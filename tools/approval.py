@@ -573,6 +573,134 @@ def resolve_gateway_approval(session_key: str, choice: str,
     return len(targets)
 
 
+def _redact_approval_text(text: str) -> str:
+    """Redact approval display text at safety boundaries."""
+    try:
+        from agent.redact import redact_sensitive_text
+
+        return redact_sensitive_text(text, force=True)
+    except Exception:
+        return "" if text is None else str(text)
+
+
+def request_gateway_approval(command: str, description: str,
+                             timeout_seconds: int | None = None,
+                             allow_permanent: bool = True) -> str:
+    """Request a blocking gateway approval and return a Hermes choice.
+
+    This adapts Codex app-server's synchronous approval callback contract to
+    Hermes' existing gateway queue/notify/resolve flow.  It intentionally
+    fails closed: if no gateway session or notify callback is bound, or if the
+    user denies/times out, callers receive ``"deny"``.
+    """
+    session_key = get_current_session_key(default="")
+    if not session_key:
+        return "deny"
+
+    with _lock:
+        notify_cb = _gateway_notify_cbs.get(session_key)
+    if notify_cb is None:
+        return "deny"
+
+    display_command = _redact_approval_text(command)
+    display_description = _redact_approval_text(description)
+    pattern_key = "codex_app_server"
+    approval_data = {
+        "command": display_command,
+        "pattern_key": pattern_key,
+        "pattern_keys": [pattern_key],
+        "description": display_description,
+        "allow_permanent": allow_permanent,
+    }
+    entry = _ApprovalEntry(approval_data)
+    with _lock:
+        _gateway_queues.setdefault(session_key, []).append(entry)
+
+    _fire_approval_hook(
+        "pre_approval_request",
+        command=display_command,
+        description=display_description,
+        pattern_key=pattern_key,
+        pattern_keys=[pattern_key],
+        session_key=session_key,
+        surface="gateway",
+    )
+
+    try:
+        notify_cb(approval_data)
+    except Exception as exc:
+        logger.warning("Gateway approval notify failed: %s", exc)
+        with _lock:
+            queue = _gateway_queues.get(session_key, [])
+            if entry in queue:
+                queue.remove(entry)
+            if not queue:
+                _gateway_queues.pop(session_key, None)
+        _fire_approval_hook(
+            "post_approval_response",
+            command=display_command,
+            description=display_description,
+            pattern_key=pattern_key,
+            pattern_keys=[pattern_key],
+            session_key=session_key,
+            surface="gateway",
+            choice="deny",
+        )
+        return "deny"
+
+    if timeout_seconds is None:
+        timeout = _get_approval_config().get("gateway_timeout", 300)
+    else:
+        timeout = timeout_seconds
+    try:
+        timeout = int(timeout)
+    except (ValueError, TypeError):
+        timeout = 300
+
+    try:
+        from tools.environments.base import touch_activity_if_due
+    except Exception:  # pragma: no cover
+        touch_activity_if_due = None
+
+    now = time.monotonic()
+    deadline = now + max(timeout, 0)
+    activity_state = {"last_touch": now, "start": now}
+    resolved = False
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        if entry.event.wait(timeout=min(1.0, remaining)):
+            resolved = True
+            break
+        if touch_activity_if_due is not None:
+            touch_activity_if_due(activity_state, "waiting for user approval")
+
+    with _lock:
+        queue = _gateway_queues.get(session_key, [])
+        if entry in queue:
+            queue.remove(entry)
+        if not queue:
+            _gateway_queues.pop(session_key, None)
+
+    choice = entry.result if resolved else None
+    outcome = "timeout" if not resolved else (choice or "timeout")
+    _fire_approval_hook(
+        "post_approval_response",
+        command=display_command,
+        description=display_description,
+        pattern_key=pattern_key,
+        pattern_keys=[pattern_key],
+        session_key=session_key,
+        surface="gateway",
+        choice=outcome,
+    )
+
+    if choice in {"once", "session", "always"}:
+        return choice
+    return "deny"
+
+
 def has_blocking_approval(session_key: str) -> bool:
     """Check if a session has one or more blocking gateway approvals waiting."""
     with _lock:

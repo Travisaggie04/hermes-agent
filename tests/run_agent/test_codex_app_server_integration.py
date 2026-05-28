@@ -12,6 +12,7 @@ Verifies that:
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -129,6 +130,119 @@ class TestRunConversationCodexPath:
             if m.get("role") == "user" and m.get("content") == "ping unique 12345"
         )
         assert user_count == 1, f"user message appeared {user_count}× in {result['messages']}"
+
+    def test_codex_session_uses_terminal_approval_callback_when_present(self, monkeypatch):
+        """CLI/ACP approval callback remains the first choice."""
+        from agent.codex_runtime import run_codex_app_server_turn
+        from tools.terminal_tool import set_approval_callback
+
+        seen = {}
+
+        def terminal_cb(command, description, *, allow_permanent=True):
+            return "once"
+
+        def fake_run_turn(self, user_input: str, **kwargs):
+            seen["callback"] = self._approval_callback
+            seen["choice"] = self._approval_callback(
+                "rm -rf /tmp/x",
+                "codex exec",
+                allow_permanent=False,
+            )
+            return TurnResult(
+                final_text="ok",
+                projected_messages=[{"role": "assistant", "content": "ok"}],
+                turn_id="t1",
+                thread_id="th1",
+            )
+
+        monkeypatch.setattr(CodexAppServerSession, "run_turn", fake_run_turn)
+        monkeypatch.setattr(CodexAppServerSession, "ensure_started", lambda self: "th1")
+        set_approval_callback(terminal_cb)
+        try:
+            agent = SimpleNamespace(
+                _codex_session=None,
+                session_cwd="/tmp",
+                _iters_since_skill=0,
+                _skill_nudge_interval=10,
+                valid_tool_names=set(),
+                _sync_external_memory_for_turn=lambda **kwargs: None,
+                _spawn_background_review=lambda **kwargs: None,
+            )
+            run_codex_app_server_turn(
+                agent,
+                user_message="trigger approval",
+                original_user_message="trigger approval",
+                messages=[{"role": "user", "content": "trigger approval"}],
+                effective_task_id="test",
+            )
+        finally:
+            set_approval_callback(None)
+
+        assert seen["callback"] is terminal_cb
+        assert seen["choice"] == "once"
+
+    def test_codex_session_falls_back_to_gateway_approval_adapter(self, monkeypatch):
+        """Gateway runs should get a synchronous Codex approval callback."""
+        from agent.codex_runtime import run_codex_app_server_turn
+        from tools import approval as approval_mod
+        from tools.terminal_tool import set_approval_callback
+
+        session_key = "codex-gateway-approval-test"
+        notified = []
+        seen = {}
+
+        def notify(data):
+            notified.append(data)
+            approval_mod.resolve_gateway_approval(session_key, "once")
+
+        def fake_run_turn(self, user_input: str, **kwargs):
+            seen["callback"] = self._approval_callback
+            seen["choice"] = self._approval_callback(
+                "rm -rf /tmp/x",
+                "codex exec",
+                allow_permanent=False,
+            )
+            return TurnResult(
+                final_text="ok",
+                projected_messages=[{"role": "assistant", "content": "ok"}],
+                turn_id="t1",
+                thread_id="th1",
+            )
+
+        monkeypatch.setattr(CodexAppServerSession, "run_turn", fake_run_turn)
+        monkeypatch.setattr(CodexAppServerSession, "ensure_started", lambda self: "th1")
+        monkeypatch.setattr(
+            approval_mod,
+            "_get_approval_config",
+            lambda: {"mode": "manual", "gateway_timeout": 5, "timeout": 5},
+        )
+        set_approval_callback(None)
+        token = approval_mod.set_current_session_key(session_key)
+        approval_mod.register_gateway_notify(session_key, notify)
+        try:
+            agent = SimpleNamespace(
+                _codex_session=None,
+                session_cwd="/tmp",
+                _iters_since_skill=0,
+                _skill_nudge_interval=10,
+                valid_tool_names=set(),
+                _sync_external_memory_for_turn=lambda **kwargs: None,
+                _spawn_background_review=lambda **kwargs: None,
+            )
+            run_codex_app_server_turn(
+                agent,
+                user_message="trigger approval",
+                original_user_message="trigger approval",
+                messages=[{"role": "user", "content": "trigger approval"}],
+                effective_task_id="test",
+            )
+        finally:
+            approval_mod.unregister_gateway_notify(session_key)
+            approval_mod.reset_current_session_key(token)
+
+        assert seen["callback"] is not None
+        assert seen["choice"] == "once"
+        assert notified and notified[0]["command"] == "rm -rf /tmp/x"
 
     def test_background_review_NOT_invoked_below_threshold(self, fake_session):
         """A single turn shouldn't trigger background review — counters

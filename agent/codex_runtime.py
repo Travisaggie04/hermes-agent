@@ -26,6 +26,25 @@ from typing import Any, Dict, List
 logger = logging.getLogger(__name__)
 
 
+def _resolve_codex_app_server_approval_callback():
+    """Return the approval callback for Codex app-server sessions."""
+    try:
+        from tools.terminal_tool import _get_approval_callback
+
+        approval_callback = _get_approval_callback()
+        if approval_callback is not None:
+            return approval_callback
+    except Exception:
+        pass
+
+    try:
+        from tools.approval import request_gateway_approval
+
+        return request_gateway_approval
+    except Exception:
+        return None
+
+
 def run_codex_app_server_turn(
     agent,
     *,
@@ -49,17 +68,9 @@ def run_codex_app_server_turn(
     # shutdown (see _cleanup hook).
     if not hasattr(agent, "_codex_session") or agent._codex_session is None:
         cwd = getattr(agent, "session_cwd", None) or os.getcwd()
-        # Approval callback: defer to Hermes' standard prompt flow if a
-        # CLI thread has installed one. Gateway / cron contexts get the
-        # codex-side fail-closed default.
-        try:
-            from tools.terminal_tool import _get_approval_callback
-            approval_callback = _get_approval_callback()
-        except Exception:
-            approval_callback = None
         agent._codex_session = CodexAppServerSession(
             cwd=cwd,
-            approval_callback=approval_callback,
+            approval_callback=_resolve_codex_app_server_approval_callback(),
         )
 
     # NOTE: the user message is ALREADY appended to messages by the

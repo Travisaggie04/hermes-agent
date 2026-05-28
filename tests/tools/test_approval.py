@@ -1370,6 +1370,52 @@ class TestApprovalTimeoutIsNotConsent:
             lambda: {"mode": "manual", "gateway_timeout": seconds, "timeout": seconds},
         )
 
+    def test_request_gateway_approval_denies_without_session_or_callback(self):
+        """Codex approval bridge must fail closed when no gateway UI is bound."""
+        from tools import approval as mod
+
+        os.environ.pop("HERMES_SESSION_KEY", None)
+        mod._gateway_notify_cbs.clear()
+
+        assert mod.request_gateway_approval("rm -rf /tmp/x", "codex exec") == "deny"
+
+    def test_request_gateway_approval_returns_deny_on_timeout(self, monkeypatch):
+        """Silence on a Codex-side gateway approval is still denial."""
+        from tools import approval as mod
+
+        self._force_short_timeout(monkeypatch, seconds=1)
+        notified = []
+        mod.register_gateway_notify(self.SESSION_KEY, lambda data: notified.append(data))
+
+        choice = mod.request_gateway_approval("rm -rf /tmp/x", "codex exec")
+
+        assert choice == "deny"
+        assert len(notified) == 1
+
+    def test_request_gateway_approval_redacts_display_payload(self):
+        """Gateway/Discord approval payload must not expose credentials."""
+        from tools import approval as mod
+
+        notified = []
+
+        def notify(data):
+            notified.append(data)
+            mod.resolve_gateway_approval(self.SESSION_KEY, "once")
+
+        mod.register_gateway_notify(self.SESSION_KEY, notify)
+
+        fake_secret = "not-a-real-test-token-value"
+        choice = mod.request_gateway_approval(
+            f"OPENAI_API_KEY={fake_secret} echo hi",
+            f"Authorization: Bearer {fake_secret}",
+        )
+
+        assert choice == "once"
+        assert notified
+        payload_text = f"{notified[0]['command']} {notified[0]['description']}"
+        assert fake_secret not in payload_text
+        assert "..." in payload_text
+
     def test_timeout_returns_approved_false_with_no_consent(self, monkeypatch):
         """The reported #24912 scenario — user never responds, agent must see BLOCKED."""
         from tools import approval as mod
