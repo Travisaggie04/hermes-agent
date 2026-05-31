@@ -1,0 +1,10 @@
+name: yt-dlp
+version: 0.1.0
+description: "Disabled-by-default adapter skeleton for constrained yt-dlp metadata and caption workflows. Registers safe stub tools only; does not install yt-dlp, use credentials, download media, or make live calls yet."
+author: NousResearch
+kind: standalone
+provides_tools:
+  - yt_dlp_status
+  - yt_dlp_extract_metadata
+  - yt_dlp_list_captions
+  - yt_dlp_fetch_captions
