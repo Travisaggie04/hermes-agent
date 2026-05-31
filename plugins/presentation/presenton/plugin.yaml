@@ -1,0 +1,9 @@
+name: presenton
+version: 0.1.0
+description: "Disabled-by-default adapter skeleton for an already-running Presenton service. Registers safe stub tools only; does not own service lifecycle, enable MCP, or make live API calls yet."
+author: NousResearch
+kind: standalone
+provides_tools:
+  - presenton_status
+  - presenton_generate_deck
+  - presenton_export_deck
