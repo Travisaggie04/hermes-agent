@@ -17,6 +17,7 @@ never the child's intermediate tool calls or reasoning.
 """
 
 import enum
+import hashlib
 import json
 import logging
 
@@ -2254,6 +2255,25 @@ def delegate_task(
         invoked_at = datetime.fromtimestamp(invoked_at_wall, timezone.utc).isoformat()
         completed_at = datetime.now(timezone.utc).isoformat()
         parent_session = getattr(parent_agent, "session_id", None)
+        active_task_id = getattr(parent_agent, "_current_task_id", None)
+        goal_id = getattr(parent_agent, "_active_goal_id", None)
+        if not goal_id and parent_session:
+            try:
+                from hermes_cli.goals import load_goal
+
+                goal_state = load_goal(str(parent_session))
+                if goal_state is not None and getattr(goal_state, "status", None) in {"active", "paused"}:
+                    digest = hashlib.sha256(str(parent_session).encode("utf-8")).hexdigest()
+                    goal_id = f"goal:{digest[:16]}"
+            except Exception:
+                goal_id = None
+        repo_path = None
+        try:
+            cwd = os.getcwd()
+            if os.path.isdir(os.path.join(cwd, ".git")):
+                repo_path = cwd
+        except Exception:
+            repo_path = None
         for entry in results:
             try:
                 idx = entry.get("task_index", 0)
@@ -2275,6 +2295,10 @@ def delegate_task(
                     result_summary=entry.get("summary") or entry.get("error") or "",
                     session_key=parent_session,
                     child_session_id=child_session_id,
+                    active_task_id=active_task_id,
+                    goal_id=goal_id,
+                    repo_path=repo_path,
+                    process_id=os.getpid(),
                 )
             except Exception:
                 logger.debug("delegate evidence record failed", exc_info=True)

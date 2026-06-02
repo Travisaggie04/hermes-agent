@@ -114,6 +114,9 @@ def require_quality_lane_section(
 
     evidence = [item for item in (delegate_evidence or []) if isinstance(item, dict)]
     real_subagent = bool(evidence)
+    failed_evidence = [
+        item for item in evidence if item.get("status") in {"failed", "skipped", "pending"}
+    ]
     if real_subagent:
         try:
             from gateway.delegate_evidence import summarize_delegate_evidence
@@ -152,6 +155,10 @@ def require_quality_lane_section(
         )
     if not is_high:
         lines.append("Standard task note: quality lanes are optional unless high-rigor work appears.")
+    if failed_evidence:
+        lines.append(
+            "Completion status: incomplete/risky until failed, skipped, or pending delegate lanes are resolved or explicitly accepted."
+        )
     lines.append(f"Remaining risks: {remaining_risks}")
     return "\n".join(lines)
 

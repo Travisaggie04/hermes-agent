@@ -12,6 +12,7 @@ Run with:  python -m pytest tests/test_delegate.py -v
 import json
 import os
 import sys
+import tempfile
 import threading
 import time
 import unittest
@@ -188,26 +189,29 @@ class TestDelegateTask(unittest.TestCase):
     def test_single_task_mode(self, mock_run):
         from gateway.delegate_evidence import clear_delegate_evidence_records, get_recent_delegate_evidence
 
-        clear_delegate_evidence_records()
-        mock_run.return_value = {
-            "task_index": 0, "status": "completed",
-            "summary": "Done!", "api_calls": 3, "duration_seconds": 5.0
-        }
-        parent = _make_mock_parent()
-        result = json.loads(
-            delegate_task(
-                goal="Fix tests",
-                context="error log...",
-                lane="implementation",
-                parent_agent=parent,
+        with tempfile.TemporaryDirectory() as hermes_home, patch.dict(
+            os.environ, {"HERMES_HOME": hermes_home}
+        ):
+            clear_delegate_evidence_records(clear_durable=True)
+            mock_run.return_value = {
+                "task_index": 0, "status": "completed",
+                "summary": "Done!", "api_calls": 3, "duration_seconds": 5.0
+            }
+            parent = _make_mock_parent()
+            result = json.loads(
+                delegate_task(
+                    goal="Fix tests",
+                    context="error log...",
+                    lane="implementation",
+                    parent_agent=parent,
+                )
             )
-        )
+            evidence = get_recent_delegate_evidence()
         self.assertIn("results", result)
         self.assertEqual(len(result["results"]), 1)
         self.assertEqual(result["results"][0]["status"], "completed")
         self.assertEqual(result["results"][0]["summary"], "Done!")
         mock_run.assert_called_once()
-        evidence = get_recent_delegate_evidence()
         self.assertEqual(len(evidence), 1)
         self.assertEqual(evidence[0]["lane"], "implementation")
         self.assertEqual(evidence[0]["status"], "succeeded")
@@ -218,29 +222,63 @@ class TestDelegateTask(unittest.TestCase):
     def test_delegate_execution_records_lane_evidence(self, mock_run):
         from gateway.delegate_evidence import clear_delegate_evidence_records, get_recent_delegate_evidence
 
-        clear_delegate_evidence_records()
-        mock_run.return_value = {
-            "task_index": 0,
-            "status": "completed",
-            "summary": "Review complete. Confidential prompt body was present.",
-            "api_calls": 1,
-            "duration_seconds": 1.0,
-        }
-        parent = _make_mock_parent()
-        parent.session_id = "platform:sample:session:id"
+        with tempfile.TemporaryDirectory() as hermes_home, patch.dict(
+            os.environ, {"HERMES_HOME": hermes_home}
+        ):
+            clear_delegate_evidence_records(clear_durable=True)
+            mock_run.return_value = {
+                "task_index": 0,
+                "status": "completed",
+                "summary": "Review complete. Confidential prompt body was present.",
+                "api_calls": 1,
+                "duration_seconds": 1.0,
+            }
+            parent = _make_mock_parent()
+            parent.session_id = "platform:sample:session:id"
 
-        delegate_task(
-            goal="Review implementation",
-            lane="review",
-            parent_agent=parent,
-        )
+            delegate_task(
+                goal="Review implementation",
+                lane="review",
+                parent_agent=parent,
+            )
 
-        evidence = get_recent_delegate_evidence()
+            evidence = get_recent_delegate_evidence()
         self.assertEqual(len(evidence), 1)
         self.assertEqual(evidence[0]["lane"], "review")
         self.assertEqual(evidence[0]["status"], "succeeded")
         self.assertNotIn("Confidential prompt body", json.dumps(evidence))
         self.assertNotIn("platform:sample:session:id", json.dumps(evidence))
+
+    @patch("tools.delegate_tool._run_single_child")
+    def test_goal_task_links_delegate_evidence_to_goal_context(self, mock_run):
+        from gateway.delegate_evidence import clear_delegate_evidence_records, get_recent_delegate_evidence
+
+        with tempfile.TemporaryDirectory() as hermes_home, patch.dict(
+            os.environ, {"HERMES_HOME": hermes_home}
+        ):
+            clear_delegate_evidence_records(clear_durable=True)
+            mock_run.return_value = {
+                "task_index": 0,
+                "status": "completed",
+                "summary": "Implementation complete.",
+                "api_calls": 1,
+                "duration_seconds": 1.0,
+            }
+            parent = _make_mock_parent()
+            parent.session_id = "goal-session"
+            parent._current_task_id = "active-task-123"
+            parent._active_goal_id = "goal-abc"
+
+            delegate_task(
+                goal="Implement durable evidence",
+                lane="implementation",
+                parent_agent=parent,
+            )
+
+            evidence = get_recent_delegate_evidence(session_id="goal-session")
+        self.assertEqual(len(evidence), 1)
+        self.assertEqual(evidence[0]["active_task_id"], "active-task-123")
+        self.assertEqual(evidence[0]["goal_id"], "goal-abc")
 
     @patch("tools.delegate_tool._run_single_child")
     def test_batch_mode(self, mock_run):

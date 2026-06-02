@@ -388,6 +388,43 @@ def test_reliability_doctor_reports_delegate_tracking(tmp_path):
     assert "delegate evidence tracking available: True" in rendered
 
 
+def test_reliability_doctor_reports_delegate_evidence_counts(tmp_path):
+    store_path = tmp_path / ".hermes" / "delegate_evidence.json"
+    store_path.parent.mkdir(parents=True)
+    store_path.write_text(
+        json.dumps(
+            {
+                "records": [
+                    {
+                        "lane": "review",
+                        "status": "succeeded",
+                        "evidence_source": "delegate_task",
+                    },
+                    {
+                        "lane": "verification",
+                        "status": "failed",
+                        "evidence_source": "delegate_task",
+                    },
+                    {
+                        "lane": "safety",
+                        "status": "skipped",
+                        "evidence_source": "checklist_fallback",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = doctor.inspect_delegate_evidence_store(store_path)
+
+    assert result["record_count"] == 3
+    assert result["lane_status_counts"]["review"]["succeeded"] == 1
+    assert result["lane_status_counts"]["verification"]["failed"] == 1
+    assert result["checklist_fallback_count"] == 1
+    assert result["unresolved_or_failed_count"] == 2
+
+
 def test_evaluate_runtime_topology_flags_cli_split_brain():
     result = doctor.evaluate_runtime_topology(
         expected_runtime_checkout="/clean",

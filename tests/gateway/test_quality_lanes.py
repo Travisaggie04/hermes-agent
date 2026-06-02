@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 from gateway.config import GatewayConfig, Platform
@@ -68,7 +69,8 @@ def test_no_claim_real_subagent_without_delegate_execution():
     assert "real subagent used: yes" not in section
 
 
-def test_quality_report_uses_delegate_evidence_when_present():
+def test_quality_report_uses_delegate_evidence_when_present(tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     from gateway.delegate_evidence import record_delegate_evidence
     from gateway.quality_lanes import require_quality_lane_section
 
@@ -108,7 +110,8 @@ def test_quality_report_falls_back_when_no_delegate_evidence():
     assert "real subagent used: yes" not in section
 
 
-def test_delegate_evidence_redacts_confidential_prompt_content():
+def test_delegate_evidence_redacts_confidential_prompt_content(tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     from gateway.delegate_evidence import record_delegate_evidence
 
     evidence = record_delegate_evidence(
@@ -126,14 +129,15 @@ def test_delegate_evidence_redacts_confidential_prompt_content():
     assert evidence["task_ref"].startswith("sha256:")
 
 
-def test_delegate_evidence_filters_by_session_id():
+def test_delegate_evidence_filters_by_session_id(tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     from gateway.delegate_evidence import (
         clear_delegate_evidence_records,
         get_recent_delegate_evidence,
         record_delegate_evidence,
     )
 
-    clear_delegate_evidence_records()
+    clear_delegate_evidence_records(clear_durable=True)
     record_delegate_evidence(
         lane="review",
         task_goal="first",
@@ -154,6 +158,112 @@ def test_delegate_evidence_filters_by_session_id():
     assert len(records) == 1
     assert records[0]["lane"] == "verification"
     assert "second summary" in records[0]["safe_result_summary"]
+
+
+def test_delegate_evidence_persists_safe_metadata(tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    from gateway.delegate_evidence import (
+        clear_delegate_evidence_records,
+        get_delegate_evidence_store_path,
+        record_delegate_evidence,
+    )
+
+    clear_delegate_evidence_records(clear_durable=True)
+    evidence = record_delegate_evidence(
+        lane="review",
+        task_goal="Review private prompt text",
+        status="succeeded",
+        result_summary="Reviewed private prompt text.",
+        session_key="platform:raw:session:key",
+        active_task_id="task-123",
+        goal_id="goal-456",
+        repo_path=str(tmp_path / "repo"),
+        branch="main",
+        head="abc123",
+    )
+
+    store_path = get_delegate_evidence_store_path()
+    stored = json.loads(store_path.read_text(encoding="utf-8"))
+    rendered = json.dumps(stored)
+    assert evidence["evidence_id"]
+    assert evidence["session_key_hash"].startswith("sha256:")
+    assert stored["records"][0]["active_task_id"] == "task-123"
+    assert stored["records"][0]["goal_id"] == "goal-456"
+    assert "platform:raw:session:key" not in rendered
+    assert "private prompt text" not in rendered
+
+
+def test_delegate_evidence_survives_store_reload(tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    from gateway.delegate_evidence import (
+        clear_delegate_evidence_records,
+        get_recent_delegate_evidence,
+        record_delegate_evidence,
+    )
+
+    clear_delegate_evidence_records(clear_durable=True)
+    record_delegate_evidence(
+        lane="verification",
+        status="succeeded",
+        result_summary="pytest passed",
+        session_key="session-reload",
+    )
+    clear_delegate_evidence_records()
+
+    records = get_recent_delegate_evidence(session_id="session-reload")
+
+    assert len(records) == 1
+    assert records[0]["lane"] == "verification"
+    assert "pytest passed" in records[0]["safe_result_summary"]
+
+
+def test_quality_report_uses_durable_delegate_evidence(tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    from gateway.delegate_evidence import (
+        clear_delegate_evidence_records,
+        get_recent_delegate_evidence,
+        record_delegate_evidence,
+    )
+    from gateway.quality_lanes import require_quality_lane_section
+
+    clear_delegate_evidence_records(clear_durable=True)
+    record_delegate_evidence(
+        lane="review",
+        status="succeeded",
+        result_summary="Durable review found no blocker.",
+        session_key="durable-session",
+    )
+    clear_delegate_evidence_records()
+
+    section = require_quality_lane_section(
+        "Review and commit code.",
+        delegate_evidence=get_recent_delegate_evidence(session_id="durable-session"),
+    )
+
+    assert "real subagent used: yes" in section
+    assert "Durable review found no blocker." in section
+
+
+def test_failed_delegate_lane_marks_report_incomplete_or_risky(tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    from gateway.delegate_evidence import clear_delegate_evidence_records, record_delegate_evidence
+    from gateway.quality_lanes import require_quality_lane_section
+
+    clear_delegate_evidence_records(clear_durable=True)
+    evidence = record_delegate_evidence(
+        lane="review",
+        status="failed",
+        result_summary="Reviewer timed out.",
+        session_key="failed-session",
+    )
+
+    section = require_quality_lane_section(
+        "Review and commit code.",
+        delegate_evidence=[evidence],
+    )
+
+    assert "Completion status: incomplete/risky" in section
+    assert "Reviewer timed out." in section
 
 
 def test_high_risk_task_requires_delegate_or_fallback_reason():

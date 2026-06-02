@@ -499,6 +499,59 @@ def check_quality_policy_presence(
     }
 
 
+def inspect_delegate_evidence_store(path: str | Path) -> dict[str, Any]:
+    store_path = Path(path)
+    result: dict[str, Any] = {
+        "exists": store_path.exists(),
+        "parsed": False,
+        "record_count": 0,
+        "recent_record_count": 0,
+        "lane_status_counts": {},
+        "status_counts": {},
+        "checklist_fallback_count": 0,
+        "unresolved_or_failed_count": 0,
+    }
+    if not store_path.exists():
+        return result
+    try:
+        data = json.loads(store_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return result
+    records = data.get("records") if isinstance(data, dict) else None
+    if not isinstance(records, list):
+        return result
+
+    safe_records = [item for item in records if isinstance(item, dict)]
+    status_counts: Counter[str] = Counter()
+    lane_counts: dict[str, Counter[str]] = {}
+    fallback_count = 0
+    unresolved = 0
+    for item in safe_records:
+        lane = str(item.get("lane") or "unknown")
+        status = str(item.get("status") or "unknown")
+        status_counts[status] += 1
+        lane_counts.setdefault(lane, Counter())[status] += 1
+        if item.get("evidence_source") == "checklist_fallback":
+            fallback_count += 1
+        if status in {"failed", "skipped", "pending", "unknown"}:
+            unresolved += 1
+
+    result.update(
+        {
+            "parsed": True,
+            "record_count": len(safe_records),
+            "recent_record_count": len(safe_records[-20:]),
+            "lane_status_counts": {
+                lane: dict(counts) for lane, counts in sorted(lane_counts.items())
+            },
+            "status_counts": dict(status_counts),
+            "checklist_fallback_count": fallback_count,
+            "unresolved_or_failed_count": unresolved,
+        }
+    )
+    return result
+
+
 def inspect_mount_names() -> dict[str, Any]:
     result = _run_command(["mount"], timeout=3.0)
     names = []
@@ -537,6 +590,9 @@ def collect_report(args: argparse.Namespace) -> dict[str, Any]:
         "stores": {
             "active_tasks": inspect_active_task_store(hermes_home / "session_active_tasks.json"),
             "goals": inspect_goal_store(hermes_home / "state.db"),
+            "delegate_evidence": inspect_delegate_evidence_store(
+                hermes_home / "delegate_evidence.json"
+            ),
         },
         "quality_policy": check_quality_policy_presence(
             args.expected_runtime_checkout,
@@ -555,6 +611,7 @@ def format_report(report: dict[str, Any]) -> str:
     stores = report["stores"]
     quality_policy = report["quality_policy"]
     storage = report["storage"]
+    delegate_evidence = stores.get("delegate_evidence") or {}
     lines = [
         "Hermes reliability doctor (read-only)",
         "",
@@ -583,6 +640,11 @@ def format_report(report: dict[str, Any]) -> str:
             f"  active goals: {stores['goals'].get('active_count')}",
             f"  goal statuses: {stores['goals'].get('status_counts')}",
             f"  goal field presence: {stores['goals'].get('field_presence')}",
+            f"  delegate evidence records: {delegate_evidence.get('record_count')}",
+            f"  recent delegate evidence records: {delegate_evidence.get('recent_record_count')}",
+            f"  delegate lane status counts: {delegate_evidence.get('lane_status_counts')}",
+            f"  delegate checklist fallback records: {delegate_evidence.get('checklist_fallback_count')}",
+            f"  unresolved/failed delegate lane records: {delegate_evidence.get('unresolved_or_failed_count')}",
             "",
             "Quality policy:",
             f"  injection enabled: {quality_policy.get('injection_path_enabled')}",
