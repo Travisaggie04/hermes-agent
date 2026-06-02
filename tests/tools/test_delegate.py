@@ -266,7 +266,7 @@ class TestDelegateTask(unittest.TestCase):
             }
             parent = _make_mock_parent()
             parent.session_id = "goal-session"
-            parent._current_task_id = "active-task-123"
+            parent._current_task_id = "active-work-123"
             parent._active_goal_id = "goal-abc"
 
             delegate_task(
@@ -277,8 +277,10 @@ class TestDelegateTask(unittest.TestCase):
 
             evidence = get_recent_delegate_evidence(session_id="goal-session")
         self.assertEqual(len(evidence), 1)
-        self.assertEqual(evidence[0]["active_task_id"], "active-task-123")
-        self.assertEqual(evidence[0]["goal_id"], "goal-abc")
+        self.assertTrue(evidence[0]["active_task_id"].startswith("sha256:"))
+        self.assertTrue(evidence[0]["goal_id"].startswith("sha256:"))
+        self.assertNotIn("active-work-123", json.dumps(evidence))
+        self.assertNotIn("goal-abc", json.dumps(evidence))
 
     @patch("tools.delegate_tool._run_single_child")
     def test_batch_mode(self, mock_run):

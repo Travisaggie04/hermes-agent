@@ -113,20 +113,37 @@ def require_quality_lane_section(
         required_lanes.append("deployment/runtime")
 
     evidence = [item for item in (delegate_evidence or []) if isinstance(item, dict)]
-    real_subagent = bool(evidence)
-    failed_evidence = [
-        item for item in evidence if item.get("status") in {"failed", "skipped", "pending"}
+    checklist_evidence = [
+        item for item in evidence if item.get("evidence_source") == "checklist_fallback"
     ]
-    if real_subagent:
-        try:
-            from gateway.delegate_evidence import summarize_delegate_evidence
+    try:
+        from gateway.delegate_evidence import is_real_delegate_evidence, summarize_delegate_evidence
+    except Exception:
+        is_real_delegate_evidence = None
+        summarize_delegate_evidence = None
 
-            evidence_summary = summarize_delegate_evidence(evidence)
-        except Exception:
-            evidence_summary = ""
+    real_evidence = [
+        item
+        for item in evidence
+        if is_real_delegate_evidence is not None and is_real_delegate_evidence(item)
+    ]
+    succeeded_evidence = [item for item in real_evidence if item.get("status") == "succeeded"]
+    failed_evidence = [
+        item for item in real_evidence if item.get("status") in {"failed", "skipped", "pending"}
+    ]
+    if succeeded_evidence:
+        evidence_summary = (
+            summarize_delegate_evidence(succeeded_evidence) if summarize_delegate_evidence else ""
+        )
         review = (
             "real subagent used: yes; delegate used: yes; "
             f"{evidence_summary or 'delegate evidence recorded; summary unavailable.'}"
+        )
+    elif failed_evidence:
+        evidence_summary = summarize_delegate_evidence(failed_evidence) if summarize_delegate_evidence else ""
+        review = (
+            "real subagent used: no; real subagent attempted but failed; "
+            f"{evidence_summary or 'delegate attempt evidence recorded; summary unavailable.'}"
         )
     else:
         if subagent_available is False:
@@ -135,9 +152,14 @@ def require_quality_lane_section(
             reason = "subagent not invoked"
         else:
             reason = "subagent availability unknown"
+        fallback_note = (
+            "checklist fallback used; checklist fallback evidence recorded."
+            if checklist_evidence
+            else "Subagent unavailable/not invoked; checklist fallback used."
+        )
         review = (
             f"real subagent used: no; {reason}. "
-            "Subagent unavailable/not invoked; checklist fallback used."
+            f"{fallback_note}"
         )
 
     lines = [

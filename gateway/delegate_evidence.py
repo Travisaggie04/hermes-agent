@@ -31,6 +31,7 @@ DELEGATE_EVIDENCE_LANES = (
     "domain",
 )
 
+TRUSTED_DELEGATE_PROVENANCE = "internal_delegate_tool"
 _MAX_RECORDS = 200
 _MAX_SUMMARY_CHARS = 500
 _records: deque[dict[str, Any]] = deque(maxlen=_MAX_RECORDS)
@@ -42,6 +43,12 @@ _SECRET_PATTERNS = (
     re.compile(r"\b[A-Za-z0-9_]*(?:token|secret|password|api[_-]?key)[A-Za-z0-9_]*\s*[:=]\s*\S+", re.I),
     re.compile(r"private prompt[^.\n,;]*", re.I),
     re.compile(r"confidential prompt[^.\n,;]*", re.I),
+    re.compile(r"\b(?:prompt|message)\b[^.\n]*(?:[.\n]|$)", re.I),
+    re.compile(r"\b(?:user|assistant|system)\s*:[^.\n]*(?:[.\n]|$)", re.I),
+    re.compile(r"\bplatform:[A-Za-z0-9:._-]{8,}\b", re.I),
+    re.compile(r"\b(?:session|thread|channel|message|discord)[-_:\s]*(?:id[-_:\s]*)?[A-Za-z0-9:._-]{12,}\b", re.I),
+    re.compile(r"\b\d{17,20}\b"),
+    re.compile(r"\b(?=[A-Za-z0-9._-]{32,}\b)(?=[A-Za-z0-9._-]*[A-Za-z])(?=[A-Za-z0-9._-]*\d)[A-Za-z0-9._-]{32,}\b"),
 )
 
 
@@ -67,7 +74,12 @@ def redact_delegate_text(value: Any, *, max_chars: int = _MAX_SUMMARY_CHARS) -> 
     if not text:
         return ""
     for pattern in _SECRET_PATTERNS:
-        text = pattern.sub("[redacted]", text)
+        replacement = "[redacted-id]" if pattern.pattern in {
+            r"\bplatform:[A-Za-z0-9:._-]{8,}\b",
+            r"\b(?:session|thread|channel|message|discord)[-_:\s]*(?:id[-_:\s]*)?[A-Za-z0-9:._-]{12,}\b",
+            r"\b\d{17,20}\b",
+        } else "[redacted]"
+        text = pattern.sub(replacement, text)
     text = re.sub(r"\s+", " ", text).strip()
     if len(text) > max_chars:
         return text[: max_chars - 15].rstrip() + " ...[truncated]"
@@ -106,6 +118,30 @@ def normalize_delegate_status(status: Any) -> str:
     return "failed"
 
 
+def is_real_delegate_evidence(record: Any) -> bool:
+    """Return True only for trusted evidence emitted by Hermes delegate_task."""
+    if not isinstance(record, dict):
+        return False
+    if record.get("provenance") != TRUSTED_DELEGATE_PROVENANCE:
+        return False
+    if record.get("evidence_source") != "delegate_task":
+        return False
+    if record.get("delegate_name") != "delegate_task":
+        return False
+    if record.get("delegate_type") != "subagent":
+        return False
+    if record.get("status") not in {"succeeded", "failed", "pending", "skipped"}:
+        return False
+    evidence_id = str(record.get("evidence_id") or "")
+    if not evidence_id.startswith("delegate-"):
+        return False
+    for known in _merged_records():
+        if not isinstance(known, dict) or known.get("evidence_id") != evidence_id:
+            continue
+        return known == record
+    return False
+
+
 def record_delegate_evidence(
     *,
     lane: Any = None,
@@ -137,11 +173,12 @@ def record_delegate_evidence(
     invoked = invoked_at or _now_iso()
     record = {
         "evidence_id": f"delegate-{uuid.uuid4().hex[:16]}",
+        "provenance": TRUSTED_DELEGATE_PROVENANCE if evidence_source == "delegate_task" else "untrusted",
         "task_ref": task_ref,
         "session_key_hash": session_key_hash,
-        "active_task_id": redact_delegate_text(active_task_id, max_chars=120),
-        "goal_id": redact_delegate_text(goal_id, max_chars=120),
-        "final_report_id": redact_delegate_text(final_report_id, max_chars=120),
+        "active_task_id": _hash_ref(active_task_id),
+        "goal_id": _hash_ref(goal_id),
+        "final_report_id": _hash_ref(final_report_id),
         "lane": normalized_lane,
         "delegate_name": str(delegate_name or "delegate_task"),
         "delegate_type": str(delegate_type or "subagent"),
@@ -150,7 +187,7 @@ def record_delegate_evidence(
         "status": normalize_delegate_status(status),
         "safe_result_summary": redact_delegate_text(result_summary),
         "evidence_pointer": pointer,
-        "evidence_source": evidence_source if evidence_source in {"delegate_task", "checklist_fallback"} else "delegate_task",
+        "evidence_source": evidence_source if evidence_source in {"delegate_task", "checklist_fallback"} else "untrusted",
         "process_id_hash": _hash_ref(process_id),
         "repo_path": redact_delegate_text(repo_path, max_chars=300),
         "branch": redact_delegate_text(branch, max_chars=120),
