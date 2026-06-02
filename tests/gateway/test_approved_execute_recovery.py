@@ -112,7 +112,7 @@ async def test_execute_completion_report_recovered_when_delivery_lost(tmp_path, 
 
     record = store.get(session_key)
     assert record is not None
-    assert record.final_report_status == "failed"
+    assert record.final_report_status == "pending"
     assert record.final_report_path
     assert Path(record.final_report_path).read_text(encoding="utf-8") == "final report body"
     assert "network down" in (record.final_report_error or "")
@@ -334,7 +334,7 @@ async def test_recovery_asks_when_intended_repo_missing(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_active_execute_recovery_report_send_failure_stays_replayable(tmp_path):
+async def test_active_execute_recovery_report_send_failure_stays_pending(tmp_path):
     repo = tmp_path / "repo"
     head = _init_repo(repo)
 
@@ -373,7 +373,7 @@ async def test_active_execute_recovery_report_send_failure_stays_replayable(tmp_
     reloaded = store.get(session_key)
     assert reloaded is not None
     assert reloaded.status == "detached"
-    assert reloaded.final_report_status == "failed"
+    assert reloaded.final_report_status == "pending"
     assert "network down" in (reloaded.final_report_error or "")
     assert reloaded.final_report_path
     assert "Approved execute recovery" in Path(reloaded.final_report_path).read_text(encoding="utf-8")
@@ -381,7 +381,7 @@ async def test_active_execute_recovery_report_send_failure_stays_replayable(tmp_
 
 
 @pytest.mark.asyncio
-async def test_next_turn_surfaces_failed_persisted_final_report(tmp_path):
+async def test_next_turn_surfaces_pending_persisted_final_report(tmp_path):
     store = ActiveTaskStore(tmp_path / "active_tasks.json")
     session_key = build_session_key(_source())
     report_path = tmp_path / "lost_report.txt"
@@ -391,7 +391,7 @@ async def test_next_turn_surfaces_failed_persisted_final_report(tmp_path):
         mode="background_process",
         status="detached",
         command="python task.py",
-        final_report_status="failed",
+        final_report_status="pending",
         final_report_path=str(report_path),
         final_report_error="previous send failed",
     )
@@ -411,6 +411,39 @@ async def test_next_turn_surfaces_failed_persisted_final_report(tmp_path):
     reloaded = store.get(session_key)
     assert reloaded is not None
     assert reloaded.final_report_status == "recovered"
+
+
+@pytest.mark.asyncio
+async def test_pending_final_report_replay_failure_remains_pending(tmp_path):
+    store = ActiveTaskStore(tmp_path / "active_tasks.json")
+    session_key = build_session_key(_source())
+    report_path = tmp_path / "lost_report.txt"
+    report_path.write_text("lost final report", encoding="utf-8")
+    store.upsert(
+        session_key=session_key,
+        mode="background_process",
+        status="detached",
+        command="python task.py",
+        final_report_status="pending",
+        final_report_path=str(report_path),
+        final_report_error="previous send failed",
+    )
+
+    adapter = _Adapter(send_result=SendResult(success=False, error="still down", retryable=False))
+    runner = object.__new__(GatewayRunner)
+    runner.active_task_store = store
+    runner.adapters = {Platform.DISCORD: adapter}
+    runner._reply_anchor_for_event = lambda event: event.message_id
+    runner._thread_metadata_for_source = lambda source, reply_anchor=None: None
+
+    surfaced = await runner._surface_pending_final_report(_event("next message"), session_key)
+
+    assert surfaced is False
+    assert "Recovered final report" in adapter.sent[-1]
+    reloaded = store.get(session_key)
+    assert reloaded is not None
+    assert reloaded.final_report_status == "pending"
+    assert "still down" in (reloaded.final_report_error or "")
 
 
 @pytest.mark.asyncio

@@ -4,12 +4,14 @@ import json
 import logging
 import subprocess
 import time
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from gateway.active_task import (
     ActiveTaskStore,
     build_active_task_recovery_note,
+    render_safe_task_contract_for_prompt,
 )
 from gateway.run import GatewayRunner
 from tools.process_registry import ProcessRegistry, ProcessSession
@@ -264,7 +266,7 @@ def test_foreground_session_snapshot_replaces_stale_same_session_metadata(tmp_pa
         "resume_reason",
     }
     assert set(raw) == {
-        "session_key",
+        "session_key_hash",
         "repo_path",
         "branch",
         "head",
@@ -273,7 +275,8 @@ def test_foreground_session_snapshot_replaces_stale_same_session_metadata(tmp_pa
         "updated_at",
     }
     assert forbidden_fields.isdisjoint(raw)
-    assert raw["session_key"] == session_key
+    assert raw["session_key_hash"].startswith("sha256:")
+    assert session_key not in json.dumps(raw)
     assert raw["repo_path"] == str(repo_path)
     assert raw["mode"] == "foreground_session"
     assert raw["status"] == "active"
@@ -514,7 +517,6 @@ def test_legacy_foreground_session_record_is_sanitized_on_read(tmp_path):
     assert record.resume_reason is None
     raw = record.to_dict()
     assert set(raw) == {
-        "session_key",
         "repo_path",
         "branch",
         "head",
@@ -710,6 +712,188 @@ def test_resume_recovery_note_for_foreground_record_refuses_task_inference(tmp_p
     assert "workspace-only foreground record" in note
     assert "Do not infer the task from unrelated logs, dirty checkout files" in note
     assert "ask the user" in note
+
+
+def test_foreground_turn_persists_safe_task_summary(tmp_path):
+    repo_path = tmp_path / "project"
+    expected_head = _init_git_repo(repo_path)
+    session_key = "agent:main:discord:thread:thread-parent:thread-1"
+    store = ActiveTaskStore(tmp_path / "active_tasks.json")
+
+    store.replace_foreground_session(
+        session_key=session_key,
+        repo_path=str(repo_path),
+        branch="main",
+        head=expected_head,
+        task_summary="Implement durable safe task-summary recovery; do not restart.",
+        task_type="foreground_turn",
+        risk_level="high",
+        source="foreground_turn",
+        forbidden_operations=["restart", "push"],
+        validation_required=True,
+    )
+
+    record = ActiveTaskStore(store.path).get(session_key)
+    assert record is not None
+    assert record.task_summary_safe == "Implement durable safe task-summary recovery; do not restart."
+    assert record.task_contract is not None
+    assert record.task_contract["intended_repo"] == str(repo_path)
+    assert record.task_contract["risk_level"] == "high"
+    assert record.task_contract["forbidden_operations"] == ["restart", "push"]
+    assert record.task_contract["validation_required"] is True
+    assert "thread-parent" not in json.dumps(record.to_dict())
+
+
+def test_recovery_uses_safe_task_summary_after_restart(tmp_path):
+    repo_path = tmp_path / "project"
+    expected_head = _init_git_repo(repo_path)
+    store = ActiveTaskStore(tmp_path / "active_tasks.json")
+    record = store.replace_foreground_session(
+        session_key="agent:main:discord:thread:thread-parent:thread-1",
+        repo_path=str(repo_path),
+        branch="main",
+        head=expected_head,
+        task_summary="Recover safe foreground task summary.",
+        source="foreground_turn",
+    )
+
+    note = build_active_task_recovery_note(record, "restart_timeout")
+
+    assert "Recovered safe task summary: Recover safe foreground task summary." in note
+    assert "Previous active task: Recover safe foreground task summary." in note
+    assert "Recovery task body: unknown" not in note
+    assert "Do not infer the task from unrelated logs" in note
+
+
+def test_recovery_without_summary_does_not_infer(tmp_path):
+    repo_path = tmp_path / "project"
+    expected_head = _init_git_repo(repo_path)
+    record = ActiveTaskStore(tmp_path / "active_tasks.json").replace_foreground_session(
+        session_key="agent:main:discord:thread:thread-parent:thread-1",
+        repo_path=str(repo_path),
+        branch="main",
+        head=expected_head,
+    )
+
+    note = build_active_task_recovery_note(record, "restart_timeout")
+
+    assert "Previous active task: unknown" in note
+    assert "Recovery task body: unknown" in note
+    assert "Do not infer the task from unrelated logs" in note
+
+
+def test_task_summary_redacts_secrets_and_session_ids(tmp_path):
+    repo_path = tmp_path / "project"
+    expected_head = _init_git_repo(repo_path)
+    store = ActiveTaskStore(tmp_path / "active_tasks.json")
+    record = store.replace_foreground_session(
+        session_key="agent:main:discord:thread:thread-parent:thread-1",
+        repo_path=str(repo_path),
+        branch="main",
+        head=expected_head,
+        task_summary=(
+            "Use token=sk-testSECRET123456 and discord message id "
+            "123456789012345678 in session_id abcdef1234567890abcdef1234567890."
+        ),
+    )
+
+    rendered = json.dumps(record.to_dict())
+    assert "sk-testSECRET123456" not in rendered
+    assert "123456789012345678" not in rendered
+    assert "abcdef1234567890abcdef1234567890" not in rendered
+    assert "[redacted" in rendered
+
+
+def test_task_contract_invalidates_cached_prompt_when_updated(tmp_path):
+    repo_path = tmp_path / "project"
+    expected_head = _init_git_repo(repo_path)
+    session_key = "agent:main:discord:thread:thread-parent:thread-1"
+    store = ActiveTaskStore(tmp_path / "active_tasks.json")
+    store.replace_foreground_session(
+        session_key=session_key,
+        repo_path=str(repo_path),
+        branch="main",
+        head=expected_head,
+        task_summary="First safe task summary.",
+    )
+    first = render_safe_task_contract_for_prompt(store.get(session_key))
+
+    store.update_task_contract(
+        session_key=session_key,
+        task_summary="Second safe task summary.",
+        source="recovery",
+    )
+    second = render_safe_task_contract_for_prompt(store.get(session_key))
+
+    assert "First safe task summary." in first
+    assert "Second safe task summary." in second
+    assert first != second
+
+
+def test_goal_summary_can_seed_task_contract(tmp_path):
+    repo_path = tmp_path / "project"
+    expected_head = _init_git_repo(repo_path)
+    session_key = "agent:main:discord:thread:thread-parent:thread-1"
+    store = ActiveTaskStore(tmp_path / "active_tasks.json")
+    store.replace_foreground_session(
+        session_key=session_key,
+        repo_path=str(repo_path),
+        branch="main",
+        head=expected_head,
+    )
+
+    store.update_task_contract(
+        session_key=session_key,
+        task_summary="Standing goal: finish recovery safely.",
+        source="goal",
+        status="paused",
+    )
+
+    record = store.get(session_key)
+    assert record is not None
+    assert record.task_summary_safe == "Standing goal: finish recovery safely."
+    assert record.task_contract["source"] == "goal"
+    assert record.task_contract["status"] == "paused"
+
+
+def test_gateway_goal_summary_seeds_task_contract(tmp_path, monkeypatch):
+    session_key = "agent:main:discord:thread:thread-parent:thread-1"
+    runner = object.__new__(GatewayRunner)
+    runner.active_task_store = ActiveTaskStore(tmp_path / "active_tasks.json")
+    monkeypatch.setattr(
+        "hermes_cli.goals.load_goal",
+        lambda session_id: SimpleNamespace(
+            status="active",
+            goal="Continue safe recovery without restart.",
+        ),
+    )
+
+    runner._persist_safe_goal_task_contract(session_key, "session-1")
+
+    record = runner.active_task_store.get(session_key)
+    assert record is not None
+    assert record.task_summary_safe == "Continue safe recovery without restart."
+    assert record.task_contract["source"] == "goal"
+    assert record.task_contract["status"] == "active"
+
+
+def test_completed_or_superseded_contract_not_recovered(tmp_path):
+    repo_path = tmp_path / "project"
+    expected_head = _init_git_repo(repo_path)
+    record = ActiveTaskStore(tmp_path / "active_tasks.json").replace_foreground_session(
+        session_key="agent:main:discord:thread:thread-parent:thread-1",
+        repo_path=str(repo_path),
+        branch="main",
+        head=expected_head,
+        task_summary="Completed safe task.",
+        status="completed",
+    )
+
+    note = build_active_task_recovery_note(record, "restart_timeout")
+
+    assert "Completed safe task." not in note
+    assert "Previous active task: unknown" in note
+    assert "Recovery task body: unknown" in note
 
 
 def test_resume_pending_note_includes_active_task_facts(tmp_path):

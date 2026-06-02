@@ -2061,6 +2061,7 @@ class GatewayRunner:
         session_key: str,
         cwd: Optional[str],
         source_label: str = "unknown",
+        task_summary: Optional[str] = None,
     ) -> None:
         if not session_key or not cwd:
             logger.info(
@@ -2101,6 +2102,8 @@ class GatewayRunner:
                 repo_path=repo_path,
                 branch=branch,
                 head=head,
+                task_summary=task_summary,
+                source="foreground_turn",
             )
             logger.info(
                 "foreground active-task record written: session_key=%s "
@@ -2113,6 +2116,80 @@ class GatewayRunner:
         except Exception:
             logger.debug("Failed to update foreground active-task store", exc_info=True)
 
+    def _persist_safe_foreground_task_contract(
+        self,
+        session_key: str,
+        message: Optional[str],
+        *,
+        source: str = "foreground_turn",
+    ) -> None:
+        if not session_key or not (message or "").strip():
+            return
+        store = getattr(self, "active_task_store", None)
+        if store is None:
+            return
+        try:
+            store.update_task_contract(
+                session_key=session_key,
+                task_summary=message,
+                source=source,
+                status="active",
+                task_type="foreground_turn",
+                risk_level="unknown",
+                restart_policy="resume_with_safe_summary",
+                validation_required=True,
+            )
+        except Exception:
+            logger.debug("Failed to persist safe foreground task contract", exc_info=True)
+
+    def _persist_safe_goal_task_contract(
+        self,
+        session_key: str,
+        session_id: str,
+    ) -> None:
+        if not session_key or not session_id:
+            return
+        store = getattr(self, "active_task_store", None)
+        if store is None:
+            return
+        try:
+            existing = store.get(session_key)
+            existing_contract = (
+                existing.task_contract
+                if existing is not None and isinstance(existing.task_contract, dict)
+                else {}
+            )
+            if existing_contract.get("source") == "foreground_turn" and existing.task_summary_safe:
+                return
+            from hermes_cli.goals import load_goal
+
+            goal = load_goal(session_id)
+            if goal is None or goal.status not in {"active", "paused"} or not goal.goal:
+                return
+            store.update_task_contract(
+                session_key=session_key,
+                task_summary=goal.goal,
+                source="goal",
+                status=goal.status,
+                task_type="goal",
+                risk_level="unknown",
+                restart_policy="resume_with_safe_summary",
+                validation_required=True,
+            )
+        except Exception:
+            logger.debug("Failed to persist safe goal task contract", exc_info=True)
+
+    def _render_safe_task_contract_context(self, session_key: str) -> str:
+        store = getattr(self, "active_task_store", None)
+        if store is None or not session_key:
+            return ""
+        try:
+            from gateway.active_task import render_safe_task_contract_for_prompt
+
+            return render_safe_task_contract_for_prompt(store.get(session_key))
+        except Exception:
+            logger.debug("Failed to render safe task contract context", exc_info=True)
+            return ""
 
     def _build_resume_recovery_note(
         self,
@@ -3759,7 +3836,7 @@ class GatewayRunner:
                 session_key=session_key,
                 status="detached",
                 last_observed_process_state=process_state,
-                final_report_status="recovered" if delivery_succeeded else "failed",
+                final_report_status="recovered" if delivery_succeeded else "pending",
                 final_report_error=None if delivery_succeeded else delivery_error,
             )
         except Exception:
@@ -3825,7 +3902,7 @@ class GatewayRunner:
         try:
             store.mark_final_report(
                 session_key=session_key,
-                status="recovered" if getattr(result, "success", False) else "failed",
+                status="recovered" if getattr(result, "success", False) else "pending",
                 error=None if getattr(result, "success", False) else getattr(result, "error", None),
             )
         except Exception:
@@ -8925,6 +9002,12 @@ class GatewayRunner:
         session_entry = self.session_store.get_or_create_session(source)
         session_key = session_entry.session_key
         self._cache_session_source(session_key, source)
+        self._persist_safe_foreground_task_contract(
+            session_key,
+            getattr(event, "text", None),
+            source="foreground_turn",
+        )
+        self._persist_safe_goal_task_contract(session_key, session_entry.session_id)
         if self._is_telegram_topic_lane(source):
             try:
                 binding = self._session_db.get_telegram_topic_binding(
@@ -8994,6 +9077,9 @@ class GatewayRunner:
 
         # Build the context prompt to inject
         context_prompt = build_session_context_prompt(context, redact_pii=_redact_pii)
+        safe_task_context = self._render_safe_task_contract_context(session_key)
+        if safe_task_context:
+            context_prompt = context_prompt + "\n\n" + safe_task_context
         
         # If the previous session expired and was auto-reset, prepend a notice
         # so the agent knows this is a fresh conversation (not an intentional /reset).
@@ -17669,6 +17755,12 @@ class GatewayRunner:
                         logger.debug("Failed to close stale codex app-server session", exc_info=True)
                     agent._codex_session = None
             agent.session_cwd = session_cwd
+            self._record_foreground_session_workspace(
+                session_key or "",
+                session_cwd,
+                source_label="agent_session_cwd",
+                task_summary=message,
+            )
 
             # Per-message state — callbacks and reasoning config change every
             # turn and must not be baked into the cached agent constructor.

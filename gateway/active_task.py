@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 import threading
 import time
@@ -32,15 +33,28 @@ ACTIVE_TASK_STATUSES = {
 }
 FINAL_REPORT_STATUSES = {"pending", "sent", "recovered", "failed"}
 FOREGROUND_SESSION_FIELDS = (
-    "session_key",
+    "session_key_hash",
     "repo_path",
     "branch",
     "head",
     "mode",
     "status",
+    "task_summary_safe",
+    "task_contract",
     "updated_at",
 )
+TASK_CONTRACT_ACTIVE_STATUSES = {"active", "paused"}
+TASK_CONTRACT_MAX_SUMMARY_CHARS = 500
 logger = logging.getLogger(__name__)
+
+_SECRET_PATTERNS = (
+    re.compile(r"\bsk-[A-Za-z0-9._-]{8,}\b"),
+    re.compile(r"\b[A-Za-z0-9_]*(?:token|secret|password|api[_-]?key)[A-Za-z0-9_]*\s*[:=]\s*\S+", re.I),
+    re.compile(r"\b(?:session|thread|channel|message|discord)[-_:\s]*(?:id[-_:\s]*)?[A-Za-z0-9:._-]{12,}\b", re.I),
+    re.compile(r"\bplatform:[A-Za-z0-9:._-]{8,}\b", re.I),
+    re.compile(r"\b\d{17,20}\b"),
+    re.compile(r"\b(?=[A-Za-z0-9._-]{32,}\b)(?=[A-Za-z0-9._-]*[A-Za-z])(?=[A-Za-z0-9._-]*\d)[A-Za-z0-9._-]{32,}\b"),
+)
 
 
 def _utc_now_iso() -> str:
@@ -66,9 +80,63 @@ def _clean_optional_str(value: Any) -> Optional[str]:
     return text or None
 
 
+def _hash_ref(value: Any) -> Optional[str]:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    import hashlib
+
+    digest = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
+    return f"sha256:{digest[:16]}"
+
+
+def redact_task_summary(value: Any, *, max_chars: int = TASK_CONTRACT_MAX_SUMMARY_CHARS) -> str:
+    """Return a short, secret-scrubbed task summary safe for recovery prompts."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    for pattern in _SECRET_PATTERNS:
+        text = pattern.sub("[redacted]", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) > max_chars:
+        return text[: max_chars - 15].rstrip() + " ...[truncated]"
+    return text
+
+
+def _clean_str_list(values: Any) -> list[str]:
+    if values is None:
+        return []
+    if isinstance(values, str):
+        values = [values]
+    if not isinstance(values, (list, tuple, set)):
+        return []
+    cleaned: list[str] = []
+    for item in values:
+        text = redact_task_summary(item, max_chars=160)
+        if text:
+            cleaned.append(text)
+    return cleaned[:20]
+
+
+def _normalize_contract_status(value: Any) -> str:
+    status = str(value or "active").strip().lower()
+    if status in {"active", "paused", "completed", "superseded"}:
+        return status
+    if status in {"done", "succeeded", "success"}:
+        return "completed"
+    return "active"
+
+
+def _contract_is_recoverable(contract: Any) -> bool:
+    if not isinstance(contract, dict):
+        return False
+    return str(contract.get("status") or "active") in TASK_CONTRACT_ACTIVE_STATUSES
+
+
 @dataclass
 class ActiveTaskRecord:
     session_key: str
+    session_key_hash: Optional[str] = None
     execution_id: Optional[str] = None
     session_id: Optional[str] = None
     platform: Optional[str] = None
@@ -81,6 +149,8 @@ class ActiveTaskRecord:
     command_label: Optional[str] = None
     command: Optional[str] = None
     task_summary: Optional[str] = None
+    task_summary_safe: Optional[str] = None
+    task_contract: Optional[dict[str, Any]] = None
     status: str = "unknown"
     pid: Optional[int] = None
     process_session_id: Optional[str] = None
@@ -108,6 +178,8 @@ class ActiveTaskRecord:
         if data.get("mode") == "foreground_session":
             fields = fields & set(FOREGROUND_SESSION_FIELDS)
         payload = {key: data.get(key) for key in fields if key in data}
+        if "session_key" in data:
+            payload["session_key"] = data.get("session_key")
         if not payload.get("updated_at"):
             payload["updated_at"] = _utc_now_iso()
         return cls(**payload)
@@ -115,7 +187,11 @@ class ActiveTaskRecord:
     def to_dict(self) -> dict[str, Any]:
         if self.mode == "foreground_session":
             raw = asdict(self)
-            return {key: raw.get(key) for key in FOREGROUND_SESSION_FIELDS}
+            return {
+                key: raw.get(key)
+                for key in FOREGROUND_SESSION_FIELDS
+                if raw.get(key) not in (None, "", [], {})
+            }
         return asdict(self)
 
     def is_fresh(self, ttl_seconds: int = DEFAULT_ACTIVE_TASK_TTL_SECONDS) -> bool:
@@ -209,6 +285,8 @@ class ActiveTaskStore:
             raw = self._read_unlocked().get(session_key)
         if not isinstance(raw, dict):
             return None
+        raw = dict(raw)
+        raw.setdefault("session_key", session_key)
         try:
             return ActiveTaskRecord.from_dict(raw)
         except TypeError:
@@ -233,6 +311,10 @@ class ActiveTaskStore:
                 elif key == "final_report_status":
                     status = _clean_optional_str(value)
                     payload[key] = status if status in FINAL_REPORT_STATUSES else None
+                elif key == "task_contract":
+                    payload[key] = value if isinstance(value, dict) else None
+                elif key == "task_summary_safe":
+                    payload[key] = redact_task_summary(value)
                 else:
                     payload[key] = _clean_optional_str(value)
             payload["updated_at"] = _utc_now_iso()
@@ -295,25 +377,176 @@ class ActiveTaskStore:
         repo_path: str,
         branch: Optional[str] = None,
         head: Optional[str] = None,
+        task_summary: Optional[str] = None,
+        task_type: Optional[str] = None,
+        expected_paths: Any = None,
+        risk_level: Optional[str] = None,
+        allowed_operations: Any = None,
+        forbidden_operations: Any = None,
+        restart_policy: Optional[str] = None,
+        validation_required: bool | None = None,
+        source: str = "foreground_turn",
+        status: str = "active",
     ) -> ActiveTaskRecord:
         if not session_key:
             raise ValueError("session_key is required")
 
+        with self._lock:
+            data = self._read_unlocked()
+            existing = data.get(session_key) if isinstance(data.get(session_key), dict) else {}
+        existing_contract = (
+            existing.get("task_contract")
+            if isinstance(existing, dict) and isinstance(existing.get("task_contract"), dict)
+            else None
+        )
+        now = _utc_now_iso()
+        safe_summary = redact_task_summary(task_summary) or (
+            redact_task_summary(existing.get("task_summary_safe"))
+            if isinstance(existing, dict)
+            else ""
+        )
+        contract = None
+        if safe_summary:
+            created_at = (
+                existing_contract.get("created_at")
+                if isinstance(existing_contract, dict)
+                else None
+            )
+            contract = {
+                "session_key_hash": _hash_ref(session_key),
+                "task_summary_safe": safe_summary,
+                "task_type": redact_task_summary(
+                    task_type
+                    or (existing_contract or {}).get("task_type")
+                    or "foreground_turn",
+                    max_chars=80,
+                ),
+                "intended_repo": _clean_optional_str(repo_path),
+                "intended_branch": redact_task_summary(branch, max_chars=120),
+                "expected_paths": _clean_str_list(
+                    expected_paths if expected_paths is not None else (existing_contract or {}).get("expected_paths")
+                ),
+                "risk_level": redact_task_summary(
+                    risk_level or (existing_contract or {}).get("risk_level") or "unknown",
+                    max_chars=80,
+                ),
+                "allowed_operations": _clean_str_list(
+                    allowed_operations if allowed_operations is not None else (existing_contract or {}).get("allowed_operations")
+                ),
+                "forbidden_operations": _clean_str_list(
+                    forbidden_operations if forbidden_operations is not None else (existing_contract or {}).get("forbidden_operations")
+                ),
+                "restart_policy": redact_task_summary(
+                    restart_policy
+                    or (existing_contract or {}).get("restart_policy")
+                    or "resume_with_safe_summary",
+                    max_chars=120,
+                ),
+                "validation_required": bool(
+                    validation_required
+                    if validation_required is not None
+                    else (existing_contract or {}).get("validation_required", False)
+                ),
+                "created_at": created_at or now,
+                "updated_at": now,
+                "source": redact_task_summary(
+                    source or (existing_contract or {}).get("source"),
+                    max_chars=80,
+                ) or "foreground_turn",
+                "status": _normalize_contract_status(
+                    status or (existing_contract or {}).get("status")
+                ),
+            }
         payload = {
             "session_key": session_key,
+            "session_key_hash": _hash_ref(session_key),
             "repo_path": _clean_optional_str(repo_path),
             "branch": _clean_optional_str(branch),
             "head": _clean_optional_str(head),
             "mode": "foreground_session",
             "status": "active",
-            "updated_at": _utc_now_iso(),
+            "task_summary_safe": safe_summary or None,
+            "task_contract": contract,
+            "updated_at": now,
         }
         record = ActiveTaskRecord.from_dict(payload)
         with self._lock:
-            data = self._read_unlocked()
-            data[session_key] = payload
+            data[session_key] = record.to_dict()
             self._write_unlocked(data)
         return record
+
+    def update_task_contract(
+        self,
+        *,
+        session_key: str,
+        task_summary: str,
+        source: str = "foreground_turn",
+        status: str = "active",
+        task_type: Optional[str] = None,
+        intended_repo: Optional[str] = None,
+        intended_branch: Optional[str] = None,
+        expected_paths: Any = None,
+        risk_level: Optional[str] = None,
+        allowed_operations: Any = None,
+        forbidden_operations: Any = None,
+        restart_policy: Optional[str] = None,
+        validation_required: bool | None = None,
+    ) -> ActiveTaskRecord:
+        if not session_key:
+            raise ValueError("session_key is required")
+        safe_summary = redact_task_summary(task_summary)
+        if not safe_summary:
+            raise ValueError("task_summary is required")
+
+        now = _utc_now_iso()
+        with self._lock:
+            data = self._read_unlocked()
+            existing = data.get(session_key) if isinstance(data.get(session_key), dict) else {}
+            contract = existing.get("task_contract") if isinstance(existing.get("task_contract"), dict) else {}
+            created_at = contract.get("created_at") if isinstance(contract, dict) else None
+            repo = _clean_optional_str(intended_repo) or _clean_optional_str(existing.get("repo_path"))
+            branch = (
+                redact_task_summary(intended_branch, max_chars=120)
+                or redact_task_summary(existing.get("branch"), max_chars=120)
+            )
+            updated_contract = {
+                "session_key_hash": _hash_ref(session_key),
+                "task_summary_safe": safe_summary,
+                "task_type": redact_task_summary(task_type or contract.get("task_type") or "foreground_turn", max_chars=80),
+                "intended_repo": repo,
+                "intended_branch": branch,
+                "expected_paths": _clean_str_list(expected_paths or contract.get("expected_paths")),
+                "risk_level": redact_task_summary(risk_level or contract.get("risk_level") or "unknown", max_chars=80),
+                "allowed_operations": _clean_str_list(allowed_operations or contract.get("allowed_operations")),
+                "forbidden_operations": _clean_str_list(forbidden_operations or contract.get("forbidden_operations")),
+                "restart_policy": redact_task_summary(
+                    restart_policy or contract.get("restart_policy") or "resume_with_safe_summary",
+                    max_chars=120,
+                ),
+                "validation_required": bool(
+                    validation_required
+                    if validation_required is not None
+                    else contract.get("validation_required", False)
+                ),
+                "created_at": created_at or now,
+                "updated_at": now,
+                "source": redact_task_summary(source, max_chars=80) or "foreground_turn",
+                "status": _normalize_contract_status(status),
+            }
+            payload = dict(existing)
+            payload["session_key"] = session_key
+            payload["session_key_hash"] = _hash_ref(session_key)
+            payload["task_summary_safe"] = safe_summary
+            payload["task_contract"] = updated_contract
+            payload["updated_at"] = now
+            if not payload.get("mode"):
+                payload["mode"] = "foreground_session"
+            if not payload.get("status"):
+                payload["status"] = "active"
+            record = ActiveTaskRecord.from_dict(payload)
+            data[session_key] = record.to_dict()
+            self._write_unlocked(data)
+            return record
 
 
 def resolve_git_branch(repo_path: str | os.PathLike[str] | None) -> Optional[str]:
@@ -406,8 +639,15 @@ def build_active_task_recovery_note(
             "project commands.]"
         )
 
-    task_known = bool(record.task_summary or record.command)
-    task = record.task_summary or record.command or "unknown"
+    safe_contract = record.task_contract if isinstance(record.task_contract, dict) else None
+    safe_contract_recoverable = _contract_is_recoverable(safe_contract)
+    safe_summary = (
+        record.task_summary_safe
+        if record.task_summary_safe and (safe_contract is None or safe_contract_recoverable)
+        else None
+    )
+    task_known = bool(safe_summary or record.task_summary or record.command)
+    task = safe_summary or record.task_summary or record.command or "unknown"
     lines = [
         base,
         f" Previous active task: {task}",
@@ -417,12 +657,30 @@ def build_active_task_recovery_note(
         f"Previous command: {record.command or 'unknown'}",
         f"Process status: {record.status or 'unknown'}",
     ]
+    if safe_summary:
+        lines.append(f"Recovered safe task summary: {safe_summary}")
+        if safe_contract:
+            lines.append(
+                "Safe task contract: "
+                f"source={safe_contract.get('source') or 'unknown'}, "
+                f"status={safe_contract.get('status') or 'active'}, "
+                f"risk_level={safe_contract.get('risk_level') or 'unknown'}, "
+                f"restart_policy={safe_contract.get('restart_policy') or 'unknown'}, "
+                f"validation_required={bool(safe_contract.get('validation_required'))}"
+            )
+            intended_repo = safe_contract.get("intended_repo")
+            if intended_repo:
+                lines.append(f"Intended repo from safe contract: {intended_repo}")
+            expected_paths = safe_contract.get("expected_paths")
+            if isinstance(expected_paths, list) and expected_paths:
+                lines.append(f"Expected paths from safe contract: {', '.join(map(str, expected_paths[:10]))}")
     if record.mode == "foreground_session" and not task_known:
         lines.append("Exact interrupted session record: found")
         lines.append(
             "Recovery task body: unknown; this is a workspace-only foreground "
             "record, not a persisted task record."
         )
+    if record.mode == "foreground_session":
         lines.append(
             "Do not infer the task from unrelated logs, dirty checkout files, "
             "or broad history searches; ask the user before continuing."
@@ -438,4 +696,34 @@ def build_active_task_recovery_note(
         "Next safe recovery check: verify the process/session status and latest "
         "log or summary path before running continuation commands.]"
     )
+    return "\n".join(lines)
+
+
+def render_safe_task_contract_for_prompt(record: ActiveTaskRecord | None) -> str:
+    """Render safe active-task contract metadata for prompt-cache-aware context."""
+    if record is None:
+        return ""
+    contract = record.task_contract if isinstance(record.task_contract, dict) else None
+    if contract is not None and not _contract_is_recoverable(contract):
+        return ""
+    summary = record.task_summary_safe or (contract or {}).get("task_summary_safe")
+    if not summary:
+        return ""
+    lines = [
+        "## Safe Active Task Contract",
+        "",
+        f"Recovered safe task summary: {summary}",
+        f"Task type: {(contract or {}).get('task_type') or record.mode or 'unknown'}",
+        f"Intended repo: {(contract or {}).get('intended_repo') or record.repo_path or 'unknown'}",
+        f"Intended branch: {(contract or {}).get('intended_branch') or record.branch or 'unknown'}",
+        f"Risk level: {(contract or {}).get('risk_level') or 'unknown'}",
+        f"Restart policy: {(contract or {}).get('restart_policy') or 'unknown'}",
+        f"Validation required: {bool((contract or {}).get('validation_required'))}",
+        f"Contract updated at: {(contract or {}).get('updated_at') or record.updated_at}",
+        "",
+        "Use this summary only as safe recovery context. Do not infer from logs, dirty files, or unrelated history.",
+    ]
+    expected_paths = (contract or {}).get("expected_paths")
+    if isinstance(expected_paths, list) and expected_paths:
+        lines.insert(5, f"Expected paths: {', '.join(map(str, expected_paths[:10]))}")
     return "\n".join(lines)

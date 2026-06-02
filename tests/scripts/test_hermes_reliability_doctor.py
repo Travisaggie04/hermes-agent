@@ -74,6 +74,12 @@ def test_inspect_active_task_store_counts_without_session_keys(tmp_path):
         "final_report_counts": {"failed": 1, "pending": 1},
         "foreground_missing_task_count": 1,
         "stale_active_foreground_count": 1,
+        "task_contract_count": 0,
+        "task_contract_missing_summary_count": 0,
+        "task_contract_status_counts": {},
+        "stale_or_superseded_task_contract_count": 0,
+        "task_contracts_with_intended_repo_count": 0,
+        "task_contracts_with_restart_policy_count": 0,
         "updated_at_age_buckets": {"bad_or_missing": 2},
     }
     rendered = json.dumps(result)
@@ -118,6 +124,54 @@ def test_inspect_active_task_store_flags_stale_foreground_records_without_text(t
     rendered = json.dumps(result)
     assert "private-session-key" not in rendered
     assert "private task body" not in rendered
+
+
+def test_reliability_doctor_reports_task_contract_counts(tmp_path):
+    store_path = tmp_path / "session_active_tasks.json"
+    store_path.write_text(
+        json.dumps(
+            {
+                "discord:channel:thread:private-session-key": {
+                    "session_key": "discord:channel:thread:private-session-key",
+                    "mode": "foreground_session",
+                    "status": "active",
+                    "repo_path": "/repo/a",
+                    "task_summary_safe": "private safe summary preview",
+                    "task_contract": {
+                        "status": "active",
+                        "source": "foreground_turn",
+                        "intended_repo": "/repo/a",
+                        "restart_policy": "resume_with_safe_summary",
+                    },
+                    "updated_at": "2026-06-02T00:00:00+00:00",
+                },
+                "discord:channel:other:private-session-key": {
+                    "session_key": "discord:channel:other:private-session-key",
+                    "mode": "foreground_session",
+                    "status": "active",
+                    "repo_path": "/repo/b",
+                    "task_contract": {
+                        "status": "superseded",
+                        "source": "recovery",
+                    },
+                    "updated_at": "2026-06-02T00:00:00+00:00",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = doctor.inspect_active_task_store(store_path)
+
+    assert result["task_contract_count"] == 2
+    assert result["task_contract_missing_summary_count"] == 1
+    assert result["task_contract_status_counts"] == {"active": 1, "superseded": 1}
+    assert result["stale_or_superseded_task_contract_count"] == 1
+    assert result["task_contracts_with_intended_repo_count"] == 1
+    assert result["task_contracts_with_restart_policy_count"] == 1
+    rendered = json.dumps(result)
+    assert "private safe summary preview" not in rendered
+    assert "private-session-key" not in rendered
 
 
 def test_inspect_goal_store_uses_read_only_counts(tmp_path):

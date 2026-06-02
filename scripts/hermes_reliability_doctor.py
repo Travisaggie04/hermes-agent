@@ -196,6 +196,12 @@ def inspect_active_task_store(path: str | Path) -> dict[str, Any]:
         "final_report_counts": {},
         "foreground_missing_task_count": 0,
         "stale_active_foreground_count": 0,
+        "task_contract_count": 0,
+        "task_contract_missing_summary_count": 0,
+        "task_contract_status_counts": {},
+        "stale_or_superseded_task_contract_count": 0,
+        "task_contracts_with_intended_repo_count": 0,
+        "task_contracts_with_restart_policy_count": 0,
         "updated_at_age_buckets": {},
     }
     if not store_path.exists():
@@ -224,6 +230,26 @@ def inspect_active_task_store(path: str | Path) -> dict[str, Any]:
         if record.get("final_report_status")
     ]
     result["final_report_counts"] = dict(sorted(Counter(final_statuses).items()))
+    contract_records = [
+        record
+        for record in records
+        if isinstance(record.get("task_contract"), dict)
+    ]
+    contract_statuses: Counter[str] = Counter()
+    for record in contract_records:
+        contract = record.get("task_contract") or {}
+        status = str(contract.get("status") or "active")
+        contract_statuses[status] += 1
+        if not (contract.get("task_summary_safe") or record.get("task_summary_safe")):
+            result["task_contract_missing_summary_count"] += 1
+        if status in {"completed", "superseded"}:
+            result["stale_or_superseded_task_contract_count"] += 1
+        if contract.get("intended_repo"):
+            result["task_contracts_with_intended_repo_count"] += 1
+        if contract.get("restart_policy"):
+            result["task_contracts_with_restart_policy_count"] += 1
+    result["task_contract_count"] = len(contract_records)
+    result["task_contract_status_counts"] = dict(sorted(contract_statuses.items()))
     now = datetime.now(timezone.utc)
     age_buckets: Counter[str] = Counter()
     for record in records:
@@ -403,6 +429,7 @@ def check_storage_policy_presence(
 
 def check_quality_policy_presence(
     repo_root: str | Path,
+    _hermes_home: str | Path | None = None,
 ) -> dict[str, Any]:
     root = Path(repo_root)
     session_py = root / "gateway" / "session.py"
@@ -635,6 +662,12 @@ def format_report(report: dict[str, Any]) -> str:
             f"  foreground records: {stores['active_tasks'].get('foreground_count')}",
             f"  foreground records missing task body: {stores['active_tasks'].get('foreground_missing_task_count')}",
             f"  stale active foreground records: {stores['active_tasks'].get('stale_active_foreground_count')}",
+            f"  active task contracts: {stores['active_tasks'].get('task_contract_count')}",
+            f"  task contracts missing summary: {stores['active_tasks'].get('task_contract_missing_summary_count')}",
+            f"  task contract statuses: {stores['active_tasks'].get('task_contract_status_counts')}",
+            f"  stale/superseded task contracts: {stores['active_tasks'].get('stale_or_superseded_task_contract_count')}",
+            f"  task contracts with intended_repo: {stores['active_tasks'].get('task_contracts_with_intended_repo_count')}",
+            f"  task contracts with restart_policy: {stores['active_tasks'].get('task_contracts_with_restart_policy_count')}",
             f"  final report statuses: {stores['active_tasks'].get('final_report_counts')}",
             f"  goal rows: {stores['goals'].get('goal_count')}",
             f"  active goals: {stores['goals'].get('active_count')}",

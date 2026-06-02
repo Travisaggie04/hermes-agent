@@ -3561,7 +3561,7 @@ class BasePlatformAdapter(ABC):
 
                     ActiveTaskStore().mark_final_report(
                         session_key=session_key,
-                        status="failed",
+                        status="pending",
                         error=getattr(result, "error", None),
                     )
                 except Exception:
