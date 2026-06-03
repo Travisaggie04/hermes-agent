@@ -44,6 +44,12 @@ def make_repo(tmp_path: Path, branch: str = "mission-control-os-stateful-foundat
     return repo
 
 
+def test_default_expected_branch_matches_default_checkout_branch() -> None:
+    module = load_module()
+
+    assert module.DEFAULT_EXPECTED_BRANCH == "codex/website-maintenance-mode"
+
+
 def run_gate(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],

@@ -147,18 +147,8 @@ def resolve_module_paths(
 def get_cli_project(hermes_bin: str | None = None) -> dict[str, str | None]:
     hermes_path = hermes_bin or shutil.which("hermes")
     if not hermes_path:
-        return {"binary": None, "project": None, "version_output": None}
-    result = _run_command([hermes_path, "--version"], timeout=8.0)
-    project = None
-    for line in result["stdout"].splitlines():
-        if line.startswith("Project:"):
-            project = line.split(":", 1)[1].strip() or None
-            break
-    return {
-        "binary": hermes_path,
-        "project": project,
-        "version_output": result["stdout"] if result["ok"] else None,
-    }
+        return {"binary": None, "project": None}
+    return {"binary": hermes_path, "project": None}
 
 
 def evaluate_runtime_topology(

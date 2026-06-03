@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 DEFAULT_EXPECTED_PATH = Path("/home/jenny/.hermes/hermes-context-routing-e1d-integration")
-DEFAULT_EXPECTED_BRANCH = "mission-control-os-stateful-foundation"
+DEFAULT_EXPECTED_BRANCH = "codex/website-maintenance-mode"
 
 
 @dataclass(frozen=True)

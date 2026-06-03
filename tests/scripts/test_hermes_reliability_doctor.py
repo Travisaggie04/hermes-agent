@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from argparse import Namespace
 
 from scripts import hermes_reliability_doctor as doctor
 
@@ -35,6 +36,68 @@ def test_default_gateway_venv_python_prefers_runtime_venv_when_executable(tmp_pa
     runtime_python.chmod(0o755)
 
     assert doctor.resolve_default_gateway_venv_python(runtime_python) == str(runtime_python)
+
+
+def test_collect_report_does_not_run_hermes_or_write_update_and_logs(tmp_path, monkeypatch):
+    hermes_home = tmp_path / ".hermes"
+    hermes_home.mkdir()
+    fake_hermes = tmp_path / "hermes"
+    fake_hermes.write_text(
+        "#!/bin/sh\n"
+        "touch \"$HERMES_HOME/.update_check\"\n"
+        "mkdir -p \"$HERMES_HOME/logs\"\n"
+        "touch \"$HERMES_HOME/logs/agent.log\"\n"
+        "echo 'Project: /dirty'\n",
+        encoding="utf-8",
+    )
+    fake_hermes.chmod(0o755)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    brain = tmp_path / "ai-ops-brain"
+
+    monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+    monkeypatch.setattr(
+        doctor,
+        "get_service_state",
+        lambda _service: {
+            "working_directory": str(repo),
+            "main_pid": "0",
+        },
+    )
+    monkeypatch.setattr(
+        doctor,
+        "resolve_module_paths",
+        lambda *_args, **_kwargs: {
+            "hermes_cli.main": str(repo / "hermes_cli" / "main.py"),
+            "gateway.run": str(repo / "gateway" / "run.py"),
+        },
+    )
+    monkeypatch.setattr(
+        doctor,
+        "parse_rclone_config",
+        lambda _path: {"exists": False, "remote_count": 0, "remotes": []},
+    )
+    monkeypatch.setattr(
+        doctor,
+        "inspect_mount_names",
+        lambda: {"command_ok": True, "cloud_like_mount_count": 0, "cloud_like_mount_sources": []},
+    )
+
+    report = doctor.collect_report(
+        Namespace(
+            hermes_home=str(hermes_home),
+            service="hermes-gateway.service",
+            gateway_venv_python="/unused/python",
+            expected_runtime_checkout=str(repo),
+            hermes_bin=str(fake_hermes),
+            ai_ops_brain=str(brain),
+        )
+    )
+
+    assert report["runtime"]["cli"]["binary"] == str(fake_hermes)
+    assert report["runtime"]["cli"]["project"] is None
+    assert not (hermes_home / ".update_check").exists()
+    assert not (hermes_home / "logs").exists()
 
 
 def test_parse_rclone_config_reports_remote_names_only(tmp_path):
