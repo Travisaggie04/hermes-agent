@@ -501,19 +501,14 @@ def check_quality_policy_presence(
         "status_counts": {},
     }
     if delegate_tracking_available:
-        try:
-            root_text = str(root.resolve())
-            if root_text not in sys.path:
-                sys.path.insert(0, root_text)
-            from gateway.delegate_evidence import get_recent_delegate_evidence
-
-            recent = get_recent_delegate_evidence()
-            status_counts: dict[str, int] = {}
-            for item in recent:
-                status = str(item.get("status") or "unknown")
-                status_counts[status] = status_counts.get(status, 0) + 1
-            delegate_records = {"count": len(recent), "status_counts": status_counts}
-        except Exception:
+        evidence_store = inspect_delegate_evidence_store(
+            Path(hermes_home) / "delegate_evidence.json"
+        )
+        delegate_records = {
+            "count": evidence_store.get("recent_record_count", 0),
+            "status_counts": evidence_store.get("recent_status_counts", {}),
+        }
+        if evidence_store.get("exists") and not evidence_store.get("parsed"):
             delegate_records = {"count": 0, "status_counts": {}, "read_error": True}
     memory_text = ""
     home = Path(hermes_home)
@@ -557,6 +552,7 @@ def inspect_delegate_evidence_store(path: str | Path) -> dict[str, Any]:
         "recent_record_count": 0,
         "lane_status_counts": {},
         "status_counts": {},
+        "recent_status_counts": {},
         "checklist_fallback_count": 0,
         "unresolved_or_failed_count": 0,
     }
@@ -594,6 +590,9 @@ def inspect_delegate_evidence_store(path: str | Path) -> dict[str, Any]:
                 lane: dict(counts) for lane, counts in sorted(lane_counts.items())
             },
             "status_counts": dict(status_counts),
+            "recent_status_counts": dict(
+                Counter(str(item.get("status") or "unknown") for item in safe_records[-20:])
+            ),
             "checklist_fallback_count": fallback_count,
             "unresolved_or_failed_count": unresolved,
         }

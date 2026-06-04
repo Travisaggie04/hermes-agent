@@ -483,6 +483,29 @@ def test_reliability_doctor_reports_quality_gate_status(tmp_path):
     assert result["high_risk_final_report_template_available"] is True
 
 
+def test_quality_policy_check_does_not_import_inspected_delegate_evidence(tmp_path):
+    repo = tmp_path / "repo"
+    gateway = repo / "gateway"
+    gateway.mkdir(parents=True)
+    (gateway / "__init__.py").write_text("", encoding="utf-8")
+    marker = tmp_path / "delegate_evidence_imported"
+    (gateway / "delegate_evidence.py").write_text(
+        f"from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('imported', encoding='utf-8')\n"
+        "def record_delegate_evidence(): return {}\n"
+        "def get_recent_delegate_evidence(): return []\n",
+        encoding="utf-8",
+    )
+    hermes_home = tmp_path / ".hermes"
+    (hermes_home / "memories").mkdir(parents=True)
+
+    result = doctor.check_quality_policy_presence(repo, hermes_home)
+
+    assert result["delegate_evidence_tracking_available"] is True
+    assert result["recent_delegate_records"] == {"count": 0, "status_counts": {}}
+    assert not marker.exists()
+
+
 def test_delegate_capability_detection_matches_actual_tool(tmp_path):
     repo = tmp_path / "repo"
     gateway = repo / "gateway"
