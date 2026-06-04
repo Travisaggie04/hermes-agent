@@ -1358,6 +1358,7 @@ AUTHOR_MAP = {
     "mordred@inaugust.com": "emonty",
     "rodrigoeq@hotmail.com": "rodrigoeqnit",
     "soliva.johnpaul@icloud.com": "jonpol01",
+    "jenny@local": "Travisaggie04",  # PR-A Mission Control records
     "2182712990@qq.com": "yu-xin-c",  # PR #32122 (Docker audio bridge notes)
     "baxter@bitreserve.ai": "BaxBit",  # PR #30200 (Svix webhook signature validation)
     "chris.eth@qq.com": "duyua9",  # PR #10949 (render object config values structurally)
