@@ -112,7 +112,7 @@ async def test_execute_completion_report_recovered_when_delivery_lost(tmp_path, 
 
     record = store.get(session_key)
     assert record is not None
-    assert record.final_report_status == "failed"
+    assert record.final_report_status == "pending"
     assert record.final_report_path
     assert Path(record.final_report_path).read_text(encoding="utf-8") == "final report body"
     assert "network down" in (record.final_report_error or "")
@@ -171,6 +171,60 @@ async def test_active_execute_without_process_runs_final_state_recovery(tmp_path
     assert reloaded is not None
     assert reloaded.final_report_status == "recovered"
     assert reloaded.last_observed_process_state == "not_found"
+    runner._release_running_agent_state.assert_called_once_with(session_key)
+
+
+@pytest.mark.asyncio
+async def test_cached_turn_recovers_completed_test_result_when_process_gone(tmp_path):
+    repo = tmp_path / "repo"
+    head = _init_repo(repo)
+
+    store = ActiveTaskStore(tmp_path / "active_tasks.json")
+    session_key = build_session_key(_source())
+    store.upsert(
+        session_key=session_key,
+        repo_path=str(repo),
+        branch="master",
+        head=head,
+        mode="background_process",
+        command="python -m pytest tests/unit",
+        task_summary="verification run",
+        status="succeeded",
+        process_session_id="proc_done",
+        pid=999999,
+        exit_code=0,
+        completed_at="2026-06-02T00:00:00+00:00",
+        output_tail="2 passed in 0.10s",
+        last_observed_process_state="exited",
+        final_report_status="pending",
+    )
+
+    adapter = _Adapter()
+    runner = object.__new__(GatewayRunner)
+    runner.active_task_store = store
+    runner.adapters = {Platform.DISCORD: adapter}
+    runner._running_agents = {session_key: _AGENT_PENDING_SENTINEL}
+    runner._running_agents_ts = {session_key: 1.0}
+    runner._busy_ack_ts = {}
+    runner._busy_input_mode = "queue"
+    runner._busy_text_mode = "interrupt"
+    runner._draining = False
+    runner._is_user_authorized = lambda _source: True
+    runner._release_running_agent_state = MagicMock(return_value=True)
+    runner._reply_anchor_for_event = lambda event: event.message_id
+    runner._thread_metadata_for_source = lambda source, reply_anchor=None: None
+
+    handled = await runner._handle_active_session_busy_message(_event("still working?"), session_key)
+
+    assert handled is True
+    report = adapter.sent[-1]
+    assert "Approved execute recovery" in report
+    assert "Process state: exited" in report
+    assert "Exit code: 0" in report
+    assert "2 passed in 0.10s" in report
+    reloaded = store.get(session_key)
+    assert reloaded is not None
+    assert reloaded.final_report_status == "recovered"
     runner._release_running_agent_state.assert_called_once_with(session_key)
 
 
@@ -280,7 +334,7 @@ async def test_recovery_asks_when_intended_repo_missing(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_active_execute_recovery_report_send_failure_stays_replayable(tmp_path):
+async def test_active_execute_recovery_report_send_failure_stays_pending(tmp_path):
     repo = tmp_path / "repo"
     head = _init_repo(repo)
 
@@ -319,7 +373,7 @@ async def test_active_execute_recovery_report_send_failure_stays_replayable(tmp_
     reloaded = store.get(session_key)
     assert reloaded is not None
     assert reloaded.status == "detached"
-    assert reloaded.final_report_status == "failed"
+    assert reloaded.final_report_status == "pending"
     assert "network down" in (reloaded.final_report_error or "")
     assert reloaded.final_report_path
     assert "Approved execute recovery" in Path(reloaded.final_report_path).read_text(encoding="utf-8")
@@ -327,7 +381,7 @@ async def test_active_execute_recovery_report_send_failure_stays_replayable(tmp_
 
 
 @pytest.mark.asyncio
-async def test_next_turn_surfaces_failed_persisted_final_report(tmp_path):
+async def test_next_turn_surfaces_pending_persisted_final_report(tmp_path):
     store = ActiveTaskStore(tmp_path / "active_tasks.json")
     session_key = build_session_key(_source())
     report_path = tmp_path / "lost_report.txt"
@@ -337,7 +391,7 @@ async def test_next_turn_surfaces_failed_persisted_final_report(tmp_path):
         mode="background_process",
         status="detached",
         command="python task.py",
-        final_report_status="failed",
+        final_report_status="pending",
         final_report_path=str(report_path),
         final_report_error="previous send failed",
     )
@@ -357,6 +411,39 @@ async def test_next_turn_surfaces_failed_persisted_final_report(tmp_path):
     reloaded = store.get(session_key)
     assert reloaded is not None
     assert reloaded.final_report_status == "recovered"
+
+
+@pytest.mark.asyncio
+async def test_pending_final_report_replay_failure_remains_pending(tmp_path):
+    store = ActiveTaskStore(tmp_path / "active_tasks.json")
+    session_key = build_session_key(_source())
+    report_path = tmp_path / "lost_report.txt"
+    report_path.write_text("lost final report", encoding="utf-8")
+    store.upsert(
+        session_key=session_key,
+        mode="background_process",
+        status="detached",
+        command="python task.py",
+        final_report_status="pending",
+        final_report_path=str(report_path),
+        final_report_error="previous send failed",
+    )
+
+    adapter = _Adapter(send_result=SendResult(success=False, error="still down", retryable=False))
+    runner = object.__new__(GatewayRunner)
+    runner.active_task_store = store
+    runner.adapters = {Platform.DISCORD: adapter}
+    runner._reply_anchor_for_event = lambda event: event.message_id
+    runner._thread_metadata_for_source = lambda source, reply_anchor=None: None
+
+    surfaced = await runner._surface_pending_final_report(_event("next message"), session_key)
+
+    assert surfaced is False
+    assert "Recovered final report" in adapter.sent[-1]
+    reloaded = store.get(session_key)
+    assert reloaded is not None
+    assert reloaded.final_report_status == "pending"
+    assert "still down" in (reloaded.final_report_error or "")
 
 
 @pytest.mark.asyncio

@@ -17,6 +17,7 @@ never the child's intermediate tool calls or reasoning.
 """
 
 import enum
+import hashlib
 import json
 import logging
 
@@ -1924,14 +1925,15 @@ def delegate_task(
     acp_command: Optional[str] = None,
     acp_args: Optional[List[str]] = None,
     role: Optional[str] = None,
+    lane: Optional[str] = None,
     parent_agent=None,
 ) -> str:
     """
     Spawn one or more child agents to handle delegated tasks.
 
     Supports two modes:
-      - Single: provide goal (+ optional context, toolsets, role)
-      - Batch:  provide tasks array [{goal, context, toolsets, role}, ...]
+      - Single: provide goal (+ optional context, toolsets, role, lane)
+      - Batch:  provide tasks array [{goal, context, toolsets, role, lane}, ...]
 
     The 'role' parameter controls whether a child can further delegate:
     'leaf' (default) cannot; 'orchestrator' retains the delegation
@@ -2017,7 +2019,13 @@ def delegate_task(
         task_list = tasks
     elif goal and isinstance(goal, str) and goal.strip():
         task_list = [
-            {"goal": goal, "context": context, "toolsets": toolsets, "role": top_role}
+            {
+                "goal": goal,
+                "context": context,
+                "toolsets": toolsets,
+                "role": top_role,
+                "lane": lane,
+            }
         ]
     else:
         return tool_error("Provide either 'goal' (single task) or 'tasks' (batch).")
@@ -2035,6 +2043,7 @@ def delegate_task(
             return tool_error(f"Task {i} is missing a 'goal'.")
 
     overall_start = time.monotonic()
+    invoked_at_wall = time.time()
     results = []
 
     n_tasks = len(task_list)
@@ -2236,6 +2245,65 @@ def delegate_task(
                 )
             except Exception:
                 pass
+
+    # Record safe, process-local evidence that delegation actually happened.
+    # This is intentionally separate from persistent session/memory stores.
+    try:
+        from datetime import datetime, timezone
+        from gateway.delegate_evidence import record_delegate_evidence
+
+        invoked_at = datetime.fromtimestamp(invoked_at_wall, timezone.utc).isoformat()
+        completed_at = datetime.now(timezone.utc).isoformat()
+        parent_session = getattr(parent_agent, "session_id", None)
+        active_task_id = getattr(parent_agent, "_current_task_id", None)
+        goal_id = getattr(parent_agent, "_active_goal_id", None)
+        if not goal_id and parent_session:
+            try:
+                from hermes_cli.goals import load_goal
+
+                goal_state = load_goal(str(parent_session))
+                if goal_state is not None and getattr(goal_state, "status", None) in {"active", "paused"}:
+                    digest = hashlib.sha256(str(parent_session).encode("utf-8")).hexdigest()
+                    goal_id = f"goal:{digest[:16]}"
+            except Exception:
+                goal_id = None
+        repo_path = None
+        try:
+            cwd = os.getcwd()
+            if os.path.isdir(os.path.join(cwd, ".git")):
+                repo_path = cwd
+        except Exception:
+            repo_path = None
+        for entry in results:
+            try:
+                idx = entry.get("task_index", 0)
+                task = task_list[idx] if isinstance(idx, int) and idx < len(task_list) else {}
+                child_session_id = (
+                    getattr(children[idx][2], "session_id", "")
+                    if isinstance(idx, int) and idx < len(children)
+                    else ""
+                )
+                record_delegate_evidence(
+                    lane=task.get("lane"),
+                    task_goal=task.get("goal"),
+                    context=task.get("context"),
+                    delegate_name="delegate_task",
+                    delegate_type="subagent",
+                    invoked_at=invoked_at,
+                    completed_at=completed_at,
+                    status=entry.get("status"),
+                    result_summary=entry.get("summary") or entry.get("error") or "",
+                    session_key=parent_session,
+                    child_session_id=child_session_id,
+                    active_task_id=active_task_id,
+                    goal_id=goal_id,
+                    repo_path=repo_path,
+                    process_id=os.getpid(),
+                )
+            except Exception:
+                logger.debug("delegate evidence record failed", exc_info=True)
+    except Exception:
+        logger.debug("delegate evidence tracking unavailable", exc_info=True)
 
     # Fire subagent_stop hooks once per child, serialised on the parent thread.
     # This keeps Python-plugin and shell-hook callbacks off of the worker threads
@@ -2691,6 +2759,24 @@ DELEGATE_TASK_SCHEMA = {
                     "specific you are, the better the subagent performs."
                 ),
             },
+            "lane": {
+                "type": "string",
+                "enum": [
+                    "implementation",
+                    "review",
+                    "verification",
+                    "safety",
+                    "deployment",
+                    "domain",
+                ],
+                "description": (
+                    "Optional quality lane this subagent is performing. "
+                    "Use review for independent code/design review, verification "
+                    "for tests/checks, safety for risk/security checks, deployment "
+                    "for runtime/restart validation, domain for research/domain work, "
+                    "and implementation for build/fix work."
+                ),
+            },
             "toolsets": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -2735,6 +2821,18 @@ DELEGATE_TASK_SCHEMA = {
                             "type": "string",
                             "enum": ["leaf", "orchestrator"],
                             "description": "Per-task role override. See top-level 'role' for semantics.",
+                        },
+                        "lane": {
+                            "type": "string",
+                            "enum": [
+                                "implementation",
+                                "review",
+                                "verification",
+                                "safety",
+                                "deployment",
+                                "domain",
+                            ],
+                            "description": "Quality lane this subagent is performing.",
                         },
                     },
                     "required": ["goal"],

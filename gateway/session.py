@@ -203,6 +203,40 @@ that requires raw IDs).  Discord is excluded because mentions use ``<@user_id>``
 and the LLM needs the real ID to tag users."""
 
 
+QUALITY_LANE_POLICY_MARKERS = (
+    "implementation lane",
+    "review lane",
+    "verification lane",
+    "deployment/report lane",
+)
+
+
+def render_quality_lane_policy_for_prompt() -> str:
+    """Compact high-rigor work policy for gateway/runtime prompts."""
+    from gateway.quality_lanes import QUALITY_LANE_REQUIRED_FIELDS
+
+    required_fields = ", ".join(field.rstrip(":") for field in QUALITY_LANE_REQUIRED_FIELDS)
+    return "\n".join(
+        [
+            "## Quality Lanes for High-Rigor Work",
+            "",
+            "For video production, WAHA inspection work, app building, Hermes "
+            "reliability, code changes requiring review, final reports, and "
+            "deployment verification: use delegate_task subagents when "
+            "available and appropriate.",
+            "",
+            "If real subagents are unavailable or unsafe for the task, use "
+            "checklist-style lanes instead: implementation lane, review lane, "
+            "verification lane, and deployment/report lane.",
+            "",
+            "Do not claim real subagents ran unless delegation actually ran. "
+            "Quality lanes section is required in final reports for high-rigor "
+            "work. It must include: "
+            f"{required_fields}.",
+        ]
+    )
+
+
 def _discord_tools_loaded() -> bool:
     """True iff the agent will actually have Discord tools this session.
 
@@ -417,6 +451,20 @@ def build_session_context_prompt(
     # Note about explicit targeting
     lines.append("")
     lines.append("*For explicit targeting, use `\"platform:chat_id\"` format if the user provides a specific chat ID.*")
+
+    lines.append("")
+    lines.append(render_quality_lane_policy_for_prompt())
+
+    if context.session_id:
+        try:
+            from hermes_cli.goals import render_goal_context_for_prompt
+
+            goal_context = render_goal_context_for_prompt(context.session_id)
+        except Exception:
+            goal_context = ""
+        if goal_context:
+            lines.append("")
+            lines.append(goal_context)
 
     return "\n".join(lines)
 
