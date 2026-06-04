@@ -31,6 +31,10 @@ import { Button } from "@nous-research/ui/ui/components/button";
 import { Badge } from "@nous-research/ui/ui/components/badge";
 import { H2, Typography } from "@/components/NouiTypography";
 import { Card, CardContent } from "@/components/ui/card";
+import { ActiveEnvelopePanel } from "@/components/ActiveEnvelopePanel";
+import { ApprovalSlicesPanel } from "@/components/ApprovalSlicesPanel";
+import { ArtifactWorkspaceBrowser } from "@/components/ArtifactWorkspaceBrowser";
+import { MissionBriefsPanel } from "@/components/MissionBriefsPanel";
 import { MissionPacketsPanel } from "@/components/MissionPacketsPanel";
 import { ProjectRoomsPanel } from "@/components/ProjectRoomsPanel";
 import { api } from "@/lib/api";
@@ -1301,6 +1305,7 @@ export default function MissionControlPage() {
   const [memoryStatus, setMemoryStatus] = useState<OpsMemoryStatus | null>(null);
   const [socialStatus, setSocialStatus] = useState<OpsSocialPlatformStatus | null>(null);
   const [socialHistory, setSocialHistory] = useState<OpsSocialPlatformHistory | null>(null);
+  const [missionBriefsEnabled, setMissionBriefsEnabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { setEnd } = usePageHeader();
 
@@ -1314,7 +1319,8 @@ export default function MissionControlPage() {
       api.getOpsMemoryStatus(),
       api.getOpsSocialPlatformStatus(),
       api.getOpsSocialPlatformStatusHistory(8),
-    ]).then(([statusResult, jobsResult, sessionsResult, approvalSummaryResult, memoryStatusResult, socialStatusResult, socialHistoryResult]) => {
+      api.getConfig(),
+    ]).then(([statusResult, jobsResult, sessionsResult, approvalSummaryResult, memoryStatusResult, socialStatusResult, socialHistoryResult, configResult]) => {
       if (statusResult.status === "fulfilled") setStatus(statusResult.value);
       if (jobsResult.status === "fulfilled") setJobs(jobsResult.value);
       if (sessionsResult.status === "fulfilled") setSessions(sessionsResult.value.sessions);
@@ -1322,6 +1328,12 @@ export default function MissionControlPage() {
       if (memoryStatusResult.status === "fulfilled") setMemoryStatus(memoryStatusResult.value);
       if (socialStatusResult.status === "fulfilled") setSocialStatus(socialStatusResult.value);
       if (socialHistoryResult.status === "fulfilled") setSocialHistory(socialHistoryResult.value);
+      if (configResult.status === "fulfilled") {
+        const dashboard = (configResult.value.dashboard ?? {}) as { mission_briefs_enabled?: unknown };
+        setMissionBriefsEnabled(dashboard.mission_briefs_enabled === true);
+      } else {
+        setMissionBriefsEnabled(false);
+      }
       const failures = [statusResult, jobsResult, sessionsResult, approvalSummaryResult, memoryStatusResult, socialStatusResult, socialHistoryResult].filter((r) => r.status === "rejected");
       setError(failures.length ? "Some live status panels could not refresh." : null);
     });
@@ -1415,6 +1427,10 @@ export default function MissionControlPage() {
           </div>
         )}
 
+        <ActiveEnvelopePanel />
+        <ApprovalSlicesPanel />
+        {missionBriefsEnabled && <MissionBriefsPanel />}
+        <ArtifactWorkspaceBrowser />
         <ProjectRoomsPanel />
         <TodayView status={status} activeJobs={activeJobs} jobs={jobs} approvalSummary={approvalSummary} />
         <MemoryStatusPanel memoryStatus={memoryStatus} />

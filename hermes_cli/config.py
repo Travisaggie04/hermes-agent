@@ -1090,6 +1090,11 @@ DEFAULT_CONFIG = {
     # Web dashboard settings
     "dashboard": {
         "theme": "default",  # Dashboard visual theme: "default", "midnight", "ember", "mono", "cyberpunk", "rose"
+        "mission_briefs_enabled": False,
+        "goal_contracts_enabled": False,
+        "approval_slices_enabled": False,
+        "task_control_envelopes_enabled": False,
+        "evidence_cards_enabled": False,
         # Hide the token/cost analytics surfaces (Analytics page, token bars and
         # cost figures on the Models page) by default.  The numbers shown there
         # are a local debug estimate: they only count successful main-agent

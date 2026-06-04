@@ -111,6 +111,56 @@ Fixed action registry:
 - Arbitrary commands, gateway restart, cron mutation, credential change,
   public/payment action, and messaging outreach are blocked classes.
 
+Laptop SSH Capability:
+
+- Capability name: `laptop_ssh_read_only_inspection`.
+- Default state: disabled until preflight-approved.
+- Purpose: preserve the approved private route for laptop-local files so Jenny
+  does not conclude a laptop file is unavailable merely because it is absent
+  from the VPS filesystem.
+- Locality trigger phrases: "my laptop", "Downloads", "Windows Downloads",
+  "MSI laptop", "TRAVIS-MSI", and known laptop paths such as
+  `C:\Users\Travis\Downloads\`.
+- Approved route:
+  - SSH alias: `main-laptop`
+  - Hostname: `travis-msi.taila00f3c.ts.net`
+  - User: `travis`
+  - Remote machine: `TRAVIS-MSI`
+  - Remote home: `C:\Users\Travis`
+  - Downloads path: `C:\Users\Travis\Downloads\`
+  - Agent OS pack: `C:\Users\Travis\Downloads\agent-os-pack\` and
+    `C:\Users\Travis\Downloads\agent-os-pack.7z`
+- Required locality behavior:
+  - First classify whether the requested file is expected on the VPS, the
+    laptop, OneDrive/rclone, or an unknown source.
+  - Check current local/VPS paths only if relevant to that classification.
+  - If not found locally and likely on the laptop, consider this approved SSH
+    route.
+  - If SSH fails, report the exact failure and do not claim the file does not
+    exist globally.
+- Allowed modes: read-only existence checks, directory listing, file metadata,
+  and checksum checks within the approved path.
+- Blocked modes: copy, delete, move, extract, execute, install, broad recursive
+  inventory, secret reading or printing, unrelated personal-file inspection,
+  and any mutation of laptop files or settings.
+- Approval requirements: before using SSH, state the alias or host, target
+  path, exact read-only Windows command or commands, that no secrets will be
+  printed, and that no files will be modified, copied, deleted, extracted, or
+  run. Require approval unless an active approval slice already grants that
+  exact read-only laptop inspection.
+- Safe Windows command patterns: bounded `cmd /c if exist ...` existence
+  checks, bounded `cmd /c dir ...` listings for the approved path,
+  PowerShell `Get-Item` metadata reads for exact approved paths, and
+  PowerShell `Get-FileHash` checksum reads for exact approved files.
+- Forbidden command patterns: `copy`, `xcopy`, `robocopy`, `move`, `del`,
+  `erase`, `rmdir`, archive extraction, installers, script execution, broad
+  recursive `dir /s` inventory, commands that read `.env`, private keys,
+  browser profiles, credentials, tokens, SSH keys, or unrelated personal file
+  contents.
+- Privacy constraints: never print SSH keys, tokens, credentials, `.env`
+  contents, private keys, browser profile data, or unrelated personal file
+  contents.
+
 Task queue and worker output:
 
 - Hermes Kanban is the existing durable task queue. The shared board lives
@@ -145,6 +195,271 @@ Mission Control should become an operator console with four lanes:
    correct Hermes profile.
 4. Notify: send lightweight notifications to Discord/WhatsApp when something
    needs Travis, but keep the actual state and controls in Hermes.
+
+Mission Control operations also need a lane lock before action. Jenny should
+classify the active lane, explicitly allowed actions, forbidden adjacent lanes,
+other-thread/chat exclusions, and the approval slice required before crossing
+lanes. Context from a neighboring lane may be recorded as risk/background, but
+it must not authorize work outside the current lane. A documentation-only lane
+stays documentation-only; a read-only inventory lane stays read-only; a
+stop-state lane permits no cleanup or forward progress; and a cleanup/revert
+lane may touch only the named cleanup target.
+
+## Task Control Envelope T2 Design Model
+
+T2 is a design/specification model for future Mission Control task routing. It
+does not implement enforcement, command parsing, preflight checks, approval
+records, dashboard UI, MCP tools, runtime behavior, feature flags, or
+persistence migrations. Any code that consumes this model belongs to a later
+reviewed implementation slice.
+
+The Task Control Envelope is the normalized control packet Mission Control
+should place around a bounded Jenny/Codex task before the task is started,
+queued, or handed to a future approval surface. Its action fields must use only
+the G1 canonical action categories from
+`docs/design/goal_contract_approval_slice_g1_20260602.md`.
+
+Proposed envelope schema:
+
+```yaml
+schema: mission_control.task_control_envelope.v1
+task:
+  id: string
+  title: string
+  source: string
+  source_ref: string
+  created_at: string
+  created_by: string
+repo:
+  path: string
+  branch: string
+  head: string
+mode:
+  active_mode: string
+  preset: string
+  allowed_actions: [string]
+  forbidden_actions: [string]
+  checkpoints: [string]
+lane_lock:
+  active_lane: string
+  explicitly_allowed_actions: [string]
+  explicitly_forbidden_actions: [string]
+  adjacent_context_not_authority: [string]
+  other_thread_workstreams_excluded: [string]
+  approval_slice_required_before_crossing: string
+capabilities:
+  required: [string]
+  optional: [string]
+  blocked: [string]
+  registry_snapshot_ref: string
+file_locality:
+  requested_paths: [string]
+  expected_locations: [string]
+  resolver_decision: string
+dirty_worktree:
+  status: string
+  allowed_dirty_paths: [string]
+  unrelated_dirty_paths: [string]
+  checkpoint_on_unrelated_dirty_files: string
+evidence:
+  required_cards: [string]
+  produced_cards: [string]
+relationships:
+  mission_brief_ref: string
+  g1_spec_ref: string
+  g2_goal_contract_ref: string
+  w1b_artifact_metadata_ref: string
+  w1c_artifact_browser_ref: string
+  g3_approval_slice_ref: string
+```
+
+The schema is intentionally declarative. `allowed_actions`,
+`forbidden_actions`, `explicitly_allowed_actions`, and
+`explicitly_forbidden_actions` are category lists, not executable commands.
+They must be drawn from the G1 action category set:
+`discuss`, `plan`, `inspect_repo`, `read_files`, `search_files`, `edit_files`,
+`run_focused_tests`, `run_broad_tests`, `run_build`, `run_lint`,
+`run_dev_server`, `browser_qa`, `install_dependencies`, `change_config`,
+`touch_secrets`, `commit`, `push`, `open_pr`, `deploy`, `restart_service`,
+`public_bind`, `oauth_connector`, `external_network`, and `destructive_git`.
+
+### Active Mode Defaults
+
+Active Mode is the future per-task posture selected from the G1 preset names.
+Mode defaults define the starting category allowance, but the Task Control
+Envelope can narrow them further for a specific task. It cannot widen them
+without a later approval slice.
+
+| Active Mode | Default allowed G1 action categories | Default checkpoint posture |
+|---|---|---|
+| `discussion-only` | `discuss`, `plan` | `stop_after_plan`, `stop_on_scope_expansion` |
+| `inspection-only` | `discuss`, `plan`, `inspect_repo`, `read_files`, `search_files` | `stop_after_inspection_report`, `stop_on_scope_expansion` |
+| `implement-slice` | `discuss`, `plan`, `inspect_repo`, `read_files`, `search_files`, `edit_files`, `run_focused_tests`, `run_build`, `run_lint`, `browser_qa` | `stop_after_implementation_report`, `stop_after_validation_report`, `stop_on_validation_failure`, `stop_on_scope_expansion` |
+| `commit-only` | `discuss`, `inspect_repo`, `read_files`, `search_files`, `run_focused_tests`, `run_build`, `run_lint`, `commit` | `stop_after_local_commit_report`, `stop_on_unrelated_dirty_files` |
+| `local-smoke-test` | `discuss`, `inspect_repo`, `read_files`, `search_files`, `run_focused_tests`, `run_build`, `run_lint`, `run_dev_server`, `browser_qa` | `stop_after_validation_report`, `stop_on_validation_failure` |
+| `stop-state-only` | `discuss`, `inspect_repo`, `read_files`, `search_files` | `stop_after_status_report`, `stop_on_scope_expansion` |
+
+The default denied posture is every G1 category not listed for the active mode.
+Task-specific forbidden actions should still be recorded explicitly when the
+operator names them, because an explicit denial is more useful to reviewers than
+an implied omission.
+
+### Checkpoint Mapping
+
+T2 uses the G1 checkpoint vocabulary as event labels for future task control,
+not the current filesystem checkpoint manager. The checkpoint labels map to
+Mission Control moments:
+
+- `stop_after_status_report`: stop after reporting current state; no cleanup or
+  forward progress.
+- `stop_after_plan`: stop after a proposed plan or task split.
+- `stop_after_inspection_report`: stop after local read-only findings.
+- `stop_after_implementation_report`: stop after documentation/code edits are
+  summarized, before validation expansion.
+- `stop_after_validation_report`: stop after the allowed focused validation is
+  reported.
+- `stop_after_local_commit_report`: stop after a local commit summary, before
+  any `push` or `open_pr`.
+- `stop_on_scope_expansion`: stop when satisfying the task would require a G1
+  category not allowed by the envelope.
+- `stop_on_validation_failure`: stop and report when allowed validation fails.
+- `stop_on_unrelated_dirty_files`: stop when unrelated dirty files affect the
+  requested work.
+- `stop_on_dependency_change_needed`: stop when `install_dependencies` is
+  needed but not already allowed.
+- `stop_on_restart_or_deploy_needed`: stop when `restart_service` or `deploy`
+  is needed but not already allowed.
+- `stop_on_user_message_conflict`: stop when a newer user message conflicts
+  with the active envelope.
+
+### Transition Rules
+
+T2 transitions are conservative:
+
+- A task may move to a narrower mode without approval.
+- A task may not add any new G1 action category unless a future G3 Approval
+  Slice or equivalent user approval explicitly allows that category.
+- A task may not cross from `read_files` or `search_files` into `edit_files`
+  without the active envelope allowing `edit_files`.
+- A task may not cross from `edit_files` into `commit`, `push`, `deploy`, or
+  `restart_service` unless those categories are explicitly allowed.
+- A task may not use `touch_secrets`, `oauth_connector`, `external_network`,
+  `public_bind`, or `destructive_git` unless the active envelope explicitly
+  allows the category and the capability state is compatible.
+- If W1C or G3 does not exist in the checkout, the transition must stop at the
+  design boundary rather than pretending an implementation surface is present.
+
+### Evidence Cards
+
+Evidence Cards are small review records attached to the envelope. They are
+designed for future dashboard/API rendering and should be safe to display
+without exposing secrets. A card should include:
+
+- `card_id`
+- `kind`
+- `summary`
+- `source_ref`
+- `action_categories`
+- `files_or_artifacts`
+- `commands_run`
+- `result`
+- `redaction_notes`
+- `created_at`
+
+The `action_categories` field must contain only G1 action categories. Example
+card kinds include repo-state, diff-summary, validation, secret-scan,
+dirty-worktree, file-locality, capability-state, and reviewer-verdict. These
+are display kinds, not action names and not execution authority.
+
+Evidence Cards relate to W1B by pointing at artifact metadata instead of
+embedding large artifacts. W1C may later browse the cards and linked artifacts,
+but W1C is not present in this checkout unless it is reimplemented in a later
+slice.
+
+### File Locality Resolver
+
+The File Locality Resolver is a future preflight/read model that classifies
+where requested files are expected to live before any file access occurs. It
+should record:
+
+- requested path or path hint
+- expected location, such as repo checkout, Hermes profile state, AI Ops Brain,
+  laptop-local path, OneDrive/rclone-backed path, or unknown
+- allowed G1 categories for the lookup
+- forbidden G1 categories for the lookup
+- exact stop checkpoint if the file is not available in the allowed locality
+
+The resolver must not turn a missing local file into authority for
+`external_network`, `oauth_connector`, `touch_secrets`, or laptop/OneDrive
+inspection. Those categories require explicit envelope permission and a
+compatible capability state. In this T3 docs-only slice, laptop SSH, OneDrive,
+rclone, and external access remain forbidden.
+
+### Dirty Worktree Gate
+
+The Dirty Worktree Gate is a future pre-edit and pre-commit control. It should
+capture branch, HEAD, dirty file list, which dirty paths belong to the current
+task, and which paths are unrelated. If unrelated dirty files are present and
+the task would need `edit_files`, `commit`, or `destructive_git`, the envelope
+should trigger `stop_on_unrelated_dirty_files`.
+
+The gate is not a cleanup instruction. It must never authorize deleting,
+reverting, formatting, or committing unrelated files. Cleanup/revert remains a
+separate active lane with its own envelope.
+
+### Lane Lock
+
+Lane Lock is the operator-facing summary of the envelope. It should be produced
+before action and repeated in the final handoff for bounded lane work. It
+records the active lane, explicitly allowed actions, explicitly forbidden
+actions, adjacent context that must not be acted on, excluded workstreams, and
+the approval slice required before crossing lanes.
+
+Lane Lock is stricter than Active Mode. Active Mode supplies default category
+sets; Lane Lock binds the actual task. If the user says "documentation-only",
+Lane Lock must limit `edit_files` to documentation files and deny disallowed
+G1 categories such as `run_focused_tests`, `run_broad_tests`, `deploy`,
+`restart_service`, `external_network`, and any other forbidden G1 category
+named in the prompt. Runtime behavior and UI changes remain out of scope unless
+a later envelope names them and grants the matching G1 categories.
+
+### Capability Registry Integration
+
+The future Capability Registry should describe what the current checkout,
+profile, host, and approval context can safely do. It should not grant action
+authority by itself. The Task Control Envelope remains the task-specific
+authority boundary.
+
+Capability records should include a stable capability name, state, source,
+required G1 action categories, denied G1 action categories, locality limits,
+secret-redaction posture, audit requirements, and expiry. Suggested states are
+`absent`, `available`, `disabled`, `blocked`, `requires_approval`, and
+`approved_for_slice`. A capability in `available` state still cannot be used
+unless the envelope allows the matching G1 category.
+
+Mission Control should use registry snapshots to populate Evidence Cards and
+to explain why a requested transition is blocked. For example, a laptop-local
+file resolver capability may be known, but a task whose envelope forbids
+`external_network` must still stop before using it.
+
+### Related Specs and Surfaces
+
+- Phase 1A Mission Briefs: provide human-facing objective, scope, constraints,
+  and verification expectations that can seed a Task Control Envelope.
+- G1 Goal Contract spec constants: provide the canonical action categories,
+  presets, checkpoint labels, approval states, source fields, and policy values
+  used by T2. T2 must not add new action categories.
+- G2 Goal Contract records: future persisted goal-contract records should store
+  or reference the envelope so the agent and dashboard agree on task boundaries.
+- W1B Artifact metadata endpoint: should provide artifact references for
+  Evidence Cards, worker results, validation logs, and packet previews without
+  embedding large or sensitive content in the envelope.
+- W1C Artifact Browser UI: future browser surface for Evidence Cards and
+  artifacts. W1C is reconciled as not present in this checkout unless it is
+  reimplemented later.
+- G3 Approval Slice records: future approval records that may allow an envelope
+  transition, category expansion, or capability use. T2 only points to the
+  approval slice requirement; it does not create or enforce G3 records.
 
 Discord should become notification-only because it is a poor source of truth:
 thread rollover loses context, copy/paste relays waste Codex turns, and
