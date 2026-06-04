@@ -211,6 +211,32 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
+  listMissionControlArtifacts: () =>
+    fetchJSON<MissionControlArtifactListResponse>("/api/mission-control/artifacts", { cache: "no-store" }),
+  listMissionBriefs: () =>
+    fetchJSON<MissionBriefListResponse>("/api/mission-control/mission-briefs", { cache: "no-store" }),
+  getMissionBrief: (briefId: string) =>
+    fetchJSON<MissionBriefDetailResponse>(`/api/mission-control/mission-briefs/${encodeURIComponent(briefId)}`, { cache: "no-store" }),
+  getMissionControlActiveEnvelope: () =>
+    fetchJSON<MissionControlActiveEnvelopeResponse>("/api/mission-control/active-envelope", { cache: "no-store" }),
+  listApprovalSlices: () =>
+    fetchJSON<ApprovalSlicesResponse>("/api/mission-control/approval-slices?include_inactive=true", { cache: "no-store" }),
+  createMissionBrief: (body: MissionBriefCreate) =>
+    fetchJSON<MissionBriefCreateResponse>("/api/mission-control/mission-briefs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  updateMissionBrief: (briefId: string, body: MissionBriefUpdate) =>
+    fetchJSON<MissionBriefCreateResponse>(`/api/mission-control/mission-briefs/${encodeURIComponent(briefId)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  archiveMissionBrief: (briefId: string) =>
+    fetchJSON<MissionBriefCreateResponse>(`/api/mission-control/mission-briefs/${encodeURIComponent(briefId)}`, {
+      method: "DELETE",
+    }),
   listProjectRooms: () =>
     fetchJSON<ProjectRoomsResponse>("/api/mission-control/project-rooms", { cache: "no-store" }),
   createProjectRoom: (body: ProjectRoomCreate) =>
@@ -910,6 +936,102 @@ export interface MissionControlPacketCreateResponse {
   packet: MissionControlPacket;
 }
 
+export interface MissionControlArtifact {
+  source_type: string;
+  record_id: string;
+  title: string;
+  project: string;
+  status: string;
+  kind: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+  archived_at?: string | null;
+  counts: Record<string, number>;
+  linked_ids: Record<string, string[]>;
+  source_ref_count: number;
+  flags: Record<string, unknown>;
+  warnings: string[];
+  trusted_for_execution: false;
+  inert_context_only: true;
+  untrusted: true;
+}
+
+export interface MissionControlArtifactListResponse {
+  generated_at: string;
+  source: string;
+  items: MissionControlArtifact[];
+  warnings: string[];
+}
+
+export interface MissionControlActiveEnvelopeMetadata {
+  id?: string | null;
+  schema?: string | null;
+  status?: string | null;
+  title?: string | null;
+  mode?: string | null;
+  mode_label?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  trusted_for_execution: false;
+  inert_context_only: true;
+  vocabulary_version?: string | null;
+}
+
+export interface MissionControlActiveEnvelopeResponse {
+  exists: boolean;
+  active_lane?: string | null;
+  active_mode?: string | null;
+  execution_boundary: string;
+  allowed_actions: string[];
+  forbidden_actions: string[];
+  checkpoint?: string | null;
+  repo_state: {
+    status?: string | null;
+    source?: string | null;
+  };
+  evidence: {
+    count: number;
+    links: string[];
+  };
+  data_source: string;
+  task_control_envelope?: MissionControlActiveEnvelopeMetadata;
+  selection?: {
+    selected_from_count: number;
+    ambiguous: boolean;
+    selection_reason: string;
+  };
+  trusted_for_execution: false;
+  inert_context_only: true;
+}
+
+export type ApprovalSliceStatus = "active" | "revoked" | "expired" | "completed";
+
+export interface ApprovalSliceSummary {
+  id: string;
+  status: ApprovalSliceStatus;
+  title: string;
+  repo_path?: string | null;
+  allowed_actions: string[];
+  forbidden_actions: string[];
+  stop_condition?: string | null;
+  checkpoint?: string | null;
+  linked_goal_contract_id?: string | null;
+  created_by?: string | null;
+  created_from?: string | null;
+  created_at: string;
+  updated_at: string;
+  revoked_at?: string | null;
+  expired_at?: string | null;
+  completed_at?: string | null;
+  trusted_for_execution: false;
+  inert_context_only: true;
+}
+
+export interface ApprovalSlicesResponse {
+  items: ApprovalSliceSummary[];
+  warnings: string[];
+}
+
 export interface MissionControlCodexPromptPacketCreate {
   project: string;
   title: string;
@@ -933,6 +1055,55 @@ export interface MissionControlBlockFlagPacketCreate {
   reason: string;
   source_refs?: string[];
   author?: string;
+}
+
+export interface MissionBrief {
+  id: string;
+  title: string;
+  summary: string;
+  references: string[];
+  status: "active" | "archived";
+  author: string;
+  created_at: string;
+  updated_at: string;
+  archived_at?: string | null;
+  trusted_for_execution: false;
+  inert_context_only: true;
+}
+
+export interface MissionBriefSummary {
+  id: string;
+  title: string;
+  summary: string;
+  status: "active" | "archived";
+  reference_count: number;
+  created_at: string;
+  updated_at: string;
+  archived_at?: string | null;
+  trusted_for_execution: false;
+  inert_context_only: true;
+}
+
+export interface MissionBriefListResponse {
+  items: MissionBriefSummary[];
+  warnings: string[];
+}
+
+export interface MissionBriefDetailResponse {
+  brief: MissionBrief;
+}
+
+export interface MissionBriefCreate {
+  title: string;
+  summary?: string;
+  references?: string[];
+  author?: string;
+}
+
+export type MissionBriefUpdate = Partial<MissionBriefCreate>;
+
+export interface MissionBriefCreateResponse {
+  brief: MissionBrief;
 }
 
 export interface ProjectRoom {

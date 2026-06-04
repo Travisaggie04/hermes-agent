@@ -2840,6 +2840,83 @@ async def get_mission_control_recent_audit_log():
     return recent_audit_log()
 
 
+@app.get("/api/mission-control/active-envelope")
+async def get_mission_control_active_envelope():
+    from hermes_cli.mission_control_task_control_envelopes import active_task_control_envelope_selection
+
+    selection = active_task_control_envelope_selection()
+    envelope = selection.get("task_control_envelope")
+    if envelope:
+        selected_from_count = int(selection.get("selected_from_count") or 0)
+        repo_context = envelope.get("repo_context") or {}
+        lane_lock = envelope.get("lane_lock") if isinstance(envelope.get("lane_lock"), dict) else {}
+        return {
+            "exists": True,
+            "active_lane": lane_lock.get("active_lane"),
+            "active_mode": envelope.get("mode"),
+            "execution_boundary": "persisted_envelope_inert_non_authorizing",
+            "allowed_actions": envelope.get("allowed_actions", []),
+            "forbidden_actions": envelope.get("forbidden_actions", []),
+            "checkpoint": envelope.get("checkpoint"),
+            "repo_state": {
+                "status": repo_context.get("dirty_state", "not_probed"),
+                "source": repo_context.get("source", "unknown"),
+            },
+            "evidence": {
+                "count": selected_from_count,
+                "links": [],
+            },
+            "data_source": "persisted_task_control_envelope",
+            "task_control_envelope": {
+                "id": envelope.get("id"),
+                "schema": envelope.get("schema"),
+                "status": envelope.get("status"),
+                "title": envelope.get("title"),
+                "mode": envelope.get("mode"),
+                "mode_label": envelope.get("mode_label", ""),
+                "created_at": envelope.get("created_at"),
+                "updated_at": envelope.get("updated_at"),
+                "trusted_for_execution": False,
+                "inert_context_only": True,
+                "vocabulary_version": "g1",
+            },
+            "selection": {
+                "selected_from_count": selected_from_count,
+                "ambiguous": selected_from_count > 1,
+                "selection_reason": "newest_active_updated_at",
+            },
+            "trusted_for_execution": False,
+            "inert_context_only": True,
+        }
+    return {
+        "exists": False,
+        "active_lane": None,
+        "active_mode": None,
+        "execution_boundary": "no_active_authorization",
+        "allowed_actions": [],
+        "forbidden_actions": [],
+        "checkpoint": None,
+        "repo_state": {
+            "status": "unknown",
+            "source": "not_probed",
+        },
+        "evidence": {
+            "count": 0,
+            "links": [],
+        },
+        "data_source": "no_persisted_envelope",
+        "trusted_for_execution": False,
+        "inert_context_only": True,
+    }
+
+
+@app.get("/api/mission-control/artifacts")
+async def get_mission_control_artifacts(kind: str | None = None, status: str | None = None):
+    from hermes_cli.mission_control_artifacts import list_artifacts
+
+    return list_artifacts(kind=kind, status=status)
+
+
 def _mission_control_packet_error(exc: Exception) -> HTTPException:
     from hermes_cli.mission_control import MissionControlPacketError
 
@@ -2862,6 +2939,116 @@ def _project_room_error(exc: Exception) -> HTTPException:
     if isinstance(exc, ProjectRoomError):
         return HTTPException(status_code=400, detail=str(exc))
     return HTTPException(status_code=500, detail="Project Rooms error")
+
+
+def _mission_briefs_enabled() -> bool:
+    config = load_config()
+    return cfg_get(config, "dashboard", "mission_briefs_enabled", default=False) is True
+
+
+def _require_mission_briefs_enabled() -> None:
+    if not _mission_briefs_enabled():
+        raise HTTPException(status_code=404, detail="Mission Briefs disabled")
+
+
+def _goal_contracts_enabled() -> bool:
+    config = load_config()
+    return cfg_get(config, "dashboard", "goal_contracts_enabled", default=False) is True
+
+
+def _require_goal_contracts_enabled() -> None:
+    if not _goal_contracts_enabled():
+        raise HTTPException(status_code=404, detail="Goal Contracts disabled")
+
+
+def _approval_slices_enabled() -> bool:
+    config = load_config()
+    return cfg_get(config, "dashboard", "approval_slices_enabled", default=False) is True
+
+
+def _require_approval_slices_enabled() -> None:
+    if not _approval_slices_enabled():
+        raise HTTPException(status_code=404, detail="Approval Slices disabled")
+
+
+def _task_control_envelopes_enabled() -> bool:
+    config = load_config()
+    return cfg_get(config, "dashboard", "task_control_envelopes_enabled", default=False) is True
+
+
+def _require_task_control_envelopes_enabled() -> None:
+    if not _task_control_envelopes_enabled():
+        raise HTTPException(status_code=404, detail="Task Control Envelopes disabled")
+
+
+def _evidence_cards_enabled() -> bool:
+    config = load_config()
+    return cfg_get(config, "dashboard", "evidence_cards_enabled", default=False) is True
+
+
+def _require_evidence_cards_enabled() -> None:
+    if not _evidence_cards_enabled():
+        raise HTTPException(status_code=404, detail="Evidence Cards disabled")
+
+
+def _mission_brief_error(exc: Exception) -> HTTPException:
+    from hermes_cli.mission_briefs import MissionBriefError
+
+    if isinstance(exc, FileNotFoundError):
+        return HTTPException(status_code=404, detail="Mission Brief not found")
+    if isinstance(exc, MissionBriefError):
+        if str(exc) == "Invalid brief id":
+            return HTTPException(status_code=404, detail="Mission Brief not found")
+        return HTTPException(status_code=400, detail=str(exc))
+    return HTTPException(status_code=500, detail="Mission Brief error")
+
+
+def _goal_contract_error(exc: Exception) -> HTTPException:
+    from hermes_cli.mission_control_goal_contracts import GoalContractError
+
+    if isinstance(exc, FileNotFoundError):
+        return HTTPException(status_code=404, detail="Goal Contract not found")
+    if isinstance(exc, GoalContractError):
+        if str(exc) == "Invalid contract id":
+            return HTTPException(status_code=404, detail="Goal Contract not found")
+        return HTTPException(status_code=400, detail=str(exc))
+    return HTTPException(status_code=500, detail="Goal Contract error")
+
+
+def _approval_slice_error(exc: Exception) -> HTTPException:
+    from hermes_cli.mission_control_approval_slices import ApprovalSliceError
+
+    if isinstance(exc, FileNotFoundError):
+        return HTTPException(status_code=404, detail="Approval Slice not found")
+    if isinstance(exc, ApprovalSliceError):
+        if str(exc) == "Invalid approval slice id":
+            return HTTPException(status_code=404, detail="Approval Slice not found")
+        return HTTPException(status_code=400, detail=str(exc))
+    return HTTPException(status_code=500, detail="Approval Slice error")
+
+
+def _task_control_envelope_error(exc: Exception) -> HTTPException:
+    from hermes_cli.mission_control_task_control_envelopes import TaskControlEnvelopeError
+
+    if isinstance(exc, FileNotFoundError):
+        return HTTPException(status_code=404, detail="Task Control Envelope not found")
+    if isinstance(exc, TaskControlEnvelopeError):
+        if str(exc) == "Invalid task control envelope id":
+            return HTTPException(status_code=404, detail="Task Control Envelope not found")
+        return HTTPException(status_code=400, detail=str(exc))
+    return HTTPException(status_code=500, detail="Task Control Envelope error")
+
+
+def _evidence_card_error(exc: Exception) -> HTTPException:
+    from hermes_cli.mission_control_evidence_cards import EvidenceCardError
+
+    if isinstance(exc, FileNotFoundError):
+        return HTTPException(status_code=404, detail="Evidence Card not found")
+    if isinstance(exc, EvidenceCardError):
+        if str(exc) == "Invalid evidence card id":
+            return HTTPException(status_code=404, detail="Evidence Card not found")
+        return HTTPException(status_code=400, detail=str(exc))
+    return HTTPException(status_code=500, detail="Evidence Card error")
 
 
 @app.get("/api/mission-control/packets")
@@ -2924,6 +3111,257 @@ async def post_mission_control_block_flag_packet(body: Dict[str, Any]):
     except Exception as exc:
         create_rejection_audit(dict(body), str(exc), packet_kind="block_flag")
         raise _mission_control_packet_error(exc) from exc
+
+
+@app.get("/api/mission-control/mission-briefs")
+async def get_mission_briefs():
+    _require_mission_briefs_enabled()
+    from hermes_cli.mission_briefs import list_briefs
+
+    return list_briefs()
+
+
+@app.post("/api/mission-control/mission-briefs")
+async def post_mission_brief(body: Dict[str, Any]):
+    _require_mission_briefs_enabled()
+    from hermes_cli.mission_briefs import create_brief
+
+    try:
+        return {"brief": create_brief(dict(body))}
+    except Exception as exc:
+        raise _mission_brief_error(exc) from exc
+
+
+@app.get("/api/mission-control/mission-briefs/{brief_id}")
+async def get_mission_brief(brief_id: str):
+    _require_mission_briefs_enabled()
+    from hermes_cli.mission_briefs import get_brief
+
+    try:
+        return get_brief(brief_id)
+    except Exception as exc:
+        raise _mission_brief_error(exc) from exc
+
+
+@app.put("/api/mission-control/mission-briefs/{brief_id}")
+async def put_mission_brief(brief_id: str, body: Dict[str, Any]):
+    _require_mission_briefs_enabled()
+    from hermes_cli.mission_briefs import update_brief
+
+    try:
+        return update_brief(brief_id, dict(body))
+    except Exception as exc:
+        raise _mission_brief_error(exc) from exc
+
+
+@app.delete("/api/mission-control/mission-briefs/{brief_id}")
+async def delete_mission_brief(brief_id: str):
+    _require_mission_briefs_enabled()
+    from hermes_cli.mission_briefs import archive_brief
+
+    try:
+        return archive_brief(brief_id)
+    except Exception as exc:
+        raise _mission_brief_error(exc) from exc
+
+
+@app.get("/api/mission-control/goal-contracts")
+async def get_goal_contracts():
+    _require_goal_contracts_enabled()
+    from hermes_cli.mission_control_goal_contracts import list_contracts
+
+    return list_contracts()
+
+
+@app.post("/api/mission-control/goal-contracts")
+async def post_goal_contract(body: Dict[str, Any]):
+    _require_goal_contracts_enabled()
+    from hermes_cli.mission_control_goal_contracts import create_contract
+
+    try:
+        return {"contract": create_contract(dict(body))}
+    except Exception as exc:
+        raise _goal_contract_error(exc) from exc
+
+
+@app.get("/api/mission-control/goal-contracts/{contract_id}")
+async def get_goal_contract(contract_id: str):
+    _require_goal_contracts_enabled()
+    from hermes_cli.mission_control_goal_contracts import get_contract
+
+    try:
+        return get_contract(contract_id)
+    except Exception as exc:
+        raise _goal_contract_error(exc) from exc
+
+
+@app.put("/api/mission-control/goal-contracts/{contract_id}")
+async def put_goal_contract(contract_id: str, body: Dict[str, Any]):
+    _require_goal_contracts_enabled()
+    from hermes_cli.mission_control_goal_contracts import update_contract
+
+    try:
+        return update_contract(contract_id, dict(body))
+    except Exception as exc:
+        raise _goal_contract_error(exc) from exc
+
+
+@app.delete("/api/mission-control/goal-contracts/{contract_id}")
+async def delete_goal_contract(contract_id: str):
+    _require_goal_contracts_enabled()
+    from hermes_cli.mission_control_goal_contracts import archive_contract
+
+    try:
+        return archive_contract(contract_id)
+    except Exception as exc:
+        raise _goal_contract_error(exc) from exc
+
+
+@app.get("/api/mission-control/approval-slices")
+async def get_approval_slices(include_inactive: bool = False):
+    _require_approval_slices_enabled()
+    from hermes_cli.mission_control_approval_slices import list_approval_slices
+
+    return list_approval_slices(include_inactive=include_inactive)
+
+
+@app.post("/api/mission-control/approval-slices")
+async def post_approval_slice(body: Dict[str, Any]):
+    _require_approval_slices_enabled()
+    from hermes_cli.mission_control_approval_slices import create_approval_slice
+
+    try:
+        return {"approval_slice": create_approval_slice(dict(body))}
+    except Exception as exc:
+        raise _approval_slice_error(exc) from exc
+
+
+@app.get("/api/mission-control/approval-slices/{slice_id}")
+async def get_approval_slice(slice_id: str):
+    _require_approval_slices_enabled()
+    from hermes_cli.mission_control_approval_slices import get_approval_slice as read_approval_slice
+
+    try:
+        return read_approval_slice(slice_id)
+    except Exception as exc:
+        raise _approval_slice_error(exc) from exc
+
+
+@app.post("/api/mission-control/approval-slices/{slice_id}/revoke")
+async def revoke_approval_slice(slice_id: str):
+    _require_approval_slices_enabled()
+    from hermes_cli.mission_control_approval_slices import transition_approval_slice
+
+    try:
+        return transition_approval_slice(slice_id, "revoked")
+    except Exception as exc:
+        raise _approval_slice_error(exc) from exc
+
+
+@app.post("/api/mission-control/approval-slices/{slice_id}/expire")
+async def expire_approval_slice(slice_id: str):
+    _require_approval_slices_enabled()
+    from hermes_cli.mission_control_approval_slices import transition_approval_slice
+
+    try:
+        return transition_approval_slice(slice_id, "expired")
+    except Exception as exc:
+        raise _approval_slice_error(exc) from exc
+
+
+@app.post("/api/mission-control/approval-slices/{slice_id}/complete")
+async def complete_approval_slice(slice_id: str):
+    _require_approval_slices_enabled()
+    from hermes_cli.mission_control_approval_slices import transition_approval_slice
+
+    try:
+        return transition_approval_slice(slice_id, "completed")
+    except Exception as exc:
+        raise _approval_slice_error(exc) from exc
+
+
+@app.get("/api/mission-control/task-control-envelopes")
+async def get_task_control_envelopes(include_inactive: bool = False):
+    _require_task_control_envelopes_enabled()
+    from hermes_cli.mission_control_task_control_envelopes import list_task_control_envelopes
+
+    return list_task_control_envelopes(include_inactive=include_inactive)
+
+
+@app.post("/api/mission-control/task-control-envelopes")
+async def post_task_control_envelope(body: Dict[str, Any]):
+    _require_task_control_envelopes_enabled()
+    from hermes_cli.mission_control_task_control_envelopes import create_task_control_envelope
+
+    try:
+        return {"task_control_envelope": create_task_control_envelope(dict(body))}
+    except Exception as exc:
+        raise _task_control_envelope_error(exc) from exc
+
+
+@app.get("/api/mission-control/task-control-envelopes/{envelope_id}")
+async def get_task_control_envelope(envelope_id: str):
+    _require_task_control_envelopes_enabled()
+    from hermes_cli.mission_control_task_control_envelopes import (
+        get_task_control_envelope as read_task_control_envelope,
+    )
+
+    try:
+        return read_task_control_envelope(envelope_id)
+    except Exception as exc:
+        raise _task_control_envelope_error(exc) from exc
+
+
+@app.post("/api/mission-control/task-control-envelopes/{envelope_id}/complete")
+async def complete_task_control_envelope(envelope_id: str):
+    _require_task_control_envelopes_enabled()
+    from hermes_cli.mission_control_task_control_envelopes import transition_task_control_envelope
+
+    try:
+        return transition_task_control_envelope(envelope_id, "completed")
+    except Exception as exc:
+        raise _task_control_envelope_error(exc) from exc
+
+
+@app.post("/api/mission-control/task-control-envelopes/{envelope_id}/archive")
+async def archive_task_control_envelope(envelope_id: str):
+    _require_task_control_envelopes_enabled()
+    from hermes_cli.mission_control_task_control_envelopes import transition_task_control_envelope
+
+    try:
+        return transition_task_control_envelope(envelope_id, "archived")
+    except Exception as exc:
+        raise _task_control_envelope_error(exc) from exc
+
+
+@app.get("/api/mission-control/evidence-cards")
+async def get_evidence_cards():
+    _require_evidence_cards_enabled()
+    from hermes_cli.mission_control_evidence_cards import list_cards
+
+    return list_cards()
+
+
+@app.post("/api/mission-control/evidence-cards")
+async def post_evidence_card(body: Dict[str, Any]):
+    _require_evidence_cards_enabled()
+    from hermes_cli.mission_control_evidence_cards import create_card
+
+    try:
+        return {"card": create_card(dict(body))}
+    except Exception as exc:
+        raise _evidence_card_error(exc) from exc
+
+
+@app.get("/api/mission-control/evidence-cards/{card_id}")
+async def get_evidence_card(card_id: str):
+    _require_evidence_cards_enabled()
+    from hermes_cli.mission_control_evidence_cards import get_card
+
+    try:
+        return get_card(card_id)
+    except Exception as exc:
+        raise _evidence_card_error(exc) from exc
 
 
 @app.get("/api/mission-control/project-rooms")
