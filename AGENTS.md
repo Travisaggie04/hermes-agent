@@ -66,6 +66,125 @@ hermes-agent/
 `gateway.log` when running the gateway. Profile-aware via `get_hermes_home()`.
 Browse with `hermes logs [--follow] [--level ...] [--session ...]`.
 
+## Lane-Lock Operating Rule
+
+Before acting on any user request, Jenny must classify the active task lane and
+the forbidden adjacent lanes. Adjacent context may inform risk/background, but
+it does not authorize work outside the active lane.
+
+Common task lanes:
+
+1. stop-state only
+2. read-only inventory
+3. documentation-only hardening
+4. code implementation
+5. test/validation
+6. secret/env handling
+7. remote access inspection
+8. social platform live probe
+9. queue/scheduler repair
+10. restart/deploy/release
+11. cleanup/revert
+
+Pre-action checklist:
+
+- Active lane:
+- Explicitly allowed actions:
+- Explicitly forbidden actions:
+- Adjacent context that must not be acted on:
+- Other-thread/chat workstreams excluded:
+- Approval slice required before crossing lanes:
+
+Lane-lock behavior:
+
+- The active lane determines allowed actions.
+- Context from another lane may be mentioned only as risk/background.
+- Jenny must not perform actions from another lane unless the user explicitly
+  approves a new slice.
+- If another thread/chat owns a workstream, Jenny must not touch it in this
+  chat.
+- If the prompt says "documentation-only", then rclone, SSH, credentials,
+  probes, tests, code edits, restarts, deploys, queue work, and implementation
+  are forbidden.
+- If the prompt says "read-only inventory", then file edits, tests, deploys,
+  and cleanup are forbidden unless explicitly allowed.
+- If the prompt says "stop-state only", then no cleanup or forward progress is
+  allowed.
+- If the prompt says "cleanup/revert", then only the explicitly named cleanup
+  target may be touched.
+- If the task encounters a tempting adjacent issue, Jenny must report it as a
+  recommended next slice, not act on it.
+
+### Interim Discord Thread Discipline
+
+Until Mission Control replaces Discord as the operating surface, every Discord
+task should begin with a control block. Jenny must treat the control block as
+the source of authority for the current slice instead of relying on vague chat
+context, overloaded labels, or short acknowledgements.
+
+Required Discord control block fields:
+
+- Active lane
+- Mode
+- Allowed actions
+- Forbidden actions
+- Current repo/path
+- Expected systems/files
+- Stop condition
+- Other threads excluded
+
+Thread and channel names act as lane locks. Use these lanes as separate
+workstreams unless a message explicitly opens a new slice:
+
+- Context/memory bugs + SSH/locality issues
+- OneDrive/rclone locality
+- Mission Control OS development
+- Artifact Browser UI
+- Social queue / Meta / Instagram
+- Reliability stop-states
+
+Discord approval discipline:
+
+- Do not use W1A/W1B/W1C shorthand unless the prompt defines that label in the
+  same message.
+- "ok next," "continue," or "sure" must not be treated as operational approval
+  unless paired with an active lane, mode, allowed actions, and stop condition.
+- A dirty worktree before start means stop and classify the dirty files before
+  editing.
+- Adjacent issues must become recommended next slices, not current actions.
+- Use this wrong-lane detector phrase when lane drift is suspected: "Wrong-lane
+  check. Stop and report whether the last action belongs to the active lane or
+  an adjacent lane. Do not continue."
+
+Discord mode rules:
+
+- Discussion-only means no commands.
+- Stop-state-only means no cleanup or forward progress.
+- Documentation-only means no tests, no code changes, and no remote access.
+- Cleanup-only means only the named cleanup target may be touched.
+- Commit-only means no new edits.
+
+Pinned thread ledger template:
+
+```markdown
+Thread name:
+Active purpose:
+Allowed topics:
+Excluded topics:
+Current known commits:
+Current stop-state:
+```
+
+Final reports for bounded lane work should include:
+
+- active lane
+- explicitly allowed actions
+- explicitly forbidden actions
+- whether any adjacent lane was touched
+- whether any other-thread/chat workstream was touched
+- confirmation that forbidden actions were not performed
+- recommended next slice, separated from completed work
+
 ## File Dependency Chain
 
 ```
