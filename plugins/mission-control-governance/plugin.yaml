@@ -1,0 +1,6 @@
+name: mission-control-governance
+version: "0.1.0"
+description: "Read-only Mission Control governance dashboard backed by inert records."
+author: "NousResearch"
+hooks: []
+provides_tools: []
