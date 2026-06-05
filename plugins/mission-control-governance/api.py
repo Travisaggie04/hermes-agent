@@ -12,7 +12,13 @@ from fastapi import APIRouter, HTTPException
 from hermes_constants import get_hermes_home
 from mission_control.records.errors import RecordStoreError
 from mission_control.records.models import RECORD_TYPES
-from mission_control.records import JsonlRecordStore
+from mission_control.records import (
+    ApprovalSlice,
+    EvidenceCard,
+    JsonlRecordStore,
+    MissionBrief,
+    TaskControlEnvelope,
+)
 
 
 PLUGIN_NAME = "mission-control-governance"
@@ -49,6 +55,47 @@ def _load_records_with_state() -> tuple[tuple[Any, ...], str, str | None]:
     if not records:
         return (), "empty", None
     return records, "ok", None
+
+
+def _load_latest_records_with_state(
+    record_class: type[Any] | None = None,
+    limit: int = 10,
+) -> tuple[tuple[tuple[int, Any], ...], str, str | None]:
+    path = record_store_path()
+    state = _record_store_state(path)
+    if state != "ok":
+        return (), state, None
+    try:
+        records = JsonlRecordStore(path).read_latest(record_class=record_class, limit=limit)
+    except RecordStoreError as exc:
+        return (), "malformed", str(exc)
+    if not records:
+        return (), "empty", None
+    return records, "ok", None
+
+
+def _record_counts_with_state() -> tuple[int, Counter[str], str, str | None]:
+    path = record_store_path()
+    state = _record_store_state(path)
+    if state != "ok":
+        return 0, Counter(), state, None
+
+    store = JsonlRecordStore(path)
+    counts: Counter[str] = Counter()
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            for line_number, raw_line in enumerate(handle, start=1):
+                line = raw_line.strip()
+                if not line:
+                    continue
+                entry = store._decode_line(line, line_number)
+                decoded = store._decode_record(entry, line_number)
+                counts[_record_type(decoded)] += 1
+    except RecordStoreError as exc:
+        return 0, Counter(), "malformed", str(exc)
+    if not counts:
+        return 0, Counter(), "empty", None
+    return sum(counts.values()), counts, "ok", None
 
 
 def _record_type(record: Any) -> str:
@@ -166,19 +213,12 @@ def _evidence_summary(evidence: Any) -> dict[str, Any]:
     return summary
 
 
-def _latest_mission_with_items(records: tuple[Any, ...], field_name: str) -> tuple[int, Any] | None:
-    for index, record in reversed(tuple(enumerate(records))):
-        if _record_type(record) == "MissionBrief" and getattr(record, field_name, ()):  # compact embedded context
-            return index, record
-    return None
-
-
-def _standalone_records(records: tuple[Any, ...], record_type: str) -> tuple[tuple[int, Any], ...]:
-    return tuple(
-        (index, record)
-        for index, record in enumerate(records)
-        if _record_type(record) == record_type
-    )
+def _latest_mission_with_items(field_name: str) -> tuple[tuple[int, Any] | None, str, str | None]:
+    missions, store_status, error = _load_latest_records_with_state(MissionBrief, limit=10)
+    for index, record in reversed(missions):
+        if getattr(record, field_name, ()):  # compact embedded context
+            return (index, record), store_status, error
+    return None, store_status, error
 
 
 def _record_schema() -> dict[str, dict[str, Any]]:
@@ -206,21 +246,17 @@ async def health() -> dict[str, Any]:
 
 @router.get("/summary")
 async def summary() -> dict[str, Any]:
-    records, store_status, error = _load_records_with_state()
-    counts = Counter(_record_type(record) for record in records)
-    latest_mission = next(
-        (
-            record
-            for record in reversed(records)
-            if _record_type(record) == "MissionBrief"
-        ),
-        None,
-    )
+    record_count, counts, store_status, error = _record_counts_with_state()
+    latest_missions, mission_status, mission_error = _load_latest_records_with_state(MissionBrief, limit=1)
+    if store_status == "ok" and mission_status == "malformed":
+        store_status = mission_status
+        error = mission_error
+    latest_mission = latest_missions[-1][1] if latest_missions and store_status == "ok" else None
     return {
         **INERT_FLAGS,
         "store_status": store_status,
         "error": error,
-        "record_count": len(records),
+        "record_count": record_count,
         "record_types": dict(sorted(counts.items())),
         "latest_mission_title": getattr(latest_mission, "title", None),
         "latest_mission_created_at": getattr(latest_mission, "created_at", None),
@@ -229,11 +265,7 @@ async def summary() -> dict[str, Any]:
 
 @router.get("/approval-slices")
 async def approval_slices() -> dict[str, Any]:
-    loaded, store_status, error = _load_records_with_state()
-    if not loaded:
-        return _empty_approval_slices_payload(store_status, error)
-
-    mission_match = _latest_mission_with_items(loaded, "approvals")
+    mission_match, store_status, error = _latest_mission_with_items("approvals")
     if mission_match is not None:
         _, mission = mission_match
         items = _bounded_latest(tuple(getattr(mission, "approvals", ()) or ()))
@@ -248,14 +280,17 @@ async def approval_slices() -> dict[str, Any]:
             "approval_slices": summaries,
         }
 
-    standalone = _bounded_latest(_standalone_records(loaded, "ApprovalSlice"))
+    standalone, standalone_status, standalone_error = _load_latest_records_with_state(ApprovalSlice, limit=10)
     if not standalone:
-        return _empty_approval_slices_payload(store_status, error)
-    summaries = [_approval_summary(record) for _, record in standalone]
+        return _empty_approval_slices_payload(standalone_status, standalone_error)
+    summaries = [
+        {"record_index": index, **_approval_summary(record)}
+        for index, record in standalone
+    ]
     return {
         **INERT_FLAGS,
-        "store_status": store_status,
-        "error": error,
+        "store_status": standalone_status,
+        "error": standalone_error,
         "source": "ApprovalSlice",
         "count": len(summaries),
         "approval_slices": summaries,
@@ -264,11 +299,7 @@ async def approval_slices() -> dict[str, Any]:
 
 @router.get("/evidence-cards")
 async def evidence_cards() -> dict[str, Any]:
-    loaded, store_status, error = _load_records_with_state()
-    if not loaded:
-        return _empty_evidence_cards_payload(store_status, error)
-
-    mission_match = _latest_mission_with_items(loaded, "evidence")
+    mission_match, store_status, error = _latest_mission_with_items("evidence")
     if mission_match is not None:
         _, mission = mission_match
         items = _bounded_latest(tuple(getattr(mission, "evidence", ()) or ()))
@@ -282,14 +313,17 @@ async def evidence_cards() -> dict[str, Any]:
             "evidence_cards": summaries,
         }
 
-    standalone = _bounded_latest(_standalone_records(loaded, "EvidenceCard"))
+    standalone, standalone_status, standalone_error = _load_latest_records_with_state(EvidenceCard, limit=10)
     if not standalone:
-        return _empty_evidence_cards_payload(store_status, error)
-    summaries = [_evidence_summary(record) for _, record in standalone]
+        return _empty_evidence_cards_payload(standalone_status, standalone_error)
+    summaries = [
+        {"record_index": index, **_evidence_summary(record)}
+        for index, record in standalone
+    ]
     return {
         **INERT_FLAGS,
-        "store_status": store_status,
-        "error": error,
+        "store_status": standalone_status,
+        "error": standalone_error,
         "source": "EvidenceCard",
         "count": len(summaries),
         "evidence_cards": summaries,
@@ -298,12 +332,10 @@ async def evidence_cards() -> dict[str, Any]:
 
 @router.get("/start-gate")
 async def start_gate() -> dict[str, Any]:
-    loaded, store_status, error = _load_records_with_state()
-    if not loaded:
-        return _empty_start_gate_payload(store_status, error)
-
-    for index, record in reversed(tuple(enumerate(loaded))):
-        if _record_type(record) == "MissionBrief" and getattr(record, "control", None) is not None:
+    missions, store_status, error = _load_latest_records_with_state(MissionBrief, limit=1)
+    if missions:
+        index, record = missions[-1]
+        if getattr(record, "control", None) is not None:
             return {
                 **INERT_FLAGS,
                 "store_status": store_status,
@@ -317,22 +349,25 @@ async def start_gate() -> dict[str, Any]:
                 "envelope": _envelope_summary(getattr(record, "control")),
             }
 
-    for index, record in reversed(tuple(enumerate(loaded))):
-        if _record_type(record) == "TaskControlEnvelope":
-            return {
-                **INERT_FLAGS,
-                "store_status": store_status,
-                "error": error,
-                "has_active_envelope": True,
-                "source": "TaskControlEnvelope",
-                "record_index": index,
-                "mission_id": None,
-                "mission_title": None,
-                "mission_created_at": None,
-                "envelope": _envelope_summary(record),
-            }
+    envelopes, envelope_status, envelope_error = _load_latest_records_with_state(TaskControlEnvelope, limit=1)
+    if envelopes:
+        index, record = envelopes[-1]
+        return {
+            **INERT_FLAGS,
+            "store_status": envelope_status,
+            "error": envelope_error,
+            "has_active_envelope": True,
+            "source": "TaskControlEnvelope",
+            "record_index": index,
+            "mission_id": None,
+            "mission_title": None,
+            "mission_created_at": None,
+            "envelope": _envelope_summary(record),
+        }
 
-    return _empty_start_gate_payload(store_status, error)
+    if store_status == "malformed":
+        return _empty_start_gate_payload(store_status, error)
+    return _empty_start_gate_payload(envelope_status, envelope_error)
 
 
 @router.get("/records")

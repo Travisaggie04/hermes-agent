@@ -3,7 +3,7 @@ import json
 import pytest
 
 from mission_control.records.errors import RecordDecodeError, UnknownRecordTypeError
-from mission_control.records.models import ArtifactRef, GoalContract
+from mission_control.records.models import ApprovalSlice, ArtifactRef, GoalContract
 from mission_control.records.store import JsonlRecordStore
 
 
@@ -72,3 +72,79 @@ def test_jsonl_store_wraps_invalid_json_with_line_number(tmp_path):
         store.read_all()
 
     assert excinfo.value.line_number == 2
+
+
+def test_jsonl_store_read_latest_returns_latest_n_with_original_indexes(tmp_path):
+    path = tmp_path / "records.jsonl"
+    store = JsonlRecordStore(path)
+    records = tuple(
+        GoalContract(goal_id=f"goal-{index}", statement=f"Goal {index}")
+        for index in range(5)
+    )
+    for record in records:
+        store.append(record)
+
+    assert store.read_latest(limit=2) == (
+        (3, records[3]),
+        (4, records[4]),
+    )
+
+
+def test_jsonl_store_read_latest_filters_record_class_with_original_indexes(tmp_path):
+    path = tmp_path / "records.jsonl"
+    store = JsonlRecordStore(path)
+    goal = GoalContract(goal_id="goal-1", statement="Unrelated goal")
+    approvals = tuple(
+        ApprovalSlice(approval_id=f"approval-{index}", lane="lane", mode="mode")
+        for index in range(3)
+    )
+    store.append(approvals[0])
+    store.append(goal)
+    store.append(approvals[1])
+    store.append(approvals[2])
+
+    assert store.read_latest(record_class=ApprovalSlice, limit=2) == (
+        (2, approvals[1]),
+        (3, approvals[2]),
+    )
+
+
+def test_jsonl_store_read_latest_missing_file_reads_empty_tuple(tmp_path):
+    store = JsonlRecordStore(tmp_path / "records.jsonl")
+
+    assert store.read_latest() == ()
+
+
+def test_jsonl_store_read_latest_zero_or_invalid_limit_reads_empty_tuple(tmp_path):
+    store = JsonlRecordStore(tmp_path / "records.jsonl")
+    store.append(GoalContract(goal_id="goal-1", statement="Present but not requested"))
+
+    assert store.read_latest(limit=0) == ()
+    assert store.read_latest(limit=-1) == ()
+
+
+def test_jsonl_store_read_latest_preserves_malformed_record_errors(tmp_path):
+    path = tmp_path / "records.jsonl"
+    path.write_text(
+        (
+            '{"record_type": "GoalContract", '
+            '"record": {"goal_id": "goal-001", "statement": "valid"}}\n'
+            "not-json\n"
+        ),
+        encoding="utf-8",
+    )
+    store = JsonlRecordStore(path)
+
+    with pytest.raises(RecordDecodeError) as excinfo:
+        store.read_latest()
+
+    assert excinfo.value.line_number == 2
+
+
+def test_jsonl_store_read_latest_preserves_unknown_record_errors(tmp_path):
+    path = tmp_path / "records.jsonl"
+    path.write_text('{"record_type": "GatewayHook", "record": {}}\n', encoding="utf-8")
+    store = JsonlRecordStore(path)
+
+    with pytest.raises(UnknownRecordTypeError):
+        store.read_latest()

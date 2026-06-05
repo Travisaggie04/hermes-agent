@@ -558,12 +558,107 @@ def test_evidence_cards_uses_standalone_fallback(plugin_api, client):
     assert payload["source"] == "EvidenceCard"
     assert payload["count"] == 1
     assert payload["evidence_cards"][0] == {
+        "record_index": 0,
         "evidence_id": "standalone-evidence",
         "summary": "Fallback evidence summary.",
         "artifact_count": 1,
         "artifact_refs_count": 1,
     }
 
+
+
+def test_summary_style_routes_do_not_call_read_all(plugin_api, client, monkeypatch):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    goal = GoalContract(goal_id="goal-bounded", statement="Bounded summaries only.")
+    control = TaskControlEnvelope(active_lane="bounded lane", mode="focused tests only")
+    store.append(TaskControlEnvelope(active_lane="fallback lane", mode="read-only"))
+    store.append(
+        ApprovalSlice(
+            approval_id="standalone-approval",
+            lane="bounded lane",
+            mode="focused tests only",
+        )
+    )
+    store.append(EvidenceCard(evidence_id="standalone-evidence", summary="Standalone evidence"))
+    store.append(
+        MissionBrief(
+            mission_id="mission-bounded",
+            title="Bounded summaries",
+            created_at="2026-06-05T04:00:00Z",
+            goal=goal,
+            control=control,
+            approvals=(
+                ApprovalSlice(
+                    approval_id="mission-approval",
+                    lane="bounded lane",
+                    mode="focused tests only",
+                ),
+            ),
+            evidence=(EvidenceCard(evidence_id="mission-evidence", summary="Mission evidence"),),
+        )
+    )
+
+    def fail_read_all(self, record_class=None):
+        raise AssertionError("summary route unexpectedly called read_all")
+
+    monkeypatch.setattr(JsonlRecordStore, "read_all", fail_read_all)
+
+    summary = client.get("/api/plugins/mission-control-governance/summary")
+    start_gate = client.get("/api/plugins/mission-control-governance/start-gate")
+    approvals = client.get("/api/plugins/mission-control-governance/approval-slices")
+    evidence = client.get("/api/plugins/mission-control-governance/evidence-cards")
+
+    assert summary.status_code == 200
+    assert start_gate.status_code == 200
+    assert approvals.status_code == 200
+    assert evidence.status_code == 200
+    assert summary.json()["record_count"] == 4
+    assert start_gate.json()["source"] == "MissionBrief.control"
+    assert approvals.json()["source"] == "MissionBrief.approvals"
+    assert evidence.json()["source"] == "MissionBrief.evidence"
+
+
+def test_latest_standalone_fallback_preserves_original_record_index(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(GoalContract(goal_id="goal-index", statement="Unrelated record"))
+    store.append(TaskControlEnvelope(active_lane="fallback lane", mode="read-only"))
+
+    payload = client.get("/api/plugins/mission-control-governance/start-gate").json()
+
+    assert payload["source"] == "TaskControlEnvelope"
+    assert payload["record_index"] == 1
+
+
+def test_approval_and_evidence_summaries_are_bounded_to_latest_10(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    for index in range(12):
+        store.append(
+            ApprovalSlice(
+                approval_id=f"approval-{index}",
+                lane="bounded lane",
+                mode="read-only",
+            )
+        )
+        store.append(
+            EvidenceCard(
+                evidence_id=f"evidence-{index}",
+                summary=f"Evidence {index}",
+            )
+        )
+
+    approvals = client.get("/api/plugins/mission-control-governance/approval-slices").json()
+    evidence = client.get("/api/plugins/mission-control-governance/evidence-cards").json()
+
+    assert approvals["source"] == "ApprovalSlice"
+    assert approvals["count"] == 10
+    assert [item["approval_id"] for item in approvals["approval_slices"]] == [
+        f"approval-{index}" for index in range(2, 12)
+    ]
+    assert evidence["source"] == "EvidenceCard"
+    assert evidence["count"] == 10
+    assert [item["evidence_id"] for item in evidence["evidence_cards"]] == [
+        f"evidence-{index}" for index in range(2, 12)
+    ]
 
 def test_malformed_store_returns_inert_error_payload(plugin_api, client):
     path = plugin_api.record_store_path()
