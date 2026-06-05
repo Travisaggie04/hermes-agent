@@ -1063,6 +1063,19 @@ def check_all_command_guards(command: str, env_type: str,
     if env_type in {"docker", "singularity", "modal", "daytona"}:
         return {"approved": True, "message": None}
 
+    try:
+        from hermes_cli.safety_guard import evaluate_tool_guard, config_from_env, format_stop_report
+
+        safety_decision = evaluate_tool_guard(
+            "terminal",
+            {"command": command},
+            config_from_env(),
+        )
+        if safety_decision.blocked:
+            return {"approved": False, "message": format_stop_report(safety_decision)}
+    except Exception as exc:
+        logger.debug("Tool Guard command evaluation skipped: %s", exc)
+
     # Hardline floor: unconditional block for catastrophic commands
     # (rm -rf /, mkfs, dd to raw device, shutdown/reboot, fork bomb,
     # kill -1). Applies BEFORE yolo / mode=off / cron approve-mode so
