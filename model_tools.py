@@ -768,6 +768,15 @@ def handle_function_call(
     function_args = coerce_tool_args(function_name, function_args)
 
     try:
+        from hermes_cli.safety_guard import stop_report_for_tool
+
+        stop_report = stop_report_for_tool(function_name, function_args)
+        if stop_report is not None:
+            return json.dumps({"error": stop_report}, ensure_ascii=False)
+    except Exception as _safety_guard_err:
+        logger.debug("Tool Guard evaluation skipped: %s", _safety_guard_err)
+
+    try:
         if function_name in _AGENT_LOOP_TOOLS:
             return json.dumps({"error": f"{function_name} must be handled by the agent loop"})
 
