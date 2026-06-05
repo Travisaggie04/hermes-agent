@@ -46,6 +46,7 @@ _EDIT_COMMAND_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _SECRET_KEY_RE = re.compile(r"(?i)(api[_-]?key|token|secret|password|authorization)=([^\s]+)")
+_URL_USERINFO_RE = re.compile(r"([a-zA-Z][a-zA-Z0-9+.-]*://)[^/@\s]+@")
 
 
 @dataclass(frozen=True)
@@ -102,7 +103,9 @@ def evaluate_start_gate(repo_path: str | Path, config: SafetyGuardConfig) -> Saf
 
     remote = _git(repo, "remote", "get-url", "origin")
     if remote != config.expected_remote:
-        details.append(f"remote mismatch: origin is {remote!r}; expected {config.expected_remote!r}")
+        actual_remote = _sanitize_remote_url(remote)
+        expected_remote = _sanitize_remote_url(config.expected_remote)
+        details.append(f"remote mismatch: origin is {actual_remote!r}; expected {expected_remote!r}")
 
     branch = _git(repo, "branch", "--show-current")
     detached = branch == ""
@@ -147,19 +150,27 @@ def evaluate_tool_guard(
     haystack = " ".join(_flatten_values(tool_args))
     details: list[str] = []
 
-    if _is_read_only_lane(lane) and _is_write_or_edit_tool(tool_name, command):
-        details.append(f"write/edit behavior blocked in lane {cfg.active_lane!r}")
-
-    if cfg.focused_tests_required and command and _is_broad_test_command(command):
-        details.append("broad test command blocked while focused tests are required")
-
-    if command and _is_cleanup_command(command):
+    is_cleanup_command = bool(command and _is_cleanup_command(command))
+    cleanup_target_allowed = False
+    if is_cleanup_command:
         if not _is_cleanup_lane(lane):
             details.append("cleanup command blocked outside cleanup/revert lane")
         elif not cfg.cleanup_target:
             details.append("cleanup command blocked because no exact cleanup target was named")
-        elif cfg.cleanup_target not in command:
+        elif not _cleanup_command_targets(command, cfg.cleanup_target):
             details.append(f"cleanup command does not name required target {cfg.cleanup_target!r}")
+        else:
+            cleanup_target_allowed = True
+
+    if (
+        _is_read_only_lane(lane)
+        and _is_write_or_edit_tool(tool_name, command)
+        and not cleanup_target_allowed
+    ):
+        details.append(f"write/edit behavior blocked in lane {cfg.active_lane!r}")
+
+    if cfg.focused_tests_required and command and _is_broad_test_command(command):
+        details.append("broad test command blocked while focused tests are required")
 
     if cfg.block_parent_directory_scans and _is_parent_directory_scan(tool_name, command, tool_args):
         details.append("parent-directory scan blocked by default")
@@ -294,6 +305,30 @@ def _is_cleanup_command(command: str) -> bool:
     return bool(_CLEANUP_COMMAND_RE.search(command))
 
 
+def _cleanup_command_targets(command: str, cleanup_target: str) -> bool:
+    if any(separator in command for separator in (";", "&&", "||", "|")):
+        return False
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.split()
+    normalized_target = cleanup_target.rstrip("/")
+    operands = _cleanup_operands(tokens)
+    return operands == [normalized_target]
+
+
+def _cleanup_operands(tokens: Sequence[str]) -> list[str]:
+    if tokens and tokens[0] == "sudo":
+        tokens = tokens[1:]
+    if not tokens:
+        return []
+    if tokens[0] in {"rm", "trash"}:
+        return [token.rstrip("/") for token in tokens[1:] if not token.startswith("-")]
+    if len(tokens) >= 2 and tokens[:2] == ["git", "clean"]:
+        return [token.rstrip("/") for token in tokens[2:] if not token.startswith("-")]
+    return [token.rstrip("/") for token in tokens if not token.startswith("-")]
+
+
 def _is_parent_directory_write(command: str) -> bool:
     if ">" not in command and "<<" not in command:
         return False
@@ -351,6 +386,10 @@ def _flatten_values(value: Any) -> list[str]:
             out.extend(_flatten_values(item))
         return out
     return [str(value)]
+
+
+def _sanitize_remote_url(url: str) -> str:
+    return _URL_USERINFO_RE.sub(r"\1[REDACTED]@", url)
 
 
 def _redact_details(details: Sequence[str], config: SafetyGuardConfig) -> list[str]:

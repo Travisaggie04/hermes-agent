@@ -80,6 +80,18 @@ class TestStartGate:
         assert "remote mismatch" in decision.summary.lower()
         assert "NousResearch" in decision.details[0]
 
+    def test_remote_mismatch_redacts_credential_userinfo(self, git_repo: Path) -> None:
+        userinfo = "credential-userinfo"
+        _git(git_repo, "remote", "set-url", "origin", f"https://{userinfo}@github.com/NousResearch/hermes-agent.git")
+
+        decision = evaluate_start_gate(git_repo, SafetyGuardConfig())
+        report = format_stop_report(decision)
+
+        assert decision.blocked is True
+        assert userinfo not in report
+        assert f"https://{userinfo}@" not in report
+        assert "github.com/NousResearch/hermes-agent.git" in report
+
     def test_blocks_wrong_branch_unless_allowed(self, git_repo: Path) -> None:
         _git(git_repo, "checkout", "-b", "wrong-branch")
 
@@ -145,6 +157,21 @@ class TestToolGuard:
             {"command": "rm -rf build"},
             SafetyGuardConfig(active_lane="cleanup/revert"),
         )
+        cleanup_only_unnamed = evaluate_tool_guard(
+            "terminal",
+            {"command": "rm -rf build"},
+            SafetyGuardConfig(active_lane="cleanup-only"),
+        )
+        non_exact_target = evaluate_tool_guard(
+            "terminal",
+            {"command": "rm -rf build-cache"},
+            SafetyGuardConfig(active_lane="cleanup-only", cleanup_target="build"),
+        )
+        broad_cleanup = evaluate_tool_guard(
+            "terminal",
+            {"command": "rm -rf build dist"},
+            SafetyGuardConfig(active_lane="cleanup-only", cleanup_target="build"),
+        )
         allowed = evaluate_tool_guard(
             "terminal",
             {"command": "rm -rf build"},
@@ -153,7 +180,19 @@ class TestToolGuard:
 
         assert blocked.blocked is True
         assert unnamed.blocked is True
+        assert cleanup_only_unnamed.blocked is True
+        assert non_exact_target.blocked is True
+        assert broad_cleanup.blocked is True
         assert allowed.blocked is False
+
+    def test_allows_cleanup_only_lane_with_exact_cleanup_target(self) -> None:
+        decision = evaluate_tool_guard(
+            "terminal",
+            {"command": "rm -rf build"},
+            SafetyGuardConfig(active_lane="cleanup-only", cleanup_target="build"),
+        )
+
+        assert decision.blocked is False
 
     def test_blocks_parent_directory_scans(self) -> None:
         decision = evaluate_tool_guard(
