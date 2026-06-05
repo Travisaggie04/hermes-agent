@@ -107,6 +107,10 @@ def _record_payload(record: Any) -> dict[str, Any]:
     if hasattr(record, "to_dict"):
         payload = record.to_dict()
         if isinstance(payload, dict):
+            if isinstance(record, OperatorAction):
+                metadata = payload.pop("metadata", {}) or {}
+                if isinstance(metadata, dict) and "source" in metadata:
+                    payload["source"] = metadata["source"]
             return payload
     return {}
 

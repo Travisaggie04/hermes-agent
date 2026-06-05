@@ -328,6 +328,44 @@ def test_record_detail_returns_zero_based_record_index(plugin_api, client):
     assert payload["record"]["active_lane"] == "PR-B Mission Control governance plugin MVP"
 
 
+def test_operator_action_metadata_is_not_exposed_by_record_apis(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(
+        OperatorAction(
+            action_id="action-sensitive-metadata",
+            title="Review safe summary only",
+            lane="PR-G",
+            mode="read-only",
+            requested_action="Review bounded queue summary.",
+            metadata={
+                "source": "planning",
+                "transcript": "secret transcript value",
+                "artifact_blob": "secret artifact value",
+                "arbitrary_key": "arbitrary secret value",
+            },
+        )
+    )
+
+    records_payload = client.get("/api/plugins/mission-control-governance/records").json()
+    detail_payload = client.get("/api/plugins/mission-control-governance/records/0").json()
+
+    for record in (
+        records_payload["records"][0]["record"],
+        detail_payload["record"],
+    ):
+        assert record["action_id"] == "action-sensitive-metadata"
+        assert record["source"] == "planning"
+        assert "metadata" not in record
+        assert "transcript" not in record
+        assert "artifact_blob" not in record
+        assert "arbitrary_key" not in record
+
+    lowered = f"{records_payload} {detail_payload}".lower()
+    assert "secret transcript value" not in lowered
+    assert "secret artifact value" not in lowered
+    assert "arbitrary secret value" not in lowered
+
+
 def test_record_detail_returns_404_for_missing_index(plugin_api, client):
     _seed_records(plugin_api.record_store_path())
 
