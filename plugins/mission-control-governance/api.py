@@ -74,6 +74,35 @@ def _serialized_records(records: tuple[Any, ...]) -> list[dict[str, Any]]:
     ]
 
 
+def _envelope_summary(envelope: Any) -> dict[str, Any]:
+    payload = _record_payload(envelope)
+    return {
+        "active_lane": payload.get("active_lane", ""),
+        "mode": payload.get("mode", ""),
+        "allowed_actions": list(payload.get("allowed_actions") or ()),
+        "forbidden_actions": list(payload.get("forbidden_actions") or ()),
+        "current_repo": payload.get("current_repo", ""),
+        "expected_systems_files": list(payload.get("expected_systems_files") or ()),
+        "stop_condition": payload.get("stop_condition", ""),
+        "other_threads_excluded": list(payload.get("other_threads_excluded") or ()),
+    }
+
+
+def _empty_start_gate_payload(store_status: str, error: str | None) -> dict[str, Any]:
+    return {
+        **INERT_FLAGS,
+        "store_status": store_status,
+        "error": error,
+        "has_active_envelope": False,
+        "source": "none",
+        "record_index": None,
+        "mission_id": None,
+        "mission_title": None,
+        "mission_created_at": None,
+        "envelope": None,
+    }
+
+
 def _record_schema() -> dict[str, dict[str, Any]]:
     schema: dict[str, dict[str, Any]] = {}
     for record_type, record_class in sorted(RECORD_TYPES.items()):
@@ -118,6 +147,45 @@ async def summary() -> dict[str, Any]:
         "latest_mission_title": getattr(latest_mission, "title", None),
         "latest_mission_created_at": getattr(latest_mission, "created_at", None),
     }
+
+
+@router.get("/start-gate")
+async def start_gate() -> dict[str, Any]:
+    loaded, store_status, error = _load_records_with_state()
+    if not loaded:
+        return _empty_start_gate_payload(store_status, error)
+
+    for index, record in reversed(tuple(enumerate(loaded))):
+        if _record_type(record) == "MissionBrief" and getattr(record, "control", None) is not None:
+            return {
+                **INERT_FLAGS,
+                "store_status": store_status,
+                "error": error,
+                "has_active_envelope": True,
+                "source": "MissionBrief.control",
+                "record_index": index,
+                "mission_id": getattr(record, "mission_id", None),
+                "mission_title": getattr(record, "title", None),
+                "mission_created_at": getattr(record, "created_at", None),
+                "envelope": _envelope_summary(getattr(record, "control")),
+            }
+
+    for index, record in reversed(tuple(enumerate(loaded))):
+        if _record_type(record) == "TaskControlEnvelope":
+            return {
+                **INERT_FLAGS,
+                "store_status": store_status,
+                "error": error,
+                "has_active_envelope": True,
+                "source": "TaskControlEnvelope",
+                "record_index": index,
+                "mission_id": None,
+                "mission_title": None,
+                "mission_created_at": None,
+                "envelope": _envelope_summary(record),
+            }
+
+    return _empty_start_gate_payload(store_status, error)
 
 
 @router.get("/records")
