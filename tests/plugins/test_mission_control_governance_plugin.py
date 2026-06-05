@@ -13,6 +13,8 @@ from fastapi.testclient import TestClient
 
 from mission_control.records import (
     ApprovalSlice,
+    ArtifactRef,
+    EvidenceCard,
     GoalContract,
     JsonlRecordStore,
     MissionBrief,
@@ -115,12 +117,23 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/health": {"GET"},
         "/summary": {"GET"},
         "/start-gate": {"GET"},
+        "/approval-slices": {"GET"},
+        "/evidence-cards": {"GET"},
         "/records": {"GET"},
         "/schema": {"GET"},
         "/records/{record_index}": {"GET"},
     }
 
-    for path in ("/health", "/summary", "/start-gate", "/records", "/schema", "/records/0"):
+    for path in (
+        "/health",
+        "/summary",
+        "/start-gate",
+        "/approval-slices",
+        "/evidence-cards",
+        "/records",
+        "/schema",
+        "/records/0",
+    ):
         for method in ("post", "put", "patch", "delete"):
             response = getattr(client, method)(
                 f"/api/plugins/mission-control-governance{path}"
@@ -337,6 +350,221 @@ def test_empty_store_returns_empty_inert_payload(client):
     assert records["execution_enabled"] is False
 
 
+def test_empty_store_returns_empty_approval_and_evidence_payloads(client):
+    approvals = client.get("/api/plugins/mission-control-governance/approval-slices")
+    evidence = client.get("/api/plugins/mission-control-governance/evidence-cards")
+
+    assert approvals.status_code == 200
+    assert evidence.status_code == 200
+    assert approvals.json() == {
+        "trusted_for_execution": False,
+        "inert_context_only": True,
+        "execution_enabled": False,
+        "store_status": "missing",
+        "error": None,
+        "source": "none",
+        "count": 0,
+        "approval_slices": [],
+    }
+    assert evidence.json() == {
+        "trusted_for_execution": False,
+        "inert_context_only": True,
+        "execution_enabled": False,
+        "store_status": "missing",
+        "error": None,
+        "source": "none",
+        "count": 0,
+        "evidence_cards": [],
+    }
+
+
+def test_approval_and_evidence_routes_are_get_only(client):
+    for path in ("/approval-slices", "/evidence-cards"):
+        for method in ("post", "put", "patch", "delete"):
+            response = getattr(client, method)(
+                f"/api/plugins/mission-control-governance{path}"
+            )
+            assert response.status_code == 405
+
+
+def test_approval_slices_prefers_latest_mission_brief_approvals(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    old = ApprovalSlice(
+        approval_id="standalone-old",
+        lane="old lane",
+        mode="old mode",
+        approved_actions=("old action",),
+    )
+    latest = ApprovalSlice(
+        approval_id="mission-latest",
+        lane="latest lane",
+        mode="focused tests only",
+        approved_actions=("add GET endpoint", "add compact panel"),
+        forbidden_actions=("push", "deploy"),
+        approver="Travis",
+        approved_at="2026-06-05T01:00:00Z",
+        expires_at="2026-06-06T01:00:00Z",
+        metadata={
+            "status": "active",
+            "reason": "bounded implementation",
+            "risk_class": "low",
+            "required_approver": "Travis",
+            "internal_note": "do not expose this",
+        },
+    )
+    goal = GoalContract(goal_id="goal-approval", statement="Summarize approvals.")
+    control = TaskControlEnvelope(active_lane="latest lane", mode="focused tests only")
+    store.append(old)
+    store.append(
+        MissionBrief(
+            mission_id="mission-approval",
+            title="Approval summaries",
+            created_at="2026-06-05T01:01:00Z",
+            goal=goal,
+            control=control,
+            approvals=(latest,),
+            evidence=(EvidenceCard(evidence_id="ev-linked", summary="Supports approval"),),
+        )
+    )
+
+    response = client.get("/api/plugins/mission-control-governance/approval-slices")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["source"] == "MissionBrief.approvals"
+    assert payload["count"] == 1
+    assert payload["approval_slices"] == [
+        {
+            "approval_id": "mission-latest",
+            "lane": "latest lane",
+            "mode": "focused tests only",
+            "approver": "Travis",
+            "approved_at": "2026-06-05T01:00:00Z",
+            "expires_at": "2026-06-06T01:00:00Z",
+            "approved_action_count": 2,
+            "forbidden_action_count": 2,
+            "evidence_count": 1,
+            "status": "active",
+            "reason": "bounded implementation",
+            "risk_class": "low",
+            "required_approver": "Travis",
+        }
+    ]
+    assert "metadata" not in payload["approval_slices"][0]
+    assert "internal_note" not in str(payload)
+
+
+def test_approval_slices_uses_standalone_fallback(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(
+        ApprovalSlice(
+            approval_id="standalone-approval",
+            lane="fallback lane",
+            mode="read-only",
+            approved_actions=("read records",),
+            forbidden_actions=("write records",),
+            approver="Travis",
+            approved_at="2026-06-05T02:00:00Z",
+        )
+    )
+
+    payload = client.get("/api/plugins/mission-control-governance/approval-slices").json()
+
+    assert payload["source"] == "ApprovalSlice"
+    assert payload["count"] == 1
+    assert payload["approval_slices"][0]["approval_id"] == "standalone-approval"
+    assert payload["approval_slices"][0]["approved_action_count"] == 1
+    assert payload["approval_slices"][0]["forbidden_action_count"] == 1
+
+
+def test_evidence_cards_prefers_latest_mission_brief_evidence(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    old = EvidenceCard(evidence_id="standalone-old", summary="Old evidence")
+    latest = EvidenceCard(
+        evidence_id="mission-evidence",
+        summary="Focused tests demonstrate inert summaries.",
+        artifact_refs=(
+            ArtifactRef(
+                ref_id="artifact-1",
+                kind="test-log",
+                location="tests/plugins/test_mission_control_governance_plugin.py",
+                description="focused test",
+                metadata={"blob": "do not dump"},
+            ),
+        ),
+        metadata={
+            "title": "Focused test log",
+            "type": "test",
+            "source": "pytest",
+            "transcript": "do not include transcript",
+            "artifact_blob": "do not include blob",
+        },
+    )
+    goal = GoalContract(goal_id="goal-evidence", statement="Summarize evidence.")
+    control = TaskControlEnvelope(active_lane="evidence lane", mode="focused tests only")
+    store.append(old)
+    store.append(
+        MissionBrief(
+            mission_id="mission-evidence",
+            title="Evidence summaries",
+            created_at="2026-06-05T03:00:00Z",
+            goal=goal,
+            control=control,
+            evidence=(latest,),
+        )
+    )
+
+    response = client.get("/api/plugins/mission-control-governance/evidence-cards")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["source"] == "MissionBrief.evidence"
+    assert payload["count"] == 1
+    assert payload["evidence_cards"] == [
+        {
+            "evidence_id": "mission-evidence",
+            "summary": "Focused tests demonstrate inert summaries.",
+            "artifact_count": 1,
+            "artifact_refs_count": 1,
+            "title": "Focused test log",
+            "type": "test",
+            "source": "pytest",
+        }
+    ]
+    assert "metadata" not in payload["evidence_cards"][0]
+    assert "artifact_refs" not in payload["evidence_cards"][0]
+    assert "transcript" not in str(payload).lower()
+    assert "blob" not in str(payload).lower()
+
+
+def test_evidence_cards_uses_standalone_fallback(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(
+        EvidenceCard(
+            evidence_id="standalone-evidence",
+            summary="Fallback evidence summary.",
+            artifact_refs=(ArtifactRef(ref_id="artifact-1", kind="log", location="focused.log"),),
+        )
+    )
+
+    payload = client.get("/api/plugins/mission-control-governance/evidence-cards").json()
+
+    assert payload["source"] == "EvidenceCard"
+    assert payload["count"] == 1
+    assert payload["evidence_cards"][0] == {
+        "evidence_id": "standalone-evidence",
+        "summary": "Fallback evidence summary.",
+        "artifact_count": 1,
+        "artifact_refs_count": 1,
+    }
+
+
 def test_malformed_store_returns_inert_error_payload(plugin_api, client):
     path = plugin_api.record_store_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -371,7 +599,8 @@ def test_plugin_has_no_runtime_tool_gateway_or_subprocess_imports():
         "gateway.",
         "gateway import",
         "run_agent",
-        "approval",
+        "resolve_gateway_approval",
+        "tools.approval",
         "transcript",
     )
     for path in (
@@ -391,9 +620,21 @@ def test_dashboard_bundle_registers_read_only_tab_only():
     assert '__HERMES_PLUGINS__.register("mission-control-governance"' in bundle
     assert "/api/plugins/mission-control-governance/summary" in bundle
     assert "/api/plugins/mission-control-governance/start-gate" in bundle
+    assert "/api/plugins/mission-control-governance/approval-slices" in bundle
+    assert "/api/plugins/mission-control-governance/evidence-cards" in bundle
     assert "/api/plugins/mission-control-governance/records" in bundle
     assert "/api/plugins/mission-control-governance/schema" in bundle
     assert "RECORD_DETAIL_URL" in bundle
     assert "method:" not in lowered
-    for token in ("post(", "put(", "patch(", "delete(", "execute", "approve", "transcript"):
+    for token in (
+        "post(",
+        "put(",
+        "patch(",
+        "delete(",
+        "execute",
+        "approve(",
+        "transcript",
+        "resolve_gateway_approval",
+        "tools.approval",
+    ):
         assert token not in lowered
