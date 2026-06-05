@@ -103,6 +103,84 @@ def _empty_start_gate_payload(store_status: str, error: str | None) -> dict[str,
     }
 
 
+def _empty_approval_slices_payload(store_status: str, error: str | None) -> dict[str, Any]:
+    return {
+        **INERT_FLAGS,
+        "store_status": store_status,
+        "error": error,
+        "source": "none",
+        "count": 0,
+        "approval_slices": [],
+    }
+
+
+def _empty_evidence_cards_payload(store_status: str, error: str | None) -> dict[str, Any]:
+    return {
+        **INERT_FLAGS,
+        "store_status": store_status,
+        "error": error,
+        "source": "none",
+        "count": 0,
+        "evidence_cards": [],
+    }
+
+
+def _bounded_latest(items: tuple[Any, ...], limit: int = 10) -> tuple[Any, ...]:
+    if len(items) <= limit:
+        return items
+    return items[-limit:]
+
+
+def _approval_summary(approval: Any, evidence_count: int | None = None) -> dict[str, Any]:
+    metadata = getattr(approval, "metadata", {}) or {}
+    summary = {
+        "approval_id": getattr(approval, "approval_id", ""),
+        "lane": getattr(approval, "lane", ""),
+        "mode": getattr(approval, "mode", ""),
+        "approver": getattr(approval, "approver", ""),
+        "approved_at": getattr(approval, "approved_at", ""),
+        "expires_at": getattr(approval, "expires_at", None),
+        "approved_action_count": len(getattr(approval, "approved_actions", ()) or ()),
+        "forbidden_action_count": len(getattr(approval, "forbidden_actions", ()) or ()),
+    }
+    if evidence_count is not None:
+        summary["evidence_count"] = evidence_count
+    for key in ("status", "reason", "risk_class", "required_approver"):
+        if key in metadata:
+            summary[key] = metadata[key]
+    return summary
+
+
+def _evidence_summary(evidence: Any) -> dict[str, Any]:
+    metadata = getattr(evidence, "metadata", {}) or {}
+    artifact_refs = tuple(getattr(evidence, "artifact_refs", ()) or ())
+    summary = {
+        "evidence_id": getattr(evidence, "evidence_id", ""),
+        "summary": getattr(evidence, "summary", ""),
+        "artifact_count": len(artifact_refs),
+        "artifact_refs_count": len(artifact_refs),
+    }
+    for key in ("title", "type", "source"):
+        if key in metadata:
+            summary[key] = metadata[key]
+    return summary
+
+
+def _latest_mission_with_items(records: tuple[Any, ...], field_name: str) -> tuple[int, Any] | None:
+    for index, record in reversed(tuple(enumerate(records))):
+        if _record_type(record) == "MissionBrief" and getattr(record, field_name, ()):  # compact embedded context
+            return index, record
+    return None
+
+
+def _standalone_records(records: tuple[Any, ...], record_type: str) -> tuple[tuple[int, Any], ...]:
+    return tuple(
+        (index, record)
+        for index, record in enumerate(records)
+        if _record_type(record) == record_type
+    )
+
+
 def _record_schema() -> dict[str, dict[str, Any]]:
     schema: dict[str, dict[str, Any]] = {}
     for record_type, record_class in sorted(RECORD_TYPES.items()):
@@ -146,6 +224,75 @@ async def summary() -> dict[str, Any]:
         "record_types": dict(sorted(counts.items())),
         "latest_mission_title": getattr(latest_mission, "title", None),
         "latest_mission_created_at": getattr(latest_mission, "created_at", None),
+    }
+
+
+@router.get("/approval-slices")
+async def approval_slices() -> dict[str, Any]:
+    loaded, store_status, error = _load_records_with_state()
+    if not loaded:
+        return _empty_approval_slices_payload(store_status, error)
+
+    mission_match = _latest_mission_with_items(loaded, "approvals")
+    if mission_match is not None:
+        _, mission = mission_match
+        items = _bounded_latest(tuple(getattr(mission, "approvals", ()) or ()))
+        evidence_count = len(getattr(mission, "evidence", ()) or ())
+        summaries = [_approval_summary(item, evidence_count) for item in items]
+        return {
+            **INERT_FLAGS,
+            "store_status": store_status,
+            "error": error,
+            "source": "MissionBrief.approvals",
+            "count": len(summaries),
+            "approval_slices": summaries,
+        }
+
+    standalone = _bounded_latest(_standalone_records(loaded, "ApprovalSlice"))
+    if not standalone:
+        return _empty_approval_slices_payload(store_status, error)
+    summaries = [_approval_summary(record) for _, record in standalone]
+    return {
+        **INERT_FLAGS,
+        "store_status": store_status,
+        "error": error,
+        "source": "ApprovalSlice",
+        "count": len(summaries),
+        "approval_slices": summaries,
+    }
+
+
+@router.get("/evidence-cards")
+async def evidence_cards() -> dict[str, Any]:
+    loaded, store_status, error = _load_records_with_state()
+    if not loaded:
+        return _empty_evidence_cards_payload(store_status, error)
+
+    mission_match = _latest_mission_with_items(loaded, "evidence")
+    if mission_match is not None:
+        _, mission = mission_match
+        items = _bounded_latest(tuple(getattr(mission, "evidence", ()) or ()))
+        summaries = [_evidence_summary(item) for item in items]
+        return {
+            **INERT_FLAGS,
+            "store_status": store_status,
+            "error": error,
+            "source": "MissionBrief.evidence",
+            "count": len(summaries),
+            "evidence_cards": summaries,
+        }
+
+    standalone = _bounded_latest(_standalone_records(loaded, "EvidenceCard"))
+    if not standalone:
+        return _empty_evidence_cards_payload(store_status, error)
+    summaries = [_evidence_summary(record) for _, record in standalone]
+    return {
+        **INERT_FLAGS,
+        "store_status": store_status,
+        "error": error,
+        "source": "EvidenceCard",
+        "count": len(summaries),
+        "evidence_cards": summaries,
     }
 
 

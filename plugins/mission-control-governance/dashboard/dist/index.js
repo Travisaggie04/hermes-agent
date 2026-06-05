@@ -11,6 +11,8 @@
 
   const SUMMARY_URL = "/api/plugins/mission-control-governance/summary";
   const START_GATE_URL = "/api/plugins/mission-control-governance/start-gate";
+  const APPROVAL_SLICES_URL = "/api/plugins/mission-control-governance/approval-slices";
+  const EVIDENCE_CARDS_URL = "/api/plugins/mission-control-governance/evidence-cards";
   const RECORDS_URL = "/api/plugins/mission-control-governance/records";
   const SCHEMA_URL = "/api/plugins/mission-control-governance/schema";
   const RECORD_DETAIL_URL = function (index) {
@@ -60,6 +62,8 @@
       loading: true,
       summary: null,
       startGate: null,
+      approvals: null,
+      evidence: null,
       rows: [],
       schema: null,
       detail: null,
@@ -73,15 +77,24 @@
 
     useEffect(function () {
       let cancelled = false;
-      Promise.all([getJSON(SUMMARY_URL), getJSON(START_GATE_URL), getJSON(RECORDS_URL), getJSON(SCHEMA_URL)])
+      Promise.all([
+        getJSON(SUMMARY_URL),
+        getJSON(START_GATE_URL),
+        getJSON(APPROVAL_SLICES_URL),
+        getJSON(EVIDENCE_CARDS_URL),
+        getJSON(RECORDS_URL),
+        getJSON(SCHEMA_URL),
+      ])
         .then(function (result) {
           if (cancelled) return;
           setData({
             loading: false,
             summary: result[0],
             startGate: result[1],
-            rows: (result[2] && result[2].records) || [],
-            schema: result[3],
+            approvals: result[2],
+            evidence: result[3],
+            rows: (result[4] && result[4].records) || [],
+            schema: result[5],
             detail: null,
             detailLoading: false,
             detailError: "",
@@ -95,6 +108,8 @@
             loading: false,
             summary: null,
             startGate: null,
+            approvals: null,
+            evidence: null,
             rows: [],
             schema: null,
             detail: null,
@@ -140,6 +155,10 @@
     const summary = data.summary || {};
     const startGate = data.startGate || {};
     const envelope = startGate.envelope || {};
+    const approvals = data.approvals || {};
+    const evidence = data.evidence || {};
+    const approvalRows = approvals.approval_slices || [];
+    const evidenceRows = evidence.evidence_cards || [];
     const types = summary.record_types || {};
     const schemaTypes = data.schema && data.schema.record_types ? data.schema.record_types : {};
     const schemaNames = Object.keys(schemaTypes).sort();
@@ -196,6 +215,50 @@
                   h("strong", null, envelope.stop_condition || "Unspecified")
                 )
               )
+        )
+      ),
+      h("div", { className: "mcg-summary-panels" },
+        h(C.Card, { className: "mcg-approval-card" },
+          h(C.CardContent, { className: "mcg-panel-body" },
+            h("div", { className: "mcg-panel-heading" },
+              h("div", { className: "mcg-panel-title" }, "Approval Slices"),
+              h("span", { className: "mcg-count" }, data.loading ? "..." : String(approvals.count || 0))
+            ),
+            data.loading
+              ? h("p", { className: "mcg-muted" }, "Loading approval slices...")
+              : approvalRows.length === 0
+                ? h("p", { className: "mcg-muted" }, "No approval slices found.")
+                : h("div", { className: "mcg-compact-list" },
+                  approvalRows.map(function (item, index) {
+                    return h("div", { className: "mcg-compact-row", key: item.approval_id || index },
+                      h("strong", null, item.lane || item.approval_id || "Approval slice"),
+                      h("span", null, (item.mode || "mode unknown") + " - " + String(item.approved_action_count || 0) + " allowed / " + String(item.forbidden_action_count || 0) + " blocked"),
+                      h("span", null, (item.approver || "unknown") + (item.approved_at ? " - " + item.approved_at : ""))
+                    );
+                  })
+                )
+          )
+        ),
+        h(C.Card, { className: "mcg-evidence-card" },
+          h(C.CardContent, { className: "mcg-panel-body" },
+            h("div", { className: "mcg-panel-heading" },
+              h("div", { className: "mcg-panel-title" }, "Evidence Cards"),
+              h("span", { className: "mcg-count" }, data.loading ? "..." : String(evidence.count || 0))
+            ),
+            data.loading
+              ? h("p", { className: "mcg-muted" }, "Loading evidence cards...")
+              : evidenceRows.length === 0
+                ? h("p", { className: "mcg-muted" }, "No evidence cards found.")
+                : h("div", { className: "mcg-compact-list" },
+                  evidenceRows.map(function (item, index) {
+                    return h("div", { className: "mcg-compact-row", key: item.evidence_id || index },
+                      h("strong", null, item.title || item.evidence_id || "Evidence card"),
+                      h("span", null, item.summary || "No summary"),
+                      h("span", null, String(item.artifact_refs_count || item.artifact_count || 0) + " artifact refs" + (item.source ? " - " + item.source : ""))
+                    );
+                  })
+                )
+          )
         )
       ),
       h("div", { className: "mcg-panels" },
