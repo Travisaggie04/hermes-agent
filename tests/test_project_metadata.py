@@ -122,3 +122,26 @@ def test_dashboard_plugin_manifests_and_assets_are_packaged():
     assert "*/dashboard/manifest.json" in plugin_data
     assert "*/dashboard/dist/*" in plugin_data
     assert "*/dashboard/dist/**/*" in plugin_data
+
+
+def test_mission_control_governance_backend_files_are_packaged():
+    """Mission Control governance uses a hyphenated plugin directory, so its
+    Python backend files must be shipped as plugin package data."""
+    package_data = _load_package_data()
+    plugin_data = package_data["plugins"]
+
+    assert "mission-control-governance/api.py" in plugin_data
+    assert "mission-control-governance/dashboard/plugin_api.py" in plugin_data
+
+    manifest = (Path(__file__).resolve().parents[1] / "MANIFEST.in").read_text(
+        encoding="utf-8"
+    )
+    assert "include plugins/mission-control-governance/api.py" in manifest
+    assert (
+        "include plugins/mission-control-governance/dashboard/plugin_api.py"
+        in manifest
+    )
+    assert (
+        "include plugins/mission-control-governance/dashboard/manifest.json"
+        in manifest
+    )

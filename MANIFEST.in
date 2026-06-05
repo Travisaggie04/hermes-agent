@@ -5,5 +5,8 @@ graft optional-skills
 # built from the sdist (e.g. Homebrew, downstream packagers). package-data
 # below covers the wheel; this covers the sdist. See #34034 / #28149.
 recursive-include plugins plugin.yaml plugin.yml
+include plugins/mission-control-governance/api.py
+include plugins/mission-control-governance/dashboard/plugin_api.py
+include plugins/mission-control-governance/dashboard/manifest.json
 global-exclude __pycache__
 global-exclude *.py[cod]
