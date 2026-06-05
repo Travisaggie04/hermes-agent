@@ -115,9 +115,11 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/health": {"GET"},
         "/summary": {"GET"},
         "/records": {"GET"},
+        "/schema": {"GET"},
+        "/records/{record_index}": {"GET"},
     }
 
-    for path in ("/health", "/summary", "/records"):
+    for path in ("/health", "/summary", "/records", "/schema", "/records/0"):
         for method in ("post", "put", "patch", "delete"):
             response = getattr(client, method)(
                 f"/api/plugins/mission-control-governance{path}"
@@ -159,6 +161,8 @@ def test_summary_and_records_return_inert_fields(plugin_api, client):
     assert records["inert_context_only"] is True
     assert records["execution_enabled"] is False
     assert records["count"] == 4
+    assert records["store_status"] == "ok"
+    assert records["error"] is None
     assert [item["record_type"] for item in records["records"]] == [
         "GoalContract",
         "TaskControlEnvelope",
@@ -166,6 +170,50 @@ def test_summary_and_records_return_inert_fields(plugin_api, client):
         "MissionBrief",
     ]
     assert records["records"][0]["record"]["statement"] == "Keep governance records inert."
+
+
+def test_schema_lists_record_types_without_loading_records(client):
+    response = client.get("/api/plugins/mission-control-governance/schema")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["record_store"]["status"] == "missing"
+    assert "GoalContract" in payload["record_types"]
+    assert payload["record_types"]["GoalContract"]["fields"] == [
+        "goal_id",
+        "statement",
+        "success_criteria",
+        "constraints",
+        "metadata",
+    ]
+    assert "ArtifactRef" in payload["record_types"]
+
+
+def test_record_detail_returns_zero_based_record_index(plugin_api, client):
+    _seed_records(plugin_api.record_store_path())
+
+    response = client.get("/api/plugins/mission-control-governance/records/1")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["record_index"] == 1
+    assert payload["record_type"] == "TaskControlEnvelope"
+    assert payload["record"]["active_lane"] == "PR-B Mission Control governance plugin MVP"
+
+
+def test_record_detail_returns_404_for_missing_index(plugin_api, client):
+    _seed_records(plugin_api.record_store_path())
+
+    response = client.get("/api/plugins/mission-control-governance/records/99")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "record index not found"
 
 
 def test_empty_store_returns_empty_inert_payload(client):
@@ -176,8 +224,38 @@ def test_empty_store_returns_empty_inert_payload(client):
     assert summary["record_types"] == {}
     assert records["count"] == 0
     assert records["records"] == []
+    assert summary["store_status"] == "missing"
+    assert summary["error"] is None
+    assert records["store_status"] == "missing"
+    assert records["error"] is None
     assert summary["trusted_for_execution"] is False
     assert records["execution_enabled"] is False
+
+
+def test_malformed_store_returns_inert_error_payload(plugin_api, client):
+    path = plugin_api.record_store_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{not json}\n", encoding="utf-8")
+
+    summary = client.get("/api/plugins/mission-control-governance/summary")
+    records = client.get("/api/plugins/mission-control-governance/records")
+    detail = client.get("/api/plugins/mission-control-governance/records/0")
+
+    assert summary.status_code == 200
+    assert records.status_code == 200
+    assert detail.status_code == 409
+
+    summary_payload = summary.json()
+    records_payload = records.json()
+    assert summary_payload["record_count"] == 0
+    assert summary_payload["record_types"] == {}
+    assert summary_payload["store_status"] == "malformed"
+    assert "line 1" in summary_payload["error"]
+    assert records_payload["count"] == 0
+    assert records_payload["records"] == []
+    assert records_payload["store_status"] == "malformed"
+    assert "line 1" in records_payload["error"]
+    assert detail.json()["detail"] == "record store is malformed"
 
 
 def test_plugin_has_no_runtime_tool_gateway_or_subprocess_imports():
@@ -208,6 +286,8 @@ def test_dashboard_bundle_registers_read_only_tab_only():
     assert '__HERMES_PLUGINS__.register("mission-control-governance"' in bundle
     assert "/api/plugins/mission-control-governance/summary" in bundle
     assert "/api/plugins/mission-control-governance/records" in bundle
+    assert "/api/plugins/mission-control-governance/schema" in bundle
+    assert "RECORD_DETAIL_URL" in bundle
     assert "method:" not in lowered
     for token in ("post(", "put(", "patch(", "delete(", "execute", "approve"):
         assert token not in lowered

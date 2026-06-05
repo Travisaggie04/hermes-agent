@@ -53,7 +53,10 @@
 }
 
 .mcg-stat,
-.mcg-table-card {
+.mcg-table-card,
+.mcg-schema-card,
+.mcg-detail-card,
+.mcg-state {
   border-radius: 8px;
 }
 
@@ -73,6 +76,90 @@
 .mcg-table-wrap {
   overflow-x: auto;
   padding: 0;
+}
+
+.mcg-state .card-content,
+.mcg-state > div {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px;
+}
+
+.mcg-state strong {
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.mcg-state span {
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+}
+
+.mcg-panels {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+}
+
+.mcg-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.mcg-panel-title {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.mcg-muted {
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+  margin: 0;
+}
+
+.mcg-schema-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mcg-schema-item {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 160px minmax(0, 1fr);
+}
+
+.mcg-schema-item span {
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.mcg-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mcg-json {
+  background: hsl(var(--muted));
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
+.mcg-detail-error {
+  color: hsl(var(--destructive));
+  font-size: 13px;
+  margin: 0;
 }
 
 .mcg-table {
@@ -101,6 +188,17 @@
   font-size: 12px;
 }
 
+.mcg-table tbody tr {
+  cursor: pointer;
+}
+
+.mcg-table tbody tr:focus,
+.mcg-table tbody tr:hover,
+.mcg-table tbody tr.mcg-selected {
+  background: hsl(var(--muted));
+  outline: none;
+}
+
 .mcg-error {
   border-color: hsl(var(--destructive));
 }
@@ -111,6 +209,14 @@
   }
 
   .mcg-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .mcg-panels {
+    grid-template-columns: 1fr;
+  }
+
+  .mcg-schema-item {
     grid-template-columns: 1fr;
   }
 }
