@@ -6,6 +6,7 @@ from mission_control.records.models import (
     EvidenceCard,
     GoalContract,
     MissionBrief,
+    OperatorAction,
     TaskControlEnvelope,
 )
 from mission_control.records.store import JsonlRecordStore
@@ -17,5 +18,6 @@ __all__ = [
     "GoalContract",
     "JsonlRecordStore",
     "MissionBrief",
+    "OperatorAction",
     "TaskControlEnvelope",
 ]

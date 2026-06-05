@@ -225,6 +225,67 @@ class EvidenceCard:
 
 
 @dataclass(frozen=True)
+class OperatorAction:
+    action_id: str
+    title: str
+    lane: str
+    mode: str
+    requested_action: str
+    risk_level: str = ""
+    status: str = "requested"
+    required_approval: str = ""
+    approval_id: str = ""
+    evidence_ids: tuple[str, ...] = ()
+    stop_condition: str = ""
+    created_at: str = ""
+    expires_at: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "OperatorAction"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "evidence_ids", tuple(str(item) for item in _tuple(self.evidence_ids)))
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "action_id": self.action_id,
+            "title": self.title,
+            "lane": self.lane,
+            "mode": self.mode,
+            "requested_action": self.requested_action,
+            "risk_level": self.risk_level,
+            "status": self.status,
+            "required_approval": self.required_approval,
+            "approval_id": self.approval_id,
+            "evidence_ids": list(self.evidence_ids),
+            "stop_condition": self.stop_condition,
+            "created_at": self.created_at,
+            "expires_at": self.expires_at,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> OperatorAction:
+        return cls(
+            action_id=_required(data, "action_id"),
+            title=_required(data, "title"),
+            lane=_required(data, "lane"),
+            mode=_required(data, "mode"),
+            requested_action=_required(data, "requested_action"),
+            risk_level=data.get("risk_level", ""),
+            status=data.get("status", "requested"),
+            required_approval=data.get("required_approval", ""),
+            approval_id=data.get("approval_id", ""),
+            evidence_ids=data.get("evidence_ids") or (),
+            stop_condition=data.get("stop_condition", ""),
+            created_at=data.get("created_at", ""),
+            expires_at=data.get("expires_at"),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
 class MissionBrief:
     mission_id: str
     title: str
@@ -313,6 +374,7 @@ RECORD_TYPES = {
         EvidenceCard,
         GoalContract,
         MissionBrief,
+        OperatorAction,
         TaskControlEnvelope,
     )
 }

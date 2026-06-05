@@ -18,6 +18,7 @@ from mission_control.records import (
     GoalContract,
     JsonlRecordStore,
     MissionBrief,
+    OperatorAction,
     TaskControlEnvelope,
 )
 
@@ -119,6 +120,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/start-gate": {"GET"},
         "/approval-slices": {"GET"},
         "/evidence-cards": {"GET"},
+        "/operator-actions": {"GET"},
         "/records": {"GET"},
         "/schema": {"GET"},
         "/records/{record_index}": {"GET"},
@@ -130,6 +132,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/start-gate",
         "/approval-slices",
         "/evidence-cards",
+        "/operator-actions",
         "/records",
         "/schema",
         "/records/0",
@@ -353,9 +356,11 @@ def test_empty_store_returns_empty_inert_payload(client):
 def test_empty_store_returns_empty_approval_and_evidence_payloads(client):
     approvals = client.get("/api/plugins/mission-control-governance/approval-slices")
     evidence = client.get("/api/plugins/mission-control-governance/evidence-cards")
+    actions = client.get("/api/plugins/mission-control-governance/operator-actions")
 
     assert approvals.status_code == 200
     assert evidence.status_code == 200
+    assert actions.status_code == 200
     assert approvals.json() == {
         "trusted_for_execution": False,
         "inert_context_only": True,
@@ -376,10 +381,20 @@ def test_empty_store_returns_empty_approval_and_evidence_payloads(client):
         "count": 0,
         "evidence_cards": [],
     }
+    assert actions.json() == {
+        "trusted_for_execution": False,
+        "inert_context_only": True,
+        "execution_enabled": False,
+        "store_status": "missing",
+        "error": None,
+        "source": "none",
+        "count": 0,
+        "operator_actions": [],
+    }
 
 
 def test_approval_and_evidence_routes_are_get_only(client):
-    for path in ("/approval-slices", "/evidence-cards"):
+    for path in ("/approval-slices", "/evidence-cards", "/operator-actions"):
         for method in ("post", "put", "patch", "delete"):
             response = getattr(client, method)(
                 f"/api/plugins/mission-control-governance{path}"
@@ -607,6 +622,7 @@ def test_summary_style_routes_do_not_call_read_all(plugin_api, client, monkeypat
     start_gate = client.get("/api/plugins/mission-control-governance/start-gate")
     approvals = client.get("/api/plugins/mission-control-governance/approval-slices")
     evidence = client.get("/api/plugins/mission-control-governance/evidence-cards")
+    actions = client.get("/api/plugins/mission-control-governance/operator-actions")
 
     assert summary.status_code == 200
     assert start_gate.status_code == 200
@@ -717,6 +733,8 @@ def test_dashboard_bundle_registers_read_only_tab_only():
     assert "/api/plugins/mission-control-governance/start-gate" in bundle
     assert "/api/plugins/mission-control-governance/approval-slices" in bundle
     assert "/api/plugins/mission-control-governance/evidence-cards" in bundle
+    assert "/api/plugins/mission-control-governance/operator-actions" in bundle
+    assert "Operator Action Queue" in bundle
     assert "/api/plugins/mission-control-governance/records" in bundle
     assert "/api/plugins/mission-control-governance/schema" in bundle
     assert "RECORD_DETAIL_URL" in bundle
@@ -728,8 +746,182 @@ def test_dashboard_bundle_registers_read_only_tab_only():
         "delete(",
         "execute",
         "approve(",
+        "deny(",
         "transcript",
         "resolve_gateway_approval",
         "tools.approval",
     ):
         assert token not in lowered
+
+
+def test_operator_actions_empty_missing_store_returns_bounded_empty_payload(client):
+    response = client.get("/api/plugins/mission-control-governance/operator-actions")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "trusted_for_execution": False,
+        "inert_context_only": True,
+        "execution_enabled": False,
+        "store_status": "missing",
+        "error": None,
+        "source": "none",
+        "count": 0,
+        "operator_actions": [],
+    }
+
+
+def test_operator_actions_uses_latest_standalone_fallback(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(GoalContract(goal_id="goal-action", statement="Unrelated record"))
+    store.append(
+        OperatorAction(
+            action_id="action-standalone",
+            title="Review bounded queue",
+            lane="PR-G",
+            mode="focused tests only",
+            requested_action="Review requested action summary.",
+            risk_level="low",
+            status="requested",
+            required_approval="manual approval",
+            approval_id="approval-1",
+            evidence_ids=("evidence-1", "evidence-2"),
+            stop_condition="Stop after tests.",
+            created_at="2026-06-05T12:00:00Z",
+            expires_at="2026-06-06T12:00:00Z",
+            metadata={
+                "source": "planning",
+                "transcript": "do not expose",
+                "artifact_blob": "do not expose",
+                "broad_context": "do not expose",
+            },
+        )
+    )
+
+    payload = client.get("/api/plugins/mission-control-governance/operator-actions").json()
+
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["source"] == "OperatorAction"
+    assert payload["count"] == 1
+    assert payload["operator_actions"] == [
+        {
+            "record_index": 1,
+            "action_id": "action-standalone",
+            "title": "Review bounded queue",
+            "lane": "PR-G",
+            "mode": "focused tests only",
+            "requested_action": "Review requested action summary.",
+            "risk_level": "low",
+            "status": "requested",
+            "required_approval": "manual approval",
+            "approval_id": "approval-1",
+            "evidence_count": 2,
+            "stop_condition": "Stop after tests.",
+            "created_at": "2026-06-05T12:00:00Z",
+            "expires_at": "2026-06-06T12:00:00Z",
+            "source": "planning",
+        }
+    ]
+    assert "metadata" not in payload["operator_actions"][0]
+    assert "evidence_ids" not in payload["operator_actions"][0]
+    lowered = str(payload).lower()
+    assert "transcript" not in lowered
+    assert "artifact_blob" not in lowered
+    assert "broad_context" not in lowered
+
+
+def test_operator_actions_are_bounded_to_latest_10(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    for index in range(12):
+        store.append(
+            OperatorAction(
+                action_id=f"action-{index}",
+                title=f"Action {index}",
+                lane="bounded lane",
+                mode="read-only",
+                requested_action=f"Review action {index}.",
+            )
+        )
+
+    payload = client.get("/api/plugins/mission-control-governance/operator-actions").json()
+
+    assert payload["source"] == "OperatorAction"
+    assert payload["count"] == 10
+    assert [item["action_id"] for item in payload["operator_actions"]] == [
+        f"action-{index}" for index in range(2, 12)
+    ]
+
+
+def test_operator_actions_are_descriptive_context_only(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(
+        OperatorAction(
+            action_id="action-inert",
+            title="Request manual review",
+            lane="governance lane",
+            mode="read-only",
+            requested_action="Review this summary manually.",
+            metadata={"can_run": True, "command": "ignored"},
+        )
+    )
+
+    payload = client.get("/api/plugins/mission-control-governance/operator-actions").json()
+
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["operator_actions"][0]["status"] == "requested"
+    assert "can_run" not in str(payload)
+    assert "command" not in str(payload)
+
+
+def test_operator_actions_do_not_read_mission_brief_metadata(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(
+        MissionBrief(
+            mission_id="mission-action-metadata",
+            title="Metadata requested action",
+            created_at="2026-06-05T13:00:00Z",
+            goal=GoalContract(goal_id="goal-action-metadata", statement="Do not infer actions."),
+            control=TaskControlEnvelope(active_lane="metadata lane", mode="read-only"),
+            metadata={
+                "operator_actions": [
+                    {
+                        "action_id": "metadata-action",
+                        "title": "Do not expose",
+                        "requested_action": "Do not infer from mission metadata.",
+                    }
+                ]
+            },
+        )
+    )
+
+    payload = client.get("/api/plugins/mission-control-governance/operator-actions").json()
+
+    assert payload["source"] == "none"
+    assert payload["count"] == 0
+    assert payload["operator_actions"] == []
+
+
+def test_summary_style_routes_include_operator_actions_without_read_all(plugin_api, client, monkeypatch):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(
+        OperatorAction(
+            action_id="action-bounded",
+            title="Bounded action",
+            lane="bounded lane",
+            mode="read-only",
+            requested_action="Read compact summary.",
+        )
+    )
+
+    def fail_read_all(self, record_class=None):
+        raise AssertionError("summary route unexpectedly called read_all")
+
+    monkeypatch.setattr(JsonlRecordStore, "read_all", fail_read_all)
+
+    response = client.get("/api/plugins/mission-control-governance/operator-actions")
+
+    assert response.status_code == 200
+    assert response.json()["source"] == "OperatorAction"

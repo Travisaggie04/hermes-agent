@@ -17,6 +17,7 @@ from mission_control.records import (
     EvidenceCard,
     JsonlRecordStore,
     MissionBrief,
+    OperatorAction,
     TaskControlEnvelope,
 )
 
@@ -172,6 +173,17 @@ def _empty_evidence_cards_payload(store_status: str, error: str | None) -> dict[
     }
 
 
+def _empty_operator_actions_payload(store_status: str, error: str | None) -> dict[str, Any]:
+    return {
+        **INERT_FLAGS,
+        "store_status": store_status,
+        "error": error,
+        "source": "none",
+        "count": 0,
+        "operator_actions": [],
+    }
+
+
 def _bounded_latest(items: tuple[Any, ...], limit: int = 10) -> tuple[Any, ...]:
     if len(items) <= limit:
         return items
@@ -210,6 +222,29 @@ def _evidence_summary(evidence: Any) -> dict[str, Any]:
     for key in ("title", "type", "source"):
         if key in metadata:
             summary[key] = metadata[key]
+    return summary
+
+
+def _operator_action_summary(action: Any) -> dict[str, Any]:
+    metadata = getattr(action, "metadata", {}) or {}
+    evidence_ids = tuple(getattr(action, "evidence_ids", ()) or ())
+    summary = {
+        "action_id": getattr(action, "action_id", ""),
+        "title": getattr(action, "title", ""),
+        "lane": getattr(action, "lane", ""),
+        "mode": getattr(action, "mode", ""),
+        "requested_action": getattr(action, "requested_action", ""),
+        "risk_level": getattr(action, "risk_level", ""),
+        "status": getattr(action, "status", ""),
+        "required_approval": getattr(action, "required_approval", ""),
+        "approval_id": getattr(action, "approval_id", ""),
+        "evidence_count": len(evidence_ids),
+        "stop_condition": getattr(action, "stop_condition", ""),
+        "created_at": getattr(action, "created_at", ""),
+        "expires_at": getattr(action, "expires_at", None),
+    }
+    if "source" in metadata:
+        summary["source"] = metadata["source"]
     return summary
 
 
@@ -327,6 +362,25 @@ async def evidence_cards() -> dict[str, Any]:
         "source": "EvidenceCard",
         "count": len(summaries),
         "evidence_cards": summaries,
+    }
+
+
+@router.get("/operator-actions")
+async def operator_actions() -> dict[str, Any]:
+    standalone, store_status, error = _load_latest_records_with_state(OperatorAction, limit=10)
+    if not standalone:
+        return _empty_operator_actions_payload(store_status, error)
+    summaries = [
+        {"record_index": index, **_operator_action_summary(record)}
+        for index, record in standalone
+    ]
+    return {
+        **INERT_FLAGS,
+        "store_status": store_status,
+        "error": error,
+        "source": "OperatorAction",
+        "count": len(summaries),
+        "operator_actions": summaries,
     }
 
 

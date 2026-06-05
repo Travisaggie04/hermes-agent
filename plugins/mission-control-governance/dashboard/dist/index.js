@@ -13,6 +13,7 @@
   const START_GATE_URL = "/api/plugins/mission-control-governance/start-gate";
   const APPROVAL_SLICES_URL = "/api/plugins/mission-control-governance/approval-slices";
   const EVIDENCE_CARDS_URL = "/api/plugins/mission-control-governance/evidence-cards";
+  const OPERATOR_ACTIONS_URL = "/api/plugins/mission-control-governance/operator-actions";
   const RECORDS_URL = "/api/plugins/mission-control-governance/records";
   const SCHEMA_URL = "/api/plugins/mission-control-governance/schema";
   const RECORD_DETAIL_URL = function (index) {
@@ -64,6 +65,7 @@
       startGate: null,
       approvals: null,
       evidence: null,
+      actions: null,
       rows: [],
       schema: null,
       detail: null,
@@ -82,6 +84,7 @@
         getJSON(START_GATE_URL),
         getJSON(APPROVAL_SLICES_URL),
         getJSON(EVIDENCE_CARDS_URL),
+        getJSON(OPERATOR_ACTIONS_URL),
         getJSON(RECORDS_URL),
         getJSON(SCHEMA_URL),
       ])
@@ -93,8 +96,9 @@
             startGate: result[1],
             approvals: result[2],
             evidence: result[3],
-            rows: (result[4] && result[4].records) || [],
-            schema: result[5],
+            actions: result[4],
+            rows: (result[5] && result[5].records) || [],
+            schema: result[6],
             detail: null,
             detailLoading: false,
             detailError: "",
@@ -110,6 +114,7 @@
             startGate: null,
             approvals: null,
             evidence: null,
+            actions: null,
             rows: [],
             schema: null,
             detail: null,
@@ -157,8 +162,10 @@
     const envelope = startGate.envelope || {};
     const approvals = data.approvals || {};
     const evidence = data.evidence || {};
+    const actions = data.actions || {};
     const approvalRows = approvals.approval_slices || [];
     const evidenceRows = evidence.evidence_cards || [];
+    const actionRows = actions.operator_actions || [];
     const types = summary.record_types || {};
     const schemaTypes = data.schema && data.schema.record_types ? data.schema.record_types : {};
     const schemaNames = Object.keys(schemaTypes).sort();
@@ -234,6 +241,29 @@
                       h("strong", null, item.lane || item.approval_id || "Approval slice"),
                       h("span", null, (item.mode || "mode unknown") + " - " + String(item.approved_action_count || 0) + " allowed / " + String(item.forbidden_action_count || 0) + " blocked"),
                       h("span", null, (item.approver || "unknown") + (item.approved_at ? " - " + item.approved_at : ""))
+                    );
+                  })
+                )
+          )
+        ),
+
+        h(C.Card, { className: "mcg-action-card" },
+          h(C.CardContent, { className: "mcg-panel-body" },
+            h("div", { className: "mcg-panel-heading" },
+              h("div", { className: "mcg-panel-title" }, "Operator Action Queue"),
+              h("span", { className: "mcg-count" }, data.loading ? "..." : String(actions.count || 0))
+            ),
+            data.loading
+              ? h("p", { className: "mcg-muted" }, "Loading requested actions...")
+              : actionRows.length === 0
+                ? h("p", { className: "mcg-muted" }, "No requested actions found.")
+                : h("div", { className: "mcg-compact-list" },
+                  actionRows.map(function (item, index) {
+                    return h("div", { className: "mcg-compact-row", key: item.action_id || index },
+                      h("strong", null, item.title || item.action_id || "Requested action"),
+                      h("span", null, (item.lane || "lane unknown") + " - " + (item.mode || "mode unknown")),
+                      h("span", null, item.requested_action || "No requested action summary"),
+                      h("span", null, (item.status || "requested") + " / " + (item.risk_level || "risk unknown") + " / " + String(item.evidence_count || 0) + " evidence ids")
                     );
                   })
                 )
