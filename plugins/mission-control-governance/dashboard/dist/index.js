@@ -10,6 +10,7 @@
   const C = SDK.components;
 
   const SUMMARY_URL = "/api/plugins/mission-control-governance/summary";
+  const START_GATE_URL = "/api/plugins/mission-control-governance/start-gate";
   const RECORDS_URL = "/api/plugins/mission-control-governance/records";
   const SCHEMA_URL = "/api/plugins/mission-control-governance/schema";
   const RECORD_DETAIL_URL = function (index) {
@@ -58,6 +59,7 @@
     const state = useState({
       loading: true,
       summary: null,
+      startGate: null,
       rows: [],
       schema: null,
       detail: null,
@@ -71,14 +73,15 @@
 
     useEffect(function () {
       let cancelled = false;
-      Promise.all([getJSON(SUMMARY_URL), getJSON(RECORDS_URL), getJSON(SCHEMA_URL)])
+      Promise.all([getJSON(SUMMARY_URL), getJSON(START_GATE_URL), getJSON(RECORDS_URL), getJSON(SCHEMA_URL)])
         .then(function (result) {
           if (cancelled) return;
           setData({
             loading: false,
             summary: result[0],
-            rows: (result[1] && result[1].records) || [],
-            schema: result[2],
+            startGate: result[1],
+            rows: (result[2] && result[2].records) || [],
+            schema: result[3],
             detail: null,
             detailLoading: false,
             detailError: "",
@@ -91,6 +94,7 @@
           setData({
             loading: false,
             summary: null,
+            startGate: null,
             rows: [],
             schema: null,
             detail: null,
@@ -134,6 +138,8 @@
     }
 
     const summary = data.summary || {};
+    const startGate = data.startGate || {};
+    const envelope = startGate.envelope || {};
     const types = summary.record_types || {};
     const schemaTypes = data.schema && data.schema.record_types ? data.schema.record_types : {};
     const schemaNames = Object.keys(schemaTypes).sort();
@@ -163,6 +169,34 @@
         h(StatCard, { label: "Records", value: data.loading ? "..." : String(summary.record_count || 0), hint: "total stored items" }),
         h(StatCard, { label: "Types", value: data.loading ? "..." : String(typeCount), hint: "record categories" }),
         h(StatCard, { label: "Latest mission", value: summary.latest_mission_title || "None", hint: summary.latest_mission_created_at || "no mission brief" })
+      ),
+
+      h(C.Card, { className: "mcg-start-card" },
+        h(C.CardContent, { className: "mcg-start-body" },
+          h("div", { className: "mcg-panel-title" }, "Start Gate"),
+          data.loading
+            ? h("p", { className: "mcg-muted" }, "Loading start gate...")
+            : !startGate.has_active_envelope
+              ? h("p", { className: "mcg-muted" }, "No active task envelope found.")
+              : h("div", { className: "mcg-start-grid" },
+                h("div", null,
+                  h("span", { className: "mcg-start-label" }, "Lane"),
+                  h("strong", null, envelope.active_lane || "Unnamed")
+                ),
+                h("div", null,
+                  h("span", { className: "mcg-start-label" }, "Mode"),
+                  h("strong", null, envelope.mode || "Unspecified")
+                ),
+                h("div", null,
+                  h("span", { className: "mcg-start-label" }, "Source"),
+                  h("strong", null, startGate.source || "none")
+                ),
+                h("div", null,
+                  h("span", { className: "mcg-start-label" }, "Stop"),
+                  h("strong", null, envelope.stop_condition || "Unspecified")
+                )
+              )
+        )
       ),
       h("div", { className: "mcg-panels" },
         h(C.Card, { className: "mcg-schema-card" },

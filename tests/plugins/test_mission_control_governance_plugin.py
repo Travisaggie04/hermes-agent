@@ -114,12 +114,13 @@ def test_api_routes_are_get_only(plugin_api, client):
     assert methods_by_path == {
         "/health": {"GET"},
         "/summary": {"GET"},
+        "/start-gate": {"GET"},
         "/records": {"GET"},
         "/schema": {"GET"},
         "/records/{record_index}": {"GET"},
     }
 
-    for path in ("/health", "/summary", "/records", "/schema", "/records/0"):
+    for path in ("/health", "/summary", "/start-gate", "/records", "/schema", "/records/0"):
         for method in ("post", "put", "patch", "delete"):
             response = getattr(client, method)(
                 f"/api/plugins/mission-control-governance{path}"
@@ -170,6 +171,110 @@ def test_summary_and_records_return_inert_fields(plugin_api, client):
         "MissionBrief",
     ]
     assert records["records"][0]["record"]["statement"] == "Keep governance records inert."
+
+
+def test_start_gate_returns_no_active_envelope_for_missing_store(client):
+    response = client.get("/api/plugins/mission-control-governance/start-gate")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "trusted_for_execution": False,
+        "inert_context_only": True,
+        "execution_enabled": False,
+        "store_status": "missing",
+        "error": None,
+        "has_active_envelope": False,
+        "source": "none",
+        "record_index": None,
+        "mission_id": None,
+        "mission_title": None,
+        "mission_created_at": None,
+        "envelope": None,
+    }
+
+
+def test_start_gate_prefers_latest_mission_brief_control(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    old_control = TaskControlEnvelope(
+        active_lane="Older standalone lane",
+        mode="inventory only",
+        allowed_actions=("read records",),
+        forbidden_actions=("change records",),
+        current_repo="/tmp/old",
+        stop_condition="Stop before edits.",
+    )
+    latest_control = TaskControlEnvelope(
+        active_lane="Latest mission lane",
+        mode="focused tests only",
+        allowed_actions=("add GET endpoint", "update dashboard panel"),
+        forbidden_actions=("run broad tests", "load transcripts"),
+        current_repo="/tmp/latest",
+        expected_systems_files=("plugins/mission-control-governance/api.py",),
+        stop_condition="Stop after focused tests.",
+        other_threads_excluded=("unrelated PR",),
+    )
+    goal = GoalContract(goal_id="goal-latest", statement="Expose inert start gate summary.")
+    store.append(old_control)
+    store.append(
+        MissionBrief(
+            mission_id="mission-latest",
+            title="Start Gate UI",
+            created_at="2026-06-05T00:00:00Z",
+            goal=goal,
+            control=latest_control,
+        )
+    )
+
+    response = client.get("/api/plugins/mission-control-governance/start-gate")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["has_active_envelope"] is True
+    assert payload["source"] == "MissionBrief.control"
+    assert payload["record_index"] == 1
+    assert payload["mission_id"] == "mission-latest"
+    assert payload["mission_title"] == "Start Gate UI"
+    assert payload["mission_created_at"] == "2026-06-05T00:00:00Z"
+    assert payload["envelope"] == {
+        "active_lane": "Latest mission lane",
+        "mode": "focused tests only",
+        "allowed_actions": ["add GET endpoint", "update dashboard panel"],
+        "forbidden_actions": ["run broad tests", "load transcripts"],
+        "current_repo": "/tmp/latest",
+        "expected_systems_files": ["plugins/mission-control-governance/api.py"],
+        "stop_condition": "Stop after focused tests.",
+        "other_threads_excluded": ["unrelated PR"],
+    }
+
+
+def test_start_gate_uses_standalone_envelope_fallback(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    control = TaskControlEnvelope(
+        active_lane="Standalone lane",
+        mode="read-only summary",
+        allowed_actions=("read envelope",),
+        forbidden_actions=("write records",),
+        current_repo="/tmp/standalone",
+        stop_condition="Stop after response.",
+    )
+    store.append(control)
+
+    response = client.get("/api/plugins/mission-control-governance/start-gate")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["has_active_envelope"] is True
+    assert payload["source"] == "TaskControlEnvelope"
+    assert payload["record_index"] == 0
+    assert payload["mission_id"] is None
+    assert payload["mission_title"] is None
+    assert payload["mission_created_at"] is None
+    assert payload["envelope"]["active_lane"] == "Standalone lane"
+    assert payload["envelope"]["mode"] == "read-only summary"
+    assert "metadata" not in payload["envelope"]
 
 
 def test_schema_lists_record_types_without_loading_records(client):
@@ -285,9 +390,10 @@ def test_dashboard_bundle_registers_read_only_tab_only():
 
     assert '__HERMES_PLUGINS__.register("mission-control-governance"' in bundle
     assert "/api/plugins/mission-control-governance/summary" in bundle
+    assert "/api/plugins/mission-control-governance/start-gate" in bundle
     assert "/api/plugins/mission-control-governance/records" in bundle
     assert "/api/plugins/mission-control-governance/schema" in bundle
     assert "RECORD_DETAIL_URL" in bundle
     assert "method:" not in lowered
-    for token in ("post(", "put(", "patch(", "delete(", "execute", "approve"):
+    for token in ("post(", "put(", "patch(", "delete(", "execute", "approve", "transcript"):
         assert token not in lowered

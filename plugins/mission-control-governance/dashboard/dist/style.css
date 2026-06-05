@@ -53,6 +53,7 @@
 }
 
 .mcg-stat,
+.mcg-start-card,
 .mcg-table-card,
 .mcg-schema-card,
 .mcg-detail-card,
@@ -94,6 +95,40 @@
 .mcg-state span {
   color: hsl(var(--muted-foreground));
   font-size: 13px;
+}
+
+.mcg-start-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.mcg-start-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.mcg-start-grid div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.mcg-start-label {
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.mcg-start-grid strong {
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .mcg-panels {
@@ -212,6 +247,7 @@
     grid-template-columns: 1fr;
   }
 
+  .mcg-start-grid,
   .mcg-panels {
     grid-template-columns: 1fr;
   }
