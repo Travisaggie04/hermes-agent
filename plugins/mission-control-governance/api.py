@@ -7,7 +7,7 @@ from dataclasses import fields, is_dataclass
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from hermes_constants import get_hermes_home
 from mission_control.records.errors import RecordStoreError
@@ -24,6 +24,8 @@ from mission_control.records import (
 
 
 PLUGIN_NAME = "mission-control-governance"
+RECORDS_DEFAULT_LIMIT = 25
+RECORDS_MAX_LIMIT = 50
 INERT_FLAGS = {
     "trusted_for_execution": False,
     "inert_context_only": True,
@@ -74,6 +76,12 @@ def _load_latest_records_with_state(
     if not records:
         return (), "empty", None
     return records, "ok", None
+
+
+def _normalize_records_limit(limit: int | None) -> int:
+    if limit is None or limit <= 0:
+        return RECORDS_DEFAULT_LIMIT
+    return min(limit, RECORDS_MAX_LIMIT)
 
 
 def _record_counts_with_state() -> tuple[int, Counter[str], str, str | None]:
@@ -137,6 +145,17 @@ def _serialized_records(records: tuple[Any, ...]) -> list[dict[str, Any]]:
             "record": _record_payload(record),
         }
         for index, record in enumerate(records)
+    ]
+
+
+def _serialized_indexed_records(records: tuple[tuple[int, Any], ...]) -> list[dict[str, Any]]:
+    return [
+        {
+            "record_index": index,
+            "record_type": _record_type(record),
+            "record": _record_payload(record),
+        }
+        for index, record in records
     ]
 
 
@@ -589,14 +608,18 @@ async def start_gate() -> dict[str, Any]:
 
 
 @router.get("/records")
-async def records() -> dict[str, Any]:
-    loaded, store_status, error = _load_records_with_state()
+async def records(limit: int | None = Query(default=None)) -> dict[str, Any]:
+    normalized_limit = _normalize_records_limit(limit)
+    loaded, store_status, error = _load_latest_records_with_state(limit=normalized_limit)
     return {
         **INERT_FLAGS,
         "store_status": store_status,
         "error": error,
         "count": len(loaded),
-        "records": _serialized_records(loaded),
+        "limit": normalized_limit,
+        "returned_count": len(loaded),
+        "has_more": bool(loaded and loaded[0][0] > 0),
+        "records": _serialized_indexed_records(loaded),
     }
 
 

@@ -96,6 +96,20 @@ def _seed_records(path: Path) -> None:
     )
 
 
+def _seed_goal_records(path: Path, count: int) -> None:
+    store = JsonlRecordStore(path)
+    for index in range(count):
+        store.append(
+            GoalContract(
+                goal_id=f"goal-{index}",
+                statement=f"Governance record {index}",
+                success_criteria=("bounded records response",),
+                constraints=("read-only",),
+                metadata={"raw_context": f"secret raw context {index}"},
+            )
+        )
+
+
 def test_plugin_manifest_loads():
     manifest = yaml.safe_load((PLUGIN_DIR / "plugin.yaml").read_text())
     assert manifest["name"] == "mission-control-governance"
@@ -192,6 +206,58 @@ def test_summary_and_records_return_inert_fields(plugin_api, client):
         "MissionBrief",
     ]
     assert records["records"][0]["record"]["statement"] == "Keep governance records inert."
+
+
+def test_records_defaults_to_bounded_latest_page(plugin_api, client):
+    _seed_goal_records(plugin_api.record_store_path(), 30)
+
+    response = client.get("/api/plugins/mission-control-governance/records")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["limit"] == 25
+    assert payload["count"] == 25
+    assert payload["returned_count"] == 25
+    assert payload["has_more"] is True
+    assert [item["record_index"] for item in payload["records"]] == list(range(5, 30))
+    assert payload["records"][0]["record"]["statement"] == "Governance record 5"
+    assert "metadata" not in payload["records"][0]["record"]
+    assert "secret raw context" not in str(payload).lower()
+
+
+def test_records_caps_oversized_limit(plugin_api, client):
+    _seed_goal_records(plugin_api.record_store_path(), 60)
+
+    response = client.get("/api/plugins/mission-control-governance/records?limit=500")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["limit"] == 50
+    assert payload["count"] == 50
+    assert payload["returned_count"] == 50
+    assert payload["has_more"] is True
+    assert [item["record_index"] for item in payload["records"]] == list(range(10, 60))
+
+
+def test_records_non_positive_limit_falls_back_to_default(plugin_api, client):
+    _seed_goal_records(plugin_api.record_store_path(), 30)
+
+    response = client.get("/api/plugins/mission-control-governance/records?limit=0")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["limit"] == 25
+    assert payload["returned_count"] == 25
+    assert [item["record_index"] for item in payload["records"]] == list(range(5, 30))
+
+
+def test_records_invalid_limit_is_rejected_without_dumping_records(plugin_api, client):
+    _seed_goal_records(plugin_api.record_store_path(), 30)
+
+    response = client.get("/api/plugins/mission-control-governance/records?limit=not-a-number")
+
+    assert response.status_code == 422
+    assert "Governance record" not in response.text
 
 
 def test_start_gate_returns_no_active_envelope_for_missing_store(client):

@@ -16,7 +16,7 @@
   const APPROVAL_SLICES_URL = "/api/plugins/mission-control-governance/approval-slices";
   const EVIDENCE_CARDS_URL = "/api/plugins/mission-control-governance/evidence-cards";
   const OPERATOR_ACTIONS_URL = "/api/plugins/mission-control-governance/operator-actions";
-  const RECORDS_URL = "/api/plugins/mission-control-governance/records";
+  const RECORDS_URL = "/api/plugins/mission-control-governance/records?limit=25";
   const SCHEMA_URL = "/api/plugins/mission-control-governance/schema";
   const RECORD_DETAIL_URL = function (index) {
     return "/api/plugins/mission-control-governance/records/" + encodeURIComponent(String(index));
