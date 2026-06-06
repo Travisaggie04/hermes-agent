@@ -8,6 +8,7 @@ from mission_control.records.models import (
     EvidenceCard,
     GoalContract,
     MissionBrief,
+    OperatorAction,
     TaskControlEnvelope,
 )
 
@@ -146,3 +147,66 @@ def test_records_are_frozen_value_objects():
 def test_from_dict_rejects_missing_required_fields():
     with pytest.raises(TypeError):
         GoalContract.from_dict({"goal_id": "goal-001"})
+
+
+def test_operator_action_round_trips_to_plain_dicts():
+    action = OperatorAction(
+        action_id="action-001",
+        title="Request bounded implementation slice",
+        lane="PR-G Operator Action Queue implementation",
+        mode="focused tests only",
+        requested_action="Implement inert read-only queue summary.",
+        risk_level="low",
+        status="requested",
+        required_approval="Travis approval before commit",
+        approval_id="approval-001",
+        evidence_ids=("evidence-001", "evidence-002"),
+        stop_condition="Stop after focused tests.",
+        created_at="2026-06-05T10:00:00Z",
+        expires_at="2026-06-06T10:00:00Z",
+        metadata={"source": "planning", "internal_note": "display only"},
+    )
+
+    data = action.to_dict()
+
+    assert data == {
+        "action_id": "action-001",
+        "title": "Request bounded implementation slice",
+        "lane": "PR-G Operator Action Queue implementation",
+        "mode": "focused tests only",
+        "requested_action": "Implement inert read-only queue summary.",
+        "risk_level": "low",
+        "status": "requested",
+        "required_approval": "Travis approval before commit",
+        "approval_id": "approval-001",
+        "evidence_ids": ["evidence-001", "evidence-002"],
+        "stop_condition": "Stop after focused tests.",
+        "created_at": "2026-06-05T10:00:00Z",
+        "expires_at": "2026-06-06T10:00:00Z",
+        "metadata": {"source": "planning", "internal_note": "display only"},
+    }
+    assert OperatorAction.from_dict(data) == action
+    assert isinstance(OperatorAction.from_dict(data).evidence_ids, tuple)
+
+
+def test_operator_action_is_registered_and_exported():
+    from mission_control.records import OperatorAction as ExportedOperatorAction
+    from mission_control.records.models import RECORD_TYPES
+
+    assert ExportedOperatorAction is OperatorAction
+    assert RECORD_TYPES["OperatorAction"] is OperatorAction
+
+
+def test_operator_action_metadata_is_optional():
+    action = OperatorAction.from_dict({
+        "action_id": "action-minimal",
+        "title": "Minimal requested action",
+        "lane": "read-only lane",
+        "mode": "inventory only",
+        "requested_action": "Review summary card.",
+    })
+
+    assert action.metadata == {}
+    assert action.evidence_ids == ()
+    assert action.risk_level == ""
+    assert action.status == "requested"
