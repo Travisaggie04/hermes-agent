@@ -96,6 +96,21 @@ def _seed_records(path: Path) -> None:
     )
 
 
+def _seed_goal_records(path: Path, count: int) -> None:
+    store = JsonlRecordStore(path)
+    for index in range(count):
+        store.append(
+            GoalContract(
+                goal_id=f"goal-{index}",
+                statement=f"Keep governance record {index} inert.",
+                metadata={
+                    "raw_context": "secret raw governance context",
+                    "transcript": "secret governance transcript",
+                },
+            )
+        )
+
+
 def test_plugin_manifest_loads():
     manifest = yaml.safe_load((PLUGIN_DIR / "plugin.yaml").read_text())
     assert manifest["name"] == "mission-control-governance"
@@ -192,6 +207,77 @@ def test_summary_and_records_return_inert_fields(plugin_api, client):
         "MissionBrief",
     ]
     assert records["records"][0]["record"]["statement"] == "Keep governance records inert."
+
+
+def test_records_defaults_to_latest_bounded_response(plugin_api, client):
+    _seed_goal_records(plugin_api.record_store_path(), 30)
+
+    response = client.get("/api/plugins/mission-control-governance/records")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["count"] == 25
+    assert payload["limit"] == 25
+    assert [item["record_index"] for item in payload["records"]] == list(range(5, 30))
+    assert payload["records"][0]["record"]["statement"] == "Keep governance record 5 inert."
+    assert payload["records"][-1]["record"]["statement"] == "Keep governance record 29 inert."
+
+
+def test_records_caps_oversized_limit(plugin_api, client):
+    _seed_goal_records(plugin_api.record_store_path(), 60)
+
+    response = client.get("/api/plugins/mission-control-governance/records?limit=999")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["count"] == 50
+    assert payload["limit"] == 50
+    assert [item["record_index"] for item in payload["records"]] == list(range(10, 60))
+
+
+@pytest.mark.parametrize("limit", ["bogus", "0", "-10"])
+def test_records_invalid_or_non_positive_limit_uses_safe_default(plugin_api, client, limit):
+    _seed_goal_records(plugin_api.record_store_path(), 30)
+
+    response = client.get(f"/api/plugins/mission-control-governance/records?limit={limit}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["count"] == 25
+    assert payload["limit"] == 25
+    assert [item["record_index"] for item in payload["records"]] == list(range(5, 30))
+
+
+def test_records_limit_keeps_raw_metadata_stripped(plugin_api, client):
+    _seed_goal_records(plugin_api.record_store_path(), 30)
+
+    response = client.get("/api/plugins/mission-control-governance/records?limit=2")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["count"] == 2
+    assert [item["record_index"] for item in payload["records"]] == [28, 29]
+    lowered = f"{payload}".lower()
+    assert "metadata" not in lowered
+    assert "secret raw governance context" not in lowered
+    assert "secret governance transcript" not in lowered
+
+
+def test_bounded_records_detail_index_remains_available_and_sanitized(plugin_api, client):
+    _seed_goal_records(plugin_api.record_store_path(), 30)
+
+    records_payload = client.get("/api/plugins/mission-control-governance/records?limit=2").json()
+    record_index = records_payload["records"][0]["record_index"]
+    response = client.get(f"/api/plugins/mission-control-governance/records/{record_index}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["record_index"] == 28
+    assert payload["record"]["statement"] == "Keep governance record 28 inert."
+    lowered = f"{payload}".lower()
+    assert "metadata" not in lowered
+    assert "secret raw governance context" not in lowered
+    assert "secret governance transcript" not in lowered
 
 
 def test_start_gate_returns_no_active_envelope_for_missing_store(client):
@@ -982,7 +1068,7 @@ def test_dashboard_bundle_registers_read_only_tab_only():
     assert "Operator Action Queue" in bundle
     assert "Task Control Envelopes" in bundle
     assert "Start Gate Checks" in bundle
-    assert "/api/plugins/mission-control-governance/records" in bundle
+    assert "/api/plugins/mission-control-governance/records?limit=25" in bundle
     assert "/api/plugins/mission-control-governance/schema" in bundle
     assert "RECORD_DETAIL_URL" in bundle
     assert "method:" not in lowered
