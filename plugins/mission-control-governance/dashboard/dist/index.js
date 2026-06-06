@@ -237,10 +237,12 @@
                 ? h("p", { className: "mcg-muted" }, "No approval slices found.")
                 : h("div", { className: "mcg-compact-list" },
                   approvalRows.map(function (item, index) {
-                    return h("div", { className: "mcg-compact-row", key: item.approval_id || index },
-                      h("strong", null, item.lane || item.approval_id || "Approval slice"),
-                      h("span", null, (item.mode || "mode unknown") + " - " + String(item.approved_action_count || 0) + " allowed / " + String(item.forbidden_action_count || 0) + " blocked"),
-                      h("span", null, (item.approver || "unknown") + (item.approved_at ? " - " + item.approved_at : ""))
+                    return h("div", { className: "mcg-compact-row", key: item.approval_slice_id || item.approval_id || index },
+                      h("strong", null, item.lane || item.approval_slice_id || item.approval_id || "Approval slice"),
+                      item.related_action_id
+                        ? h("span", null, item.decision_state + " - " + item.approval_type + " - action " + item.related_action_id)
+                        : h("span", null, (item.mode || "mode unknown") + " - " + String(item.approved_action_count || 0) + " allowed / " + String(item.forbidden_action_count || 0) + " blocked"),
+                      h("span", null, (item.required_by || item.approver || "unknown") + (item.created_at || item.approved_at ? " - " + (item.created_at || item.approved_at) : ""))
                     );
                   })
                 )
@@ -284,7 +286,7 @@
                     return h("div", { className: "mcg-compact-row", key: item.evidence_id || index },
                       h("strong", null, item.title || item.evidence_id || "Evidence card"),
                       h("span", null, item.summary || "No summary"),
-                      h("span", null, String(item.artifact_refs_count || item.artifact_count || 0) + " artifact refs" + (item.source ? " - " + item.source : ""))
+                      h("span", null, String(item.artifact_refs_count || item.artifact_count || 0) + " artifact refs" + (item.source_label || item.source ? " - " + (item.source_label || item.source) : ""))
                     );
                   })
                 )
