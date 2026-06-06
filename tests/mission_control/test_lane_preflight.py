@@ -90,6 +90,26 @@ def test_dangerous_requested_actions_are_reported_as_approval_or_block_decisions
     assert requested_action in result["blocked_actions"]
 
 
+def test_explicit_approval_fields_are_preserved_in_dry_run_report_path():
+    from mission_control.lane_preflight import run_lane_start_preflight
+
+    result = run_lane_start_preflight(
+        _lane_start_request(
+            requested_actions=("push the narrow PR branch",),
+            approval_required=True,
+            approval_slice_ids=("approval-pr-o-push",),
+        )
+    )
+
+    assert result["would_block"] is False
+    assert result["would_require_approval"] is True
+    assert result["decision_state"] == "informational"
+    assert result["blocked_actions"] == []
+    assert result["required_approvals"] == ["approval-pr-o-push"]
+    assert result["start_gate_check"]["decision_state"] == "informational"
+    assert result["start_gate_check"]["required_approvals"] == ["approval-pr-o-push"]
+
+
 @pytest.mark.parametrize(
     ("repo_target", "expected_state"),
     (

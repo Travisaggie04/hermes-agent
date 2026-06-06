@@ -45,6 +45,8 @@ def build_task_control_envelope(lane_start: Mapping[str, Any]) -> TaskControlEnv
         current_repo=str(data.get("repo_target") or ""),
         stop_condition=str(data.get("stop_condition") or ""),
         report_requirements=_strings(data.get("report_requirements")),
+        approval_required=bool(data.get("approval_required", False)),
+        approval_slice_ids=_strings(data.get("approval_slice_ids")),
         token_context_policy=str(data.get("token_context_policy") or ""),
         metadata={
             "target_remote": str(data.get("repo_target") or ""),
