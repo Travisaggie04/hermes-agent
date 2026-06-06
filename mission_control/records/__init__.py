@@ -7,6 +7,7 @@ from mission_control.records.models import (
     GoalContract,
     MissionBrief,
     OperatorAction,
+    StartGateCheck,
     TaskControlEnvelope,
 )
 from mission_control.records.store import JsonlRecordStore
@@ -19,5 +20,6 @@ __all__ = [
     "JsonlRecordStore",
     "MissionBrief",
     "OperatorAction",
+    "StartGateCheck",
     "TaskControlEnvelope",
 ]

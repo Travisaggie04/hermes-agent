@@ -11,6 +11,8 @@
 
   const SUMMARY_URL = "/api/plugins/mission-control-governance/summary";
   const START_GATE_URL = "/api/plugins/mission-control-governance/start-gate";
+  const TASK_CONTROL_ENVELOPES_URL = "/api/plugins/mission-control-governance/task-control-envelopes";
+  const START_GATE_CHECKS_URL = "/api/plugins/mission-control-governance/start-gate-checks";
   const APPROVAL_SLICES_URL = "/api/plugins/mission-control-governance/approval-slices";
   const EVIDENCE_CARDS_URL = "/api/plugins/mission-control-governance/evidence-cards";
   const OPERATOR_ACTIONS_URL = "/api/plugins/mission-control-governance/operator-actions";
@@ -63,6 +65,8 @@
       loading: true,
       summary: null,
       startGate: null,
+      envelopes: null,
+      checks: null,
       approvals: null,
       evidence: null,
       actions: null,
@@ -82,6 +86,8 @@
       Promise.all([
         getJSON(SUMMARY_URL),
         getJSON(START_GATE_URL),
+        getJSON(TASK_CONTROL_ENVELOPES_URL),
+        getJSON(START_GATE_CHECKS_URL),
         getJSON(APPROVAL_SLICES_URL),
         getJSON(EVIDENCE_CARDS_URL),
         getJSON(OPERATOR_ACTIONS_URL),
@@ -94,11 +100,13 @@
             loading: false,
             summary: result[0],
             startGate: result[1],
-            approvals: result[2],
-            evidence: result[3],
-            actions: result[4],
-            rows: (result[5] && result[5].records) || [],
-            schema: result[6],
+            envelopes: result[2],
+            checks: result[3],
+            approvals: result[4],
+            evidence: result[5],
+            actions: result[6],
+            rows: (result[7] && result[7].records) || [],
+            schema: result[8],
             detail: null,
             detailLoading: false,
             detailError: "",
@@ -112,6 +120,8 @@
             loading: false,
             summary: null,
             startGate: null,
+            envelopes: null,
+            checks: null,
             approvals: null,
             evidence: null,
             actions: null,
@@ -160,9 +170,13 @@
     const summary = data.summary || {};
     const startGate = data.startGate || {};
     const envelope = startGate.envelope || {};
+    const envelopes = data.envelopes || {};
+    const checks = data.checks || {};
     const approvals = data.approvals || {};
     const evidence = data.evidence || {};
     const actions = data.actions || {};
+    const envelopeRows = envelopes.task_control_envelopes || [];
+    const checkRows = checks.start_gate_checks || [];
     const approvalRows = approvals.approval_slices || [];
     const evidenceRows = evidence.evidence_cards || [];
     const actionRows = actions.operator_actions || [];
@@ -225,6 +239,50 @@
         )
       ),
       h("div", { className: "mcg-summary-panels" },
+        h(C.Card, { className: "mcg-envelope-card" },
+          h(C.CardContent, { className: "mcg-panel-body" },
+            h("div", { className: "mcg-panel-heading" },
+              h("div", { className: "mcg-panel-title" }, "Task Control Envelopes"),
+              h("span", { className: "mcg-count" }, data.loading ? "..." : String(envelopes.count || 0))
+            ),
+            data.loading
+              ? h("p", { className: "mcg-muted" }, "Loading task envelopes...")
+              : envelopeRows.length === 0
+                ? h("p", { className: "mcg-muted" }, "No task envelopes found.")
+                : h("div", { className: "mcg-compact-list" },
+                  envelopeRows.map(function (item, index) {
+                    return h("div", { className: "mcg-compact-row", key: item.envelope_id || index },
+                      h("strong", null, item.active_lane || item.envelope_id || "Task envelope"),
+                      h("span", null, (item.mode || "mode unknown") + " - " + (item.status || "status unknown")),
+                      h("span", null, String(item.allowed_action_count || 0) + " allowed / " + String(item.forbidden_action_count || 0) + " blocked"),
+                      h("span", null, (item.risk_level || "risk unknown") + " / " + String(item.evidence_count || 0) + " evidence ids")
+                    );
+                  })
+                )
+          )
+        ),
+        h(C.Card, { className: "mcg-check-card" },
+          h(C.CardContent, { className: "mcg-panel-body" },
+            h("div", { className: "mcg-panel-heading" },
+              h("div", { className: "mcg-panel-title" }, "Start Gate Checks"),
+              h("span", { className: "mcg-count" }, data.loading ? "..." : String(checks.count || 0))
+            ),
+            data.loading
+              ? h("p", { className: "mcg-muted" }, "Loading start gate checks...")
+              : checkRows.length === 0
+                ? h("p", { className: "mcg-muted" }, "No start gate checks found.")
+                : h("div", { className: "mcg-compact-list" },
+                  checkRows.map(function (item, index) {
+                    return h("div", { className: "mcg-compact-row", key: item.start_gate_id || index },
+                      h("strong", null, item.start_gate_id || "Start gate check"),
+                      h("span", null, (item.decision_state || "informational") + " - " + (item.envelope_id || "no envelope")),
+                      h("span", null, String(item.reason_count || 0) + " reasons / " + String(item.blocked_action_count || 0) + " blocked actions"),
+                      h("span", null, (item.branch_safety_state || "branch unknown") + " / " + (item.secret_safety_state || "secret state unknown"))
+                    );
+                  })
+                )
+          )
+        ),
         h(C.Card, { className: "mcg-approval-card" },
           h(C.CardContent, { className: "mcg-panel-body" },
             h("div", { className: "mcg-panel-heading" },

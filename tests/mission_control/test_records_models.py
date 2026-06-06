@@ -9,6 +9,7 @@ from mission_control.records.models import (
     GoalContract,
     MissionBrief,
     OperatorAction,
+    StartGateCheck,
     TaskControlEnvelope,
 )
 
@@ -82,6 +83,7 @@ def test_mission_brief_round_trips_nested_records_to_plain_dicts():
             "metadata": {},
         },
         "control": {
+            "envelope_id": "",
             "active_lane": "code/test",
             "mode": "code/test only",
             "allowed_actions": ["edit records files", "run focused tests"],
@@ -90,6 +92,14 @@ def test_mission_brief_round_trips_nested_records_to_plain_dicts():
             "expected_systems_files": ["mission_control/records/models.py"],
             "stop_condition": "stop before commit",
             "other_threads_excluded": ["Mission Control OS development"],
+            "report_requirements": [],
+            "risk_level": "",
+            "approval_required": False,
+            "approval_slice_ids": [],
+            "evidence_ids": [],
+            "token_context_policy": "",
+            "created_at": "",
+            "status": "",
             "metadata": {},
         },
         "approvals": [
@@ -269,6 +279,87 @@ def test_operator_action_round_trips_to_plain_dicts():
     }
     assert OperatorAction.from_dict(data) == action
     assert isinstance(OperatorAction.from_dict(data).evidence_ids, tuple)
+
+
+def test_task_control_envelope_round_trips_pr_i_fields():
+    envelope = TaskControlEnvelope(
+        envelope_id="envelope-001",
+        active_lane="PR-I Start Gate",
+        mode="bounded implementation",
+        allowed_actions=("create inert records",),
+        forbidden_actions=("execute tools", "approve actions"),
+        stop_condition="Stop after draft PR.",
+        report_requirements=("report tests", "report safety posture"),
+        risk_level="low",
+        approval_required=True,
+        approval_slice_ids=("approval-001",),
+        evidence_ids=("evidence-001",),
+        token_context_policy="summary-first latest-N only",
+        created_at="2026-06-06T00:00:00Z",
+        status="active",
+        metadata={"raw_context": "stored only"},
+    )
+
+    data = envelope.to_dict()
+
+    assert data == {
+        "envelope_id": "envelope-001",
+        "active_lane": "PR-I Start Gate",
+        "mode": "bounded implementation",
+        "allowed_actions": ["create inert records"],
+        "forbidden_actions": ["execute tools", "approve actions"],
+        "current_repo": "",
+        "expected_systems_files": [],
+        "stop_condition": "Stop after draft PR.",
+        "other_threads_excluded": [],
+        "report_requirements": ["report tests", "report safety posture"],
+        "risk_level": "low",
+        "approval_required": True,
+        "approval_slice_ids": ["approval-001"],
+        "evidence_ids": ["evidence-001"],
+        "token_context_policy": "summary-first latest-N only",
+        "created_at": "2026-06-06T00:00:00Z",
+        "status": "active",
+        "metadata": {"raw_context": "stored only"},
+    }
+    assert TaskControlEnvelope.from_dict(data) == envelope
+    assert isinstance(TaskControlEnvelope.from_dict(data).approval_slice_ids, tuple)
+
+
+def test_start_gate_check_round_trips_descriptive_fields_only():
+    check = StartGateCheck(
+        start_gate_id="start-gate-001",
+        envelope_id="envelope-001",
+        decision_state="needs_approval",
+        reasons=("approval slice required",),
+        blocked_actions=("push", "deploy"),
+        required_approvals=("approval-001",),
+        dirty_worktree_state="clean",
+        branch_safety_state="exact base",
+        secret_safety_state="not touched",
+        token_context_state="bounded",
+        created_at="2026-06-06T00:01:00Z",
+        metadata={"raw_scan": "stored only"},
+    )
+
+    data = check.to_dict()
+
+    assert data == {
+        "start_gate_id": "start-gate-001",
+        "envelope_id": "envelope-001",
+        "decision_state": "needs_approval",
+        "reasons": ["approval slice required"],
+        "blocked_actions": ["push", "deploy"],
+        "required_approvals": ["approval-001"],
+        "dirty_worktree_state": "clean",
+        "branch_safety_state": "exact base",
+        "secret_safety_state": "not touched",
+        "token_context_state": "bounded",
+        "created_at": "2026-06-06T00:01:00Z",
+        "metadata": {"raw_scan": "stored only"},
+    }
+    assert StartGateCheck.from_dict(data) == check
+    assert isinstance(StartGateCheck.from_dict(data).blocked_actions, tuple)
 
 
 def test_operator_action_is_registered_and_exported():
