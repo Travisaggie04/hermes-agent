@@ -11,6 +11,7 @@
 
   const SUMMARY_URL = "/api/plugins/mission-control-governance/summary";
   const START_GATE_URL = "/api/plugins/mission-control-governance/start-gate";
+  const START_GATE_EVALUATE_URL = "/api/plugins/mission-control-governance/start-gate/evaluate";
   const TASK_CONTROL_ENVELOPES_URL = "/api/plugins/mission-control-governance/task-control-envelopes";
   const START_GATE_CHECKS_URL = "/api/plugins/mission-control-governance/start-gate-checks";
   const APPROVAL_SLICES_URL = "/api/plugins/mission-control-governance/approval-slices";
@@ -21,12 +22,57 @@
   const RECORD_DETAIL_URL = function (index) {
     return "/api/plugins/mission-control-governance/records/" + encodeURIComponent(String(index));
   };
+  const SAMPLE_EVALUATOR_ENVELOPE = {
+    envelope_id: "dashboard-sample-start-gate",
+    active_lane: "PR-M display-only Start Gate evaluator panel",
+    mode: "bounded display-only sample",
+    allowed_actions: [
+      "render inert evaluator output",
+      "call bounded evaluator API",
+    ],
+    forbidden_actions: [
+      "live enforcement",
+      "approval execution",
+      "tool execution",
+      "broad context loading",
+      "persistent writes",
+    ],
+    current_repo: "Travisaggie04/hermes-agent",
+    expected_systems_files: [
+      "plugins/mission-control-governance/dashboard/dist/index.js",
+      "plugins/mission-control-governance/dashboard/dist/style.css",
+    ],
+    stop_condition: "Stop after display-only evaluator result is shown.",
+    other_threads_excluded: [
+      "Signal Room",
+      "Instagram",
+      "unrelated PR cleanup",
+    ],
+    token_context_policy: "compact fixed sample only",
+    metadata: {
+      authoritative_remote: "travis",
+      worktree_state: "clean sample",
+    },
+  };
 
   async function getJSON(url) {
     const headers = {};
     const token = window.__HERMES_SESSION_TOKEN__ || "";
     if (token) headers["X-Hermes-Session-Token"] = token;
     const res = await fetch(url, { headers });
+    if (!res.ok) throw new Error(String(res.status));
+    return res.json();
+  }
+
+  async function postJSON(url, body) {
+    const headers = { "Content-Type": "application/json" };
+    const token = window.__HERMES_SESSION_TOKEN__ || "";
+    if (token) headers["X-Hermes-Session-Token"] = token;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: headers,
+      body: JSON.stringify(body),
+    });
     if (!res.ok) throw new Error(String(res.status));
     return res.json();
   }
@@ -65,6 +111,7 @@
       loading: true,
       summary: null,
       startGate: null,
+      evaluator: null,
       envelopes: null,
       checks: null,
       approvals: null,
@@ -86,6 +133,7 @@
       Promise.all([
         getJSON(SUMMARY_URL),
         getJSON(START_GATE_URL),
+        postJSON(START_GATE_EVALUATE_URL, SAMPLE_EVALUATOR_ENVELOPE),
         getJSON(TASK_CONTROL_ENVELOPES_URL),
         getJSON(START_GATE_CHECKS_URL),
         getJSON(APPROVAL_SLICES_URL),
@@ -100,13 +148,14 @@
             loading: false,
             summary: result[0],
             startGate: result[1],
-            envelopes: result[2],
-            checks: result[3],
-            approvals: result[4],
-            evidence: result[5],
-            actions: result[6],
-            rows: (result[7] && result[7].records) || [],
-            schema: result[8],
+            evaluator: result[2],
+            envelopes: result[3],
+            checks: result[4],
+            approvals: result[5],
+            evidence: result[6],
+            actions: result[7],
+            rows: (result[8] && result[8].records) || [],
+            schema: result[9],
             detail: null,
             detailLoading: false,
             detailError: "",
@@ -120,6 +169,7 @@
             loading: false,
             summary: null,
             startGate: null,
+            evaluator: null,
             envelopes: null,
             checks: null,
             approvals: null,
@@ -169,6 +219,8 @@
 
     const summary = data.summary || {};
     const startGate = data.startGate || {};
+    const evaluator = data.evaluator || {};
+    const evaluatorDecision = evaluator.decision || {};
     const envelope = startGate.envelope || {};
     const envelopes = data.envelopes || {};
     const checks = data.checks || {};
@@ -235,7 +287,66 @@
                   h("span", { className: "mcg-start-label" }, "Stop"),
                   h("strong", null, envelope.stop_condition || "Unspecified")
                 )
+          )
+        )
+      ),
+      h(C.Card, { className: "mcg-evaluator-card" },
+        h(C.CardContent, { className: "mcg-evaluator-body" },
+          h("div", { className: "mcg-panel-heading" },
+            h("div", { className: "mcg-panel-title" }, "Start Gate Evaluator"),
+            h("span", { className: "mcg-badge" }, "Display-only")
+          ),
+          h("p", { className: "mcg-muted" }, "Uses a compact fixed sample envelope. The evaluator is default-off, inert, and provides no runtime enforcement."),
+          data.loading
+            ? h("p", { className: "mcg-muted" }, "Evaluating sample envelope...")
+            : h("div", { className: "mcg-evaluator-grid" },
+              h("div", null,
+                h("span", { className: "mcg-start-label" }, "Decision"),
+                h("strong", null, evaluatorDecision.decision_state || "unknown")
+              ),
+              h("div", null,
+                h("span", { className: "mcg-start-label" }, "Source"),
+                h("strong", null, evaluator.source || "proposed_envelope")
+              ),
+              h("div", null,
+                h("span", { className: "mcg-start-label" }, "Stored"),
+                h("strong", null, evaluator.stored === false ? "false" : "unknown")
+              ),
+              h("div", null,
+                h("span", { className: "mcg-start-label" }, "Runtime"),
+                h("strong", null, evaluator.enforces_runtime ? "enforcing" : "not enforcing")
               )
+            ),
+          !data.loading ? h("div", { className: "mcg-evaluator-lists" },
+            h("div", null,
+              h("span", { className: "mcg-start-label" }, "Reasons"),
+              h("ul", null, (Array.isArray(evaluatorDecision.reasons) && evaluatorDecision.reasons.length ? evaluatorDecision.reasons : ["No reasons returned."]).map(function (item, index) {
+                return h("li", { key: "reason-" + index }, item);
+              }))
+            ),
+            h("div", null,
+              h("span", { className: "mcg-start-label" }, "Blocked actions"),
+              h("ul", null, (Array.isArray(evaluatorDecision.blocked_actions) && evaluatorDecision.blocked_actions.length ? evaluatorDecision.blocked_actions : ["No blocked actions returned."]).map(function (item, index) {
+                return h("li", { key: "blocked-" + index }, item);
+              }))
+            ),
+            h("div", null,
+              h("span", { className: "mcg-start-label" }, "Required approvals"),
+              h("ul", null, (Array.isArray(evaluatorDecision.required_approvals) && evaluatorDecision.required_approvals.length ? evaluatorDecision.required_approvals : ["No required approvals returned."]).map(function (item, index) {
+                return h("li", { key: "approval-" + index }, item);
+              }))
+            ),
+            h("div", null,
+              h("span", { className: "mcg-start-label" }, "Flags"),
+              h("ul", null,
+                h("li", null, "default_off: " + String(evaluator.default_off !== false)),
+                h("li", null, "inert: " + String(evaluator.inert !== false)),
+                h("li", null, "enforces_runtime: " + String(Boolean(evaluator.enforces_runtime))),
+                h("li", null, "token_context_state: " + (evaluatorDecision.token_context_state || "unknown")),
+                h("li", null, "secret_safety_state: " + (evaluatorDecision.secret_safety_state || "unknown"))
+              )
+            )
+          ) : null
         )
       ),
       h("div", { className: "mcg-summary-panels" },
