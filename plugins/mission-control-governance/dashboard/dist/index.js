@@ -12,6 +12,7 @@
   const SUMMARY_URL = "/api/plugins/mission-control-governance/summary";
   const START_GATE_URL = "/api/plugins/mission-control-governance/start-gate";
   const START_GATE_EVALUATE_URL = "/api/plugins/mission-control-governance/start-gate/evaluate";
+  const LANE_PREFLIGHT_EVALUATE_URL = "/api/plugins/mission-control-governance/lane-preflight/evaluate";
   const TASK_CONTROL_ENVELOPES_URL = "/api/plugins/mission-control-governance/task-control-envelopes";
   const START_GATE_CHECKS_URL = "/api/plugins/mission-control-governance/start-gate-checks";
   const APPROVAL_SLICES_URL = "/api/plugins/mission-control-governance/approval-slices";
@@ -125,6 +126,7 @@
       summary: null,
       startGate: null,
       evaluator: null,
+      lanePreflight: null,
       envelopes: null,
       checks: null,
       approvals: null,
@@ -147,6 +149,7 @@
         getJSON(SUMMARY_URL),
         getJSON(START_GATE_URL),
         postJSON(START_GATE_EVALUATE_URL, SAMPLE_EVALUATOR_ENVELOPE),
+        postJSON(LANE_PREFLIGHT_EVALUATE_URL, {}),
         getJSON(TASK_CONTROL_ENVELOPES_URL),
         getJSON(START_GATE_CHECKS_URL),
         getJSON(APPROVAL_SLICES_URL),
@@ -162,13 +165,14 @@
             summary: result[0],
             startGate: result[1],
             evaluator: result[2],
-            envelopes: result[3],
-            checks: result[4],
-            approvals: result[5],
-            evidence: result[6],
-            actions: result[7],
-            rows: (result[8] && result[8].records) || [],
-            schema: result[9],
+            lanePreflight: result[3],
+            envelopes: result[4],
+            checks: result[5],
+            approvals: result[6],
+            evidence: result[7],
+            actions: result[8],
+            rows: (result[9] && result[9].records) || [],
+            schema: result[10],
             detail: null,
             detailLoading: false,
             detailError: "",
@@ -183,6 +187,7 @@
             summary: null,
             startGate: null,
             evaluator: null,
+            lanePreflight: null,
             envelopes: null,
             checks: null,
             approvals: null,
@@ -234,6 +239,7 @@
     const startGate = data.startGate || {};
     const evaluator = data.evaluator || {};
     const evaluatorDecision = evaluator.decision || {};
+    const lanePreflight = data.lanePreflight || {};
     const envelope = startGate.envelope || {};
     const envelopes = data.envelopes || {};
     const checks = data.checks || {};
@@ -361,6 +367,64 @@
                 h("li", null, "enforces_runtime: " + String(Boolean(evaluator.enforces_runtime))),
                 h("li", null, "token_context_state: " + (evaluatorDecision.token_context_state || "unknown")),
                 h("li", null, "secret_safety_state: " + (evaluatorDecision.secret_safety_state || "unknown"))
+              )
+            )
+          ) : null
+        )
+      ),
+      h(C.Card, { className: "mcg-lane-preflight-card" },
+        h(C.CardContent, { className: "mcg-evaluator-body" },
+          h("div", { className: "mcg-panel-heading" },
+            h("div", { className: "mcg-panel-title" }, "Lane Preflight"),
+            h("span", { className: "mcg-badge" }, "Display-only")
+          ),
+          h("p", { className: "mcg-muted" }, "Uses a compact fixed lane-start sample. The caller is default-off, dry-run only, and provides no runtime enforcement."),
+          data.loading
+            ? h("p", { className: "mcg-muted" }, "Evaluating sample lane preflight...")
+            : h("div", { className: "mcg-evaluator-grid" },
+              h("div", null,
+                h("span", { className: "mcg-start-label" }, "Decision"),
+                h("strong", null, lanePreflight.decision_state || "unknown")
+              ),
+              h("div", null,
+                h("span", { className: "mcg-start-label" }, "would_block"),
+                h("strong", null, String(Boolean(lanePreflight.would_block)))
+              ),
+              h("div", null,
+                h("span", { className: "mcg-start-label" }, "would_require_approval"),
+                h("strong", null, String(Boolean(lanePreflight.would_require_approval)))
+              ),
+              h("div", null,
+                h("span", { className: "mcg-start-label" }, "Runtime"),
+                h("strong", null, lanePreflight.enforces_runtime ? "enforcing" : "not enforcing")
+              )
+            ),
+          !data.loading ? h("div", { className: "mcg-evaluator-lists" },
+            h("div", null,
+              h("span", { className: "mcg-start-label" }, "Reasons"),
+              h("ul", null, (Array.isArray(lanePreflight.reasons) && lanePreflight.reasons.length ? lanePreflight.reasons : ["No reasons returned."]).map(function (item, index) {
+                return h("li", { key: "lane-reason-" + index }, item);
+              }))
+            ),
+            h("div", null,
+              h("span", { className: "mcg-start-label" }, "Blocked actions"),
+              h("ul", null, (Array.isArray(lanePreflight.blocked_actions) && lanePreflight.blocked_actions.length ? lanePreflight.blocked_actions : ["No blocked actions returned."]).map(function (item, index) {
+                return h("li", { key: "lane-blocked-" + index }, item);
+              }))
+            ),
+            h("div", null,
+              h("span", { className: "mcg-start-label" }, "Required approvals"),
+              h("ul", null, (Array.isArray(lanePreflight.required_approvals) && lanePreflight.required_approvals.length ? lanePreflight.required_approvals : ["No required approvals returned."]).map(function (item, index) {
+                return h("li", { key: "lane-approval-" + index }, item);
+              }))
+            ),
+            h("div", null,
+              h("span", { className: "mcg-start-label" }, "Flags"),
+              h("ul", null,
+                h("li", null, "default_off: " + String(lanePreflight.default_off !== false)),
+                h("li", null, "dry_run_only: " + String(lanePreflight.dry_run_only !== false)),
+                h("li", null, "enforces_runtime: " + String(Boolean(lanePreflight.enforces_runtime))),
+                h("li", null, "stored: " + String(lanePreflight.stored === false ? false : "unknown"))
               )
             )
           ) : null

@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from hermes_constants import get_hermes_home
+from mission_control.lane_preflight import run_lane_start_preflight
 from mission_control.records.errors import RecordStoreError
 from mission_control.records.models import RECORD_TYPES
 from mission_control.kanban_linkage import linked_kanban_task_payload
@@ -526,6 +527,53 @@ def _start_gate_decision_payload(check: StartGateCheck) -> dict[str, Any]:
     }
 
 
+def _sample_lane_preflight_request() -> dict[str, Any]:
+    return {
+        "active_lane": "PR-P read-only lane-preflight result visibility",
+        "mode": "bounded implementation in a new clean worktree only",
+        "allowed_actions": [
+            "add read-only lane preflight visibility",
+            "run targeted tests",
+        ],
+        "forbidden_actions": [
+            "live enforcement",
+            "tool execution",
+            "approval execution",
+            "persistent writes",
+            "broad context loading",
+        ],
+        "stop_condition": "Stop after draft PR status report.",
+        "report_requirements": [
+            "files changed",
+            "tests run",
+            "safety confirmation",
+        ],
+        "repo_target": "Travisaggie04/hermes-agent",
+        "branch": "pr-p-lane-preflight-result-visibility",
+        "worktree_state": "clean sample",
+        "token_context_policy": "compact fixed sample only",
+        "requested_actions": [
+            "add read-only lane preflight visibility",
+        ],
+        "approval_required": False,
+        "approval_slice_ids": [],
+    }
+
+
+def _lane_preflight_visibility_payload(result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "decision_state": str(result.get("decision_state") or ""),
+        "would_block": bool(result.get("would_block", False)),
+        "would_require_approval": bool(result.get("would_require_approval", False)),
+        "reasons": _bounded_text_list(result.get("reasons")),
+        "blocked_actions": _bounded_text_list(result.get("blocked_actions")),
+        "required_approvals": _bounded_text_list(result.get("required_approvals")),
+        "default_off": bool(result.get("default_off", True)),
+        "dry_run_only": bool(result.get("dry_run_only", True)),
+        "enforces_runtime": bool(result.get("enforces_runtime", False)),
+    }
+
+
 def _latest_mission_with_items(field_name: str) -> tuple[tuple[int, Any] | None, str, str | None]:
     missions, store_status, error = _load_latest_records_with_state(MissionBrief, limit=10)
     for index, record in reversed(missions):
@@ -753,6 +801,18 @@ async def start_gate_evaluate(request: Request) -> dict[str, Any]:
         "source": "proposed_envelope",
         "stored": False,
         "decision": _start_gate_decision_payload(check),
+    }
+
+
+@router.post("/lane-preflight/evaluate")
+async def lane_preflight_evaluate() -> dict[str, Any]:
+    result = run_lane_start_preflight(_sample_lane_preflight_request())
+    return {
+        **INERT_FLAGS,
+        "source": "fixed_lane_start_sample",
+        "stored": False,
+        "input_mode": "bounded_fixed_sample",
+        **_lane_preflight_visibility_payload(result),
     }
 
 
