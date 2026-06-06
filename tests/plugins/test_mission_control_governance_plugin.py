@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import importlib.util
 import sys
 from pathlib import Path
@@ -134,6 +135,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/health": {"GET"},
         "/summary": {"GET"},
         "/start-gate": {"GET"},
+        "/start-gate/evaluate": {"POST"},
         "/task-control-envelopes": {"GET"},
         "/start-gate-checks": {"GET"},
         "/approval-slices": {"GET"},
@@ -162,6 +164,12 @@ def test_api_routes_are_get_only(plugin_api, client):
                 f"/api/plugins/mission-control-governance{path}"
             )
             assert response.status_code == 405
+
+    for method in ("get", "put", "patch", "delete"):
+        response = getattr(client, method)(
+            "/api/plugins/mission-control-governance/start-gate/evaluate"
+        )
+        assert response.status_code == 405
 
 
 def test_health_is_read_only_and_inert(client):
@@ -391,6 +399,183 @@ def test_start_gate_uses_standalone_envelope_fallback(plugin_api, client):
     assert payload["envelope"]["active_lane"] == "Standalone lane"
     assert payload["envelope"]["mode"] == "read-only summary"
     assert "metadata" not in payload["envelope"]
+
+
+def _valid_start_gate_evaluation_payload(**overrides):
+    payload = {
+        "envelope_id": "envelope-pr-l",
+        "active_lane": "PR-L read-only/default-off Start Gate evaluator API exposure",
+        "mode": "bounded implementation in a new clean worktree only",
+        "allowed_actions": ["add read-only evaluator endpoint", "run targeted tests"],
+        "forbidden_actions": ["no live enforcement", "no tool execution", "no secrets"],
+        "current_repo": "Travisaggie04/hermes-agent",
+        "expected_systems_files": ["plugins/mission-control-governance/api.py"],
+        "stop_condition": "Stop after draft PR.",
+        "other_threads_excluded": ["Signal Room", "Instagram"],
+        "report_requirements": ["files changed", "tests run", "safety confirmation"],
+        "token_context_policy": "bounded compact input only",
+        "metadata": {
+            "target_remote": "Travisaggie04/hermes-agent",
+            "worktree_state": "clean",
+            "raw_context": "secret raw context must not leak",
+        },
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_start_gate_evaluate_returns_pass_for_valid_bounded_envelope(plugin_api, client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/start-gate/evaluate",
+        json=_valid_start_gate_evaluation_payload(),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["default_off"] is True
+    assert payload["inert"] is True
+    assert payload["enforces_runtime"] is False
+    assert payload["source"] == "proposed_envelope"
+    assert payload["stored"] is False
+    assert payload["decision"]["decision_state"] == "pass"
+    assert payload["decision"]["envelope_id"] == "envelope-pr-l"
+    assert payload["decision"]["blocked_actions"] == []
+    assert payload["decision"]["required_approvals"] == []
+    assert plugin_api.record_store_path().exists() is False
+
+
+@pytest.mark.parametrize(
+    ("field_name", "replacement", "reason_fragment"),
+    (
+        ("active_lane", "", "missing active lane"),
+        ("mode", "", "missing mode"),
+        ("allowed_actions", [], "missing allowed actions"),
+        ("forbidden_actions", [], "missing forbidden actions"),
+        ("stop_condition", "", "missing stop condition"),
+        ("report_requirements", [], "missing report requirements"),
+    ),
+)
+def test_start_gate_evaluate_blocks_missing_required_lane_control_fields(
+    client,
+    field_name,
+    replacement,
+    reason_fragment,
+):
+    response = client.post(
+        "/api/plugins/mission-control-governance/start-gate/evaluate",
+        json=_valid_start_gate_evaluation_payload(**{field_name: replacement}),
+    )
+
+    assert response.status_code == 200
+    decision = response.json()["decision"]
+    assert decision["decision_state"] == "blocked"
+    assert any(reason_fragment in reason for reason in decision["reasons"])
+
+
+def test_start_gate_evaluate_flags_dangerous_actions_as_needing_approval(client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/start-gate/evaluate",
+        json=_valid_start_gate_evaluation_payload(
+            allowed_actions=["deploy Mission Control"],
+        ),
+    )
+
+    assert response.status_code == 200
+    decision = response.json()["decision"]
+    assert decision["decision_state"] == "needs_approval"
+    assert decision["blocked_actions"] == ["deploy Mission Control"]
+    assert decision["required_approvals"] == ["explicit approval for privileged action"]
+
+
+def test_start_gate_evaluate_handles_malformed_json_and_oversized_body_safely(client):
+    malformed = client.post(
+        "/api/plugins/mission-control-governance/start-gate/evaluate",
+        content="{not valid json",
+        headers={"content-type": "application/json"},
+    )
+    oversized = client.post(
+        "/api/plugins/mission-control-governance/start-gate/evaluate",
+        json={"active_lane": "x" * 9000},
+    )
+
+    assert malformed.status_code == 400
+    assert malformed.json()["detail"] == "malformed JSON body"
+    assert oversized.status_code == 413
+    assert oversized.json()["detail"] == "evaluation payload is too large"
+
+
+def test_start_gate_evaluate_does_not_write_records_or_mutate_store(plugin_api, client):
+    records_path = plugin_api.record_store_path()
+    before_exists = records_path.exists()
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/start-gate/evaluate",
+        json=_valid_start_gate_evaluation_payload(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["stored"] is False
+    assert records_path.exists() is before_exists
+
+
+def test_start_gate_evaluate_does_not_expose_raw_metadata(client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/start-gate/evaluate",
+        json=_valid_start_gate_evaluation_payload(
+            metadata={
+                "target_remote": "Travisaggie04/hermes-agent",
+                "worktree_state": "clean",
+                "transcript": "secret transcript value",
+                "raw_context": "secret raw context value",
+            },
+        ),
+    )
+
+    assert response.status_code == 200
+    lowered = str(response.json()).lower()
+    assert "metadata" not in lowered
+    assert "secret transcript value" not in lowered
+    assert "secret raw context value" not in lowered
+
+
+def test_start_gate_evaluate_does_not_call_tools_subprocess_network_or_git(
+    plugin_api,
+    client,
+):
+    response = client.post(
+        "/api/plugins/mission-control-governance/start-gate/evaluate",
+        json=_valid_start_gate_evaluation_payload(),
+    )
+    source = "\n".join(
+        inspect.getsource(item)
+        for item in (
+            plugin_api.start_gate_evaluate,
+            plugin_api._read_compact_json_body,
+            plugin_api._compact_evaluation_payload,
+            plugin_api._start_gate_decision_payload,
+        )
+    )
+
+    assert response.status_code == 200
+    for forbidden in (
+        "subprocess",
+        "Popen",
+        "os.system",
+        "socket",
+        "requests",
+        "httpx",
+        "urllib",
+        "git",
+        "JsonlRecordStore",
+        "record_store_path",
+        ".append(",
+        ".write(",
+        "open(",
+    ):
+        assert forbidden not in source
 
 
 def test_schema_lists_record_types_without_loading_records(client):

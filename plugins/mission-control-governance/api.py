@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import json
+from json import JSONDecodeError
 from collections import Counter
 from dataclasses import fields, is_dataclass
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from hermes_constants import get_hermes_home
 from mission_control.records.errors import RecordStoreError
 from mission_control.records.models import RECORD_TYPES
+from mission_control.start_gate import evaluate_start_gate
 from mission_control.records import (
     ApprovalSlice,
     EvidenceCard,
@@ -26,10 +29,49 @@ from mission_control.records import (
 PLUGIN_NAME = "mission-control-governance"
 DEFAULT_RECORDS_LIMIT = 25
 MAX_RECORDS_LIMIT = 50
+MAX_EVALUATION_BODY_BYTES = 8192
+MAX_EVALUATION_STRING_CHARS = 500
+MAX_EVALUATION_LIST_ITEMS = 20
+MAX_EVALUATION_METADATA_ITEMS = 8
 INERT_FLAGS = {
     "trusted_for_execution": False,
     "inert_context_only": True,
     "execution_enabled": False,
+}
+_EVALUATION_FIELDS = {
+    "envelope_id",
+    "active_lane",
+    "mode",
+    "allowed_actions",
+    "forbidden_actions",
+    "current_repo",
+    "expected_systems_files",
+    "stop_condition",
+    "other_threads_excluded",
+    "report_requirements",
+    "risk_level",
+    "approval_required",
+    "approval_slice_ids",
+    "evidence_ids",
+    "token_context_policy",
+    "created_at",
+    "status",
+    "metadata",
+}
+_EVALUATION_LIST_FIELDS = {
+    "allowed_actions",
+    "forbidden_actions",
+    "expected_systems_files",
+    "other_threads_excluded",
+    "report_requirements",
+    "approval_slice_ids",
+    "evidence_ids",
+}
+_EVALUATION_METADATA_FIELDS = {
+    "target_remote",
+    "repo_remote",
+    "authoritative_remote",
+    "worktree_state",
 }
 
 router = APIRouter()
@@ -388,6 +430,87 @@ def _start_gate_check_summary(check: Any) -> dict[str, Any]:
     }
 
 
+def _bounded_text(value: Any) -> str:
+    text = str(value or "")
+    if len(text) > MAX_EVALUATION_STRING_CHARS:
+        return text[:MAX_EVALUATION_STRING_CHARS]
+    return text
+
+
+def _bounded_text_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        items = [value]
+    elif isinstance(value, (list, tuple)):
+        items = list(value)
+    else:
+        items = [value]
+    return [
+        _bounded_text(item)
+        for item in items[:MAX_EVALUATION_LIST_ITEMS]
+        if str(item).strip()
+    ]
+
+
+def _bounded_evaluation_metadata(value: Any) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    metadata: dict[str, str] = {}
+    for key in sorted(_EVALUATION_METADATA_FIELDS):
+        if key in value and len(metadata) < MAX_EVALUATION_METADATA_ITEMS:
+            metadata[key] = _bounded_text(value[key])
+    return metadata
+
+
+def _compact_evaluation_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    compact: dict[str, Any] = {}
+    for key in sorted(_EVALUATION_FIELDS):
+        if key not in payload:
+            continue
+        if key in _EVALUATION_LIST_FIELDS:
+            compact[key] = _bounded_text_list(payload[key])
+        elif key == "approval_required":
+            compact[key] = bool(payload[key])
+        elif key == "metadata":
+            compact[key] = _bounded_evaluation_metadata(payload[key])
+        else:
+            compact[key] = _bounded_text(payload[key])
+    return compact
+
+
+async def _read_compact_json_body(request: Request) -> dict[str, Any]:
+    content_type = request.headers.get("content-type", "")
+    if content_type and "application/json" not in content_type.lower():
+        raise HTTPException(status_code=415, detail="JSON body required")
+    body = await request.body()
+    if len(body) > MAX_EVALUATION_BODY_BYTES:
+        raise HTTPException(status_code=413, detail="evaluation payload is too large")
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="malformed JSON body") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="JSON body must be an object")
+    return _compact_evaluation_payload(payload)
+
+
+def _start_gate_decision_payload(check: StartGateCheck) -> dict[str, Any]:
+    return {
+        "start_gate_id": check.start_gate_id,
+        "envelope_id": check.envelope_id,
+        "decision_state": check.decision_state,
+        "reasons": list(check.reasons),
+        "blocked_actions": list(check.blocked_actions),
+        "required_approvals": list(check.required_approvals),
+        "dirty_worktree_state": check.dirty_worktree_state,
+        "branch_safety_state": check.branch_safety_state,
+        "secret_safety_state": check.secret_safety_state,
+        "token_context_state": check.token_context_state,
+        "created_at": check.created_at,
+    }
+
+
 def _latest_mission_with_items(field_name: str) -> tuple[tuple[int, Any] | None, str, str | None]:
     missions, store_status, error = _load_latest_records_with_state(MissionBrief, limit=10)
     for index, record in reversed(missions):
@@ -600,6 +723,22 @@ async def start_gate() -> dict[str, Any]:
     if store_status == "malformed":
         return _empty_start_gate_payload(store_status, error)
     return _empty_start_gate_payload(envelope_status, envelope_error)
+
+
+@router.post("/start-gate/evaluate")
+async def start_gate_evaluate(request: Request) -> dict[str, Any]:
+    envelope = await _read_compact_json_body(request)
+    check = evaluate_start_gate(envelope)
+    metadata = check.metadata if isinstance(check.metadata, dict) else {}
+    return {
+        **INERT_FLAGS,
+        "default_off": bool(metadata.get("default_off", True)),
+        "inert": bool(metadata.get("inert", True)),
+        "enforces_runtime": bool(metadata.get("enforces_runtime", False)),
+        "source": "proposed_envelope",
+        "stored": False,
+        "decision": _start_gate_decision_payload(check),
+    }
 
 
 @router.get("/records")
