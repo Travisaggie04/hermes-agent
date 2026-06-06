@@ -48,6 +48,11 @@
       "Instagram",
       "unrelated PR cleanup",
     ],
+    report_requirements: [
+      "files changed",
+      "tests run",
+      "safety confirmation",
+    ],
     token_context_policy: "compact fixed sample only",
     metadata: {
       authoritative_remote: "travis",
