@@ -236,7 +236,7 @@ class CodexAppServerSession:
         """Spawn the subprocess, do the initialize handshake, and start a
         thread. Returns the codex thread id. Idempotent — repeated calls
         return the same thread id."""
-        if self._thread_id is not None:
+        if self._thread_id is not None and self._client is not None:
             return self._thread_id
         if self._client is None:
             self._client = self._client_factory(
@@ -247,6 +247,8 @@ class CodexAppServerSession:
             client_title="Hermes Agent",
             client_version=_get_hermes_version(),
         )
+        if self._thread_id is not None:
+            return self._thread_id
         # Permission selection is intentionally NOT sent on thread/start.
         # Two reasons (live-tested against codex 0.130.0):
         #   1. `thread/start.permissions` is gated behind the experimentalApi
@@ -291,6 +293,17 @@ class CodexAppServerSession:
             self._cwd,
         )
         return self._thread_id
+
+    def close_process_preserving_thread(self) -> None:
+        """Tear down the app-server subprocess while keeping logical thread state."""
+        if self._client is not None:
+            try:
+                self._client.close()
+            except Exception:  # pragma: no cover - best-effort cleanup
+                pass
+            self._client = None
+        self._interrupt_event.clear()
+        self._pending_file_changes.clear()
 
     def close(self) -> None:
         if self._closed:

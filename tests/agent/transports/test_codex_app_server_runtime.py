@@ -7,6 +7,9 @@ covered by a separate live test gated on `codex --version`.
 
 from __future__ import annotations
 
+import logging
+import subprocess
+
 import pytest
 
 from hermes_cli.runtime_provider import (
@@ -308,3 +311,128 @@ class TestSpawnEnvIsolation:
         )
         assert "sandbox_workspace_write.network_access=false" in cmd
         assert all("danger" not in part for part in cmd)
+
+
+class TestCodexAppServerProcessFamilyCleanup:
+    def test_launch_uses_new_session_on_posix(self, monkeypatch, caplog):
+        from agent.transports import codex_app_server as cas
+
+        captured = {}
+
+        class FakePopen:
+            def __init__(self, cmd, *args, **kwargs):
+                captured["kwargs"] = kwargs
+                self.stdin = None
+                self.stdout = None
+                self.stderr = None
+                self.pid = 1234
+                self.returncode = None
+
+            def poll(self):
+                return None
+
+        monkeypatch.setattr(subprocess, "Popen", FakePopen)
+        monkeypatch.setattr(cas.os, "name", "posix")
+        monkeypatch.setattr(cas.os, "getpgid", lambda pid: 1234)
+        caplog.set_level(logging.INFO, logger=cas.logger.name)
+
+        client = cas.CodexAppServerClient(codex_bin="codex")
+        client._closed = True
+
+        assert captured["kwargs"]["start_new_session"] is True
+        assert "codex app-server started" in caplog.text
+        assert "pid=1234" in caplog.text
+        assert "pgid=1234" in caplog.text
+
+    def test_close_terminates_process_group_before_kill(self, monkeypatch, caplog):
+        from agent.transports import codex_app_server as cas
+
+        signals = []
+        waits = []
+
+        class FakeStdin:
+            closed = False
+
+            def close(self):
+                self.closed = True
+
+        class FakePopen:
+            def __init__(self, cmd, *args, **kwargs):
+                self.stdin = FakeStdin()
+                self.stdout = None
+                self.stderr = None
+                self.pid = 4321
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def wait(self, timeout=None):
+                waits.append(timeout)
+                if len(waits) == 1:
+                    raise subprocess.TimeoutExpired(cmd="codex app-server", timeout=timeout)
+                self.returncode = -9
+                return self.returncode
+
+            def terminate(self):
+                raise AssertionError("direct terminate should not run for process-group cleanup")
+
+            def kill(self):
+                raise AssertionError("direct kill should not run for process-group cleanup")
+
+        monkeypatch.setattr(subprocess, "Popen", FakePopen)
+        monkeypatch.setattr(cas.os, "name", "posix")
+        monkeypatch.setattr(cas.os, "getpgid", lambda pid: 4321)
+        monkeypatch.setattr(cas.os, "killpg", lambda pgid, sig: signals.append((pgid, sig)))
+        caplog.set_level(logging.INFO, logger=cas.logger.name)
+
+        client = cas.CodexAppServerClient(codex_bin="codex")
+        client.close(timeout=0.1)
+        client.close(timeout=0.1)
+
+        assert signals == [(4321, 15), (4321, 9)]
+        assert waits == [0.1, 1.0]
+        assert "codex app-server closing" in caplog.text
+        assert "pid=4321" in caplog.text
+        assert "pgid=4321" in caplog.text
+
+    def test_close_falls_back_to_direct_process_when_group_cleanup_fails(self, monkeypatch):
+        from agent.transports import codex_app_server as cas
+
+        calls = []
+
+        class FakePopen:
+            def __init__(self, cmd, *args, **kwargs):
+                self.stdin = None
+                self.stdout = None
+                self.stderr = None
+                self.pid = 5678
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def wait(self, timeout=None):
+                self.returncode = -15
+                return self.returncode
+
+            def terminate(self):
+                calls.append("terminate")
+
+            def kill(self):
+                calls.append("kill")
+
+        monkeypatch.setattr(subprocess, "Popen", FakePopen)
+        monkeypatch.setattr(cas.os, "name", "posix")
+        monkeypatch.setattr(cas.os, "getpgid", lambda pid: 5678)
+
+        def fail_killpg(pgid, sig):
+            calls.append(("killpg", pgid, sig))
+            raise OSError("killpg unsupported")
+
+        monkeypatch.setattr(cas.os, "killpg", fail_killpg)
+
+        client = cas.CodexAppServerClient(codex_bin="codex")
+        client.close(timeout=0.1)
+
+        assert calls == [("killpg", 5678, 15), "terminate"]

@@ -17,8 +17,10 @@ runtime is not selected.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import queue
+import signal
 import subprocess
 import threading
 import time
@@ -29,6 +31,7 @@ from typing import Any, Callable, Optional
 # `codex --version` parsed at install time; bumping is a one-line change here.
 MIN_CODEX_VERSION = (0, 125, 0)
 _DEFAULT_HERMES_CODEX_BIN = "/home/jenny/.hermes/node/bin/codex"
+logger = logging.getLogger(__name__)
 
 
 def _resolve_codex_bin(codex_bin: str) -> str:
@@ -122,6 +125,10 @@ class CodexAppServerClient:
         # Codex emits tracing to stderr; default WARN keeps it quiet for users.
         spawn_env.setdefault("RUST_LOG", "warn")
 
+        popen_kwargs: dict[str, Any] = {}
+        if os.name == "posix":
+            popen_kwargs["start_new_session"] = True
+
         self._proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
@@ -129,6 +136,19 @@ class CodexAppServerClient:
             stderr=subprocess.PIPE,
             bufsize=0,
             env=spawn_env,
+            **popen_kwargs,
+        )
+        self._pgid: Optional[int] = None
+        if os.name == "posix":
+            try:
+                self._pgid = os.getpgid(self._proc.pid)
+            except Exception:
+                self._pgid = None
+        logger.info(
+            "codex app-server started: pid=%s pgid=%s new_session=%s",
+            self._proc.pid,
+            self._pgid,
+            bool(popen_kwargs.get("start_new_session")),
         )
         self._next_id = 1
         self._pending: dict[int, _Pending] = {}
@@ -177,11 +197,44 @@ class CodexAppServerClient:
         if self._closed:
             return
         self._closed = True
+        logger.info("codex app-server closing: pid=%s pgid=%s", self._proc.pid, self._pgid)
         try:
             if self._proc.stdin and not self._proc.stdin.closed:
                 self._proc.stdin.close()
         except Exception:
             pass
+        if self._terminate_process_group(timeout=timeout):
+            return
+        self._terminate_direct_process(timeout=timeout)
+
+    def _terminate_process_group(self, *, timeout: float) -> bool:
+        """Best-effort POSIX process-group cleanup. Returns True if handled."""
+        if self._pgid is None or os.name != "posix" or not hasattr(os, "killpg"):
+            return False
+        try:
+            os.killpg(self._pgid, signal.SIGTERM)
+            self._proc.wait(timeout=timeout)
+            return True
+        except ProcessLookupError:
+            return True
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(self._pgid, signal.SIGKILL)
+                self._proc.wait(timeout=1.0)
+            except Exception:
+                pass
+            return True
+        except Exception:
+            logger.debug(
+                "codex app-server process-group termination failed; "
+                "falling back to direct process cleanup: pid=%s pgid=%s",
+                self._proc.pid,
+                self._pgid,
+                exc_info=True,
+            )
+            return False
+
+    def _terminate_direct_process(self, *, timeout: float) -> None:
         try:
             self._proc.terminate()
             self._proc.wait(timeout=timeout)

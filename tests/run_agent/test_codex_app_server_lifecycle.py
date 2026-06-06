@@ -84,6 +84,25 @@ class CompletingClient:
         self.closed = True
 
 
+class RespawnClient(CompletingClient):
+    instances = []
+
+    def __init__(self, **_kwargs) -> None:
+        super().__init__()
+        self.initialized = 0
+        self.requests = []
+        RespawnClient.instances.append(self)
+
+    def initialize(self, **_kwargs) -> None:
+        self.initialized += 1
+
+    def request(self, method, params, timeout=None):
+        self.requests.append((method, params))
+        if method == "thread/start":
+            return {"thread": {"id": "new-thread"}}
+        return super().request(method, params, timeout=timeout)
+
+
 def test_codex_app_server_turn_handles_client_closed_during_shutdown():
     session = CodexAppServerSession(cwd="/tmp")
     session._thread_id = "thread-1"
@@ -106,3 +125,38 @@ def test_codex_app_server_turn_does_not_close_client_on_success():
 
     assert result.error is None
     assert client.closed is False
+
+
+def test_close_process_preserving_thread_keeps_logical_context():
+    session = CodexAppServerSession(cwd="/tmp")
+    client = CompletingClient()
+    session._thread_id = "thread-1"
+    session._client = client
+
+    session.close_process_preserving_thread()
+
+    assert client.closed is True
+    assert session._client is None
+    assert session._thread_id == "thread-1"
+    assert session._closed is False
+
+
+def test_next_turn_respawns_client_and_reuses_preserved_thread():
+    RespawnClient.instances = []
+    session = CodexAppServerSession(cwd="/tmp", client_factory=RespawnClient)
+    session._thread_id = "thread-1"
+    old_client = RespawnClient()
+    session._client = old_client
+
+    session.close_process_preserving_thread()
+    result = session.run_turn("continue", turn_timeout=0.05, notification_poll_timeout=0)
+
+    new_client = RespawnClient.instances[-1]
+    assert old_client.closed is True
+    assert new_client is not old_client
+    assert new_client.initialized == 1
+    assert ("thread/start", {"cwd": "/tmp"}) not in new_client.requests
+    assert new_client.requests[0][0] == "turn/start"
+    assert new_client.requests[0][1]["threadId"] == "thread-1"
+    assert result.thread_id == "thread-1"
+    assert result.error is None
