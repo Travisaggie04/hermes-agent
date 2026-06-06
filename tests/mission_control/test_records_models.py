@@ -94,21 +94,37 @@ def test_mission_brief_round_trips_nested_records_to_plain_dicts():
         },
         "approvals": [
             {
-                "approval_id": "approval-001",
+                "approval_slice_id": "approval-001",
+                "related_action_id": "",
+                "approval_type": "",
+                "decision_state": "pending",
+                "required_by": "Travisaggie04",
+                "reason": "",
+                "safety_conditions": ["runtime wiring"],
+                "evidence_ids": [],
+                "created_at": "2026-06-04T10:01:00Z",
+                "expires_at": None,
+                "metadata": {},
                 "lane": "code/test",
                 "mode": "code/test only",
                 "approved_actions": ["create inert records"],
                 "forbidden_actions": ["runtime wiring"],
                 "approver": "Travisaggie04",
                 "approved_at": "2026-06-04T10:01:00Z",
-                "expires_at": None,
-                "metadata": {},
             }
         ],
         "evidence": [
             {
                 "evidence_id": "evidence-001",
+                "related_lane": "",
+                "related_action_id": "",
+                "related_record_type": "",
                 "summary": "Focused tests passed.",
+                "evidence_type": "",
+                "source_label": "",
+                "created_at": "",
+                "risk_notes": [],
+                "metadata": {},
                 "artifact_refs": [
                     {
                         "ref_id": "artifact-001",
@@ -118,7 +134,6 @@ def test_mission_brief_round_trips_nested_records_to_plain_dicts():
                         "metadata": {},
                     }
                 ],
-                "metadata": {},
             }
         ],
         "artifacts": [
@@ -147,6 +162,73 @@ def test_records_are_frozen_value_objects():
 def test_from_dict_rejects_missing_required_fields():
     with pytest.raises(TypeError):
         GoalContract.from_dict({"goal_id": "goal-001"})
+
+
+def test_approval_slice_round_trips_pr_h_planning_fields():
+    approval = ApprovalSlice(
+        approval_slice_id="approval-slice-001",
+        related_action_id="action-001",
+        approval_type="human",
+        decision_state="pending",
+        required_by="Travis",
+        reason="Approve only after focused tests pass.",
+        safety_conditions=("no deploy", "no tool execution"),
+        evidence_ids=("evidence-001", "evidence-002"),
+        created_at="2026-06-06T00:00:00Z",
+        expires_at="2026-06-07T00:00:00Z",
+        metadata={"internal_note": "store only"},
+    )
+
+    data = approval.to_dict()
+
+    assert data == {
+        "approval_slice_id": "approval-slice-001",
+        "related_action_id": "action-001",
+        "approval_type": "human",
+        "decision_state": "pending",
+        "required_by": "Travis",
+        "reason": "Approve only after focused tests pass.",
+        "safety_conditions": ["no deploy", "no tool execution"],
+        "evidence_ids": ["evidence-001", "evidence-002"],
+        "created_at": "2026-06-06T00:00:00Z",
+        "expires_at": "2026-06-07T00:00:00Z",
+        "metadata": {"internal_note": "store only"},
+    }
+    assert ApprovalSlice.from_dict(data) == approval
+    assert isinstance(ApprovalSlice.from_dict(data).safety_conditions, tuple)
+    assert isinstance(ApprovalSlice.from_dict(data).evidence_ids, tuple)
+
+
+def test_evidence_card_round_trips_pr_h_planning_fields():
+    evidence = EvidenceCard(
+        evidence_id="evidence-001",
+        related_lane="PR-H Evidence Cards",
+        related_action_id="action-001",
+        related_record_type="OperatorAction",
+        summary="Focused tests show bounded read-only behavior.",
+        evidence_type="test",
+        source_label="pytest",
+        created_at="2026-06-06T00:00:00Z",
+        risk_notes=("No execution path added.",),
+        metadata={"raw_log": "store only"},
+    )
+
+    data = evidence.to_dict()
+
+    assert data == {
+        "evidence_id": "evidence-001",
+        "related_lane": "PR-H Evidence Cards",
+        "related_action_id": "action-001",
+        "related_record_type": "OperatorAction",
+        "summary": "Focused tests show bounded read-only behavior.",
+        "evidence_type": "test",
+        "source_label": "pytest",
+        "created_at": "2026-06-06T00:00:00Z",
+        "risk_notes": ["No execution path added."],
+        "metadata": {"raw_log": "store only"},
+    }
+    assert EvidenceCard.from_dict(data) == evidence
+    assert isinstance(EvidenceCard.from_dict(data).risk_notes, tuple)
 
 
 def test_operator_action_round_trips_to_plain_dicts():

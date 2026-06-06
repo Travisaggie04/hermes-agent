@@ -366,6 +366,58 @@ def test_operator_action_metadata_is_not_exposed_by_record_apis(plugin_api, clie
     assert "arbitrary secret value" not in lowered
 
 
+def test_approval_and_evidence_metadata_is_not_exposed_by_record_apis(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(
+        ApprovalSlice(
+            approval_slice_id="approval-sensitive-metadata",
+            related_action_id="action-sensitive",
+            approval_type="operator",
+            decision_state="pending",
+            required_by="Travis",
+            reason="Needs focused verification.",
+            safety_conditions=("no deploy",),
+            evidence_ids=("evidence-sensitive-metadata",),
+            created_at="2026-06-06T00:00:00Z",
+            metadata={
+                "transcript": "secret approval transcript",
+                "raw_decision": "secret approval metadata",
+            },
+        )
+    )
+    store.append(
+        EvidenceCard(
+            evidence_id="evidence-sensitive-metadata",
+            related_lane="PR-H",
+            related_action_id="action-sensitive",
+            related_record_type="OperatorAction",
+            summary="Safe compact evidence summary.",
+            evidence_type="test",
+            source_label="pytest",
+            created_at="2026-06-06T00:01:00Z",
+            risk_notes=("metadata must stay private",),
+            metadata={
+                "raw_log": "secret evidence log",
+                "transcript": "secret evidence transcript",
+            },
+        )
+    )
+
+    records_payload = client.get("/api/plugins/mission-control-governance/records").json()
+    approval_detail = client.get("/api/plugins/mission-control-governance/records/0").json()
+    evidence_detail = client.get("/api/plugins/mission-control-governance/records/1").json()
+
+    assert "metadata" not in records_payload["records"][0]["record"]
+    assert "metadata" not in records_payload["records"][1]["record"]
+    assert "metadata" not in approval_detail["record"]
+    assert "metadata" not in evidence_detail["record"]
+    lowered = f"{records_payload} {approval_detail} {evidence_detail}".lower()
+    assert "secret approval transcript" not in lowered
+    assert "secret approval metadata" not in lowered
+    assert "secret evidence log" not in lowered
+    assert "secret evidence transcript" not in lowered
+
+
 def test_record_detail_returns_404_for_missing_index(plugin_api, client):
     _seed_records(plugin_api.record_store_path())
 
@@ -514,13 +566,15 @@ def test_approval_slices_uses_standalone_fallback(plugin_api, client):
     store = JsonlRecordStore(plugin_api.record_store_path())
     store.append(
         ApprovalSlice(
-            approval_id="standalone-approval",
-            lane="fallback lane",
-            mode="read-only",
-            approved_actions=("read records",),
-            forbidden_actions=("write records",),
-            approver="Travis",
-            approved_at="2026-06-05T02:00:00Z",
+            approval_slice_id="standalone-approval",
+            related_action_id="action-1",
+            approval_type="operator",
+            decision_state="pending",
+            required_by="Travis",
+            reason="Bounded read-only inspection.",
+            safety_conditions=("write records",),
+            evidence_ids=("evidence-1",),
+            created_at="2026-06-05T02:00:00Z",
         )
     )
 
@@ -528,9 +582,19 @@ def test_approval_slices_uses_standalone_fallback(plugin_api, client):
 
     assert payload["source"] == "ApprovalSlice"
     assert payload["count"] == 1
-    assert payload["approval_slices"][0]["approval_id"] == "standalone-approval"
-    assert payload["approval_slices"][0]["approved_action_count"] == 1
-    assert payload["approval_slices"][0]["forbidden_action_count"] == 1
+    assert payload["approval_slices"][0] == {
+        "record_index": 0,
+        "approval_slice_id": "standalone-approval",
+        "related_action_id": "action-1",
+        "approval_type": "operator",
+        "decision_state": "pending",
+        "required_by": "Travis",
+        "reason": "Bounded read-only inspection.",
+        "safety_condition_count": 1,
+        "evidence_count": 1,
+        "created_at": "2026-06-05T02:00:00Z",
+        "expires_at": None,
+    }
 
 
 def test_evidence_cards_prefers_latest_mission_brief_evidence(plugin_api, client):
@@ -601,7 +665,14 @@ def test_evidence_cards_uses_standalone_fallback(plugin_api, client):
     store.append(
         EvidenceCard(
             evidence_id="standalone-evidence",
+            related_lane="PR-H",
+            related_action_id="action-1",
+            related_record_type="OperatorAction",
             summary="Fallback evidence summary.",
+            evidence_type="test",
+            source_label="pytest",
+            created_at="2026-06-05T03:00:00Z",
+            risk_notes=("No raw metadata exposed.",),
             artifact_refs=(ArtifactRef(ref_id="artifact-1", kind="log", location="focused.log"),),
         )
     )
@@ -613,7 +684,14 @@ def test_evidence_cards_uses_standalone_fallback(plugin_api, client):
     assert payload["evidence_cards"][0] == {
         "record_index": 0,
         "evidence_id": "standalone-evidence",
+        "related_lane": "PR-H",
+        "related_action_id": "action-1",
+        "related_record_type": "OperatorAction",
         "summary": "Fallback evidence summary.",
+        "evidence_type": "test",
+        "source_label": "pytest",
+        "created_at": "2026-06-05T03:00:00Z",
+        "risk_note_count": 1,
         "artifact_count": 1,
         "artifact_refs_count": 1,
     }

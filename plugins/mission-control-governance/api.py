@@ -103,12 +103,25 @@ def _record_type(record: Any) -> str:
     return str(getattr(record, "record_type", type(record).__name__))
 
 
+def _strip_metadata(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _strip_metadata(item)
+            for key, item in value.items()
+            if key != "metadata"
+        }
+    if isinstance(value, list):
+        return [_strip_metadata(item) for item in value]
+    return value
+
+
 def _record_payload(record: Any) -> dict[str, Any]:
     if hasattr(record, "to_dict"):
         payload = record.to_dict()
         if isinstance(payload, dict):
+            metadata = payload.pop("metadata", {}) or {}
+            payload = _strip_metadata(payload)
             if isinstance(record, OperatorAction):
-                metadata = payload.pop("metadata", {}) or {}
                 if isinstance(metadata, dict) and "source" in metadata:
                     payload["source"] = metadata["source"]
             return payload
@@ -196,18 +209,44 @@ def _bounded_latest(items: tuple[Any, ...], limit: int = 10) -> tuple[Any, ...]:
 
 def _approval_summary(approval: Any, evidence_count: int | None = None) -> dict[str, Any]:
     metadata = getattr(approval, "metadata", {}) or {}
-    summary = {
-        "approval_id": getattr(approval, "approval_id", ""),
-        "lane": getattr(approval, "lane", ""),
-        "mode": getattr(approval, "mode", ""),
-        "approver": getattr(approval, "approver", ""),
-        "approved_at": getattr(approval, "approved_at", ""),
-        "expires_at": getattr(approval, "expires_at", None),
-        "approved_action_count": len(getattr(approval, "approved_actions", ()) or ()),
-        "forbidden_action_count": len(getattr(approval, "forbidden_actions", ()) or ()),
-    }
-    if evidence_count is not None:
-        summary["evidence_count"] = evidence_count
+    has_legacy_fields = any(
+        (
+            getattr(approval, "lane", ""),
+            getattr(approval, "mode", ""),
+            getattr(approval, "approved_actions", ()) or (),
+            getattr(approval, "forbidden_actions", ()) or (),
+            getattr(approval, "approver", ""),
+            getattr(approval, "approved_at", ""),
+        )
+    )
+    if has_legacy_fields:
+        summary = {
+            "approval_id": getattr(approval, "approval_id", "")
+            or getattr(approval, "approval_slice_id", ""),
+            "lane": getattr(approval, "lane", ""),
+            "mode": getattr(approval, "mode", ""),
+            "approver": getattr(approval, "approver", ""),
+            "approved_at": getattr(approval, "approved_at", ""),
+            "expires_at": getattr(approval, "expires_at", None),
+            "approved_action_count": len(getattr(approval, "approved_actions", ()) or ()),
+            "forbidden_action_count": len(getattr(approval, "forbidden_actions", ()) or ()),
+        }
+        if evidence_count is not None:
+            summary["evidence_count"] = evidence_count
+    else:
+        approval_evidence_count = len(getattr(approval, "evidence_ids", ()) or ())
+        summary = {
+            "approval_slice_id": getattr(approval, "approval_slice_id", ""),
+            "related_action_id": getattr(approval, "related_action_id", ""),
+            "approval_type": getattr(approval, "approval_type", ""),
+            "decision_state": getattr(approval, "decision_state", ""),
+            "required_by": getattr(approval, "required_by", ""),
+            "reason": getattr(approval, "reason", ""),
+            "safety_condition_count": len(getattr(approval, "safety_conditions", ()) or ()),
+            "evidence_count": evidence_count if evidence_count is not None else approval_evidence_count,
+            "created_at": getattr(approval, "created_at", ""),
+            "expires_at": getattr(approval, "expires_at", None),
+        }
     for key in ("status", "reason", "risk_class", "required_approver"):
         if key in metadata:
             summary[key] = metadata[key]
@@ -223,6 +262,20 @@ def _evidence_summary(evidence: Any) -> dict[str, Any]:
         "artifact_count": len(artifact_refs),
         "artifact_refs_count": len(artifact_refs),
     }
+    for key in (
+        "related_lane",
+        "related_action_id",
+        "related_record_type",
+        "evidence_type",
+        "source_label",
+        "created_at",
+    ):
+        value = getattr(evidence, key, "")
+        if value:
+            summary[key] = value
+    risk_notes = tuple(getattr(evidence, "risk_notes", ()) or ())
+    if risk_notes:
+        summary["risk_note_count"] = len(risk_notes)
     for key in ("title", "type", "source"):
         if key in metadata:
             summary[key] = metadata[key]
