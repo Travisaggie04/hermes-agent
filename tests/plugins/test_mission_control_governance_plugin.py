@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -1245,6 +1246,7 @@ def test_dashboard_bundle_registers_read_only_tab_only():
     assert '__HERMES_PLUGINS__.register("mission-control-governance"' in bundle
     assert "/api/plugins/mission-control-governance/summary" in bundle
     assert "/api/plugins/mission-control-governance/start-gate" in bundle
+    assert "/api/plugins/mission-control-governance/start-gate/evaluate" in bundle
     assert "/api/plugins/mission-control-governance/task-control-envelopes" in bundle
     assert "/api/plugins/mission-control-governance/start-gate-checks" in bundle
     assert "/api/plugins/mission-control-governance/approval-slices" in bundle
@@ -1256,9 +1258,7 @@ def test_dashboard_bundle_registers_read_only_tab_only():
     assert "/api/plugins/mission-control-governance/records?limit=25" in bundle
     assert "/api/plugins/mission-control-governance/schema" in bundle
     assert "RECORD_DETAIL_URL" in bundle
-    assert "method:" not in lowered
     for token in (
-        "post(",
         "put(",
         "patch(",
         "delete(",
@@ -1270,6 +1270,37 @@ def test_dashboard_bundle_registers_read_only_tab_only():
         "tools.approval",
     ):
         assert token not in lowered
+
+
+def test_dashboard_start_gate_evaluator_panel_is_bounded_display_only():
+    bundle = (PLUGIN_DIR / "dashboard" / "dist" / "index.js").read_text()
+    lowered = bundle.lower()
+
+    assert "Start Gate Evaluator" in bundle
+    assert "default-off" in lowered
+    assert "inert" in lowered
+    assert "no runtime enforcement" in lowered
+    assert "SAMPLE_EVALUATOR_ENVELOPE" in bundle
+    assert "START_GATE_EVALUATE_URL" in bundle
+    assert "postJSON(START_GATE_EVALUATE_URL, SAMPLE_EVALUATOR_ENVELOPE)" in bundle
+    assert bundle.count("/api/plugins/mission-control-governance/start-gate/evaluate") == 1
+    assert re.findall(r'method:\s*"([A-Z]+)"', bundle) == ["POST"]
+
+    for token in (
+        "textarea",
+        "contenteditable",
+        "conversation_history",
+        "conversationhistory",
+        "transcript",
+        "full-text",
+        "fulltext",
+        "localstorage",
+        "sessionstorage",
+    ):
+        assert token not in lowered
+    for control in ("approve", "reject", "execute", "deny"):
+        assert not re.search(r"<button[^>]*>[^<]*" + control, lowered)
+        assert control + "(" not in lowered
 
 
 def test_operator_actions_empty_missing_store_returns_bounded_empty_payload(client):
