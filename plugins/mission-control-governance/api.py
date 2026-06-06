@@ -7,7 +7,7 @@ from dataclasses import fields, is_dataclass
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from hermes_constants import get_hermes_home
 from mission_control.records.errors import RecordStoreError
@@ -24,6 +24,8 @@ from mission_control.records import (
 
 
 PLUGIN_NAME = "mission-control-governance"
+DEFAULT_RECORDS_LIMIT = 25
+MAX_RECORDS_LIMIT = 50
 INERT_FLAGS = {
     "trusted_for_execution": False,
     "inert_context_only": True,
@@ -74,6 +76,18 @@ def _load_latest_records_with_state(
     if not records:
         return (), "empty", None
     return records, "ok", None
+
+
+def _safe_records_limit(limit: str | None) -> int:
+    if limit is None:
+        return DEFAULT_RECORDS_LIMIT
+    try:
+        parsed = int(limit)
+    except (TypeError, ValueError):
+        return DEFAULT_RECORDS_LIMIT
+    if parsed <= 0:
+        return DEFAULT_RECORDS_LIMIT
+    return min(parsed, MAX_RECORDS_LIMIT)
 
 
 def _record_counts_with_state() -> tuple[int, Counter[str], str, str | None]:
@@ -129,14 +143,14 @@ def _record_payload(record: Any) -> dict[str, Any]:
     return {}
 
 
-def _serialized_records(records: tuple[Any, ...]) -> list[dict[str, Any]]:
+def _serialized_indexed_records(records: tuple[tuple[int, Any], ...]) -> list[dict[str, Any]]:
     return [
         {
             "record_index": index,
             "record_type": _record_type(record),
             "record": _record_payload(record),
         }
-        for index, record in enumerate(records)
+        for index, record in records
     ]
 
 
@@ -589,14 +603,16 @@ async def start_gate() -> dict[str, Any]:
 
 
 @router.get("/records")
-async def records() -> dict[str, Any]:
-    loaded, store_status, error = _load_records_with_state()
+async def records(limit: str | None = Query(default=None)) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    loaded, store_status, error = _load_latest_records_with_state(limit=applied_limit)
     return {
         **INERT_FLAGS,
         "store_status": store_status,
         "error": error,
+        "limit": applied_limit,
         "count": len(loaded),
-        "records": _serialized_records(loaded),
+        "records": _serialized_indexed_records(loaded),
     }
 
 
