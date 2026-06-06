@@ -18,6 +18,7 @@ from mission_control.records import (
     JsonlRecordStore,
     MissionBrief,
     OperatorAction,
+    StartGateCheck,
     TaskControlEnvelope,
 )
 
@@ -142,6 +143,7 @@ def _serialized_records(records: tuple[Any, ...]) -> list[dict[str, Any]]:
 def _envelope_summary(envelope: Any) -> dict[str, Any]:
     payload = _record_payload(envelope)
     return {
+        "envelope_id": payload.get("envelope_id", ""),
         "active_lane": payload.get("active_lane", ""),
         "mode": payload.get("mode", ""),
         "allowed_actions": list(payload.get("allowed_actions") or ()),
@@ -150,6 +152,14 @@ def _envelope_summary(envelope: Any) -> dict[str, Any]:
         "expected_systems_files": list(payload.get("expected_systems_files") or ()),
         "stop_condition": payload.get("stop_condition", ""),
         "other_threads_excluded": list(payload.get("other_threads_excluded") or ()),
+        "report_requirements": list(payload.get("report_requirements") or ()),
+        "risk_level": payload.get("risk_level", ""),
+        "approval_required": bool(payload.get("approval_required", False)),
+        "approval_slice_ids": list(payload.get("approval_slice_ids") or ()),
+        "evidence_ids": list(payload.get("evidence_ids") or ()),
+        "token_context_policy": payload.get("token_context_policy", ""),
+        "created_at": payload.get("created_at", ""),
+        "status": payload.get("status", ""),
     }
 
 
@@ -198,6 +208,28 @@ def _empty_operator_actions_payload(store_status: str, error: str | None) -> dic
         "source": "none",
         "count": 0,
         "operator_actions": [],
+    }
+
+
+def _empty_task_control_envelopes_payload(store_status: str, error: str | None) -> dict[str, Any]:
+    return {
+        **INERT_FLAGS,
+        "store_status": store_status,
+        "error": error,
+        "source": "none",
+        "count": 0,
+        "task_control_envelopes": [],
+    }
+
+
+def _empty_start_gate_checks_payload(store_status: str, error: str | None) -> dict[str, Any]:
+    return {
+        **INERT_FLAGS,
+        "store_status": store_status,
+        "error": error,
+        "source": "none",
+        "count": 0,
+        "start_gate_checks": [],
     }
 
 
@@ -303,6 +335,43 @@ def _operator_action_summary(action: Any) -> dict[str, Any]:
     if "source" in metadata:
         summary["source"] = metadata["source"]
     return summary
+
+
+def _task_control_envelope_summary(envelope: Any) -> dict[str, Any]:
+    approval_slice_ids = tuple(getattr(envelope, "approval_slice_ids", ()) or ())
+    evidence_ids = tuple(getattr(envelope, "evidence_ids", ()) or ())
+    return {
+        "envelope_id": getattr(envelope, "envelope_id", ""),
+        "active_lane": getattr(envelope, "active_lane", ""),
+        "mode": getattr(envelope, "mode", ""),
+        "allowed_action_count": len(getattr(envelope, "allowed_actions", ()) or ()),
+        "forbidden_action_count": len(getattr(envelope, "forbidden_actions", ()) or ()),
+        "stop_condition": getattr(envelope, "stop_condition", ""),
+        "report_requirement_count": len(getattr(envelope, "report_requirements", ()) or ()),
+        "risk_level": getattr(envelope, "risk_level", ""),
+        "approval_required": bool(getattr(envelope, "approval_required", False)),
+        "approval_slice_count": len(approval_slice_ids),
+        "evidence_count": len(evidence_ids),
+        "token_context_policy": getattr(envelope, "token_context_policy", ""),
+        "created_at": getattr(envelope, "created_at", ""),
+        "status": getattr(envelope, "status", ""),
+    }
+
+
+def _start_gate_check_summary(check: Any) -> dict[str, Any]:
+    return {
+        "start_gate_id": getattr(check, "start_gate_id", ""),
+        "envelope_id": getattr(check, "envelope_id", ""),
+        "decision_state": getattr(check, "decision_state", ""),
+        "reason_count": len(getattr(check, "reasons", ()) or ()),
+        "blocked_action_count": len(getattr(check, "blocked_actions", ()) or ()),
+        "required_approval_count": len(getattr(check, "required_approvals", ()) or ()),
+        "dirty_worktree_state": getattr(check, "dirty_worktree_state", ""),
+        "branch_safety_state": getattr(check, "branch_safety_state", ""),
+        "secret_safety_state": getattr(check, "secret_safety_state", ""),
+        "token_context_state": getattr(check, "token_context_state", ""),
+        "created_at": getattr(check, "created_at", ""),
+    }
 
 
 def _latest_mission_with_items(field_name: str) -> tuple[tuple[int, Any] | None, str, str | None]:
@@ -438,6 +507,44 @@ async def operator_actions() -> dict[str, Any]:
         "source": "OperatorAction",
         "count": len(summaries),
         "operator_actions": summaries,
+    }
+
+
+@router.get("/task-control-envelopes")
+async def task_control_envelopes() -> dict[str, Any]:
+    standalone, store_status, error = _load_latest_records_with_state(TaskControlEnvelope, limit=10)
+    if not standalone:
+        return _empty_task_control_envelopes_payload(store_status, error)
+    summaries = [
+        {"record_index": index, **_task_control_envelope_summary(record)}
+        for index, record in standalone
+    ]
+    return {
+        **INERT_FLAGS,
+        "store_status": store_status,
+        "error": error,
+        "source": "TaskControlEnvelope",
+        "count": len(summaries),
+        "task_control_envelopes": summaries,
+    }
+
+
+@router.get("/start-gate-checks")
+async def start_gate_checks() -> dict[str, Any]:
+    standalone, store_status, error = _load_latest_records_with_state(StartGateCheck, limit=10)
+    if not standalone:
+        return _empty_start_gate_checks_payload(store_status, error)
+    summaries = [
+        {"record_index": index, **_start_gate_check_summary(record)}
+        for index, record in standalone
+    ]
+    return {
+        **INERT_FLAGS,
+        "store_status": store_status,
+        "error": error,
+        "source": "StartGateCheck",
+        "count": len(summaries),
+        "start_gate_checks": summaries,
     }
 
 

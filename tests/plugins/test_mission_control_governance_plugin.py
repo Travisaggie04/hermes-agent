@@ -19,6 +19,7 @@ from mission_control.records import (
     JsonlRecordStore,
     MissionBrief,
     OperatorAction,
+    StartGateCheck,
     TaskControlEnvelope,
 )
 
@@ -118,6 +119,8 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/health": {"GET"},
         "/summary": {"GET"},
         "/start-gate": {"GET"},
+        "/task-control-envelopes": {"GET"},
+        "/start-gate-checks": {"GET"},
         "/approval-slices": {"GET"},
         "/evidence-cards": {"GET"},
         "/operator-actions": {"GET"},
@@ -130,6 +133,8 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/health",
         "/summary",
         "/start-gate",
+        "/task-control-envelopes",
+        "/start-gate-checks",
         "/approval-slices",
         "/evidence-cards",
         "/operator-actions",
@@ -255,6 +260,7 @@ def test_start_gate_prefers_latest_mission_brief_control(plugin_api, client):
     assert payload["mission_title"] == "Start Gate UI"
     assert payload["mission_created_at"] == "2026-06-05T00:00:00Z"
     assert payload["envelope"] == {
+        "envelope_id": "",
         "active_lane": "Latest mission lane",
         "mode": "focused tests only",
         "allowed_actions": ["add GET endpoint", "update dashboard panel"],
@@ -263,6 +269,14 @@ def test_start_gate_prefers_latest_mission_brief_control(plugin_api, client):
         "expected_systems_files": ["plugins/mission-control-governance/api.py"],
         "stop_condition": "Stop after focused tests.",
         "other_threads_excluded": ["unrelated PR"],
+        "report_requirements": [],
+        "risk_level": "",
+        "approval_required": False,
+        "approval_slice_ids": [],
+        "evidence_ids": [],
+        "token_context_policy": "",
+        "created_at": "",
+        "status": "",
     }
 
 
@@ -418,6 +432,105 @@ def test_approval_and_evidence_metadata_is_not_exposed_by_record_apis(plugin_api
     assert "secret evidence transcript" not in lowered
 
 
+def test_task_control_envelopes_endpoint_is_bounded_and_metadata_safe(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    for index in range(12):
+        store.append(
+            TaskControlEnvelope(
+                envelope_id=f"envelope-{index}",
+                active_lane=f"lane-{index}",
+                mode="read-only",
+                allowed_actions=("read records",),
+                forbidden_actions=("execute tools",),
+                stop_condition="Stop after report.",
+                report_requirements=("files changed",),
+                risk_level="low",
+                approval_required=index % 2 == 0,
+                approval_slice_ids=(f"approval-{index}",),
+                evidence_ids=(f"evidence-{index}",),
+                token_context_policy="summary-first latest-10 only",
+                created_at=f"2026-06-06T00:{index:02d}:00Z",
+                status="active",
+                metadata={
+                    "raw_context": "secret envelope context",
+                    "transcript": "secret envelope transcript",
+                },
+            )
+        )
+
+    response = client.get("/api/plugins/mission-control-governance/task-control-envelopes")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["source"] == "TaskControlEnvelope"
+    assert payload["count"] == 10
+    assert [item["envelope_id"] for item in payload["task_control_envelopes"]] == [
+        f"envelope-{index}" for index in range(2, 12)
+    ]
+    first = payload["task_control_envelopes"][0]
+    assert first["record_index"] == 2
+    assert first["active_lane"] == "lane-2"
+    assert first["allowed_action_count"] == 1
+    assert first["forbidden_action_count"] == 1
+    assert first["approval_required"] is True
+    assert first["approval_slice_count"] == 1
+    assert first["evidence_count"] == 1
+    lowered = str(payload).lower()
+    assert "metadata" not in lowered
+    assert "secret envelope context" not in lowered
+    assert "secret envelope transcript" not in lowered
+
+
+def test_start_gate_checks_endpoint_is_descriptive_bounded_and_metadata_safe(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    for index in range(12):
+        store.append(
+            StartGateCheck(
+                start_gate_id=f"start-gate-{index}",
+                envelope_id=f"envelope-{index}",
+                decision_state="blocked" if index == 11 else "informational",
+                reasons=(f"reason {index}",),
+                blocked_actions=("deploy", "merge"),
+                required_approvals=(f"approval-{index}",),
+                dirty_worktree_state="clean",
+                branch_safety_state="exact base",
+                secret_safety_state="not touched",
+                token_context_state="bounded",
+                created_at=f"2026-06-06T01:{index:02d}:00Z",
+                metadata={
+                    "raw_scan": "secret start gate scan",
+                    "transcript": "secret start gate transcript",
+                },
+            )
+        )
+
+    response = client.get("/api/plugins/mission-control-governance/start-gate-checks")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["source"] == "StartGateCheck"
+    assert payload["count"] == 10
+    assert [item["start_gate_id"] for item in payload["start_gate_checks"]] == [
+        f"start-gate-{index}" for index in range(2, 12)
+    ]
+    latest = payload["start_gate_checks"][-1]
+    assert latest["record_index"] == 11
+    assert latest["decision_state"] == "blocked"
+    assert latest["reason_count"] == 1
+    assert latest["blocked_action_count"] == 2
+    assert latest["required_approval_count"] == 1
+    lowered = str(payload).lower()
+    assert "metadata" not in lowered
+    assert "secret start gate scan" not in lowered
+    assert "secret start gate transcript" not in lowered
+
+
 def test_record_detail_returns_404_for_missing_index(plugin_api, client):
     _seed_records(plugin_api.record_store_path())
 
@@ -484,7 +597,13 @@ def test_empty_store_returns_empty_approval_and_evidence_payloads(client):
 
 
 def test_approval_and_evidence_routes_are_get_only(client):
-    for path in ("/approval-slices", "/evidence-cards", "/operator-actions"):
+    for path in (
+        "/approval-slices",
+        "/evidence-cards",
+        "/operator-actions",
+        "/task-control-envelopes",
+        "/start-gate-checks",
+    ):
         for method in ("post", "put", "patch", "delete"):
             response = getattr(client, method)(
                 f"/api/plugins/mission-control-governance{path}"
@@ -711,6 +830,7 @@ def test_summary_style_routes_do_not_call_read_all(plugin_api, client, monkeypat
         )
     )
     store.append(EvidenceCard(evidence_id="standalone-evidence", summary="Standalone evidence"))
+    store.append(StartGateCheck(start_gate_id="gate-bounded", envelope_id="envelope-bounded"))
     store.append(
         MissionBrief(
             mission_id="mission-bounded",
@@ -739,15 +859,22 @@ def test_summary_style_routes_do_not_call_read_all(plugin_api, client, monkeypat
     approvals = client.get("/api/plugins/mission-control-governance/approval-slices")
     evidence = client.get("/api/plugins/mission-control-governance/evidence-cards")
     actions = client.get("/api/plugins/mission-control-governance/operator-actions")
+    envelopes = client.get("/api/plugins/mission-control-governance/task-control-envelopes")
+    checks = client.get("/api/plugins/mission-control-governance/start-gate-checks")
 
     assert summary.status_code == 200
     assert start_gate.status_code == 200
     assert approvals.status_code == 200
     assert evidence.status_code == 200
-    assert summary.json()["record_count"] == 4
+    assert actions.status_code == 200
+    assert envelopes.status_code == 200
+    assert checks.status_code == 200
+    assert summary.json()["record_count"] == 5
     assert start_gate.json()["source"] == "MissionBrief.control"
     assert approvals.json()["source"] == "MissionBrief.approvals"
     assert evidence.json()["source"] == "MissionBrief.evidence"
+    assert envelopes.json()["source"] == "TaskControlEnvelope"
+    assert checks.json()["source"] == "StartGateCheck"
 
 
 def test_latest_standalone_fallback_preserves_original_record_index(plugin_api, client):
@@ -847,10 +974,14 @@ def test_dashboard_bundle_registers_read_only_tab_only():
     assert '__HERMES_PLUGINS__.register("mission-control-governance"' in bundle
     assert "/api/plugins/mission-control-governance/summary" in bundle
     assert "/api/plugins/mission-control-governance/start-gate" in bundle
+    assert "/api/plugins/mission-control-governance/task-control-envelopes" in bundle
+    assert "/api/plugins/mission-control-governance/start-gate-checks" in bundle
     assert "/api/plugins/mission-control-governance/approval-slices" in bundle
     assert "/api/plugins/mission-control-governance/evidence-cards" in bundle
     assert "/api/plugins/mission-control-governance/operator-actions" in bundle
     assert "Operator Action Queue" in bundle
+    assert "Task Control Envelopes" in bundle
+    assert "Start Gate Checks" in bundle
     assert "/api/plugins/mission-control-governance/records" in bundle
     assert "/api/plugins/mission-control-governance/schema" in bundle
     assert "RECORD_DETAIL_URL" in bundle

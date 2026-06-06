@@ -95,14 +95,23 @@ class GoalContract:
 
 @dataclass(frozen=True)
 class TaskControlEnvelope:
-    active_lane: str
-    mode: str
+    envelope_id: str = ""
+    active_lane: str = ""
+    mode: str = ""
     allowed_actions: tuple[str, ...] = ()
     forbidden_actions: tuple[str, ...] = ()
     current_repo: str = ""
     expected_systems_files: tuple[str, ...] = ()
     stop_condition: str = ""
     other_threads_excluded: tuple[str, ...] = ()
+    report_requirements: tuple[str, ...] = ()
+    risk_level: str = ""
+    approval_required: bool = False
+    approval_slice_ids: tuple[str, ...] = ()
+    evidence_ids: tuple[str, ...] = ()
+    token_context_policy: str = ""
+    created_at: str = ""
+    status: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
     record_type: ClassVar[str] = "TaskControlEnvelope"
@@ -112,10 +121,14 @@ class TaskControlEnvelope:
         object.__setattr__(self, "forbidden_actions", _tuple(self.forbidden_actions))
         object.__setattr__(self, "expected_systems_files", _tuple(self.expected_systems_files))
         object.__setattr__(self, "other_threads_excluded", _tuple(self.other_threads_excluded))
+        object.__setattr__(self, "report_requirements", tuple(str(item) for item in _tuple(self.report_requirements)))
+        object.__setattr__(self, "approval_slice_ids", tuple(str(item) for item in _tuple(self.approval_slice_ids)))
+        object.__setattr__(self, "evidence_ids", tuple(str(item) for item in _tuple(self.evidence_ids)))
         object.__setattr__(self, "metadata", _dict(self.metadata))
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "envelope_id": self.envelope_id,
             "active_lane": self.active_lane,
             "mode": self.mode,
             "allowed_actions": list(self.allowed_actions),
@@ -124,12 +137,21 @@ class TaskControlEnvelope:
             "expected_systems_files": list(self.expected_systems_files),
             "stop_condition": self.stop_condition,
             "other_threads_excluded": list(self.other_threads_excluded),
+            "report_requirements": list(self.report_requirements),
+            "risk_level": self.risk_level,
+            "approval_required": self.approval_required,
+            "approval_slice_ids": list(self.approval_slice_ids),
+            "evidence_ids": list(self.evidence_ids),
+            "token_context_policy": self.token_context_policy,
+            "created_at": self.created_at,
+            "status": self.status,
             "metadata": dict(self.metadata),
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TaskControlEnvelope:
         return cls(
+            envelope_id=data.get("envelope_id", ""),
             active_lane=_required(data, "active_lane"),
             mode=_required(data, "mode"),
             allowed_actions=data.get("allowed_actions") or (),
@@ -138,6 +160,71 @@ class TaskControlEnvelope:
             expected_systems_files=data.get("expected_systems_files") or (),
             stop_condition=data.get("stop_condition", ""),
             other_threads_excluded=data.get("other_threads_excluded") or (),
+            report_requirements=data.get("report_requirements") or (),
+            risk_level=data.get("risk_level", ""),
+            approval_required=bool(data.get("approval_required", False)),
+            approval_slice_ids=data.get("approval_slice_ids") or (),
+            evidence_ids=data.get("evidence_ids") or (),
+            token_context_policy=data.get("token_context_policy", ""),
+            created_at=data.get("created_at", ""),
+            status=data.get("status", ""),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
+class StartGateCheck:
+    start_gate_id: str
+    envelope_id: str
+    decision_state: str = "informational"
+    reasons: tuple[str, ...] = ()
+    blocked_actions: tuple[str, ...] = ()
+    required_approvals: tuple[str, ...] = ()
+    dirty_worktree_state: str = ""
+    branch_safety_state: str = ""
+    secret_safety_state: str = ""
+    token_context_state: str = ""
+    created_at: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "StartGateCheck"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "reasons", tuple(str(item) for item in _tuple(self.reasons)))
+        object.__setattr__(self, "blocked_actions", tuple(str(item) for item in _tuple(self.blocked_actions)))
+        object.__setattr__(self, "required_approvals", tuple(str(item) for item in _tuple(self.required_approvals)))
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "start_gate_id": self.start_gate_id,
+            "envelope_id": self.envelope_id,
+            "decision_state": self.decision_state,
+            "reasons": list(self.reasons),
+            "blocked_actions": list(self.blocked_actions),
+            "required_approvals": list(self.required_approvals),
+            "dirty_worktree_state": self.dirty_worktree_state,
+            "branch_safety_state": self.branch_safety_state,
+            "secret_safety_state": self.secret_safety_state,
+            "token_context_state": self.token_context_state,
+            "created_at": self.created_at,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> StartGateCheck:
+        return cls(
+            start_gate_id=_required(data, "start_gate_id"),
+            envelope_id=_required(data, "envelope_id"),
+            decision_state=data.get("decision_state", "informational"),
+            reasons=data.get("reasons") or (),
+            blocked_actions=data.get("blocked_actions") or (),
+            required_approvals=data.get("required_approvals") or (),
+            dirty_worktree_state=data.get("dirty_worktree_state", ""),
+            branch_safety_state=data.get("branch_safety_state", ""),
+            secret_safety_state=data.get("secret_safety_state", ""),
+            token_context_state=data.get("token_context_state", ""),
+            created_at=data.get("created_at", ""),
             metadata=data.get("metadata") or {},
         )
 
@@ -442,6 +529,7 @@ RECORD_TYPES = {
         GoalContract,
         MissionBrief,
         OperatorAction,
+        StartGateCheck,
         TaskControlEnvelope,
     )
 }
