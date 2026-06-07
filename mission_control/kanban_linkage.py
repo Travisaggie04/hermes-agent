@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,6 +11,15 @@ from typing import Any
 
 
 VALID_LINK_STATES = {"linked", "missing_link", "stale_link", "scope_mismatch", "unknown"}
+MAX_LINK_DISPLAY_CHARS = 120
+MAX_LINK_REASONS = 5
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_MULTISPACE_RE = re.compile(r"\s+")
+_SECRET_TOKEN_RE = re.compile(
+    r"(?i)\b(?:sk-[a-z0-9_-]{4,}|gh[pousr]_[a-z0-9_]{4,}|akia[a-z0-9]{4,}|"
+    r"[a-z0-9_-]*(?:secret|token|api[_-]?key|password)[a-z0-9_-]*\s*[:=]\s*\S+)"
+)
 
 
 @dataclass(frozen=True)
@@ -45,6 +55,52 @@ def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _bounded_display_text(value: Any, *, max_chars: int = MAX_LINK_DISPLAY_CHARS) -> str:
+    text = _ANSI_ESCAPE_RE.sub("", str(value or ""))
+    text = _CONTROL_CHARS_RE.sub(" ", text)
+    text = _SECRET_TOKEN_RE.sub("[redacted]", text)
+    text = _MULTISPACE_RE.sub(" ", text).strip()
+    if len(text) > max_chars:
+        return text[:max_chars].rstrip()
+    return text
+
+
+def _has_hidden_path_part(value: str) -> bool:
+    return any(part.startswith(".") for part in Path(value).parts if part not in (".", "..", os.sep))
+
+
+def _safe_path_label(value: Any, *, hidden_label: str = "[path hidden]") -> str:
+    raw = _bounded_display_text(value, max_chars=512)
+    if not raw:
+        return ""
+    path = Path(raw).expanduser()
+    if path.is_absolute() or raw.startswith("~"):
+        if _has_hidden_path_part(raw):
+            return hidden_label
+        return _bounded_display_text(path.name or "[path set]")
+    if "/" in raw or "\\" in raw:
+        if _has_hidden_path_part(raw):
+            return hidden_label
+        return _bounded_display_text(Path(raw).name or raw)
+    return _bounded_display_text(raw)
+
+
+def _safe_link_id(value: Any, *, default: str = "") -> str:
+    return _safe_path_label(value, hidden_label="[id hidden]") or default
+
+
+def _safe_workspace_label(value: Any) -> str:
+    return _safe_path_label(value, hidden_label="[workspace path hidden]")
+
+
+def _safe_reasons(reasons: tuple[str, ...]) -> list[str]:
+    return [
+        reason
+        for reason in (_bounded_display_text(item) for item in reasons[:MAX_LINK_REASONS])
+        if reason
+    ]
+
+
 def _metadata(record: Any) -> dict[str, Any]:
     value = getattr(record, "metadata", {}) or {}
     return value if isinstance(value, dict) else {}
@@ -59,17 +115,17 @@ def extract_kanban_link(record: Any, *, record_id: str = "") -> KanbanLink | Non
     metadata = _metadata(record)
     nested = metadata.get("kanban")
     nested_map = nested if isinstance(nested, dict) else {}
-    board_id = _text(metadata.get("kanban_board_id") or nested_map.get("board_id") or nested_map.get("board"))
-    task_id = _text(metadata.get("kanban_task_id") or nested_map.get("task_id") or nested_map.get("task"))
+    board_id = _safe_link_id(metadata.get("kanban_board_id") or nested_map.get("board_id") or nested_map.get("board"))
+    task_id = _safe_link_id(metadata.get("kanban_task_id") or nested_map.get("task_id") or nested_map.get("task"))
     if not task_id:
         return None
 
-    goal_contract_id = _text(
+    goal_contract_id = _safe_link_id(
         metadata.get("goal_contract_id")
         or nested_map.get("goal_contract_id")
         or (record_id if getattr(record, "record_type", "") == "GoalContract" else "")
     )
-    envelope_id = _text(
+    envelope_id = _safe_link_id(
         metadata.get("task_control_envelope_id")
         or nested_map.get("task_control_envelope_id")
         or getattr(record, "envelope_id", "")
@@ -106,7 +162,7 @@ def validate_kanban_linkage(
 ) -> KanbanLinkValidation:
     """Return a display-only linkage state; never enforces runtime behavior."""
     if read_error:
-        return KanbanLinkValidation("unknown", (read_error,))
+        return KanbanLinkValidation("unknown", ("read_error",))
     if link is None:
         return KanbanLinkValidation("missing_link")
     if observed is None:
@@ -193,14 +249,14 @@ def linked_kanban_task_payload(record: Any, *, record_id: str = "") -> dict[str,
         return None
     return {
         "link_state": validation.state,
-        "board_id": link.board_id if link else "",
-        "board_name": read_kanban_board_name(link.board_id) if link else "",
-        "task_id": link.task_id if link else "",
-        "task_title": observed.title if observed else "",
-        "task_status": observed.status if observed else "",
-        "task_workspace": observed.workspace_path if observed else "",
-        "task_branch": observed.branch_name if observed else "",
-        "linked_goal_contract_id": link.goal_contract_id if link else "",
-        "linked_task_control_envelope_id": link.task_control_envelope_id if link else "",
-        "reasons": list(validation.reasons),
+        "board_id": _safe_link_id(link.board_id) if link else "",
+        "board_name": _bounded_display_text(read_kanban_board_name(link.board_id)) if link else "",
+        "task_id": _safe_link_id(link.task_id) if link else "",
+        "task_title": _bounded_display_text(observed.title) if observed else "",
+        "task_status": _bounded_display_text(observed.status) if observed else "",
+        "task_workspace": _safe_workspace_label(observed.workspace_path) if observed else "",
+        "task_branch": _bounded_display_text(observed.branch_name) if observed else "",
+        "linked_goal_contract_id": _safe_link_id(link.goal_contract_id) if link else "",
+        "linked_task_control_envelope_id": _safe_link_id(link.task_control_envelope_id) if link else "",
+        "reasons": _safe_reasons(validation.reasons),
     }

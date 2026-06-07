@@ -806,7 +806,7 @@ def test_task_control_envelopes_endpoint_returns_linked_kanban_task_state(
         "task_id": task_id,
         "task_title": "Implement linkage",
         "task_status": "ready",
-        "task_workspace": "/work/hermes-agent",
+        "task_workspace": "hermes-agent",
         "task_branch": "mc-kanban-linkage-v1",
         "linked_goal_contract_id": "goal-linked",
         "linked_task_control_envelope_id": "tce-linked",
@@ -859,6 +859,62 @@ def test_records_endpoint_returns_goal_contract_linked_kanban_task_state(
     assert record["linked_kanban_task"]["linked_goal_contract_id"] == "goal-linked"
     assert "metadata" not in str(record).lower()
     assert "secret goal context" not in str(record)
+
+
+def test_api_linked_kanban_payload_is_display_safe_for_dashboard(
+    plugin_api,
+    client,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setenv("HERMES_KANBAN_HOME", str(tmp_path / "kanban-home"))
+    from hermes_cli import kanban_db
+
+    kanban_db.init_db(board="mission-control")
+    with kanban_db.connect(board="mission-control") as conn:
+        task_id = kanban_db.create_task(
+            conn,
+            title="Task \x1b[31mSECRET_TOKEN=sk-test-fake\n" + ("x" * 500),
+            body="Visible task state only.",
+            created_by="test",
+            workspace_kind="worktree",
+            workspace_path="/home/jenny/.secrets/project",
+            branch_name="feature/SECRET_TOKEN=sk-test-fake\n" + ("x" * 500),
+            board="mission-control",
+        )
+
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(
+        TaskControlEnvelope(
+            envelope_id="tce-dashboard-safe",
+            active_lane="Mission Control / Kanban display-only linkage",
+            mode="read-only display",
+            current_repo="/different/project",
+            metadata={
+                "kanban_board_id": "mission-control",
+                "kanban_task_id": task_id,
+                "goal_contract_id": "goal-dashboard-safe",
+                "expected_branch": "main",
+                "raw_context": "secret raw metadata",
+            },
+        )
+    )
+
+    response = client.get("/api/plugins/mission-control-governance/start-gate")
+
+    assert response.status_code == 200
+    linked = response.json()["envelope"]["linked_kanban_task"]
+    flattened = str(linked)
+    assert linked["link_state"] == "scope_mismatch"
+    assert linked["task_workspace"] == "[workspace path hidden]"
+    assert "\x1b" not in flattened
+    assert "\n" not in flattened
+    assert "sk-test-fake" not in flattened
+    assert "SECRET_TOKEN" not in flattened
+    assert "/home/jenny/.secrets/project" not in flattened
+    assert "metadata" not in flattened.lower()
+    assert "secret raw metadata" not in flattened
+    assert all(len(reason) <= 120 for reason in linked["reasons"])
 
 
 def test_start_gate_checks_endpoint_is_descriptive_bounded_and_metadata_safe(plugin_api, client):
