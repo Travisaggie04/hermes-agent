@@ -1170,6 +1170,36 @@ def test_api_linked_kanban_payload_is_display_safe_for_dashboard(
     assert all(len(reason) <= 120 for reason in linked["reasons"])
 
 
+def test_dashboard_model_picker_panel_is_display_only_and_non_executing():
+    js = (PLUGIN_DIR / "dashboard" / "dist" / "index.js").read_text()
+
+    assert 'MODEL_REGISTRY_URL = "/api/plugins/mission-control-governance/model-registry"' in js
+    assert "Model Picker" in js
+    assert "Display-only / routing disabled" in js
+    assert "Waha requires explicit approved models" in js
+    assert "Free-cloud and unknown models are blocked for Waha until approved." in js
+    assert "Verifier roles stay blocked until explicitly qualified." in js
+    assert "routing_enabled=false" in js
+    assert "No execution controls, provider calls, or credential checks are available here." in js
+    forbidden_actions = (
+        "Select model",
+        "Use model",
+        "Route task",
+        "Test model",
+        "Call provider",
+    )
+    assert all(action not in js for action in forbidden_actions)
+
+
+def test_dashboard_model_picker_styles_are_present():
+    css = (PLUGIN_DIR / "dashboard" / "dist" / "style.css").read_text()
+
+    assert ".mcg-model-picker-card" in css
+    assert ".mcg-model-grid" in css
+    assert ".mcg-model-row" in css
+    assert ".mcg-model-pill" in css
+
+
 def test_model_registry_endpoint_exposes_inert_display_only_policy(client):
     response = client.get("/api/plugins/mission-control-governance/model-registry")
 
