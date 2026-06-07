@@ -138,6 +138,8 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/start-gate": {"GET"},
         "/start-gate/evaluate": {"POST"},
         "/lane-preflight/evaluate": {"POST"},
+        "/global-resource-guard": {"GET"},
+        "/global-resource-guard/evaluate": {"POST"},
         "/model-registry": {"GET"},
         "/domain-governance": {"GET"},
         "/task-control-envelopes": {"GET"},
@@ -154,6 +156,9 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/health",
         "/summary",
         "/start-gate",
+        "/global-resource-guard",
+        "/model-registry",
+        "/domain-governance",
         "/task-control-envelopes",
         "/start-gate-checks",
         "/approval-slices",
@@ -176,6 +181,10 @@ def test_api_routes_are_get_only(plugin_api, client):
         assert response.status_code == 405
         response = getattr(client, method)(
             "/api/plugins/mission-control-governance/lane-preflight/evaluate"
+        )
+        assert response.status_code == 405
+        response = getattr(client, method)(
+            "/api/plugins/mission-control-governance/global-resource-guard/evaluate"
         )
         assert response.status_code == 405
 
@@ -1198,6 +1207,60 @@ def test_dashboard_model_picker_styles_are_present():
     assert ".mcg-model-grid" in css
     assert ".mcg-model-row" in css
     assert ".mcg-model-pill" in css
+
+
+def test_global_resource_guard_endpoint_exposes_inert_dry_run_policy(client):
+    response = client.get("/api/plugins/mission-control-governance/global-resource-guard")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["enforcement_enabled"] is False
+    assert payload["dry_run_only"] is True
+    assert payload["display_only"] is True
+    assert payload["source"] == "mission_control.global_resource_guard"
+    assert payload["guard"]["guard_id"] == "global_concurrency_resource_v1"
+    assert payload["guard"]["global_lane_limits"]["max_active_jenny_codex_lanes"] == 1
+    assert payload["guard"]["kanban_limits"]["embedded_dispatch_allowed"] is False
+    assert payload["guard"]["kanban_limits"]["max_kanban_workers"] == 0
+    assert payload["guard"]["model_router_limits"]["model_routing_allowed"] is False
+    assert payload["guard"]["storage_artifact_limits"]["storage_delta_required_before_done"] == "placeholder"
+
+
+def test_global_resource_guard_dry_run_endpoint_uses_caller_supplied_state_only(client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/global-resource-guard/evaluate",
+        json={
+            "active_jenny_codex_lanes": 2,
+            "embedded_dispatch_enabled": True,
+            "model_routing_requested": True,
+            "waha_execution_requested": True,
+            "waha_hard_wall_ready": False,
+            "waha_approved_model_policy_ready": False,
+            "waha_technical_verifier_ready": False,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["enforcement_enabled"] is False
+    assert payload["dry_run_only"] is True
+    assert payload["enforces_runtime"] is False
+    assert payload["stored"] is False
+    assert payload["source"] == "caller_supplied_observed_state"
+    assert payload["decision_state"] == "would_block"
+    assert payload["would_block"] is True
+    assert "parallel Jenny/Codex lanes exceed max_active_jenny_codex_lanes=1" in payload["reasons"]
+    assert "embedded Kanban dispatch is not approved" in payload["reasons"]
+    assert "model routing is not approved" in payload["reasons"]
+    assert "Waha hard-wall policy is unresolved" in payload["reasons"]
+    assert "start additional Jenny/Codex lane" in payload["blocked_actions"]
+    assert "route tasks to models" in payload["blocked_actions"]
+    assert "explicit dispatch lane approval" in payload["required_approvals"]
+    assert "storage_delta_required_before_done" in payload["unresolved_policy_fields"]
 
 
 def test_model_registry_endpoint_exposes_inert_display_only_policy(client):

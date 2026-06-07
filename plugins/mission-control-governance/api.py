@@ -13,6 +13,10 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from hermes_constants import get_hermes_home
 from mission_control.domain_governance import get_domain_governance_policies
+from mission_control.global_resource_guard import (
+    evaluate_global_resource_guard,
+    get_global_resource_guard_policy,
+)
 from mission_control.model_registry import get_model_registry_records
 from mission_control.lane_preflight import run_lane_start_preflight
 from mission_control.records.errors import RecordStoreError
@@ -78,6 +82,55 @@ _EVALUATION_METADATA_FIELDS = {
     "authoritative_remote",
     "worktree_state",
 }
+_GUARD_OBSERVED_FIELDS = {
+    "active_jenny_codex_lanes",
+    "codex_app_server_pairs",
+    "embedded_dispatch_enabled",
+    "kanban_worker_count",
+    "auto_decompose_requested",
+    "worktree_state",
+    "uses_dirty_or_quarantined_worktree",
+    "parent_directory_scan_requested",
+    "travis_fork_pr_work",
+    "repo_remote_owner",
+    "repo_full_name",
+    "model_routing_requested",
+    "model_picker_execution_requested",
+    "free_cloud_model_for_protected_domain",
+    "unknown_model_for_protected_domain",
+    "waha_execution_requested",
+    "waha_model_use_requested",
+    "waha_ready_done_requested",
+    "waha_hard_wall_ready",
+    "waha_approved_model_policy_ready",
+    "waha_technical_verifier_ready",
+    "recent_resource_errors",
+    "stale_app_server_pair_detected",
+}
+_GUARD_BOOL_FIELDS = {
+    "embedded_dispatch_enabled",
+    "auto_decompose_requested",
+    "uses_dirty_or_quarantined_worktree",
+    "parent_directory_scan_requested",
+    "travis_fork_pr_work",
+    "model_routing_requested",
+    "model_picker_execution_requested",
+    "free_cloud_model_for_protected_domain",
+    "unknown_model_for_protected_domain",
+    "waha_execution_requested",
+    "waha_model_use_requested",
+    "waha_ready_done_requested",
+    "waha_hard_wall_ready",
+    "waha_approved_model_policy_ready",
+    "waha_technical_verifier_ready",
+    "stale_app_server_pair_detected",
+}
+_GUARD_INT_FIELDS = {
+    "active_jenny_codex_lanes",
+    "codex_app_server_pairs",
+    "kanban_worker_count",
+}
+_GUARD_LIST_FIELDS = {"recent_resource_errors"}
 
 router = APIRouter()
 
@@ -513,6 +566,41 @@ async def _read_compact_json_body(request: Request) -> dict[str, Any]:
     return _compact_evaluation_payload(payload)
 
 
+def _compact_guard_observed_state(payload: dict[str, Any]) -> dict[str, Any]:
+    compact: dict[str, Any] = {}
+    for key in sorted(_GUARD_OBSERVED_FIELDS):
+        if key not in payload:
+            continue
+        if key in _GUARD_BOOL_FIELDS:
+            compact[key] = payload[key] is True
+        elif key in _GUARD_INT_FIELDS:
+            try:
+                compact[key] = int(payload[key])
+            except (TypeError, ValueError):
+                compact[key] = 0
+        elif key in _GUARD_LIST_FIELDS:
+            compact[key] = _bounded_text_list(payload[key])
+        else:
+            compact[key] = _bounded_text(payload[key])
+    return compact
+
+
+async def _read_guard_observed_json_body(request: Request) -> dict[str, Any]:
+    content_type = request.headers.get("content-type", "")
+    if content_type and "application/json" not in content_type.lower():
+        raise HTTPException(status_code=415, detail="JSON body required")
+    body = await request.body()
+    if len(body) > MAX_EVALUATION_BODY_BYTES:
+        raise HTTPException(status_code=413, detail="evaluation payload is too large")
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="malformed JSON body") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="JSON body must be an object")
+    return _compact_guard_observed_state(payload)
+
+
 def _start_gate_decision_payload(check: StartGateCheck) -> dict[str, Any]:
     return {
         "start_gate_id": check.start_gate_id,
@@ -763,6 +851,34 @@ async def start_gate_checks() -> dict[str, Any]:
         "source": "StartGateCheck",
         "count": len(summaries),
         "start_gate_checks": summaries,
+    }
+
+
+@router.get("/global-resource-guard")
+async def global_resource_guard() -> dict[str, Any]:
+    guard = get_global_resource_guard_policy()
+    return {
+        **INERT_FLAGS,
+        "enforcement_enabled": False,
+        "dry_run_only": True,
+        "display_only": True,
+        "source": "mission_control.global_resource_guard",
+        "guard": guard,
+    }
+
+
+@router.post("/global-resource-guard/evaluate")
+async def global_resource_guard_evaluate(request: Request) -> dict[str, Any]:
+    observed_state = await _read_guard_observed_json_body(request)
+    result = evaluate_global_resource_guard(observed_state)
+    return {
+        **INERT_FLAGS,
+        "enforcement_enabled": False,
+        "dry_run_only": True,
+        "display_only": True,
+        "source": "caller_supplied_observed_state",
+        "stored": False,
+        **result,
     }
 
 
