@@ -105,6 +105,14 @@
     return "Record store is readable.";
   }
 
+  function formatLinkedKanbanTask(link) {
+    if (!link) return "No Kanban link";
+    const board = link.board_name || link.board_id || "board unknown";
+    const task = link.task_title || link.task_id || "task unknown";
+    const status = link.task_status || link.link_state || "state unknown";
+    return board + " / " + task + " / " + status;
+  }
+
   function PrettyRecord(props) {
     return h("pre", { className: "mcg-json" }, JSON.stringify(props.value || {}, null, 2));
   }
@@ -289,6 +297,10 @@
                   h("strong", null, startGate.source || "none")
                 ),
                 h("div", null,
+                  h("span", { className: "mcg-start-label" }, "Kanban"),
+                  h("strong", null, formatLinkedKanbanTask(envelope.linked_kanban_task))
+                ),
+                h("div", null,
                   h("span", { className: "mcg-start-label" }, "Stop"),
                   h("strong", null, envelope.stop_condition || "Unspecified")
                 )
@@ -371,6 +383,7 @@
                       h("strong", null, item.active_lane || item.envelope_id || "Task envelope"),
                       h("span", null, (item.mode || "mode unknown") + " - " + (item.status || "status unknown")),
                       h("span", null, String(item.allowed_action_count || 0) + " allowed / " + String(item.forbidden_action_count || 0) + " blocked"),
+                      item.linked_kanban_task ? h("span", null, "Kanban: " + formatLinkedKanbanTask(item.linked_kanban_task)) : null,
                       h("span", null, (item.risk_level || "risk unknown") + " / " + String(item.evidence_count || 0) + " evidence ids")
                     );
                   })

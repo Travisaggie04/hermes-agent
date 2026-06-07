@@ -14,10 +14,12 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from hermes_constants import get_hermes_home
 from mission_control.records.errors import RecordStoreError
 from mission_control.records.models import RECORD_TYPES
+from mission_control.kanban_linkage import linked_kanban_task_payload
 from mission_control.start_gate import evaluate_start_gate
 from mission_control.records import (
     ApprovalSlice,
     EvidenceCard,
+    GoalContract,
     JsonlRecordStore,
     MissionBrief,
     OperatorAction,
@@ -181,6 +183,11 @@ def _record_payload(record: Any) -> dict[str, Any]:
             if isinstance(record, OperatorAction):
                 if isinstance(metadata, dict) and "source" in metadata:
                     payload["source"] = metadata["source"]
+            if isinstance(record, (GoalContract, TaskControlEnvelope)):
+                record_id = payload.get("goal_id") or payload.get("envelope_id") or ""
+                linked_task = linked_kanban_task_payload(record, record_id=record_id)
+                if linked_task is not None:
+                    payload["linked_kanban_task"] = linked_task
             return payload
     return {}
 
@@ -198,7 +205,7 @@ def _serialized_indexed_records(records: tuple[tuple[int, Any], ...]) -> list[di
 
 def _envelope_summary(envelope: Any) -> dict[str, Any]:
     payload = _record_payload(envelope)
-    return {
+    summary = {
         "envelope_id": payload.get("envelope_id", ""),
         "active_lane": payload.get("active_lane", ""),
         "mode": payload.get("mode", ""),
@@ -217,6 +224,10 @@ def _envelope_summary(envelope: Any) -> dict[str, Any]:
         "created_at": payload.get("created_at", ""),
         "status": payload.get("status", ""),
     }
+    linked_task = linked_kanban_task_payload(envelope, record_id=summary["envelope_id"])
+    if linked_task is not None:
+        summary["linked_kanban_task"] = linked_task
+    return summary
 
 
 def _empty_start_gate_payload(store_status: str, error: str | None) -> dict[str, Any]:
@@ -396,7 +407,7 @@ def _operator_action_summary(action: Any) -> dict[str, Any]:
 def _task_control_envelope_summary(envelope: Any) -> dict[str, Any]:
     approval_slice_ids = tuple(getattr(envelope, "approval_slice_ids", ()) or ())
     evidence_ids = tuple(getattr(envelope, "evidence_ids", ()) or ())
-    return {
+    summary = {
         "envelope_id": getattr(envelope, "envelope_id", ""),
         "active_lane": getattr(envelope, "active_lane", ""),
         "mode": getattr(envelope, "mode", ""),
@@ -412,6 +423,10 @@ def _task_control_envelope_summary(envelope: Any) -> dict[str, Any]:
         "created_at": getattr(envelope, "created_at", ""),
         "status": getattr(envelope, "status", ""),
     }
+    linked_task = linked_kanban_task_payload(envelope, record_id=summary["envelope_id"])
+    if linked_task is not None:
+        summary["linked_kanban_task"] = linked_task
+    return summary
 
 
 def _start_gate_check_summary(check: Any) -> dict[str, Any]:

@@ -756,6 +756,167 @@ def test_task_control_envelopes_endpoint_is_bounded_and_metadata_safe(plugin_api
     assert "secret envelope transcript" not in lowered
 
 
+def test_task_control_envelopes_endpoint_returns_linked_kanban_task_state(
+    plugin_api,
+    client,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setenv("HERMES_KANBAN_HOME", str(tmp_path / "kanban-home"))
+    from hermes_cli import kanban_db
+
+    kanban_db.init_db(board="mission-control")
+    with kanban_db.connect(board="mission-control") as conn:
+        task_id = kanban_db.create_task(
+            conn,
+            title="Implement linkage",
+            body="Visible task state only.",
+            created_by="test",
+            workspace_kind="worktree",
+            workspace_path="/work/hermes-agent",
+            branch_name="mc-kanban-linkage-v1",
+            board="mission-control",
+        )
+
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(
+        TaskControlEnvelope(
+            envelope_id="tce-linked",
+            active_lane="Mission Control / Kanban task-linkage v1",
+            mode="bounded implementation",
+            current_repo="/work/hermes-agent",
+            metadata={
+                "kanban_board_id": "mission-control",
+                "kanban_task_id": task_id,
+                "goal_contract_id": "goal-linked",
+                "expected_branch": "mc-kanban-linkage-v1",
+                "transcript": "secret envelope transcript",
+            },
+        )
+    )
+
+    response = client.get("/api/plugins/mission-control-governance/task-control-envelopes")
+
+    assert response.status_code == 200
+    item = response.json()["task_control_envelopes"][0]
+    assert item["linked_kanban_task"] == {
+        "link_state": "linked",
+        "board_id": "mission-control",
+        "board_name": "Mission Control",
+        "task_id": task_id,
+        "task_title": "Implement linkage",
+        "task_status": "ready",
+        "task_workspace": "hermes-agent",
+        "task_branch": "mc-kanban-linkage-v1",
+        "linked_goal_contract_id": "goal-linked",
+        "linked_task_control_envelope_id": "tce-linked",
+        "reasons": [],
+    }
+    assert "metadata" not in str(item).lower()
+    assert "secret envelope transcript" not in str(item)
+
+
+def test_records_endpoint_returns_goal_contract_linked_kanban_task_state(
+    plugin_api,
+    client,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setenv("HERMES_KANBAN_HOME", str(tmp_path / "kanban-home"))
+    from hermes_cli import kanban_db
+
+    kanban_db.init_db(board="mission-control")
+    with kanban_db.connect(board="mission-control") as conn:
+        task_id = kanban_db.create_task(
+            conn,
+            title="Goal task",
+            body="Visible goal-linked task state only.",
+            created_by="test",
+            board="mission-control",
+        )
+
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(
+        GoalContract(
+            goal_id="goal-linked",
+            statement="Display the linked Kanban identity.",
+            metadata={
+                "kanban_board_id": "mission-control",
+                "kanban_task_id": task_id,
+                "raw_context": "secret goal context",
+            },
+        )
+    )
+
+    response = client.get("/api/plugins/mission-control-governance/records")
+
+    assert response.status_code == 200
+    record = response.json()["records"][0]["record"]
+    assert record["linked_kanban_task"]["link_state"] == "linked"
+    assert record["linked_kanban_task"]["board_id"] == "mission-control"
+    assert record["linked_kanban_task"]["task_id"] == task_id
+    assert record["linked_kanban_task"]["task_title"] == "Goal task"
+    assert record["linked_kanban_task"]["linked_goal_contract_id"] == "goal-linked"
+    assert "metadata" not in str(record).lower()
+    assert "secret goal context" not in str(record)
+
+
+def test_api_linked_kanban_payload_is_display_safe_for_dashboard(
+    plugin_api,
+    client,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setenv("HERMES_KANBAN_HOME", str(tmp_path / "kanban-home"))
+    from hermes_cli import kanban_db
+
+    kanban_db.init_db(board="mission-control")
+    with kanban_db.connect(board="mission-control") as conn:
+        task_id = kanban_db.create_task(
+            conn,
+            title="Task \x1b[31mSECRET_TOKEN=sk-test-fake\n" + ("x" * 500),
+            body="Visible task state only.",
+            created_by="test",
+            workspace_kind="worktree",
+            workspace_path="/home/jenny/.secrets/project",
+            branch_name="feature/SECRET_TOKEN=sk-test-fake\n" + ("x" * 500),
+            board="mission-control",
+        )
+
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(
+        TaskControlEnvelope(
+            envelope_id="tce-dashboard-safe",
+            active_lane="Mission Control / Kanban display-only linkage",
+            mode="read-only display",
+            current_repo="/different/project",
+            metadata={
+                "kanban_board_id": "mission-control",
+                "kanban_task_id": task_id,
+                "goal_contract_id": "goal-dashboard-safe",
+                "expected_branch": "main",
+                "raw_context": "secret raw metadata",
+            },
+        )
+    )
+
+    response = client.get("/api/plugins/mission-control-governance/start-gate")
+
+    assert response.status_code == 200
+    linked = response.json()["envelope"]["linked_kanban_task"]
+    flattened = str(linked)
+    assert linked["link_state"] == "scope_mismatch"
+    assert linked["task_workspace"] == "[workspace path hidden]"
+    assert "\x1b" not in flattened
+    assert "\n" not in flattened
+    assert "sk-test-fake" not in flattened
+    assert "SECRET_TOKEN" not in flattened
+    assert "/home/jenny/.secrets/project" not in flattened
+    assert "metadata" not in flattened.lower()
+    assert "secret raw metadata" not in flattened
+    assert all(len(reason) <= 120 for reason in linked["reasons"])
+
+
 def test_start_gate_checks_endpoint_is_descriptive_bounded_and_metadata_safe(plugin_api, client):
     store = JsonlRecordStore(plugin_api.record_store_path())
     for index in range(12):
@@ -1255,6 +1416,9 @@ def test_dashboard_bundle_registers_read_only_tab_only():
     assert "Operator Action Queue" in bundle
     assert "Task Control Envelopes" in bundle
     assert "Start Gate Checks" in bundle
+    assert "formatLinkedKanbanTask" in bundle
+    assert "linked_kanban_task" in bundle
+    assert "Kanban:" in bundle
     assert "/api/plugins/mission-control-governance/records?limit=25" in bundle
     assert "/api/plugins/mission-control-governance/schema" in bundle
     assert "RECORD_DETAIL_URL" in bundle
