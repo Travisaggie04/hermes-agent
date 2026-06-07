@@ -137,6 +137,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/summary": {"GET"},
         "/start-gate": {"GET"},
         "/start-gate/evaluate": {"POST"},
+        "/lane-preflight/evaluate": {"POST"},
         "/task-control-envelopes": {"GET"},
         "/start-gate-checks": {"GET"},
         "/approval-slices": {"GET"},
@@ -169,6 +170,10 @@ def test_api_routes_are_get_only(plugin_api, client):
     for method in ("get", "put", "patch", "delete"):
         response = getattr(client, method)(
             "/api/plugins/mission-control-governance/start-gate/evaluate"
+        )
+        assert response.status_code == 405
+        response = getattr(client, method)(
+            "/api/plugins/mission-control-governance/lane-preflight/evaluate"
         )
         assert response.status_code == 405
 
@@ -561,6 +566,252 @@ def test_start_gate_evaluate_does_not_call_tools_subprocess_network_or_git(
     )
 
     assert response.status_code == 200
+    for forbidden in (
+        "subprocess",
+        "Popen",
+        "os.system",
+        "socket",
+        "requests",
+        "httpx",
+        "urllib",
+        "git",
+        "JsonlRecordStore",
+        "record_store_path",
+        ".append(",
+        ".write(",
+        "open(",
+    ):
+        assert forbidden not in source
+
+
+def test_lane_preflight_evaluate_returns_compact_dry_run_result(plugin_api, client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/lane-preflight/evaluate",
+        json={},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["default_off"] is True
+    assert payload["dry_run_only"] is True
+    assert payload["enforces_runtime"] is False
+    assert payload["source"] == "fixed_lane_start_sample"
+    assert payload["stored"] is False
+    assert payload["input_mode"] == "bounded_fixed_sample"
+    assert payload["linked_kanban_task"] == {
+        "link_state": "missing_link",
+        "board_id": "",
+        "board_name": "",
+        "task_id": "",
+        "task_title": "",
+        "task_status": "",
+        "task_workspace": "",
+        "task_branch": "",
+        "linked_goal_contract_id": "",
+        "linked_task_control_envelope_id": "",
+        "reasons": [],
+    }
+    assert payload["decision_state"] == "pass"
+    assert payload["would_block"] is False
+    assert payload["would_require_approval"] is False
+    assert isinstance(payload["reasons"], list)
+    assert payload["blocked_actions"] == []
+    assert payload["required_approvals"] == []
+    assert "supported_input_fields" not in payload
+    assert "start_gate_check" not in payload
+    assert plugin_api.record_store_path().exists() is False
+
+
+def test_lane_preflight_evaluate_includes_safe_linked_kanban_identity_when_available(
+    plugin_api,
+    client,
+    monkeypatch,
+):
+    from mission_control.kanban_linkage import ObservedKanbanTaskState
+
+    monkeypatch.setattr(
+        plugin_api,
+        "_sample_lane_preflight_envelope",
+        lambda: TaskControlEnvelope(
+            envelope_id="tce-lane-preflight-linked",
+            active_lane="Lane preflight linked identity",
+            mode="display only",
+            current_repo="/work/hermes-agent",
+            metadata={
+                "kanban_board_id": "mission-control",
+                "kanban_task_id": "task-linked",
+                "goal_contract_id": "goal-linked",
+                "expected_branch": "pr-p-lane-preflight-result-visibility",
+                "raw_context": "secret raw request metadata",
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        "mission_control.kanban_linkage.read_observed_kanban_task",
+        lambda link: (
+            ObservedKanbanTaskState(
+                board_id=link.board_id,
+                task_id=link.task_id,
+                title="Linked lane preflight task",
+                status="ready",
+                workspace_path="/work/hermes-agent",
+                branch_name="pr-p-lane-preflight-result-visibility",
+            ),
+            "",
+        ),
+    )
+    monkeypatch.setattr(
+        "mission_control.kanban_linkage.read_kanban_board_name",
+        lambda board_id: "Mission Control",
+    )
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/lane-preflight/evaluate",
+        json={},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["dry_run_only"] is True
+    assert payload["default_off"] is True
+    assert payload["enforces_runtime"] is False
+    assert payload["stored"] is False
+    assert payload["linked_kanban_task"] == {
+        "link_state": "linked",
+        "board_id": "mission-control",
+        "board_name": "Mission Control",
+        "task_id": "task-linked",
+        "task_title": "Linked lane preflight task",
+        "task_status": "ready",
+        "task_workspace": "hermes-agent",
+        "task_branch": "pr-p-lane-preflight-result-visibility",
+        "linked_goal_contract_id": "goal-linked",
+        "linked_task_control_envelope_id": "tce-lane-preflight-linked",
+        "reasons": [],
+    }
+    flattened = str(payload)
+    assert "metadata" not in flattened.lower()
+    assert "secret raw request metadata" not in flattened
+
+
+def test_lane_preflight_linked_kanban_identity_uses_shared_display_safety(
+    plugin_api,
+    client,
+    monkeypatch,
+):
+    from mission_control.kanban_linkage import ObservedKanbanTaskState
+
+    unsafe = "\x1b[31mSECRET_TOKEN=sk-test-fake\n" + ("x" * 500)
+    monkeypatch.setattr(
+        plugin_api,
+        "_sample_lane_preflight_envelope",
+        lambda: TaskControlEnvelope(
+            envelope_id="tce-" + unsafe,
+            active_lane="Lane preflight linked identity",
+            mode="display only",
+            current_repo="/different/workspace",
+            metadata={
+                "kanban_board_id": "mission-control",
+                "kanban_task_id": "task-linked",
+                "goal_contract_id": "goal-" + unsafe,
+                "expected_branch": "main",
+                "raw_context": "secret raw request metadata",
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        "mission_control.kanban_linkage.read_observed_kanban_task",
+        lambda link: (
+            ObservedKanbanTaskState(
+                board_id=link.board_id,
+                task_id=link.task_id,
+                title="Task " + unsafe,
+                status="ready\nqueued",
+                workspace_path="/home/jenny/.secrets/project",
+                branch_name="feature/" + unsafe,
+            ),
+            "",
+        ),
+    )
+    monkeypatch.setattr(
+        "mission_control.kanban_linkage.read_kanban_board_name",
+        lambda board_id: "Mission Control " + unsafe,
+    )
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/lane-preflight/evaluate",
+        json={
+            "metadata": {
+                "kanban_task_id": "raw-body-task-id",
+                "token": "SECRET_TOKEN=sk-body-fake",
+            },
+            "current_repo": "/home/jenny/.hidden/raw-body",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    linked = payload["linked_kanban_task"]
+    flattened = str(linked)
+    assert linked["link_state"] == "scope_mismatch"
+    assert linked["task_workspace"] == "[workspace path hidden]"
+    assert "\x1b" not in flattened
+    assert "\n" not in flattened
+    assert "sk-test-fake" not in flattened
+    assert "SECRET_TOKEN" not in flattened
+    assert "/home/jenny/.secrets/project" not in flattened
+    assert "raw-body-task-id" not in str(payload)
+    assert "sk-body-fake" not in str(payload)
+    assert "/home/jenny/.hidden/raw-body" not in str(payload)
+    assert all(len(reason) <= 120 for reason in linked["reasons"])
+
+
+def test_lane_preflight_evaluate_does_not_expose_raw_metadata(client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/lane-preflight/evaluate",
+        json={
+            "metadata": {
+                "transcript": "secret transcript value",
+                "raw_context": "secret raw context value",
+            },
+            "requested_actions": ["deploy Mission Control"],
+        },
+    )
+
+    assert response.status_code == 200
+    lowered = str(response.json()).lower()
+    assert "metadata" not in lowered
+    assert "secret transcript value" not in lowered
+    assert "secret raw context value" not in lowered
+    assert "deploy mission control" not in lowered
+
+
+def test_lane_preflight_evaluate_does_not_write_records_or_mutate_runtime_surfaces(
+    plugin_api,
+    client,
+):
+    records_path = plugin_api.record_store_path()
+    before_exists = records_path.exists()
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/lane-preflight/evaluate",
+        json={},
+    )
+    source = "\n".join(
+        inspect.getsource(item)
+        for item in (
+            plugin_api.lane_preflight_evaluate,
+            plugin_api._lane_preflight_visibility_payload,
+            plugin_api._sample_lane_preflight_request,
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.json()["stored"] is False
+    assert records_path.exists() is before_exists
     for forbidden in (
         "subprocess",
         "Popen",
@@ -1408,6 +1659,7 @@ def test_dashboard_bundle_registers_read_only_tab_only():
     assert "/api/plugins/mission-control-governance/summary" in bundle
     assert "/api/plugins/mission-control-governance/start-gate" in bundle
     assert "/api/plugins/mission-control-governance/start-gate/evaluate" in bundle
+    assert "/api/plugins/mission-control-governance/lane-preflight/evaluate" in bundle
     assert "/api/plugins/mission-control-governance/task-control-envelopes" in bundle
     assert "/api/plugins/mission-control-governance/start-gate-checks" in bundle
     assert "/api/plugins/mission-control-governance/approval-slices" in bundle
@@ -1448,6 +1700,40 @@ def test_dashboard_start_gate_evaluator_panel_is_bounded_display_only():
     assert "START_GATE_EVALUATE_URL" in bundle
     assert "postJSON(START_GATE_EVALUATE_URL, SAMPLE_EVALUATOR_ENVELOPE)" in bundle
     assert bundle.count("/api/plugins/mission-control-governance/start-gate/evaluate") == 1
+    assert re.findall(r'method:\s*"([A-Z]+)"', bundle) == ["POST"]
+
+    for token in (
+        "textarea",
+        "contenteditable",
+        "conversation_history",
+        "conversationhistory",
+        "transcript",
+        "full-text",
+        "fulltext",
+        "localstorage",
+        "sessionstorage",
+    ):
+        assert token not in lowered
+    for control in ("approve", "reject", "execute", "deny"):
+        assert not re.search(r"<button[^>]*>[^<]*" + control, lowered)
+        assert control + "(" not in lowered
+
+
+def test_dashboard_lane_preflight_panel_is_bounded_display_only():
+    bundle = (PLUGIN_DIR / "dashboard" / "dist" / "index.js").read_text()
+    lowered = bundle.lower()
+
+    assert "Lane Preflight" in bundle
+    assert "LANE_PREFLIGHT_EVALUATE_URL" in bundle
+    assert "postJSON(LANE_PREFLIGHT_EVALUATE_URL, {})" in bundle
+    assert "default-off" in lowered
+    assert "dry-run" in lowered
+    assert "no runtime enforcement" in lowered
+    assert "would_block" in bundle
+    assert "would_require_approval" in bundle
+    assert "Linked Kanban task" in bundle
+    assert "formatLinkedKanbanTask(lanePreflight.linked_kanban_task)" in bundle
+    assert bundle.count("/api/plugins/mission-control-governance/lane-preflight/evaluate") == 1
     assert re.findall(r'method:\s*"([A-Z]+)"', bundle) == ["POST"]
 
     for token in (

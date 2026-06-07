@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from hermes_constants import get_hermes_home
+from mission_control.lane_preflight import run_lane_start_preflight
 from mission_control.records.errors import RecordStoreError
 from mission_control.records.models import RECORD_TYPES
 from mission_control.kanban_linkage import linked_kanban_task_payload
@@ -526,6 +527,69 @@ def _start_gate_decision_payload(check: StartGateCheck) -> dict[str, Any]:
     }
 
 
+def _sample_lane_preflight_envelope() -> TaskControlEnvelope:
+    return TaskControlEnvelope(
+        envelope_id="lane-preflight-fixed-sample",
+        active_lane="PR-P read-only lane-preflight result visibility",
+        mode="bounded implementation in a new clean worktree only",
+        allowed_actions=(
+            "add read-only lane preflight visibility",
+            "run targeted tests",
+        ),
+        forbidden_actions=(
+            "live enforcement",
+            "tool execution",
+            "approval execution",
+            "persistent writes",
+            "broad context loading",
+        ),
+        stop_condition="Stop after draft PR status report.",
+        report_requirements=(
+            "files changed",
+            "tests run",
+            "safety confirmation",
+        ),
+        approval_required=False,
+        approval_slice_ids=(),
+        token_context_policy="compact fixed sample only",
+    )
+
+
+def _sample_lane_preflight_request() -> dict[str, Any]:
+    envelope = _sample_lane_preflight_envelope()
+    return {
+        "active_lane": envelope.active_lane,
+        "mode": envelope.mode,
+        "allowed_actions": list(envelope.allowed_actions),
+        "forbidden_actions": list(envelope.forbidden_actions),
+        "stop_condition": envelope.stop_condition,
+        "report_requirements": list(envelope.report_requirements),
+        "repo_target": "Travisaggie04/hermes-agent",
+        "branch": "pr-p-lane-preflight-result-visibility",
+        "worktree_state": "clean sample",
+        "token_context_policy": envelope.token_context_policy,
+        "requested_actions": [
+            "add read-only lane preflight visibility",
+        ],
+        "approval_required": envelope.approval_required,
+        "approval_slice_ids": list(envelope.approval_slice_ids),
+    }
+
+
+def _lane_preflight_visibility_payload(result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "decision_state": str(result.get("decision_state") or ""),
+        "would_block": bool(result.get("would_block", False)),
+        "would_require_approval": bool(result.get("would_require_approval", False)),
+        "reasons": _bounded_text_list(result.get("reasons")),
+        "blocked_actions": _bounded_text_list(result.get("blocked_actions")),
+        "required_approvals": _bounded_text_list(result.get("required_approvals")),
+        "default_off": bool(result.get("default_off", True)),
+        "dry_run_only": bool(result.get("dry_run_only", True)),
+        "enforces_runtime": bool(result.get("enforces_runtime", False)),
+    }
+
+
 def _latest_mission_with_items(field_name: str) -> tuple[tuple[int, Any] | None, str, str | None]:
     missions, store_status, error = _load_latest_records_with_state(MissionBrief, limit=10)
     for index, record in reversed(missions):
@@ -753,6 +817,24 @@ async def start_gate_evaluate(request: Request) -> dict[str, Any]:
         "source": "proposed_envelope",
         "stored": False,
         "decision": _start_gate_decision_payload(check),
+    }
+
+
+@router.post("/lane-preflight/evaluate")
+async def lane_preflight_evaluate() -> dict[str, Any]:
+    envelope = _sample_lane_preflight_envelope()
+    result = run_lane_start_preflight(_sample_lane_preflight_request())
+    return {
+        **INERT_FLAGS,
+        "source": "fixed_lane_start_sample",
+        "stored": False,
+        "input_mode": "bounded_fixed_sample",
+        "linked_kanban_task": linked_kanban_task_payload(
+            envelope,
+            record_id=envelope.envelope_id,
+            include_missing=True,
+        ),
+        **_lane_preflight_visibility_payload(result),
     }
 
 
