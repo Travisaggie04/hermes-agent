@@ -55,6 +55,7 @@
 .mcg-stat,
 .mcg-start-card,
 .mcg-lane-preflight-card,
+.mcg-model-picker-card,
 .mcg-envelope-card,
 .mcg-check-card,
 .mcg-approval-card,
@@ -251,6 +252,66 @@
   color: hsl(var(--destructive));
   font-size: 13px;
   margin: 0;
+}
+
+.mcg-model-warnings,
+.mcg-model-grid,
+.mcg-model-row,
+.mcg-model-title,
+.mcg-model-pills,
+.mcg-model-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mcg-model-warnings {
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.mcg-model-warnings span,
+.mcg-model-fields span {
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.mcg-model-grid {
+  gap: 10px;
+}
+
+.mcg-model-row {
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.mcg-model-title strong {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.mcg-model-title code {
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.mcg-model-pills {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mcg-model-pill {
+  border: 1px solid hsl(var(--border));
+  border-radius: 999px;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  padding: 3px 8px;
 }
 
 .mcg-table {

@@ -13,6 +13,7 @@
   const START_GATE_URL = "/api/plugins/mission-control-governance/start-gate";
   const START_GATE_EVALUATE_URL = "/api/plugins/mission-control-governance/start-gate/evaluate";
   const LANE_PREFLIGHT_EVALUATE_URL = "/api/plugins/mission-control-governance/lane-preflight/evaluate";
+  const MODEL_REGISTRY_URL = "/api/plugins/mission-control-governance/model-registry";
   const TASK_CONTROL_ENVELOPES_URL = "/api/plugins/mission-control-governance/task-control-envelopes";
   const START_GATE_CHECKS_URL = "/api/plugins/mission-control-governance/start-gate-checks";
   const APPROVAL_SLICES_URL = "/api/plugins/mission-control-governance/approval-slices";
@@ -118,6 +119,15 @@
     return h("pre", { className: "mcg-json" }, JSON.stringify(props.value || {}, null, 2));
   }
 
+  function listText(value) {
+    if (!Array.isArray(value) || value.length === 0) return "None";
+    return value.join(", ");
+  }
+
+  function boolText(value) {
+    return value ? "true" : "false";
+  }
+
   function GovernancePage() {
     const useState = hooks.useState;
     const useEffect = hooks.useEffect;
@@ -127,6 +137,7 @@
       startGate: null,
       evaluator: null,
       lanePreflight: null,
+      modelRegistry: null,
       envelopes: null,
       checks: null,
       approvals: null,
@@ -150,6 +161,7 @@
         getJSON(START_GATE_URL),
         postJSON(START_GATE_EVALUATE_URL, SAMPLE_EVALUATOR_ENVELOPE),
         postJSON(LANE_PREFLIGHT_EVALUATE_URL, {}),
+        getJSON(MODEL_REGISTRY_URL),
         getJSON(TASK_CONTROL_ENVELOPES_URL),
         getJSON(START_GATE_CHECKS_URL),
         getJSON(APPROVAL_SLICES_URL),
@@ -166,13 +178,14 @@
             startGate: result[1],
             evaluator: result[2],
             lanePreflight: result[3],
-            envelopes: result[4],
-            checks: result[5],
-            approvals: result[6],
-            evidence: result[7],
-            actions: result[8],
-            rows: (result[9] && result[9].records) || [],
-            schema: result[10],
+            modelRegistry: result[4],
+            envelopes: result[5],
+            checks: result[6],
+            approvals: result[7],
+            evidence: result[8],
+            actions: result[9],
+            rows: (result[10] && result[10].records) || [],
+            schema: result[11],
             detail: null,
             detailLoading: false,
             detailError: "",
@@ -188,6 +201,7 @@
             startGate: null,
             evaluator: null,
             lanePreflight: null,
+            modelRegistry: null,
             envelopes: null,
             checks: null,
             approvals: null,
@@ -240,6 +254,8 @@
     const evaluator = data.evaluator || {};
     const evaluatorDecision = evaluator.decision || {};
     const lanePreflight = data.lanePreflight || {};
+    const modelRegistry = data.modelRegistry || {};
+    const modelRows = modelRegistry.model_registry || [];
     const envelope = startGate.envelope || {};
     const envelopes = data.envelopes || {};
     const checks = data.checks || {};
@@ -432,6 +448,52 @@
               )
             )
           ) : null
+        )
+      ),
+      h(C.Card, { className: "mcg-model-picker-card" },
+        h(C.CardContent, { className: "mcg-panel-body" },
+          h("div", { className: "mcg-panel-heading" },
+            h("div", { className: "mcg-panel-title" }, "Model Picker"),
+            h("span", { className: "mcg-badge" }, "Display-only / routing disabled")
+          ),
+          h("p", { className: "mcg-muted" }, "Read-only view of governed model registry policy. No execution controls, provider calls, or credential checks are available here."),
+          h("div", { className: "mcg-model-warnings" },
+            h("span", null, "Waha requires explicit approved models."),
+            h("span", null, "Free-cloud and unknown models are blocked for Waha until approved."),
+            h("span", null, "Verifier roles stay blocked until explicitly qualified."),
+            h("span", null, "routing_enabled=false")
+          ),
+          data.loading
+            ? h("p", { className: "mcg-muted" }, "Loading model registry...")
+            : modelRows.length === 0
+              ? h("p", { className: "mcg-muted" }, "No model registry records found.")
+              : h("div", { className: "mcg-model-grid" },
+                modelRows.map(function (model, index) {
+                  return h("div", { className: "mcg-model-row", key: model.model_id || index },
+                    h("div", { className: "mcg-model-title" },
+                      h("strong", null, model.display_name || model.model_id || "Model policy"),
+                      h("code", null, model.model_id || "model-id-missing")
+                    ),
+                    h("div", { className: "mcg-model-pills" },
+                      h("span", { className: "mcg-model-pill" }, "provider: " + (model.provider_type || "unknown")),
+                      h("span", { className: "mcg-model-pill" }, "mode: " + (model.execution_mode || "unknown")),
+                      h("span", { className: "mcg-model-pill" }, "cost: " + (model.cost_class || "unknown")),
+                      h("span", { className: "mcg-model-pill" }, "privacy: " + (model.privacy_class || "unknown")),
+                      h("span", { className: "mcg-model-pill" }, "routing_enabled=" + boolText(model.routing_enabled)),
+                      h("span", { className: "mcg-model-pill" }, "allowed_for_waha=" + boolText(model.allowed_for_waha)),
+                      h("span", { className: "mcg-model-pill" }, "verifier_allowed=" + boolText(model.verifier_allowed)),
+                      h("span", { className: "mcg-model-pill" }, "fallback_allowed=" + boolText(model.fallback_allowed))
+                    ),
+                    h("div", { className: "mcg-model-fields" },
+                      h("span", null, "roles: " + listText(model.suitable_roles)),
+                      h("span", null, "allowed domains: " + listText(model.allowed_domains)),
+                      h("span", null, "forbidden domains: " + listText(model.forbidden_domains)),
+                      h("span", null, "unresolved: " + listText(model.unresolved_before_routing)),
+                      h("span", null, "notes: " + (model.notes || "No notes"))
+                    )
+                  );
+                })
+              )
         )
       ),
       h("div", { className: "mcg-summary-panels" },
