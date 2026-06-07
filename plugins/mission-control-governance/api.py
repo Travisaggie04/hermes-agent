@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from hermes_constants import get_hermes_home
 from mission_control.domain_governance import get_domain_governance_policies
+from mission_control.model_registry import get_model_registry_records
 from mission_control.lane_preflight import run_lane_start_preflight
 from mission_control.records.errors import RecordStoreError
 from mission_control.records.models import RECORD_TYPES
@@ -762,6 +763,19 @@ async def start_gate_checks() -> dict[str, Any]:
         "source": "StartGateCheck",
         "count": len(summaries),
         "start_gate_checks": summaries,
+    }
+
+
+@router.get("/model-registry")
+async def model_registry() -> dict[str, Any]:
+    records = list(get_model_registry_records())
+    return {
+        **INERT_FLAGS,
+        "routing_enabled": False,
+        "display_only": True,
+        "source": "mission_control.model_registry",
+        "count": len(records),
+        "model_registry": records,
     }
 
 
