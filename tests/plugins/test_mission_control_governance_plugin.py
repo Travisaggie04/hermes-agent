@@ -140,6 +140,8 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/lane-preflight/evaluate": {"POST"},
         "/global-resource-guard": {"GET"},
         "/global-resource-guard/evaluate": {"POST"},
+        "/storage-guard": {"GET"},
+        "/storage-guard/evaluate": {"POST"},
         "/model-registry": {"GET"},
         "/domain-governance": {"GET"},
         "/task-control-envelopes": {"GET"},
@@ -157,6 +159,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/summary",
         "/start-gate",
         "/global-resource-guard",
+        "/storage-guard",
         "/model-registry",
         "/domain-governance",
         "/task-control-envelopes",
@@ -185,6 +188,10 @@ def test_api_routes_are_get_only(plugin_api, client):
         assert response.status_code == 405
         response = getattr(client, method)(
             "/api/plugins/mission-control-governance/global-resource-guard/evaluate"
+        )
+        assert response.status_code == 405
+        response = getattr(client, method)(
+            "/api/plugins/mission-control-governance/storage-guard/evaluate"
         )
         assert response.status_code == 405
 
@@ -1261,6 +1268,63 @@ def test_global_resource_guard_dry_run_endpoint_uses_caller_supplied_state_only(
     assert "route tasks to models" in payload["blocked_actions"]
     assert "explicit dispatch lane approval" in payload["required_approvals"]
     assert "storage_delta_required_before_done" in payload["unresolved_policy_fields"]
+
+
+def test_storage_guard_endpoint_exposes_inert_dry_run_policy(client):
+    response = client.get("/api/plugins/mission-control-governance/storage-guard")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["enforcement_enabled"] is False
+    assert payload["dry_run_only"] is True
+    assert payload["display_only"] is True
+    assert payload["source"] == "mission_control.storage_guard"
+    assert payload["guard"]["guard_id"] == "storage_guard_v1"
+    assert payload["guard"]["artifact_manifest_rules"]["artifact_manifest_required_before_done"] is True
+    assert payload["guard"]["storage_delta_rules"]["storage_delta_required_before_done"] is True
+    assert payload["guard"]["archive_delete_rules"]["delete_forbidden_without_manifest"] is True
+    assert payload["guard"]["cloud_archive_policy"]["no_cloud_upload_in_dry_run"] is True
+    assert payload["guard"]["project_specific_posture"]["signal_room_video_requires_artifact_manifest_and_archive_plan"] is True
+
+
+def test_storage_guard_dry_run_endpoint_uses_caller_supplied_state_only(client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/storage-guard/evaluate",
+        json={
+            "task_marked_done": True,
+            "artifact_manifest_required": True,
+            "artifact_manifest_present": False,
+            "cloud_upload_requested": True,
+            "delete_requested": True,
+            "archive_verification_present": False,
+            "explicit_delete_lane": False,
+            "large_artifact_created": True,
+            "storage_delta_present": False,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["enforcement_enabled"] is False
+    assert payload["dry_run_only"] is True
+    assert payload["enforces_runtime"] is False
+    assert payload["stored"] is False
+    assert payload["source"] == "caller_supplied_storage_state"
+    assert payload["decision_state"] == "would_block"
+    assert payload["would_block"] is True
+    assert "task marked done without required artifact manifest" in payload["reasons"]
+    assert "cloud upload requested during dry-run" in payload["reasons"]
+    assert "delete requested without archive verification" in payload["reasons"]
+    assert "large artifact created without storage delta" in payload["reasons"]
+    assert "mark task done" in payload["blocked_actions"]
+    assert "upload artifacts to cloud" in payload["blocked_actions"]
+    assert "delete artifacts" in payload["blocked_actions"]
+    assert "explicit cloud upload approval" in payload["required_approvals"]
+    assert "disk_warning_threshold_percent" in payload["unresolved_policy_fields"]
 
 
 def test_model_registry_endpoint_exposes_inert_display_only_policy(client):
