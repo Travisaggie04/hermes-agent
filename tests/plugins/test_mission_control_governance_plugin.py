@@ -138,6 +138,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/start-gate": {"GET"},
         "/start-gate/evaluate": {"POST"},
         "/lane-preflight/evaluate": {"POST"},
+        "/domain-governance": {"GET"},
         "/task-control-envelopes": {"GET"},
         "/start-gate-checks": {"GET"},
         "/approval-slices": {"GET"},
@@ -1166,6 +1167,37 @@ def test_api_linked_kanban_payload_is_display_safe_for_dashboard(
     assert "metadata" not in flattened.lower()
     assert "secret raw metadata" not in flattened
     assert all(len(reason) <= 120 for reason in linked["reasons"])
+
+
+def test_domain_governance_endpoint_exposes_waha_hard_wall_policy_as_display_only(client):
+    response = client.get("/api/plugins/mission-control-governance/domain-governance")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["enforcement_enabled"] is False
+    assert payload["display_only"] is True
+    assert payload["count"] == 1
+    policy = payload["domain_policies"][0]
+    assert policy["domain_id"] == "waha"
+    assert policy["domain_type"] == "professional_engineering"
+    assert policy["isolation_level"] == "hard_wall_required"
+    assert policy["board_policy"]["required_board"] == "waha"
+    assert policy["workspace_policy"]["deny_cross_project_reads"] is True
+    assert policy["workspace_policy"]["deny_cross_project_writes"] is True
+    assert policy["profile_policy"]["allowed_profiles"] == ["wahainspection"]
+    assert policy["memory_policy"]["required_namespace"] == "waha"
+    assert policy["model_policy_placeholder"]["approved_models_required"] is True
+    assert policy["verifier_policy"]["waha_technical_verifier_required"] is True
+    assert policy["enforcement"] == {
+        "trusted_for_execution": False,
+        "inert_context_only": True,
+        "enforcement_enabled": False,
+        "display_only": True,
+    }
+    assert "allowed_roots" in policy["unresolved_required_before_enforcement"]
 
 
 def test_start_gate_checks_endpoint_is_descriptive_bounded_and_metadata_safe(plugin_api, client):

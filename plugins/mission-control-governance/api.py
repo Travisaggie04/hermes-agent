@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from hermes_constants import get_hermes_home
+from mission_control.domain_governance import get_domain_governance_policies
 from mission_control.lane_preflight import run_lane_start_preflight
 from mission_control.records.errors import RecordStoreError
 from mission_control.records.models import RECORD_TYPES
@@ -761,6 +762,19 @@ async def start_gate_checks() -> dict[str, Any]:
         "source": "StartGateCheck",
         "count": len(summaries),
         "start_gate_checks": summaries,
+    }
+
+
+@router.get("/domain-governance")
+async def domain_governance() -> dict[str, Any]:
+    policies = list(get_domain_governance_policies())
+    return {
+        **INERT_FLAGS,
+        "enforcement_enabled": False,
+        "display_only": True,
+        "source": "mission_control.domain_governance",
+        "count": len(policies),
+        "domain_policies": policies,
     }
 
 
