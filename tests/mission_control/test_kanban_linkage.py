@@ -65,6 +65,33 @@ def test_kanban_linkage_validator_reports_missing_stale_linked_and_unknown():
     assert validate_kanban_linkage(link, observed, read_error="db unavailable").state == "unknown"
 
 
+def test_linked_kanban_payload_can_report_missing_link_for_display_only_callers():
+    record = TaskControlEnvelope(
+        envelope_id="tce-missing-link",
+        active_lane="Lane preflight visibility",
+        mode="display only",
+    )
+
+    assert linked_kanban_task_payload(record, record_id=record.envelope_id) is None
+    assert linked_kanban_task_payload(
+        record,
+        record_id=record.envelope_id,
+        include_missing=True,
+    ) == {
+        "link_state": "missing_link",
+        "board_id": "",
+        "board_name": "",
+        "task_id": "",
+        "task_title": "",
+        "task_status": "",
+        "task_workspace": "",
+        "task_branch": "",
+        "linked_goal_contract_id": "",
+        "linked_task_control_envelope_id": "",
+        "reasons": [],
+    }
+
+
 def test_kanban_linkage_validator_reports_scope_mismatch_for_repo_path_and_branch():
     link = KanbanLink(board_id="default", task_id="task-123")
     observed = ObservedKanbanTaskState(

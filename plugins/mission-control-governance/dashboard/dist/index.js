@@ -397,6 +397,10 @@
               h("div", null,
                 h("span", { className: "mcg-start-label" }, "Runtime"),
                 h("strong", null, lanePreflight.enforces_runtime ? "enforcing" : "not enforcing")
+              ),
+              h("div", null,
+                h("span", { className: "mcg-start-label" }, "Linked Kanban task"),
+                h("strong", null, formatLinkedKanbanTask(lanePreflight.linked_kanban_task))
               )
             ),
           !data.loading ? h("div", { className: "mcg-evaluator-lists" },

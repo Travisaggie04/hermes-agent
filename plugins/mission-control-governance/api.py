@@ -527,36 +527,52 @@ def _start_gate_decision_payload(check: StartGateCheck) -> dict[str, Any]:
     }
 
 
-def _sample_lane_preflight_request() -> dict[str, Any]:
-    return {
-        "active_lane": "PR-P read-only lane-preflight result visibility",
-        "mode": "bounded implementation in a new clean worktree only",
-        "allowed_actions": [
+def _sample_lane_preflight_envelope() -> TaskControlEnvelope:
+    return TaskControlEnvelope(
+        envelope_id="lane-preflight-fixed-sample",
+        active_lane="PR-P read-only lane-preflight result visibility",
+        mode="bounded implementation in a new clean worktree only",
+        allowed_actions=(
             "add read-only lane preflight visibility",
             "run targeted tests",
-        ],
-        "forbidden_actions": [
+        ),
+        forbidden_actions=(
             "live enforcement",
             "tool execution",
             "approval execution",
             "persistent writes",
             "broad context loading",
-        ],
-        "stop_condition": "Stop after draft PR status report.",
-        "report_requirements": [
+        ),
+        stop_condition="Stop after draft PR status report.",
+        report_requirements=(
             "files changed",
             "tests run",
             "safety confirmation",
-        ],
+        ),
+        approval_required=False,
+        approval_slice_ids=(),
+        token_context_policy="compact fixed sample only",
+    )
+
+
+def _sample_lane_preflight_request() -> dict[str, Any]:
+    envelope = _sample_lane_preflight_envelope()
+    return {
+        "active_lane": envelope.active_lane,
+        "mode": envelope.mode,
+        "allowed_actions": list(envelope.allowed_actions),
+        "forbidden_actions": list(envelope.forbidden_actions),
+        "stop_condition": envelope.stop_condition,
+        "report_requirements": list(envelope.report_requirements),
         "repo_target": "Travisaggie04/hermes-agent",
         "branch": "pr-p-lane-preflight-result-visibility",
         "worktree_state": "clean sample",
-        "token_context_policy": "compact fixed sample only",
+        "token_context_policy": envelope.token_context_policy,
         "requested_actions": [
             "add read-only lane preflight visibility",
         ],
-        "approval_required": False,
-        "approval_slice_ids": [],
+        "approval_required": envelope.approval_required,
+        "approval_slice_ids": list(envelope.approval_slice_ids),
     }
 
 
@@ -806,12 +822,18 @@ async def start_gate_evaluate(request: Request) -> dict[str, Any]:
 
 @router.post("/lane-preflight/evaluate")
 async def lane_preflight_evaluate() -> dict[str, Any]:
+    envelope = _sample_lane_preflight_envelope()
     result = run_lane_start_preflight(_sample_lane_preflight_request())
     return {
         **INERT_FLAGS,
         "source": "fixed_lane_start_sample",
         "stored": False,
         "input_mode": "bounded_fixed_sample",
+        "linked_kanban_task": linked_kanban_task_payload(
+            envelope,
+            record_id=envelope.envelope_id,
+            include_missing=True,
+        ),
         **_lane_preflight_visibility_payload(result),
     }
 

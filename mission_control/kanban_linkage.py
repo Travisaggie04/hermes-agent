@@ -238,14 +238,19 @@ def read_kanban_board_name(board_id: str) -> str:
     return _text(metadata.get("name")) or board_id
 
 
-def linked_kanban_task_payload(record: Any, *, record_id: str = "") -> dict[str, Any] | None:
+def linked_kanban_task_payload(
+    record: Any,
+    *,
+    record_id: str = "",
+    include_missing: bool = False,
+) -> dict[str, Any] | None:
     link = extract_kanban_link(record, record_id=record_id)
     observed = None
     read_error = ""
     if link is not None:
         observed, read_error = read_observed_kanban_task(link)
     validation = validate_kanban_linkage(link, observed, envelope=record, read_error=read_error)
-    if link is None and validation.state == "missing_link":
+    if link is None and validation.state == "missing_link" and not include_missing:
         return None
     return {
         "link_state": validation.state,
