@@ -18,6 +18,7 @@ from mission_control.global_resource_guard import (
     get_global_resource_guard_policy,
 )
 from mission_control.model_registry import get_model_registry_records
+from mission_control.storage_guard import evaluate_storage_guard, get_storage_guard_policy
 from mission_control.lane_preflight import run_lane_start_preflight
 from mission_control.records.errors import RecordStoreError
 from mission_control.records.models import RECORD_TYPES
@@ -131,6 +132,65 @@ _GUARD_INT_FIELDS = {
     "kanban_worker_count",
 }
 _GUARD_LIST_FIELDS = {"recent_resource_errors"}
+_STORAGE_OBSERVED_FIELDS = {
+    "task_marked_done",
+    "artifact_manifest_required",
+    "artifact_manifest_present",
+    "artifact_heavy_lane",
+    "video_generation_requested",
+    "archive_work_requested",
+    "cleanup_requested",
+    "delete_requested",
+    "archive_verification_present",
+    "cloud_destination_supplied",
+    "checksum_or_count_verification_present",
+    "explicit_delete_lane",
+    "cloud_upload_requested",
+    "cloud_upload_explicitly_approved",
+    "large_artifact_created",
+    "storage_delta_present",
+    "before_after_disk_usage_present",
+    "large_file_delta_present",
+    "disk_used_percent",
+    "disk_warning_threshold_percent",
+    "disk_block_threshold_percent",
+    "project_domain",
+    "external_archive_or_upload_requested",
+    "waha_external_upload_approved",
+    "archive_plan_present",
+    "production_evidence_delete_requested",
+    "audit_artifact_preservation_confirmed",
+}
+_STORAGE_BOOL_FIELDS = {
+    "task_marked_done",
+    "artifact_manifest_required",
+    "artifact_manifest_present",
+    "artifact_heavy_lane",
+    "video_generation_requested",
+    "archive_work_requested",
+    "cleanup_requested",
+    "delete_requested",
+    "archive_verification_present",
+    "cloud_destination_supplied",
+    "checksum_or_count_verification_present",
+    "explicit_delete_lane",
+    "cloud_upload_requested",
+    "cloud_upload_explicitly_approved",
+    "large_artifact_created",
+    "storage_delta_present",
+    "before_after_disk_usage_present",
+    "large_file_delta_present",
+    "external_archive_or_upload_requested",
+    "waha_external_upload_approved",
+    "archive_plan_present",
+    "production_evidence_delete_requested",
+    "audit_artifact_preservation_confirmed",
+}
+_STORAGE_NUMBER_FIELDS = {
+    "disk_used_percent",
+    "disk_warning_threshold_percent",
+    "disk_block_threshold_percent",
+}
 
 router = APIRouter()
 
@@ -601,6 +661,39 @@ async def _read_guard_observed_json_body(request: Request) -> dict[str, Any]:
     return _compact_guard_observed_state(payload)
 
 
+def _compact_storage_observed_state(payload: dict[str, Any]) -> dict[str, Any]:
+    compact: dict[str, Any] = {}
+    for key in sorted(_STORAGE_OBSERVED_FIELDS):
+        if key not in payload:
+            continue
+        if key in _STORAGE_BOOL_FIELDS:
+            compact[key] = payload[key] is True
+        elif key in _STORAGE_NUMBER_FIELDS:
+            try:
+                compact[key] = float(payload[key])
+            except (TypeError, ValueError):
+                compact[key] = 0.0
+        else:
+            compact[key] = _bounded_text(payload[key])
+    return compact
+
+
+async def _read_storage_observed_json_body(request: Request) -> dict[str, Any]:
+    content_type = request.headers.get("content-type", "")
+    if content_type and "application/json" not in content_type.lower():
+        raise HTTPException(status_code=415, detail="JSON body required")
+    body = await request.body()
+    if len(body) > MAX_EVALUATION_BODY_BYTES:
+        raise HTTPException(status_code=413, detail="evaluation payload is too large")
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="malformed JSON body") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="JSON body must be an object")
+    return _compact_storage_observed_state(payload)
+
+
 def _start_gate_decision_payload(check: StartGateCheck) -> dict[str, Any]:
     return {
         "start_gate_id": check.start_gate_id,
@@ -877,6 +970,34 @@ async def global_resource_guard_evaluate(request: Request) -> dict[str, Any]:
         "dry_run_only": True,
         "display_only": True,
         "source": "caller_supplied_observed_state",
+        "stored": False,
+        **result,
+    }
+
+
+@router.get("/storage-guard")
+async def storage_guard() -> dict[str, Any]:
+    guard = get_storage_guard_policy()
+    return {
+        **INERT_FLAGS,
+        "enforcement_enabled": False,
+        "dry_run_only": True,
+        "display_only": True,
+        "source": "mission_control.storage_guard",
+        "guard": guard,
+    }
+
+
+@router.post("/storage-guard/evaluate")
+async def storage_guard_evaluate(request: Request) -> dict[str, Any]:
+    observed_state = await _read_storage_observed_json_body(request)
+    result = evaluate_storage_guard(observed_state)
+    return {
+        **INERT_FLAGS,
+        "enforcement_enabled": False,
+        "dry_run_only": True,
+        "display_only": True,
+        "source": "caller_supplied_storage_state",
         "stored": False,
         **result,
     }
