@@ -138,6 +138,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/start-gate": {"GET"},
         "/start-gate/evaluate": {"POST"},
         "/lane-preflight/evaluate": {"POST"},
+        "/model-registry": {"GET"},
         "/domain-governance": {"GET"},
         "/task-control-envelopes": {"GET"},
         "/start-gate-checks": {"GET"},
@@ -1167,6 +1168,28 @@ def test_api_linked_kanban_payload_is_display_safe_for_dashboard(
     assert "metadata" not in flattened.lower()
     assert "secret raw metadata" not in flattened
     assert all(len(reason) <= 120 for reason in linked["reasons"])
+
+
+def test_model_registry_endpoint_exposes_inert_display_only_policy(client):
+    response = client.get("/api/plugins/mission-control-governance/model-registry")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["routing_enabled"] is False
+    assert payload["display_only"] is True
+    assert payload["count"] >= 3
+    records = payload["model_registry"]
+    assert all(record["trusted_for_execution"] is False for record in records)
+    assert all(record["routing_enabled"] is False for record in records)
+    unknown = next(record for record in records if record["provider_type"] == "unknown")
+    assert unknown["allowed_for_waha"] is False
+    assert unknown["verifier_allowed"] is False
+    assert "deployment_review" in unknown["forbidden_lanes"]
+    free_cloud = next(record for record in records if record["provider_type"] == "free_cloud")
+    assert free_cloud["allowed_for_waha"] is False
+    assert "explicit_waha_model_approval" in free_cloud["unresolved_before_routing"]
 
 
 def test_domain_governance_endpoint_exposes_waha_hard_wall_policy_as_display_only(client):
