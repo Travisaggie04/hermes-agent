@@ -211,6 +211,102 @@ def test_verifier_workflow_recent_evidence_endpoint_is_bounded_and_safe(plugin_a
     assert all("observed_state" not in item for item in payload["records"])
 
 
+def test_pr_merge_verifier_gate_policy_endpoint_is_inert(client):
+    response = client.get("/api/plugins/mission-control-governance/pr-merge-verifier-gate")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["enforcement_enabled"] is False
+    assert payload["dry_run_only"] is True
+    assert payload["display_only"] is True
+    assert payload["gate"]["gate_id"] == "pr_merge_verifier_gate_v1"
+    assert payload["gate"]["future_enforcement_boundary"]["does_not_call_github"] is True
+
+
+def test_pr_merge_verifier_gate_evaluate_valid_state_stores_nothing(client):
+    body = {
+        "repo": "Travisaggie04/hermes-agent",
+        "pr_number": "36",
+        "base_branch": "pr-base/v2026.5.29.2-mission-control-records",
+        "head_commit": "abc123",
+        "packet_hash": "sha256:packet",
+        "implementer_id": "jenny-implementer",
+        "verifier_id": "jenny-verifier",
+        "verifier_evidence_record_id": "evidence-1",
+        "verifier_evidence": {
+            "record_id": "evidence-1",
+            "guard_type": "verifier_workflow",
+            "action_class": "pr_merge",
+            "repo": "Travisaggie04/hermes-agent",
+            "pr_number": "36",
+            "base_branch": "pr-base/v2026.5.29.2-mission-control-records",
+            "head_commit": "abc123",
+            "packet_hash": "sha256:packet",
+            "implementer_id": "jenny-implementer",
+            "verifier_id": "jenny-verifier",
+            "would_block": False,
+            "blocked_actions": [],
+            "dry_run_only": True,
+            "enforces_runtime": False,
+            "observed_state_raw": {"secret": "must not be exposed"},
+        },
+    }
+
+    response = client.post("/api/plugins/mission-control-governance/pr-merge-verifier-gate/evaluate", json=body)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stored"] is False
+    assert payload["decision_state"] == "warn"
+    assert payload["would_block"] is False
+    assert payload["dry_run_only"] is True
+    assert payload["enforces_runtime"] is False
+    assert "observed_state_raw" not in str(payload)
+    assert "must not be exposed" not in str(payload)
+
+
+def test_pr_merge_verifier_gate_evaluate_hash_mismatch_blocks(client):
+    body = {
+        "repo": "Travisaggie04/hermes-agent",
+        "pr_number": "36",
+        "base_branch": "pr-base/v2026.5.29.2-mission-control-records",
+        "head_commit": "abc123",
+        "packet_hash": "sha256:packet",
+        "implementer_id": "jenny-implementer",
+        "verifier_id": "jenny-verifier",
+        "verifier_evidence_record_id": "evidence-1",
+        "verifier_evidence": {
+            "record_id": "evidence-1",
+            "guard_type": "verifier_workflow",
+            "action_class": "pr_merge",
+            "repo": "Travisaggie04/hermes-agent",
+            "pr_number": "36",
+            "base_branch": "pr-base/v2026.5.29.2-mission-control-records",
+            "head_commit": "abc123",
+            "packet_hash": "sha256:different",
+            "implementer_id": "jenny-implementer",
+            "verifier_id": "jenny-verifier",
+            "would_block": False,
+            "blocked_actions": [],
+            "dry_run_only": True,
+            "enforces_runtime": False,
+        },
+    }
+
+    response = client.post("/api/plugins/mission-control-governance/pr-merge-verifier-gate/evaluate", json=body)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stored"] is False
+    assert payload["would_block"] is True
+    assert "verifier evidence packet_hash mismatch" in payload["reasons"]
+    assert payload["dry_run_only"] is True
+    assert payload["enforces_runtime"] is False
+
+
 def test_plugin_manifest_loads():
     manifest = yaml.safe_load((PLUGIN_DIR / "plugin.yaml").read_text())
     assert manifest["name"] == "mission-control-governance"
@@ -241,6 +337,8 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/storage-guard": {"GET"},
         "/storage-guard/evaluate": {"POST"},
         "/verifier-workflow": {"GET"},
+        "/pr-merge-verifier-gate": {"GET"},
+        "/pr-merge-verifier-gate/evaluate": {"POST"},
         "/verifier-workflow/evidence": {"GET"},
         "/verifier-workflow/evaluate": {"POST"},
         "/model-registry": {"GET"},
@@ -262,6 +360,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/global-resource-guard",
         "/storage-guard",
         "/verifier-workflow",
+        "/pr-merge-verifier-gate",
         "/verifier-workflow/evidence",
         "/model-registry",
         "/domain-governance",
@@ -299,6 +398,10 @@ def test_api_routes_are_get_only(plugin_api, client):
         assert response.status_code == 405
         response = getattr(client, method)(
             "/api/plugins/mission-control-governance/verifier-workflow/evaluate"
+        )
+        assert response.status_code == 405
+        response = getattr(client, method)(
+            "/api/plugins/mission-control-governance/pr-merge-verifier-gate/evaluate"
         )
         assert response.status_code == 405
 
