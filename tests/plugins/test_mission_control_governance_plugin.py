@@ -2425,6 +2425,56 @@ def test_dashboard_lane_preflight_panel_is_bounded_display_only():
         assert control + "(" not in lowered
 
 
+def test_dashboard_operating_workspace_panel_is_bounded_display_only():
+    bundle = (PLUGIN_DIR / "dashboard" / "dist" / "index.js").read_text()
+    lowered = bundle.lower()
+
+    assert "WORKSPACE_STATUS_URL" in bundle
+    assert "/api/plugins/mission-control-governance/workspace-status" in bundle
+    assert "getJSON(WORKSPACE_STATUS_URL)" in bundle
+    assert "Operating Workspace" in bundle
+    assert "Execution disabled — use approved lane." in bundle
+    assert "Accepted Baseline" in bundle
+    assert "Rollback Baseline" in bundle
+    assert "Active Lane" in bundle
+    assert "Safety Locks" in bundle
+    assert "Activity Counts" in bundle
+    assert "PR Packet / Evidence / Approval Status" in bundle
+    assert "Deployment Status" in bundle
+    assert "Stale Context Warnings" in bundle
+    assert "display_only" in bundle
+    assert "dry_run_only" in bundle
+    assert "enforcement_enabled" in bundle
+    assert "dispatch_in_gateway" in bundle
+    assert "workers_enabled" in bundle
+    assert "queue_mutation_enabled" in bundle
+    assert "model_routing_enabled" in bundle
+    assert "packet_hash" in bundle
+    assert "verifier_evidence_record_id" in bundle
+    assert "approval_record_id" in bundle
+    assert "guard_advisory_only" in bundle
+    assert "rollback_used" in bundle
+    assert "stale_context" in bundle
+
+    assert bundle.count("/api/plugins/mission-control-governance/workspace-status") == 1
+    assert "/api/plugins/mission-control-governance/workspace-status/preview" not in bundle
+    assert "postJSON(WORKSPACE_STATUS_URL" not in bundle
+    assert "setInterval" not in bundle
+    assert "setTimeout" not in bundle
+    assert "localStorage" not in bundle
+    assert "sessionStorage" not in bundle
+    assert "discord_history" not in bundle
+    assert "discord_messages" not in bundle
+    assert "github_response" not in bundle
+    assert "api_response" not in bundle
+
+    assert "button" not in lowered
+    assert "onClick: function () { selectRecord" in bundle
+    for control in ("approve", "reject", "execute", "deny", "route_model"):
+        assert not re.search(r"<button[^>]*>[^<]*" + control, lowered)
+        assert control + "(" not in lowered
+
+
 def test_operator_actions_empty_missing_store_returns_bounded_empty_payload(client):
     response = client.get("/api/plugins/mission-control-governance/operator-actions")
 
