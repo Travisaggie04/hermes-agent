@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import re
+import uuid
+from datetime import datetime, timezone
 from json import JSONDecodeError
 from collections import Counter
 from dataclasses import fields, is_dataclass
@@ -37,6 +40,7 @@ from mission_control.records import (
     OperatorAction,
     StartGateCheck,
     TaskControlEnvelope,
+    VerifierWorkflowEvidenceRecord,
 )
 
 
@@ -47,6 +51,13 @@ MAX_EVALUATION_BODY_BYTES = 8192
 MAX_EVALUATION_STRING_CHARS = 500
 MAX_EVALUATION_LIST_ITEMS = 20
 MAX_EVALUATION_METADATA_ITEMS = 8
+MAX_VERIFIER_EVIDENCE_RECORDS = 10
+_VERIFIER_EVIDENCE_FIELDS = {"source", "lane_id", "task_id", "domain_id", "action_class"}
+_SECRET_LIKE_RE = re.compile(
+    r"(?i)(sk-[a-z0-9_-]{8,}|gh[pousr]_[a-z0-9_]{8,}|"
+    r"(?:api[_-]?key|token|secret|password|bearer)\s*[:=]\s*[^\s,;]+)"
+)
+_PATH_LIKE_RE = re.compile(r"(?<!\w)(?:/[A-Za-z0-9._@%+\-]+){2,}|[A-Za-z]:\\[^\s,;]+")
 INERT_FLAGS = {
     "trusted_for_execution": False,
     "inert_context_only": True,
@@ -608,6 +619,69 @@ def _start_gate_check_summary(check: Any) -> dict[str, Any]:
     }
 
 
+def _sanitize_verifier_evidence_text(value: Any, *, max_chars: int = 240) -> str:
+    text = str(value or "")
+    text = _SECRET_LIKE_RE.sub("[redacted]", text)
+    text = _PATH_LIKE_RE.sub("[path]", text)
+    text = " ".join(text.split())
+    if len(text) > max_chars:
+        return text[:max_chars]
+    return text
+
+
+def _sanitize_verifier_evidence_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        items = [value]
+    elif isinstance(value, (list, tuple)):
+        items = list(value)
+    else:
+        items = [value]
+    return [
+        _sanitize_verifier_evidence_text(item)
+        for item in items[:MAX_EVALUATION_LIST_ITEMS]
+        if str(item).strip()
+    ]
+
+
+def _verifier_record_context(payload: dict[str, Any]) -> dict[str, str]:
+    context: dict[str, str] = {}
+    for key in sorted(_VERIFIER_EVIDENCE_FIELDS):
+        context[key] = _sanitize_verifier_evidence_text(payload.get(key), max_chars=160)
+    if not context.get("source"):
+        context["source"] = "caller_supplied_workflow_state"
+    return context
+
+
+def _verifier_evidence_summary(record: VerifierWorkflowEvidenceRecord) -> dict[str, Any]:
+    return record.to_dict()
+
+
+def _build_verifier_evidence_record(
+    payload: dict[str, Any],
+    result: dict[str, Any],
+) -> VerifierWorkflowEvidenceRecord:
+    context = _verifier_record_context(payload)
+    return VerifierWorkflowEvidenceRecord(
+        record_id=f"verifier-workflow-{uuid.uuid4().hex[:12]}",
+        created_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        source=context["source"],
+        lane_id=context["lane_id"],
+        task_id=context["task_id"],
+        domain_id=context["domain_id"],
+        action_class=context["action_class"],
+        decision_state=_sanitize_verifier_evidence_text(result.get("decision_state"), max_chars=80),
+        would_block=bool(result.get("would_block", False)),
+        reasons=tuple(_sanitize_verifier_evidence_list(result.get("reasons"))),
+        blocked_actions=tuple(_sanitize_verifier_evidence_list(result.get("blocked_actions"))),
+        required_approvals=tuple(_sanitize_verifier_evidence_list(result.get("required_approvals"))),
+        unresolved_policy_fields=tuple(_sanitize_verifier_evidence_list(result.get("unresolved_policy_fields"))),
+        dry_run_only=True,
+        enforces_runtime=False,
+    )
+
+
 def _bounded_text(value: Any) -> str:
     text = str(value or "")
     if len(text) > MAX_EVALUATION_STRING_CHARS:
@@ -753,7 +827,7 @@ def _compact_verifier_observed_state(payload: dict[str, Any]) -> dict[str, Any]:
     return compact
 
 
-async def _read_verifier_observed_json_body(request: Request) -> dict[str, Any]:
+async def _read_verifier_json_body(request: Request) -> tuple[dict[str, Any], dict[str, Any]]:
     content_type = request.headers.get("content-type", "")
     if content_type and "application/json" not in content_type.lower():
         raise HTTPException(status_code=415, detail="JSON body required")
@@ -766,7 +840,7 @@ async def _read_verifier_observed_json_body(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="malformed JSON body") from exc
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="JSON body must be an object")
-    return _compact_verifier_observed_state(payload)
+    return _compact_verifier_observed_state(payload), payload
 
 
 def _start_gate_decision_payload(check: StartGateCheck) -> dict[str, Any]:
@@ -1091,17 +1165,47 @@ async def verifier_workflow() -> dict[str, Any]:
     }
 
 
+@router.get("/verifier-workflow/evidence")
+async def verifier_workflow_evidence(limit: int = Query(10, ge=1, le=MAX_RECORDS_LIMIT)) -> dict[str, Any]:
+    records, store_status, error = _load_latest_records_with_state(
+        VerifierWorkflowEvidenceRecord,
+        limit=min(limit, MAX_VERIFIER_EVIDENCE_RECORDS),
+    )
+    summaries = [
+        {"record_index": index, **_verifier_evidence_summary(record)}
+        for index, record in records
+    ]
+    return {
+        **INERT_FLAGS,
+        "enforcement_enabled": False,
+        "dry_run_only": True,
+        "display_only": True,
+        "source": "VerifierWorkflowEvidenceRecord",
+        "store_status": store_status,
+        "error": error,
+        "count": len(summaries),
+        "records": summaries,
+    }
+
+
 @router.post("/verifier-workflow/evaluate")
 async def verifier_workflow_evaluate(request: Request) -> dict[str, Any]:
-    observed_state = await _read_verifier_observed_json_body(request)
+    observed_state, payload = await _read_verifier_json_body(request)
     result = evaluate_verifier_workflow(observed_state)
+    should_record = payload.get("evaluate_and_record") is True
+    record_payload: dict[str, Any] | None = None
+    if should_record:
+        record = _build_verifier_evidence_record(payload, result)
+        JsonlRecordStore(record_store_path()).append(record)
+        record_payload = record.to_dict()
     return {
         **INERT_FLAGS,
         "enforcement_enabled": False,
         "dry_run_only": True,
         "display_only": True,
         "source": "caller_supplied_workflow_state",
-        "stored": False,
+        "stored": should_record,
+        "record": record_payload,
         **result,
     }
 
