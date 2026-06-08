@@ -19,6 +19,10 @@ from mission_control.global_resource_guard import (
 )
 from mission_control.model_registry import get_model_registry_records
 from mission_control.storage_guard import evaluate_storage_guard, get_storage_guard_policy
+from mission_control.verifier_workflow import (
+    evaluate_verifier_workflow,
+    get_verifier_workflow_policy,
+)
 from mission_control.lane_preflight import run_lane_start_preflight
 from mission_control.records.errors import RecordStoreError
 from mission_control.records.models import RECORD_TYPES
@@ -191,6 +195,49 @@ _STORAGE_NUMBER_FIELDS = {
     "disk_warning_threshold_percent",
     "disk_block_threshold_percent",
 }
+_VERIFIER_OBSERVED_FIELDS = {
+    "implementation_step_present",
+    "independent_verification_present",
+    "decision_step_present",
+    "implementer_id",
+    "verifier_id",
+    "verifier_same_as_implementer",
+    "verification_approved",
+    "pr_ready_requested",
+    "pr_merge_requested",
+    "post_merge_verification_present",
+    "deployment_requested",
+    "deployment_readiness_packet_present",
+    "blue_green_plan_present",
+    "rollback_plan_present",
+    "post_deploy_acceptance_present",
+    "waha_work_requested",
+    "waha_technical_verifier_present",
+    "waha_hard_wall_policy_present",
+    "waha_model_assisted_work_requested",
+    "waha_approved_model_policy_present",
+    "waha_external_upload_archive_requested",
+    "waha_external_upload_archive_approved",
+    "model_router_execution_requested",
+    "model_router_dry_run_policy_passed",
+    "verifier_model_role_requested",
+    "verifier_model_qualified",
+    "unknown_or_free_cloud_model_for_protected_verification",
+    "storage_cleanup_requested",
+    "delete_requested",
+    "artifact_manifest_verified",
+    "storage_delta_verified",
+    "archive_verification_present",
+    "explicit_delete_lane",
+    "implementation_summary_present",
+    "files_changed_present",
+    "tests_run_present",
+    "safety_scan_present",
+    "verifier_verdict_present",
+    "unresolved_risks_present",
+    "next_recommended_action_present",
+}
+_VERIFIER_BOOL_FIELDS = _VERIFIER_OBSERVED_FIELDS - {"implementer_id", "verifier_id"}
 
 router = APIRouter()
 
@@ -694,6 +741,34 @@ async def _read_storage_observed_json_body(request: Request) -> dict[str, Any]:
     return _compact_storage_observed_state(payload)
 
 
+def _compact_verifier_observed_state(payload: dict[str, Any]) -> dict[str, Any]:
+    compact: dict[str, Any] = {}
+    for key in sorted(_VERIFIER_OBSERVED_FIELDS):
+        if key not in payload:
+            continue
+        if key in _VERIFIER_BOOL_FIELDS:
+            compact[key] = payload[key] is True
+        else:
+            compact[key] = _bounded_text(payload[key])
+    return compact
+
+
+async def _read_verifier_observed_json_body(request: Request) -> dict[str, Any]:
+    content_type = request.headers.get("content-type", "")
+    if content_type and "application/json" not in content_type.lower():
+        raise HTTPException(status_code=415, detail="JSON body required")
+    body = await request.body()
+    if len(body) > MAX_EVALUATION_BODY_BYTES:
+        raise HTTPException(status_code=413, detail="evaluation payload is too large")
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="malformed JSON body") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="JSON body must be an object")
+    return _compact_verifier_observed_state(payload)
+
+
 def _start_gate_decision_payload(check: StartGateCheck) -> dict[str, Any]:
     return {
         "start_gate_id": check.start_gate_id,
@@ -998,6 +1073,34 @@ async def storage_guard_evaluate(request: Request) -> dict[str, Any]:
         "dry_run_only": True,
         "display_only": True,
         "source": "caller_supplied_storage_state",
+        "stored": False,
+        **result,
+    }
+
+
+@router.get("/verifier-workflow")
+async def verifier_workflow() -> dict[str, Any]:
+    workflow = get_verifier_workflow_policy()
+    return {
+        **INERT_FLAGS,
+        "enforcement_enabled": False,
+        "dry_run_only": True,
+        "display_only": True,
+        "source": "mission_control.verifier_workflow",
+        "workflow": workflow,
+    }
+
+
+@router.post("/verifier-workflow/evaluate")
+async def verifier_workflow_evaluate(request: Request) -> dict[str, Any]:
+    observed_state = await _read_verifier_observed_json_body(request)
+    result = evaluate_verifier_workflow(observed_state)
+    return {
+        **INERT_FLAGS,
+        "enforcement_enabled": False,
+        "dry_run_only": True,
+        "display_only": True,
+        "source": "caller_supplied_workflow_state",
         "stored": False,
         **result,
     }
