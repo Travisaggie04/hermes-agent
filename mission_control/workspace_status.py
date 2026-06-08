@@ -111,16 +111,53 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
     transcripts, API responses, token-like fields, and local paths are ignored.
     """
     source = payload if isinstance(payload, dict) else {}
-    accepted = _baseline_section(_section(source, "accepted_baseline"), defaults=_DEFAULT_STATUS["accepted_baseline"])
-    rollback = _rollback_section(_section(source, "rollback_baseline"), defaults=_DEFAULT_STATUS["rollback_baseline"])
+    latest_handoff = _latest_handoff_section(_section(source, "latest_handoff"))
+    accepted_record = _accepted_baseline_record_section(_section(source, "accepted_baseline_record"))
+    accepted_source = "static_fallback"
+    if accepted_record.get("present") is True:
+        accepted_source = "record"
+        accepted_defaults = {
+            "runtime_path": accepted_record.get("runtime_path", ""),
+            "head": accepted_record.get("head", ""),
+            "status": "accepted" if not accepted_record.get("issue") or accepted_record.get("issue") == "none" else accepted_record.get("issue", "accepted"),
+        }
+        rollback_defaults = {
+            "runtime_path": accepted_record.get("rollback_runtime_path", ""),
+            "head": accepted_record.get("rollback_head", ""),
+            "clean": True,
+        }
+    elif _handoff_has_baseline(latest_handoff):
+        accepted_source = "handoff"
+        accepted_defaults = {
+            "runtime_path": latest_handoff.get("accepted_runtime_path", ""),
+            "head": latest_handoff.get("accepted_head", ""),
+            "status": "accepted",
+        }
+        rollback_defaults = {
+            "runtime_path": latest_handoff.get("rollback_runtime_path", ""),
+            "head": latest_handoff.get("rollback_head", ""),
+            "clean": True,
+        }
+    else:
+        accepted_defaults = _DEFAULT_STATUS["accepted_baseline"]
+        rollback_defaults = _DEFAULT_STATUS["rollback_baseline"]
+    baseline_override = _section(source, "accepted_baseline") if accepted_source == "static_fallback" else {}
+    rollback_override = _section(source, "rollback_baseline") if accepted_source == "static_fallback" else {}
+    accepted = _baseline_section(baseline_override, defaults=accepted_defaults)
+    rollback = _rollback_section(rollback_override, defaults=rollback_defaults)
     lane = _lane_section(_section(source, "lane"), defaults=_DEFAULT_STATUS["lane"])
     safety = _safety_section(_section(source, "safety"), defaults=_DEFAULT_STATUS["safety"])
     activity = _activity_section(_section(source, "activity"), defaults=_DEFAULT_STATUS["activity"])
+    if accepted_record.get("present") is True:
+        safety = {**safety, "dispatch_in_gateway": accepted_record.get("dispatch_in_gateway")}
+        activity = {**activity, "active_workers": 0, "active_tasks": 0, "active_runs": accepted_record.get("active_kanban", 0)}
+        lane = {**lane, "max_active_lane": accepted_record.get("max_active_lane", lane.get("max_active_lane", 1))}
     pr_gate = _pr_gate_section(_section(source, "pr_gate"), defaults=_DEFAULT_STATUS["pr_gate"])
     deployment = _deployment_section(_section(source, "deployment"), defaults=_DEFAULT_STATUS["deployment"])
-    latest_handoff = _latest_handoff_section(_section(source, "latest_handoff"))
 
     warnings: list[str] = []
+    if accepted_source == "static_fallback":
+        warnings.append("accepted_baseline_source_missing")
     accepted_head = accepted.get("head") or ""
     declared_head = lane.get("declared_baseline_head") or ""
     if not declared_head:
@@ -145,6 +182,12 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         handoff_head = latest_handoff.get("accepted_head") or ""
         if handoff_head and accepted_head and handoff_head != accepted_head:
             warnings.append("handoff_baseline_mismatch")
+        if latest_handoff.get("accepted_runtime_path") and accepted.get("runtime_path") and latest_handoff.get("accepted_runtime_path") != accepted.get("runtime_path"):
+            warnings.append("handoff_baseline_mismatch")
+        if latest_handoff.get("rollback_head") and rollback.get("head") and latest_handoff.get("rollback_head") != rollback.get("head"):
+            warnings.append("handoff_rollback_baseline_mismatch")
+        if latest_handoff.get("rollback_runtime_path") and rollback.get("runtime_path") and latest_handoff.get("rollback_runtime_path") != rollback.get("runtime_path"):
+            warnings.append("handoff_rollback_baseline_mismatch")
         if latest_handoff.get("dispatch_in_gateway") is not False:
             warnings.append("handoff_dispatch_not_false")
         if latest_handoff.get("active_lane_count", 0) > latest_handoff.get("max_active_lane", 1):
@@ -160,6 +203,8 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         **INERT_WORKSPACE_FLAGS,
         "source": "caller_supplied_or_static_display_status",
         "stored": False,
+        "accepted_baseline_source": accepted_source,
+        "accepted_baseline_record": accepted_record,
         "accepted_baseline": accepted,
         "rollback_baseline": rollback,
         "lane": lane,
@@ -176,6 +221,38 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
     }
 
 
+
+
+def _accepted_baseline_record_section(section: dict[str, Any]) -> dict[str, Any]:
+    if not section:
+        return {"present": False}
+    return {
+        "present": True,
+        "baseline_id": _safe_text(section.get("baseline_id")),
+        "recorded_at": _safe_text(section.get("recorded_at")),
+        "source": _safe_text(section.get("source")),
+        "runtime_path": _safe_text(section.get("runtime_path"), max_chars=240),
+        "head": _safe_sha(section.get("head")),
+        "rollback_runtime_path": _safe_text(section.get("rollback_runtime_path"), max_chars=240),
+        "rollback_head": _safe_sha(section.get("rollback_head")),
+        "dispatch_in_gateway": _safe_bool(section.get("dispatch_in_gateway"), default=False),
+        "active_kanban": _safe_int(section.get("active_kanban"), default=0),
+        "max_active_lane": _safe_int(section.get("max_active_lane"), default=1) or 1,
+        "issue": _safe_text(section.get("issue")),
+        "display_only": True,
+        "dry_run_only": True,
+        "enforces_runtime": False,
+    }
+
+
+def _handoff_has_baseline(handoff: dict[str, Any]) -> bool:
+    return (
+        handoff.get("present") is True
+        and bool(handoff.get("accepted_runtime_path"))
+        and bool(handoff.get("accepted_head"))
+        and bool(handoff.get("rollback_runtime_path"))
+        and bool(handoff.get("rollback_head"))
+    )
 
 def _latest_handoff_section(section: dict[str, Any]) -> dict[str, Any]:
     if not section:

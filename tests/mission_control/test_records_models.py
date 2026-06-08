@@ -8,6 +8,7 @@ from mission_control.records.models import (
     EvidenceCard,
     GoalContract,
     MissionBrief,
+    AcceptedBaselineRecord,
     OperatingWorkspaceHandoffRecord,
     OperatorAction,
     RECORD_TYPES,
@@ -486,3 +487,79 @@ def test_operating_workspace_handoff_record_sanitizes_allowlist_bounds_and_shas(
     assert "discord_messages" not in rendered
     assert "secret-token" not in rendered
     assert "github_response" not in rendered
+
+
+
+def test_accepted_baseline_record_round_trips_and_forces_inert_flags():
+    record = AcceptedBaselineRecord(
+        baseline_id="baseline-001",
+        recorded_at="2026-06-09T00:00:00Z",
+        source="operator_accepted_baseline",
+        runtime_path="/home/jenny/.hermes/hermes-runtime-handoff-8c560c7",
+        head="8c560c739606564aeeb4db464fe1989cb67a40b6",
+        rollback_runtime_path="/home/jenny/.hermes/hermes-runtime-workspaceui-d11681f",
+        rollback_head="d11681f81c7cd16a99c53649f157040b2d10a89f",
+        dispatch_in_gateway=False,
+        active_kanban=0,
+        max_active_lane=1,
+        issue="none",
+        display_only=False,
+        dry_run_only=False,
+        enforces_runtime=True,
+    )
+
+    data = record.to_dict()
+
+    assert data == {
+        "baseline_id": "baseline-001",
+        "recorded_at": "2026-06-09T00:00:00Z",
+        "source": "operator_accepted_baseline",
+        "runtime_path": "/home/jenny/.hermes/hermes-runtime-handoff-8c560c7",
+        "head": "8c560c739606564aeeb4db464fe1989cb67a40b6",
+        "rollback_runtime_path": "/home/jenny/.hermes/hermes-runtime-workspaceui-d11681f",
+        "rollback_head": "d11681f81c7cd16a99c53649f157040b2d10a89f",
+        "dispatch_in_gateway": False,
+        "active_kanban": 0,
+        "max_active_lane": 1,
+        "issue": "none",
+        "display_only": True,
+        "dry_run_only": True,
+        "enforces_runtime": False,
+    }
+    assert AcceptedBaselineRecord.from_dict(data) == record
+    assert RECORD_TYPES["AcceptedBaselineRecord"] is AcceptedBaselineRecord
+
+
+def test_accepted_baseline_record_sanitizes_bounds_shas_and_forbidden_fields():
+    record = AcceptedBaselineRecord.from_dict({
+        "baseline_id": "b" * 500,
+        "recorded_at": "2026-06-09T00:00:00Z",
+        "source": "operator",
+        "runtime_path": "/home/jenny/.hermes/hermes-runtime-handoff-8c560c7",
+        "head": "not-a-sha",
+        "rollback_runtime_path": "/home/jenny/.hermes/hermes-runtime-workspaceui-d11681f",
+        "rollback_head": "also-not-a-sha",
+        "dispatch_in_gateway": True,
+        "active_kanban": 5000,
+        "max_active_lane": 5001,
+        "issue": "x" * 500,
+        "raw_log": "forbidden",
+        "transcript": "forbidden",
+        "discord_messages": ["forbidden"],
+        "pr_body": "forbidden",
+        "github_response": {"raw": "forbidden"},
+        "token": "placeholder-token",
+        "canonical_packet_json": {"raw": "forbidden"},
+    })
+
+    data = record.to_dict()
+
+    assert len(data["baseline_id"]) <= 160
+    assert len(data["issue"]) <= 160
+    assert data["head"] == ""
+    assert data["rollback_head"] == ""
+    assert data["active_kanban"] == 999
+    assert data["max_active_lane"] == 999
+    rendered = str(data).lower()
+    for forbidden in ("raw_log", "transcript", "discord_messages", "pr_body", "github_response", "placeholder-token", "canonical_packet_json"):
+        assert forbidden not in rendered

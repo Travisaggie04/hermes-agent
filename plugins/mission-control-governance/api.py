@@ -38,6 +38,7 @@ from mission_control.records.models import RECORD_TYPES
 from mission_control.kanban_linkage import linked_kanban_task_payload
 from mission_control.start_gate import evaluate_start_gate
 from mission_control.records import (
+    AcceptedBaselineRecord,
     ApprovalSlice,
     EvidenceCard,
     GoalContract,
@@ -330,6 +331,17 @@ def _load_latest_records_with_state(
     if not records:
         return (), "empty", None
     return records, "ok", None
+
+
+def _latest_accepted_baseline_payload() -> dict[str, Any]:
+    records, _store_status, _error = _load_latest_records_with_state(
+        AcceptedBaselineRecord,
+        limit=1,
+    )
+    if not records:
+        return {}
+    _index, record = records[-1]
+    return record.to_dict()
 
 
 def _latest_handoff_payload() -> dict[str, Any]:
@@ -1337,6 +1349,9 @@ async def pr_merge_verifier_gate() -> dict[str, Any]:
 @router.get("/workspace-status")
 async def workspace_status() -> dict[str, Any]:
     payload = default_workspace_status_input()
+    latest_baseline = _latest_accepted_baseline_payload()
+    if latest_baseline:
+        payload["accepted_baseline_record"] = latest_baseline
     latest_handoff = _latest_handoff_payload()
     if latest_handoff:
         payload["latest_handoff"] = latest_handoff

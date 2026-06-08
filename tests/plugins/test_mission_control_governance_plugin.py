@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from mission_control.records import (
+    AcceptedBaselineRecord,
     ApprovalSlice,
     ArtifactRef,
     EvidenceCard,
@@ -2788,3 +2789,61 @@ def test_dashboard_operating_workspace_latest_handoff_panel_is_display_only():
     assert "sessionStorage" not in bundle
     assert not re.search(r'"(?:Approve|Reject|Execute|Run|Merge)"', bundle)
     assert "button" not in bundle.lower()
+
+
+def test_workspace_status_get_uses_latest_accepted_baseline_record_without_mutation(plugin_api, client):
+    JsonlRecordStore(plugin_api.record_store_path()).append(
+        AcceptedBaselineRecord(
+            baseline_id="baseline-001",
+            recorded_at="2026-06-09T00:00:00Z",
+            source="operator_accepted_baseline",
+            runtime_path="/home/jenny/.hermes/hermes-runtime-handoff-8c560c7",
+            head="8c560c739606564aeeb4db464fe1989cb67a40b6",
+            rollback_runtime_path="/home/jenny/.hermes/hermes-runtime-workspaceui-d11681f",
+            rollback_head="d11681f81c7cd16a99c53649f157040b2d10a89f",
+            dispatch_in_gateway=False,
+            active_kanban=0,
+            max_active_lane=1,
+            issue="none",
+        )
+    )
+
+    response = client.get("/api/plugins/mission-control-governance/workspace-status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stored"] is False
+    assert payload["accepted_baseline_source"] == "record"
+    assert payload["accepted_baseline"]["runtime_path"] == "/home/jenny/.hermes/hermes-runtime-handoff-8c560c7"
+    assert payload["accepted_baseline"]["head"] == "8c560c739606564aeeb4db464fe1989cb67a40b6"
+    assert payload["rollback_baseline"]["runtime_path"] == "/home/jenny/.hermes/hermes-runtime-workspaceui-d11681f"
+    assert payload["rollback_baseline"]["head"] == "d11681f81c7cd16a99c53649f157040b2d10a89f"
+    assert payload["display_only"] is True
+    assert payload["dry_run_only"] is True
+    assert payload["enforces_runtime"] is False
+
+
+def test_workspace_status_preview_accepts_accepted_baseline_source_but_remains_unstored(client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace-status/preview",
+        json={
+            "accepted_baseline_record": {
+                "baseline_id": "preview-baseline",
+                "runtime_path": "/home/jenny/.hermes/hermes-runtime-handoff-8c560c7",
+                "head": "8c560c739606564aeeb4db464fe1989cb67a40b6",
+                "rollback_runtime_path": "/home/jenny/.hermes/hermes-runtime-workspaceui-d11681f",
+                "rollback_head": "d11681f81c7cd16a99c53649f157040b2d10a89f",
+                "token": "placeholder-token",
+                "raw_log": "forbidden",
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stored"] is False
+    assert payload["accepted_baseline_source"] == "record"
+    assert payload["accepted_baseline"]["head"] == "8c560c739606564aeeb4db464fe1989cb67a40b6"
+    rendered = str(payload).lower()
+    assert "placeholder-token" not in rendered
+    assert "raw_log" not in rendered

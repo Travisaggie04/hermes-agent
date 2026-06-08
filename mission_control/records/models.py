@@ -908,6 +908,79 @@ def _bounded_handoff_warnings(value: Any) -> tuple[str, ...]:
 
 
 @dataclass(frozen=True)
+class AcceptedBaselineRecord:
+    baseline_id: str = ""
+    recorded_at: str = ""
+    source: str = ""
+    runtime_path: str = ""
+    head: str = ""
+    rollback_runtime_path: str = ""
+    rollback_head: str = ""
+    dispatch_in_gateway: bool = False
+    active_kanban: int = 0
+    max_active_lane: int = 1
+    issue: str = ""
+    display_only: bool = True
+    dry_run_only: bool = True
+    enforces_runtime: bool = False
+
+    record_type: ClassVar[str] = "AcceptedBaselineRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "baseline_id", _bounded_handoff_text(self.baseline_id))
+        object.__setattr__(self, "recorded_at", _bounded_handoff_text(self.recorded_at))
+        object.__setattr__(self, "source", _bounded_handoff_text(self.source))
+        object.__setattr__(self, "runtime_path", _bounded_handoff_text(self.runtime_path, _MAX_HANDOFF_PATH_CHARS))
+        object.__setattr__(self, "head", _normalize_packet_sha(self.head))
+        object.__setattr__(self, "rollback_runtime_path", _bounded_handoff_text(self.rollback_runtime_path, _MAX_HANDOFF_PATH_CHARS))
+        object.__setattr__(self, "rollback_head", _normalize_packet_sha(self.rollback_head))
+        object.__setattr__(self, "dispatch_in_gateway", self.dispatch_in_gateway is True)
+        object.__setattr__(self, "active_kanban", _bounded_handoff_int(self.active_kanban, default=0))
+        object.__setattr__(self, "max_active_lane", _bounded_handoff_int(self.max_active_lane, default=1) or 1)
+        object.__setattr__(self, "issue", _bounded_handoff_text(self.issue))
+        object.__setattr__(self, "display_only", True)
+        object.__setattr__(self, "dry_run_only", True)
+        object.__setattr__(self, "enforces_runtime", False)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "baseline_id": self.baseline_id,
+            "recorded_at": self.recorded_at,
+            "source": self.source,
+            "runtime_path": self.runtime_path,
+            "head": self.head,
+            "rollback_runtime_path": self.rollback_runtime_path,
+            "rollback_head": self.rollback_head,
+            "dispatch_in_gateway": self.dispatch_in_gateway,
+            "active_kanban": self.active_kanban,
+            "max_active_lane": self.max_active_lane,
+            "issue": self.issue,
+            "display_only": True,
+            "dry_run_only": True,
+            "enforces_runtime": False,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AcceptedBaselineRecord:
+        return cls(
+            baseline_id=data.get("baseline_id", ""),
+            recorded_at=data.get("recorded_at", ""),
+            source=data.get("source", ""),
+            runtime_path=data.get("runtime_path", ""),
+            head=data.get("head", ""),
+            rollback_runtime_path=data.get("rollback_runtime_path", ""),
+            rollback_head=data.get("rollback_head", ""),
+            dispatch_in_gateway=data.get("dispatch_in_gateway") is True,
+            active_kanban=data.get("active_kanban", 0),
+            max_active_lane=data.get("max_active_lane", 1),
+            issue=data.get("issue", ""),
+            display_only=True,
+            dry_run_only=True,
+            enforces_runtime=False,
+        )
+
+
+@dataclass(frozen=True)
 class OperatingWorkspaceHandoffRecord:
     handoff_id: str = ""
     created_at: str = ""
@@ -1015,6 +1088,7 @@ class OperatingWorkspaceHandoffRecord:
 RECORD_TYPES = {
     cls.record_type: cls
     for cls in (
+        AcceptedBaselineRecord,
         ApprovalSlice,
         PrMergeApprovalRecord,
         ArtifactRef,

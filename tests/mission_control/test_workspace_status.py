@@ -77,7 +77,7 @@ def test_workspace_status_returns_inert_display_only_flags_and_baselines():
     assert status["activity"]["active_workers"] == 0
     assert status["pr_gate"]["packet_hash_valid"] is True
     assert status["deployment"]["status"] == "accepted"
-    assert status["stale_context"]["warnings"] == []
+    assert status["stale_context"]["warnings"] == ["accepted_baseline_source_missing"]
 
 
 def test_workspace_status_warns_on_stale_baseline_dispatch_lane_and_workers():
@@ -244,3 +244,85 @@ def test_workspace_status_warns_on_handoff_baseline_dispatch_lane_and_missing_ta
     assert "handoff_dispatch_not_false" in warnings
     assert "handoff_active_lane_count_exceeds_max" in warnings
     assert "handoff_missing_target_head" in warnings
+
+
+
+def _accepted_baseline_record_payload(**overrides):
+    payload = {
+        "baseline_id": "baseline-001",
+        "recorded_at": "2026-06-09T00:00:00Z",
+        "source": "operator_accepted_baseline",
+        "runtime_path": "/home/jenny/.hermes/hermes-runtime-handoff-8c560c7",
+        "head": "8c560c739606564aeeb4db464fe1989cb67a40b6",
+        "rollback_runtime_path": "/home/jenny/.hermes/hermes-runtime-workspaceui-d11681f",
+        "rollback_head": "d11681f81c7cd16a99c53649f157040b2d10a89f",
+        "dispatch_in_gateway": False,
+        "active_kanban": 0,
+        "max_active_lane": 1,
+        "issue": "none",
+        "display_only": True,
+        "dry_run_only": True,
+        "enforces_runtime": False,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_workspace_status_uses_accepted_baseline_record_source_when_present():
+    status = build_workspace_status(_baseline_payload(accepted_baseline_record=_accepted_baseline_record_payload()))
+
+    assert status["accepted_baseline_source"] == "record"
+    assert status["accepted_baseline"]["runtime_path"] == "/home/jenny/.hermes/hermes-runtime-handoff-8c560c7"
+    assert status["accepted_baseline"]["head"] == "8c560c739606564aeeb4db464fe1989cb67a40b6"
+    assert status["rollback_baseline"]["runtime_path"] == "/home/jenny/.hermes/hermes-runtime-workspaceui-d11681f"
+    assert status["rollback_baseline"]["head"] == "d11681f81c7cd16a99c53649f157040b2d10a89f"
+    assert "accepted_baseline_source_missing" not in status["stale_context"]["warnings"]
+
+
+def test_workspace_status_uses_handoff_source_when_no_accepted_record_exists():
+    status = build_workspace_status(_baseline_payload(latest_handoff={
+        "handoff_id": "handoff-001",
+        "accepted_runtime_path": "/home/jenny/.hermes/hermes-runtime-handoff-8c560c7",
+        "accepted_head": "8c560c739606564aeeb4db464fe1989cb67a40b6",
+        "rollback_runtime_path": "/home/jenny/.hermes/hermes-runtime-workspaceui-d11681f",
+        "rollback_head": "d11681f81c7cd16a99c53649f157040b2d10a89f",
+        "dispatch_in_gateway": False,
+        "active_lane_count": 1,
+        "max_active_lane": 1,
+        "display_only": True,
+        "dry_run_only": True,
+        "enforces_runtime": False,
+    }))
+
+    assert status["accepted_baseline_source"] == "handoff"
+    assert status["accepted_baseline"]["runtime_path"] == "/home/jenny/.hermes/hermes-runtime-handoff-8c560c7"
+    assert status["accepted_baseline"]["head"] == "8c560c739606564aeeb4db464fe1989cb67a40b6"
+    assert status["rollback_baseline"]["runtime_path"] == "/home/jenny/.hermes/hermes-runtime-workspaceui-d11681f"
+    assert status["rollback_baseline"]["head"] == "d11681f81c7cd16a99c53649f157040b2d10a89f"
+
+
+def test_workspace_status_static_fallback_warns_when_no_record_or_handoff_source():
+    status = build_workspace_status(_baseline_payload())
+
+    assert status["accepted_baseline_source"] == "static_fallback"
+    assert "accepted_baseline_source_missing" in status["stale_context"]["warnings"]
+
+
+def test_workspace_status_warns_when_handoff_conflicts_with_accepted_record():
+    status = build_workspace_status(_baseline_payload(
+        accepted_baseline_record=_accepted_baseline_record_payload(),
+        latest_handoff={
+            "handoff_id": "handoff-002",
+            "accepted_runtime_path": "/home/jenny/.hermes/hermes-runtime-old",
+            "accepted_head": "d11681f81c7cd16a99c53649f157040b2d10a89f",
+            "rollback_runtime_path": "/home/jenny/.hermes/hermes-runtime-workspace-f20aa2d",
+            "rollback_head": "f20aa2da2a2e978d72f837007d8ab1b14301795b",
+            "dispatch_in_gateway": False,
+            "active_lane_count": 1,
+            "max_active_lane": 1,
+        },
+    ))
+
+    warnings = set(status["stale_context"]["warnings"])
+    assert "handoff_baseline_mismatch" in warnings
+    assert "handoff_rollback_baseline_mismatch" in warnings
