@@ -21,6 +21,10 @@ from mission_control.global_resource_guard import (
     get_global_resource_guard_policy,
 )
 from mission_control.model_registry import get_model_registry_records
+from mission_control.pr_merge_verifier_gate import (
+    evaluate_pr_merge_verifier_gate,
+    get_pr_merge_verifier_gate_policy,
+)
 from mission_control.storage_guard import evaluate_storage_guard, get_storage_guard_policy
 from mission_control.verifier_workflow import (
     evaluate_verifier_workflow,
@@ -52,6 +56,35 @@ MAX_EVALUATION_STRING_CHARS = 500
 MAX_EVALUATION_LIST_ITEMS = 20
 MAX_EVALUATION_METADATA_ITEMS = 8
 MAX_VERIFIER_EVIDENCE_RECORDS = 10
+_PR_MERGE_GATE_FIELDS = {
+    "repo",
+    "pr_number",
+    "base_branch",
+    "head_commit",
+    "packet_hash",
+    "implementer_id",
+    "verifier_id",
+    "verifier_evidence_record_id",
+    "verifier_evidence",
+}
+_PR_MERGE_GATE_EVIDENCE_FIELDS = {
+    "record_id",
+    "guard_type",
+    "action_class",
+    "repo",
+    "pr_number",
+    "base_branch",
+    "head_commit",
+    "packet_hash",
+    "implementer_id",
+    "verifier_id",
+    "would_block",
+    "blocked_actions",
+    "dry_run_only",
+    "enforces_runtime",
+}
+_PR_MERGE_GATE_BOOL_FIELDS = {"would_block", "dry_run_only", "enforces_runtime"}
+_PR_MERGE_GATE_LIST_FIELDS = {"blocked_actions"}
 _VERIFIER_EVIDENCE_FIELDS = {"source", "lane_id", "task_id", "domain_id", "action_class"}
 _SECRET_LIKE_RE = re.compile(
     r"(?i)(sk-[a-z0-9_-]{8,}|gh[pousr]_[a-z0-9_]{8,}|"
@@ -843,6 +876,50 @@ async def _read_verifier_json_body(request: Request) -> tuple[dict[str, Any], di
     return _compact_verifier_observed_state(payload), payload
 
 
+def _compact_pr_merge_gate_evidence(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    compact: dict[str, Any] = {}
+    for key in sorted(_PR_MERGE_GATE_EVIDENCE_FIELDS):
+        if key not in value:
+            continue
+        if key in _PR_MERGE_GATE_BOOL_FIELDS:
+            compact[key] = value[key] is True
+        elif key in _PR_MERGE_GATE_LIST_FIELDS:
+            compact[key] = _bounded_text_list(value[key])
+        else:
+            compact[key] = _bounded_text(value[key])
+    return compact
+
+
+def _compact_pr_merge_gate_state(payload: dict[str, Any]) -> dict[str, Any]:
+    compact: dict[str, Any] = {}
+    for key in sorted(_PR_MERGE_GATE_FIELDS):
+        if key not in payload:
+            continue
+        if key == "verifier_evidence":
+            compact[key] = _compact_pr_merge_gate_evidence(payload[key])
+        else:
+            compact[key] = _bounded_text(payload[key])
+    return compact
+
+
+async def _read_pr_merge_gate_json_body(request: Request) -> dict[str, Any]:
+    content_type = request.headers.get("content-type", "")
+    if content_type and "application/json" not in content_type.lower():
+        raise HTTPException(status_code=415, detail="JSON body required")
+    body = await request.body()
+    if len(body) > MAX_EVALUATION_BODY_BYTES:
+        raise HTTPException(status_code=413, detail="evaluation payload is too large")
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="malformed JSON body") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="JSON body must be an object")
+    return _compact_pr_merge_gate_state(payload)
+
+
 def _start_gate_decision_payload(check: StartGateCheck) -> dict[str, Any]:
     return {
         "start_gate_id": check.start_gate_id,
@@ -1162,6 +1239,34 @@ async def verifier_workflow() -> dict[str, Any]:
         "display_only": True,
         "source": "mission_control.verifier_workflow",
         "workflow": workflow,
+    }
+
+
+@router.get("/pr-merge-verifier-gate")
+async def pr_merge_verifier_gate() -> dict[str, Any]:
+    gate = get_pr_merge_verifier_gate_policy()
+    return {
+        **INERT_FLAGS,
+        "enforcement_enabled": False,
+        "dry_run_only": True,
+        "display_only": True,
+        "source": "mission_control.pr_merge_verifier_gate",
+        "gate": gate,
+    }
+
+
+@router.post("/pr-merge-verifier-gate/evaluate")
+async def pr_merge_verifier_gate_evaluate(request: Request) -> dict[str, Any]:
+    observed_state = await _read_pr_merge_gate_json_body(request)
+    result = evaluate_pr_merge_verifier_gate(observed_state)
+    return {
+        **INERT_FLAGS,
+        "enforcement_enabled": False,
+        "dry_run_only": True,
+        "display_only": True,
+        "source": "caller_supplied_pr_merge_packet_state",
+        "stored": False,
+        **result,
     }
 
 
