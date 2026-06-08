@@ -1691,6 +1691,16 @@ DEFAULT_CONFIG = {
         "max_parallel_jobs": None,
     },
 
+    "mission_control": {
+        "enforcement": {
+            # Default-off advisory guard for Jenny PR merge lanes. When enabled
+            # by an operator, Jenny merge lanes should stop if the caller-
+            # supplied PR merge verifier gate result would block. This is not
+            # GitHub-wide enforcement and does not execute merges.
+            "pr_merge_verifier_gate_enabled": False,
+        },
+    },
+
     # Kanban multi-agent coordination — controls the dispatcher loop that
     # spawns workers for ready tasks. The dispatcher ticks every N seconds
     # (default 60), reclaims stale claims, promotes dependency-satisfied
