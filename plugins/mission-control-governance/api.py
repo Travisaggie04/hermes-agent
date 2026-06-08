@@ -21,6 +21,7 @@ from mission_control.global_resource_guard import (
     get_global_resource_guard_policy,
 )
 from mission_control.model_registry import get_model_registry_records
+from mission_control.pr_merge_lane_guard import evaluate_pr_merge_lane_guard
 from mission_control.pr_merge_verifier_gate import (
     evaluate_pr_merge_verifier_gate,
     get_pr_merge_verifier_gate_policy,
@@ -905,6 +906,11 @@ def _compact_pr_merge_gate_state(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _read_pr_merge_gate_json_body(request: Request) -> dict[str, Any]:
+    payload = await _read_json_object_body(request)
+    return _compact_pr_merge_gate_state(payload)
+
+
+async def _read_json_object_body(request: Request) -> dict[str, Any]:
     content_type = request.headers.get("content-type", "")
     if content_type and "application/json" not in content_type.lower():
         raise HTTPException(status_code=415, detail="JSON body required")
@@ -917,7 +923,67 @@ async def _read_pr_merge_gate_json_body(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="malformed JSON body") from exc
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="JSON body must be an object")
-    return _compact_pr_merge_gate_state(payload)
+    return payload
+
+
+def _compact_pr_merge_gate_config(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    enabled = (
+        ((value.get("mission_control") or {}).get("enforcement") or {})
+        .get("pr_merge_verifier_gate_enabled")
+        is True
+    )
+    return {
+        "mission_control": {
+            "enforcement": {
+                "pr_merge_verifier_gate_enabled": enabled,
+            },
+        },
+    }
+
+
+def _pr_merge_visibility_payload(config: dict[str, Any], packet: dict[str, Any]) -> dict[str, Any]:
+    result = evaluate_pr_merge_lane_guard(config, packet)
+    required_approvals = _bounded_text_list(result.get("required_approvals"))
+    unresolved_policy_fields = _bounded_text_list(result.get("unresolved_policy_fields"))
+    reasons = _bounded_text_list(result.get("reasons"))
+    missing_reason_items = [
+        reason
+        for reason in reasons
+        if "missing" in reason.casefold()
+    ]
+    missing_requirements = list(dict.fromkeys(
+        item
+        for item in missing_reason_items + required_approvals + unresolved_policy_fields
+        if item
+    ))
+    evidence = packet.get("verifier_evidence") if isinstance(packet.get("verifier_evidence"), dict) else {}
+    return {
+        "guard_id": result.get("guard_id", "pr_merge_verifier_gate_v1"),
+        "visibility_only": True,
+        "label": "Visibility only. No approval, merge, deploy, or enforcement.",
+        "enabled": bool(result.get("enabled", False)),
+        "advisory_only": bool(result.get("advisory_only", True)),
+        "stop_merge_lane": bool(result.get("stop_merge_lane", False)),
+        "would_block": bool(result.get("would_block", False)),
+        "decision_state": str(result.get("decision_state") or "unknown"),
+        "repo": _bounded_text(packet.get("repo")),
+        "pr_number": _bounded_text(packet.get("pr_number")),
+        "base_branch": _bounded_text(packet.get("base_branch")),
+        "head_commit": _bounded_text(packet.get("head_commit")),
+        "packet_hash": _bounded_text(packet.get("packet_hash")),
+        "evidence_record_id": _bounded_text(
+            packet.get("verifier_evidence_record_id") or evidence.get("record_id")
+        ),
+        "reasons": reasons,
+        "blocked_actions": _bounded_text_list(result.get("blocked_actions")),
+        "missing_requirements": missing_requirements[:MAX_EVALUATION_LIST_ITEMS],
+        "required_approvals": required_approvals,
+        "unresolved_policy_fields": unresolved_policy_fields,
+        "dry_run_only": True,
+        "enforces_runtime": False,
+    }
 
 
 def _start_gate_decision_payload(check: StartGateCheck) -> dict[str, Any]:
@@ -1267,6 +1333,28 @@ async def pr_merge_verifier_gate_evaluate(request: Request) -> dict[str, Any]:
         "source": "caller_supplied_pr_merge_packet_state",
         "stored": False,
         **result,
+    }
+
+
+@router.post("/pr-merge-verifier-gate/visibility")
+async def pr_merge_verifier_gate_visibility(request: Request) -> dict[str, Any]:
+    payload = await _read_json_object_body(request)
+    config = _compact_pr_merge_gate_config(payload.get("config"))
+    packet_source = payload.get("merge_packet")
+    if not isinstance(packet_source, dict):
+        packet_source = payload.get("packet")
+    if not isinstance(packet_source, dict):
+        packet_source = {}
+    packet = _compact_pr_merge_gate_state(packet_source)
+    visibility = _pr_merge_visibility_payload(config, packet)
+    return {
+        **INERT_FLAGS,
+        "enforcement_enabled": False,
+        "dry_run_only": True,
+        "display_only": True,
+        "source": "caller_supplied_pr_merge_packet_visibility",
+        "stored": False,
+        **visibility,
     }
 
 
