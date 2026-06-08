@@ -307,6 +307,170 @@ def test_pr_merge_verifier_gate_evaluate_hash_mismatch_blocks(client):
     assert payload["enforces_runtime"] is False
 
 
+
+
+
+def _valid_pr_merge_visibility_body() -> dict[str, object]:
+    return {
+        "config": {
+            "mission_control": {
+                "enforcement": {"pr_merge_verifier_gate_enabled": True},
+            },
+        },
+        "merge_packet": {
+            "repo": "Travisaggie04/hermes-agent",
+            "pr_number": "38",
+            "base_branch": "pr-base/v2026.5.29.2-mission-control-records",
+            "head_commit": "abc123",
+            "packet_hash": "sha256:packet",
+            "implementer_id": "jenny-implementer",
+            "verifier_id": "jenny-verifier",
+            "verifier_evidence_record_id": "evidence-38",
+            "verifier_evidence": {
+                "record_id": "evidence-38",
+                "guard_type": "verifier_workflow",
+                "action_class": "pr_merge",
+                "repo": "Travisaggie04/hermes-agent",
+                "pr_number": "38",
+                "base_branch": "pr-base/v2026.5.29.2-mission-control-records",
+                "head_commit": "abc123",
+                "packet_hash": "sha256:packet",
+                "implementer_id": "jenny-implementer",
+                "verifier_id": "jenny-verifier",
+                "would_block": False,
+                "blocked_actions": [],
+                "dry_run_only": True,
+                "enforces_runtime": False,
+            },
+        },
+    }
+
+
+def test_pr_merge_gate_visibility_missing_packet_is_inert_advisory(client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/pr-merge-verifier-gate/visibility",
+        json={},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["enforcement_enabled"] is False
+    assert payload["visibility_only"] is True
+    assert payload["label"] == "Visibility only. No approval, merge, deploy, or enforcement."
+    assert payload["enabled"] is False
+    assert payload["advisory_only"] is True
+    assert payload["stop_merge_lane"] is False
+    assert payload["would_block"] is False
+    assert payload["decision_state"] == "unknown"
+    assert "caller-supplied PR merge packet state is incomplete" in payload["reasons"]
+    assert payload["missing_requirements"]
+    assert payload["stored"] is False
+
+
+def test_pr_merge_gate_visibility_valid_packet_shows_fields_and_allows(client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/pr-merge-verifier-gate/visibility",
+        json=_valid_pr_merge_visibility_body(),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["visibility_only"] is True
+    assert payload["enabled"] is True
+    assert payload["advisory_only"] is False
+    assert payload["would_block"] is False
+    assert payload["stop_merge_lane"] is False
+    assert payload["repo"] == "Travisaggie04/hermes-agent"
+    assert payload["pr_number"] == "38"
+    assert payload["base_branch"] == "pr-base/v2026.5.29.2-mission-control-records"
+    assert payload["head_commit"] == "abc123"
+    assert payload["packet_hash"] == "sha256:packet"
+    assert payload["evidence_record_id"] == "evidence-38"
+    assert payload["blocked_actions"] == []
+    assert payload["dry_run_only"] is True
+    assert payload["enforces_runtime"] is False
+
+
+def test_pr_merge_gate_visibility_default_false_never_stops_even_when_would_block(client):
+    body = _valid_pr_merge_visibility_body()
+    body["config"] = {}
+    body["merge_packet"].pop("verifier_evidence")
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/pr-merge-verifier-gate/visibility",
+        json=body,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["enabled"] is False
+    assert payload["advisory_only"] is True
+    assert payload["would_block"] is True
+    assert payload["stop_merge_lane"] is False
+    assert "missing verifier evidence" in payload["reasons"]
+    assert "missing verifier evidence" in payload["missing_requirements"]
+
+
+def test_pr_merge_gate_visibility_hash_mismatch_is_visible(client):
+    body = _valid_pr_merge_visibility_body()
+    body["merge_packet"]["verifier_evidence"]["packet_hash"] = "sha256:different"
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/pr-merge-verifier-gate/visibility",
+        json=body,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["would_block"] is True
+    assert payload["stop_merge_lane"] is True
+    assert "verifier evidence packet_hash mismatch" in payload["reasons"]
+    assert payload["packet_hash"] == "sha256:packet"
+    assert payload["evidence_record_id"] == "evidence-38"
+
+
+def test_pr_merge_gate_visibility_has_no_live_inspection_or_execution(plugin_api, client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/pr-merge-verifier-gate/visibility",
+        json=_valid_pr_merge_visibility_body(),
+    )
+    source = "\n".join(
+        inspect.getsource(item)
+        for item in (
+            plugin_api.pr_merge_verifier_gate_visibility,
+            plugin_api._read_json_object_body,
+            plugin_api._compact_pr_merge_gate_config,
+            plugin_api._compact_pr_merge_gate_state,
+            plugin_api._pr_merge_visibility_payload,
+        )
+    )
+
+    assert response.status_code == 200
+    for forbidden in (
+        "subprocess",
+        "Popen",
+        "os.system",
+        "systemctl",
+        "requests",
+        "httpx",
+        "urllib",
+        "github",
+        "gh pr",
+        "JsonlRecordStore",
+        "record_store_path",
+        ".append(",
+        ".write(",
+        "open(",
+        "worker",
+        "model_router",
+        "queue",
+    ):
+        assert forbidden not in source
+
+
 def test_plugin_manifest_loads():
     manifest = yaml.safe_load((PLUGIN_DIR / "plugin.yaml").read_text())
     assert manifest["name"] == "mission-control-governance"
@@ -339,6 +503,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/verifier-workflow": {"GET"},
         "/pr-merge-verifier-gate": {"GET"},
         "/pr-merge-verifier-gate/evaluate": {"POST"},
+        "/pr-merge-verifier-gate/visibility": {"POST"},
         "/verifier-workflow/evidence": {"GET"},
         "/verifier-workflow/evaluate": {"POST"},
         "/model-registry": {"GET"},
@@ -402,6 +567,10 @@ def test_api_routes_are_get_only(plugin_api, client):
         assert response.status_code == 405
         response = getattr(client, method)(
             "/api/plugins/mission-control-governance/pr-merge-verifier-gate/evaluate"
+        )
+        assert response.status_code == 405
+        response = getattr(client, method)(
+            "/api/plugins/mission-control-governance/pr-merge-verifier-gate/visibility"
         )
         assert response.status_code == 405
 
