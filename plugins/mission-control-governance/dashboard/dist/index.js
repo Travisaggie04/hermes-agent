@@ -307,6 +307,8 @@
     const workspaceActivity = workspaceStatus.activity || {};
     const prGate = workspaceStatus.pr_gate || {};
     const deployment = workspaceStatus.deployment || {};
+    const latestHandoff = workspaceStatus.latest_handoff || { present: false };
+    const handoffWarnings = Array.isArray(latestHandoff.warnings) ? latestHandoff.warnings : [];
     const staleContext = workspaceStatus.stale_context || {};
     const staleWarnings = Array.isArray(staleContext.warnings) ? staleContext.warnings : [];
     const safetyLocks = [
@@ -389,6 +391,24 @@
                 h(WorkspaceField, { label: "Mode", value: workspaceLane.mode }),
                 h(WorkspaceField, { label: "Max active lane", value: workspaceLane.max_active_lane }),
                 h(WorkspaceField, { label: "Active lane count", value: workspaceLane.active_lane_count })
+              ),
+
+              h("div", { className: "mcg-workspace-section" },
+                h("div", { className: "mcg-workspace-section-title" }, "Latest Lane Handoff"),
+                latestHandoff.present
+                  ? h("div", null,
+                    h(WorkspaceField, { label: "Handoff", value: latestHandoff.handoff_id, fallback: "Unknown" }),
+                    h(WorkspaceField, { label: "Lane", value: latestHandoff.active_lane, fallback: "None" }),
+                    h(WorkspaceField, { label: "Mode", value: latestHandoff.lane_mode, fallback: "None" }),
+                    h(WorkspaceField, { label: "Target", value: [latestHandoff.target_type, latestHandoff.target_id].filter(Boolean).join(" "), fallback: "None" }),
+                    h(WorkspaceField, { label: "Target head", value: shortHead(latestHandoff.target_head), fallback: "Missing" }),
+                    h(WorkspaceField, { label: "Last result", value: latestHandoff.last_result, fallback: "None" }),
+                    h(WorkspaceField, { label: "Next action", value: latestHandoff.next_action, fallback: "None" }),
+                    h(WorkspaceField, { label: "Warnings", value: handoffWarnings, fallback: "None" }),
+                    h(WorkspaceField, { label: "display_only", value: latestHandoff.display_only }),
+                    h(WorkspaceField, { label: "enforces_runtime", value: latestHandoff.enforces_runtime })
+                  )
+                  : h("p", { className: "mcg-muted" }, "No lane handoff record found.")
               ),
               h(WorkspaceList, { title: "Safety Locks", items: safetyLocks }),
               h("div", { className: "mcg-workspace-section" },

@@ -118,6 +118,7 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
     activity = _activity_section(_section(source, "activity"), defaults=_DEFAULT_STATUS["activity"])
     pr_gate = _pr_gate_section(_section(source, "pr_gate"), defaults=_DEFAULT_STATUS["pr_gate"])
     deployment = _deployment_section(_section(source, "deployment"), defaults=_DEFAULT_STATUS["deployment"])
+    latest_handoff = _latest_handoff_section(_section(source, "latest_handoff"))
 
     warnings: list[str] = []
     accepted_head = accepted.get("head") or ""
@@ -140,6 +141,16 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
             warnings.append("missing_verifier_evidence")
         if not pr_gate.get("approval_record_id"):
             warnings.append("missing_approval_record")
+    if latest_handoff.get("present") is True:
+        handoff_head = latest_handoff.get("accepted_head") or ""
+        if handoff_head and accepted_head and handoff_head != accepted_head:
+            warnings.append("handoff_baseline_mismatch")
+        if latest_handoff.get("dispatch_in_gateway") is not False:
+            warnings.append("handoff_dispatch_not_false")
+        if latest_handoff.get("active_lane_count", 0) > latest_handoff.get("max_active_lane", 1):
+            warnings.append("handoff_active_lane_count_exceeds_max")
+        if latest_handoff.get("target_type") and latest_handoff.get("target_id") and not latest_handoff.get("target_head"):
+            warnings.append("handoff_missing_target_head")
     if source.get("stale_discord_context") is True:
         warnings.append("stale_discord_context")
 
@@ -156,6 +167,7 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         "activity": activity,
         "pr_gate": pr_gate,
         "deployment": deployment,
+        "latest_handoff": latest_handoff,
         "stale_context": {
             "baseline_mismatch": "baseline_mismatch" in warnings,
             "thread_mismatch": "stale_discord_context" in warnings,
@@ -163,6 +175,38 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         },
     }
 
+
+
+def _latest_handoff_section(section: dict[str, Any]) -> dict[str, Any]:
+    if not section:
+        return {"present": False}
+    max_lane = _safe_int(section.get("max_active_lane"), default=1) or 1
+    active_count = _safe_int(section.get("active_lane_count"), default=0)
+    return {
+        "present": True,
+        "handoff_id": _safe_text(section.get("handoff_id")),
+        "created_at": _safe_text(section.get("created_at")),
+        "source": _safe_text(section.get("source")),
+        "active_lane": _safe_text(section.get("active_lane")),
+        "lane_mode": _safe_text(section.get("lane_mode")),
+        "accepted_runtime_path": _safe_text(section.get("accepted_runtime_path"), max_chars=240),
+        "accepted_head": _safe_sha(section.get("accepted_head")),
+        "rollback_runtime_path": _safe_text(section.get("rollback_runtime_path"), max_chars=240),
+        "rollback_head": _safe_sha(section.get("rollback_head")),
+        "dispatch_in_gateway": _safe_bool(section.get("dispatch_in_gateway"), default=False),
+        "max_active_lane": max_lane,
+        "active_lane_count": active_count,
+        "target_type": _safe_text(section.get("target_type")),
+        "target_id": _safe_text(section.get("target_id")),
+        "target_head": _safe_sha(section.get("target_head")),
+        "status": _safe_text(section.get("status")),
+        "last_result": _safe_text(section.get("last_result")),
+        "next_action": _safe_text(section.get("next_action")),
+        "warnings": _dedupe_bounded(section.get("warnings") if isinstance(section.get("warnings"), list | tuple) else ()),
+        "dry_run_only": True,
+        "enforces_runtime": False,
+        "display_only": True,
+    }
 
 def _section(payload: dict[str, Any], key: str) -> dict[str, Any]:
     value = payload.get(key)

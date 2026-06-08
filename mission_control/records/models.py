@@ -874,6 +874,144 @@ class MissionBrief:
         )
 
 
+_MAX_HANDOFF_TEXT_CHARS = 160
+_MAX_HANDOFF_PATH_CHARS = 240
+_MAX_HANDOFF_WARNINGS = 20
+
+
+def _bounded_handoff_text(value: Any, max_chars: int = _MAX_HANDOFF_TEXT_CHARS) -> str:
+    text = str(value or "").strip().replace("\x00", "")
+    if len(text) > max_chars:
+        return text[: max_chars - 1] + "…"
+    return text
+
+
+def _bounded_handoff_int(value: Any, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return default
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(0, min(number, 999))
+
+
+def _bounded_handoff_warnings(value: Any) -> tuple[str, ...]:
+    output: list[str] = []
+    for item in _tuple(value):
+        text = _bounded_handoff_text(item)
+        if text and text not in output:
+            output.append(text)
+        if len(output) >= _MAX_HANDOFF_WARNINGS:
+            break
+    return tuple(output)
+
+
+@dataclass(frozen=True)
+class OperatingWorkspaceHandoffRecord:
+    handoff_id: str = ""
+    created_at: str = ""
+    source: str = ""
+    active_lane: str = ""
+    lane_mode: str = ""
+    accepted_runtime_path: str = ""
+    accepted_head: str = ""
+    rollback_runtime_path: str = ""
+    rollback_head: str = ""
+    dispatch_in_gateway: bool = False
+    max_active_lane: int = 1
+    active_lane_count: int = 0
+    target_type: str = ""
+    target_id: str = ""
+    target_head: str = ""
+    status: str = ""
+    last_result: str = ""
+    next_action: str = ""
+    warnings: tuple[str, ...] = ()
+    dry_run_only: bool = True
+    enforces_runtime: bool = False
+    display_only: bool = True
+
+    record_type: ClassVar[str] = "OperatingWorkspaceHandoffRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "handoff_id", _bounded_handoff_text(self.handoff_id))
+        object.__setattr__(self, "created_at", _bounded_handoff_text(self.created_at))
+        object.__setattr__(self, "source", _bounded_handoff_text(self.source))
+        object.__setattr__(self, "active_lane", _bounded_handoff_text(self.active_lane))
+        object.__setattr__(self, "lane_mode", _bounded_handoff_text(self.lane_mode))
+        object.__setattr__(self, "accepted_runtime_path", _bounded_handoff_text(self.accepted_runtime_path, _MAX_HANDOFF_PATH_CHARS))
+        object.__setattr__(self, "accepted_head", _normalize_packet_sha(self.accepted_head))
+        object.__setattr__(self, "rollback_runtime_path", _bounded_handoff_text(self.rollback_runtime_path, _MAX_HANDOFF_PATH_CHARS))
+        object.__setattr__(self, "rollback_head", _normalize_packet_sha(self.rollback_head))
+        object.__setattr__(self, "dispatch_in_gateway", self.dispatch_in_gateway is True)
+        object.__setattr__(self, "max_active_lane", _bounded_handoff_int(self.max_active_lane, default=1) or 1)
+        object.__setattr__(self, "active_lane_count", _bounded_handoff_int(self.active_lane_count, default=0))
+        object.__setattr__(self, "target_type", _bounded_handoff_text(self.target_type))
+        object.__setattr__(self, "target_id", _bounded_handoff_text(self.target_id))
+        object.__setattr__(self, "target_head", _normalize_packet_sha(self.target_head))
+        object.__setattr__(self, "status", _bounded_handoff_text(self.status))
+        object.__setattr__(self, "last_result", _bounded_handoff_text(self.last_result))
+        object.__setattr__(self, "next_action", _bounded_handoff_text(self.next_action))
+        object.__setattr__(self, "warnings", _bounded_handoff_warnings(self.warnings))
+        object.__setattr__(self, "dry_run_only", True)
+        object.__setattr__(self, "enforces_runtime", False)
+        object.__setattr__(self, "display_only", True)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "handoff_id": self.handoff_id,
+            "created_at": self.created_at,
+            "source": self.source,
+            "active_lane": self.active_lane,
+            "lane_mode": self.lane_mode,
+            "accepted_runtime_path": self.accepted_runtime_path,
+            "accepted_head": self.accepted_head,
+            "rollback_runtime_path": self.rollback_runtime_path,
+            "rollback_head": self.rollback_head,
+            "dispatch_in_gateway": self.dispatch_in_gateway,
+            "max_active_lane": self.max_active_lane,
+            "active_lane_count": self.active_lane_count,
+            "target_type": self.target_type,
+            "target_id": self.target_id,
+            "target_head": self.target_head,
+            "status": self.status,
+            "last_result": self.last_result,
+            "next_action": self.next_action,
+            "warnings": list(self.warnings),
+            "dry_run_only": True,
+            "enforces_runtime": False,
+            "display_only": True,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> OperatingWorkspaceHandoffRecord:
+        return cls(
+            handoff_id=data.get("handoff_id", ""),
+            created_at=data.get("created_at", ""),
+            source=data.get("source", ""),
+            active_lane=data.get("active_lane", ""),
+            lane_mode=data.get("lane_mode", ""),
+            accepted_runtime_path=data.get("accepted_runtime_path", ""),
+            accepted_head=data.get("accepted_head", ""),
+            rollback_runtime_path=data.get("rollback_runtime_path", ""),
+            rollback_head=data.get("rollback_head", ""),
+            dispatch_in_gateway=data.get("dispatch_in_gateway") is True,
+            max_active_lane=data.get("max_active_lane", 1),
+            active_lane_count=data.get("active_lane_count", 0),
+            target_type=data.get("target_type", ""),
+            target_id=data.get("target_id", ""),
+            target_head=data.get("target_head", ""),
+            status=data.get("status", ""),
+            last_result=data.get("last_result", ""),
+            next_action=data.get("next_action", ""),
+            warnings=data.get("warnings") or (),
+            dry_run_only=True,
+            enforces_runtime=False,
+            display_only=True,
+        )
+
+
 RECORD_TYPES = {
     cls.record_type: cls
     for cls in (
@@ -883,6 +1021,7 @@ RECORD_TYPES = {
         EvidenceCard,
         GoalContract,
         MissionBrief,
+        OperatingWorkspaceHandoffRecord,
         OperatorAction,
         StartGateCheck,
         TaskControlEnvelope,

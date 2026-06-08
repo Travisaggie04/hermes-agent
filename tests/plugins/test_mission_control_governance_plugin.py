@@ -20,6 +20,7 @@ from mission_control.records import (
     GoalContract,
     JsonlRecordStore,
     MissionBrief,
+    OperatingWorkspaceHandoffRecord,
     OperatorAction,
     StartGateCheck,
     TaskControlEnvelope,
@@ -2703,3 +2704,87 @@ def test_workspace_status_has_no_action_routes(client):
     ):
         response = client.post(path, json={})
         assert response.status_code == 404
+
+
+def test_workspace_status_get_includes_latest_handoff_record_without_mutation(plugin_api, client):
+    JsonlRecordStore(plugin_api.record_store_path()).append(
+        OperatingWorkspaceHandoffRecord(
+            handoff_id="handoff-001",
+            created_at="2026-06-09T00:00:00Z",
+            source="operator_supplied_handoff",
+            active_lane="PR #45 Operating Workspace handoff records",
+            lane_mode="bounded display-only PR",
+            accepted_head="775f49352189fdec3169f59e3378b6744da2bdda",
+            rollback_head="cb42bbc1ed372576079ce8162e6c66fe11872fa4",
+            dispatch_in_gateway=False,
+            max_active_lane=1,
+            active_lane_count=1,
+            target_type="pr",
+            target_id="45",
+            target_head="775f49352189fdec3169f59e3378b6744da2bdda",
+            status="active",
+            last_result="PR #44 accepted",
+            next_action="Review PR #45",
+        )
+    )
+
+    response = client.get("/api/plugins/mission-control-governance/workspace-status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["display_only"] is True
+    assert payload["dry_run_only"] is True
+    assert payload["enforces_runtime"] is False
+    assert payload["latest_handoff"]["present"] is True
+    assert payload["latest_handoff"]["handoff_id"] == "handoff-001"
+    assert payload["latest_handoff"]["target_id"] == "45"
+    assert payload["latest_handoff"]["display_only"] is True
+    assert payload["stored"] is False
+
+
+def test_workspace_status_preview_remains_unstored_with_caller_supplied_handoff(client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace-status/preview",
+        json={
+            "latest_handoff": {
+                "handoff_id": "preview-001",
+                "accepted_head": "775f49352189fdec3169f59e3378b6744da2bdda",
+                "target_type": "pr",
+                "target_id": "45",
+                "target_head": "775f49352189fdec3169f59e3378b6744da2bdda",
+                "dry_run_only": False,
+                "enforces_runtime": True,
+                "display_only": False,
+                "raw_log": "forbidden",
+                "token": "secret-token",
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stored"] is False
+    assert payload["latest_handoff"]["present"] is True
+    assert payload["latest_handoff"]["handoff_id"] == "preview-001"
+    assert payload["latest_handoff"]["dry_run_only"] is True
+    assert payload["latest_handoff"]["enforces_runtime"] is False
+    assert payload["latest_handoff"]["display_only"] is True
+    rendered = str(payload).lower()
+    assert "secret-token" not in rendered
+    assert "raw_log" not in rendered
+
+
+def test_dashboard_operating_workspace_latest_handoff_panel_is_display_only():
+    bundle = (PLUGIN_DIR / "dashboard" / "dist" / "index.js").read_text(encoding="utf-8")
+
+    assert "Latest Lane Handoff" in bundle
+    assert "No lane handoff record found." in bundle
+    assert "display_only" in bundle
+    assert "enforces_runtime" in bundle
+    assert "workspace-status/preview" not in bundle
+    assert "setInterval" not in bundle
+    assert "setTimeout" not in bundle
+    assert "localStorage" not in bundle
+    assert "sessionStorage" not in bundle
+    assert not re.search(r'"(?:Approve|Reject|Execute|Run|Merge)"', bundle)
+    assert "button" not in bundle.lower()

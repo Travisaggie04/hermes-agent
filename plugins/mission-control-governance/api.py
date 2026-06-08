@@ -43,6 +43,7 @@ from mission_control.records import (
     GoalContract,
     JsonlRecordStore,
     MissionBrief,
+    OperatingWorkspaceHandoffRecord,
     OperatorAction,
     StartGateCheck,
     TaskControlEnvelope,
@@ -329,6 +330,17 @@ def _load_latest_records_with_state(
     if not records:
         return (), "empty", None
     return records, "ok", None
+
+
+def _latest_handoff_payload() -> dict[str, Any]:
+    records, _store_status, _error = _load_latest_records_with_state(
+        OperatingWorkspaceHandoffRecord,
+        limit=1,
+    )
+    if not records:
+        return {}
+    _index, record = records[-1]
+    return record.to_dict()
 
 
 def _safe_records_limit(limit: str | None) -> int:
@@ -1324,7 +1336,11 @@ async def pr_merge_verifier_gate() -> dict[str, Any]:
 
 @router.get("/workspace-status")
 async def workspace_status() -> dict[str, Any]:
-    status = build_workspace_status(default_workspace_status_input())
+    payload = default_workspace_status_input()
+    latest_handoff = _latest_handoff_payload()
+    if latest_handoff:
+        payload["latest_handoff"] = latest_handoff
+    status = build_workspace_status(payload)
     return {
         **INERT_FLAGS,
         "enforcement_enabled": False,
