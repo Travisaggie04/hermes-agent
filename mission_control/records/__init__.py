@@ -9,6 +9,7 @@ from mission_control.records.models import (
     OperatorAction,
     StartGateCheck,
     TaskControlEnvelope,
+    VerifierWorkflowEvidenceRecord,
 )
 from mission_control.records.store import JsonlRecordStore
 
@@ -22,4 +23,5 @@ __all__ = [
     "OperatorAction",
     "StartGateCheck",
     "TaskControlEnvelope",
+    "VerifierWorkflowEvidenceRecord",
 ]

@@ -230,6 +230,75 @@ class StartGateCheck:
 
 
 @dataclass(frozen=True)
+class VerifierWorkflowEvidenceRecord:
+    record_id: str
+    created_at: str
+    guard_type: str = "verifier_workflow"
+    source: str = "caller_supplied_workflow_state"
+    lane_id: str = ""
+    task_id: str = ""
+    domain_id: str = ""
+    action_class: str = ""
+    decision_state: str = "unknown"
+    would_block: bool = False
+    reasons: tuple[str, ...] = ()
+    blocked_actions: tuple[str, ...] = ()
+    required_approvals: tuple[str, ...] = ()
+    unresolved_policy_fields: tuple[str, ...] = ()
+    dry_run_only: bool = True
+    enforces_runtime: bool = False
+
+    record_type: ClassVar[str] = "VerifierWorkflowEvidenceRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "guard_type", "verifier_workflow")
+        object.__setattr__(self, "reasons", tuple(str(item) for item in _tuple(self.reasons)))
+        object.__setattr__(self, "blocked_actions", tuple(str(item) for item in _tuple(self.blocked_actions)))
+        object.__setattr__(self, "required_approvals", tuple(str(item) for item in _tuple(self.required_approvals)))
+        object.__setattr__(self, "unresolved_policy_fields", tuple(str(item) for item in _tuple(self.unresolved_policy_fields)))
+        object.__setattr__(self, "dry_run_only", True)
+        object.__setattr__(self, "enforces_runtime", False)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "record_id": self.record_id,
+            "created_at": self.created_at,
+            "guard_type": "verifier_workflow",
+            "source": self.source,
+            "lane_id": self.lane_id,
+            "task_id": self.task_id,
+            "domain_id": self.domain_id,
+            "action_class": self.action_class,
+            "decision_state": self.decision_state,
+            "would_block": self.would_block,
+            "reasons": list(self.reasons),
+            "blocked_actions": list(self.blocked_actions),
+            "required_approvals": list(self.required_approvals),
+            "unresolved_policy_fields": list(self.unresolved_policy_fields),
+            "dry_run_only": True,
+            "enforces_runtime": False,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> VerifierWorkflowEvidenceRecord:
+        return cls(
+            record_id=_required(data, "record_id"),
+            created_at=_required(data, "created_at"),
+            source=data.get("source", "caller_supplied_workflow_state"),
+            lane_id=data.get("lane_id", ""),
+            task_id=data.get("task_id", ""),
+            domain_id=data.get("domain_id", ""),
+            action_class=data.get("action_class", ""),
+            decision_state=data.get("decision_state", "unknown"),
+            would_block=bool(data.get("would_block", False)),
+            reasons=data.get("reasons") or (),
+            blocked_actions=data.get("blocked_actions") or (),
+            required_approvals=data.get("required_approvals") or (),
+            unresolved_policy_fields=data.get("unresolved_policy_fields") or (),
+        )
+
+
+@dataclass(frozen=True)
 class ApprovalSlice:
     approval_slice_id: str = ""
     related_action_id: str = ""
@@ -531,5 +600,6 @@ RECORD_TYPES = {
         OperatorAction,
         StartGateCheck,
         TaskControlEnvelope,
+        VerifierWorkflowEvidenceRecord,
     )
 }

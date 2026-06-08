@@ -23,6 +23,7 @@ from mission_control.records import (
     OperatorAction,
     StartGateCheck,
     TaskControlEnvelope,
+    VerifierWorkflowEvidenceRecord,
 )
 
 
@@ -113,6 +114,103 @@ def _seed_goal_records(path: Path, count: int) -> None:
         )
 
 
+
+def test_verifier_workflow_evaluate_only_does_not_store_evidence(plugin_api, client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/verifier-workflow/evaluate",
+        json={
+            "pr_merge_requested": True,
+            "independent_verification_present": False,
+            "verification_approved": False,
+            "source": "unit-test",
+            "lane_id": "lane-no-store",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stored"] is False
+    assert payload["record"] is None
+    assert payload["would_block"] is True
+    assert JsonlRecordStore(plugin_api.record_store_path()).read_all(VerifierWorkflowEvidenceRecord) == ()
+
+
+def test_verifier_workflow_evaluate_and_record_appends_one_sanitized_record(plugin_api, client):
+    body = {
+        "evaluate_and_record": True,
+        "pr_merge_requested": True,
+        "independent_verification_present": False,
+        "verification_approved": False,
+        "source": "operator token=secret-value",
+        "lane_id": "/home/jenny/.hermes/private/very/long/path/to/worktree",
+        "task_id": "task-1 sk-test-secretvalue",
+        "domain_id": "mission-control",
+        "action_class": "pr_merge",
+        "observed_state_raw": {"secret": "must not be stored"},
+    }
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/verifier-workflow/evaluate",
+        json=body,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stored"] is True
+    assert payload["dry_run_only"] is True
+    assert payload["enforces_runtime"] is False
+    record = payload["record"]
+    assert record["guard_type"] == "verifier_workflow"
+    assert record["decision_state"] == "would_block"
+    assert record["would_block"] is True
+    assert record["dry_run_only"] is True
+    assert record["enforces_runtime"] is False
+    assert record["action_class"] == "pr_merge"
+    assert "merge PR" in record["blocked_actions"]
+    assert "approved independent verification" in record["required_approvals"]
+    lowered = str(record).lower()
+    assert "secret-value" not in lowered
+    assert "sk-test-secretvalue" not in lowered
+    assert "/home/jenny" not in lowered
+    assert "observed_state_raw" not in lowered
+    assert "must not be stored" not in lowered
+
+    records = JsonlRecordStore(plugin_api.record_store_path()).read_all(VerifierWorkflowEvidenceRecord)
+    assert len(records) == 1
+    assert records[0].record_id == record["record_id"]
+
+
+def test_verifier_workflow_recent_evidence_endpoint_is_bounded_and_safe(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    for index in range(12):
+        store.append(
+            VerifierWorkflowEvidenceRecord(
+                record_id=f"record-{index}",
+                created_at=f"2026-06-08T00:{index:02d}:00Z",
+                lane_id=f"lane-{index}",
+                action_class="pr_merge",
+                decision_state="would_block",
+                would_block=True,
+                reasons=("safe compact reason",),
+                blocked_actions=("merge PR",),
+                required_approvals=("approved independent verification",),
+            )
+        )
+
+    response = client.get("/api/plugins/mission-control-governance/verifier-workflow/evidence?limit=20")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["dry_run_only"] is True
+    assert payload["enforcement_enabled"] is False
+    assert payload["count"] == 10
+    assert [item["record_id"] for item in payload["records"]] == [f"record-{index}" for index in range(2, 12)]
+    assert all("observed_state" not in item for item in payload["records"])
+
+
 def test_plugin_manifest_loads():
     manifest = yaml.safe_load((PLUGIN_DIR / "plugin.yaml").read_text())
     assert manifest["name"] == "mission-control-governance"
@@ -143,6 +241,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/storage-guard": {"GET"},
         "/storage-guard/evaluate": {"POST"},
         "/verifier-workflow": {"GET"},
+        "/verifier-workflow/evidence": {"GET"},
         "/verifier-workflow/evaluate": {"POST"},
         "/model-registry": {"GET"},
         "/domain-governance": {"GET"},
@@ -163,6 +262,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/global-resource-guard",
         "/storage-guard",
         "/verifier-workflow",
+        "/verifier-workflow/evidence",
         "/model-registry",
         "/domain-governance",
         "/task-control-envelopes",

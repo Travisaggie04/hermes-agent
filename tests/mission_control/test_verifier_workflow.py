@@ -1,5 +1,6 @@
 """Inert Verifier Workflow v1 policy tests."""
 
+from mission_control.records import JsonlRecordStore, VerifierWorkflowEvidenceRecord
 from mission_control.verifier_workflow import (
     VERIFIER_WORKFLOW_POLICY,
     evaluate_verifier_workflow,
@@ -219,3 +220,39 @@ def test_dry_run_evaluator_unknown_without_observed_state():
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
     assert "caller-supplied observed workflow state is incomplete" in result["reasons"]
+
+
+def test_verifier_workflow_evidence_record_is_append_only_and_inert(tmp_path):
+    store = JsonlRecordStore(tmp_path / "records.jsonl")
+    first = VerifierWorkflowEvidenceRecord(
+        record_id="record-1",
+        created_at="2026-06-08T00:00:00Z",
+        source="unit-test",
+        lane_id="lane-a",
+        task_id="task-a",
+        domain_id="mission-control",
+        action_class="pr_merge",
+        decision_state="would_block",
+        would_block=True,
+        reasons=("PR merge requested without approved verification",),
+        blocked_actions=("merge PR",),
+        required_approvals=("approved independent verification",),
+        unresolved_policy_fields=("future_runtime_enforcement_wiring",),
+    )
+    second = VerifierWorkflowEvidenceRecord(
+        record_id="record-2",
+        created_at="2026-06-08T00:01:00Z",
+        decision_state="warn",
+        would_block=False,
+    )
+
+    assert store.append(first) == 1
+    assert store.append(second) == 2
+
+    records = store.read_all(VerifierWorkflowEvidenceRecord)
+    assert [record.record_id for record in records] == ["record-1", "record-2"]
+    assert records[0].guard_type == "verifier_workflow"
+    assert records[0].dry_run_only is True
+    assert records[0].enforces_runtime is False
+    assert records[0].to_dict()["dry_run_only"] is True
+    assert records[0].to_dict()["enforces_runtime"] is False
