@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import re
 from typing import Any, ClassVar
 
 
@@ -23,6 +24,86 @@ def _required(data: dict[str, Any], field_name: str) -> Any:
         return data[field_name]
     except KeyError as exc:
         raise TypeError(f"missing required field: {field_name}") from exc
+
+
+_PACKET_HASH_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+_FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_PACKET_VERSION = "pr_merge_packet_v1"
+_ALLOWED_MERGE_METHODS = {"merge", "squash", "rebase"}
+_MAX_REPO_CHARS = 120
+_MAX_PR_NUMBER_CHARS = 20
+_MAX_BASE_BRANCH_CHARS = 200
+
+
+def _clean_text(value: Any, max_chars: int) -> str:
+    text = str(value or "").strip()
+    if not text or len(text) > max_chars:
+        return ""
+    return text
+
+
+def _normalize_packet_repo(value: Any) -> str:
+    text = _clean_text(value, _MAX_REPO_CHARS + 32)
+    if text.startswith("https://github.com/"):
+        text = text.removeprefix("https://github.com/")
+    elif text.startswith("http://github.com/"):
+        text = text.removeprefix("http://github.com/")
+    if text.endswith(".git"):
+        text = text.removesuffix(".git")
+    text = text.strip("/").lower()
+    if len(text) > _MAX_REPO_CHARS or text.count("/") != 1 or any(not part for part in text.split("/")):
+        return ""
+    return text
+
+
+def _normalize_packet_pr_number(value: Any) -> str:
+    text = _clean_text(value, _MAX_PR_NUMBER_CHARS + 1)
+    if text.startswith("#"):
+        text = text[1:]
+    if not text.isdecimal():
+        return ""
+    normalized = str(int(text))
+    if len(normalized) > _MAX_PR_NUMBER_CHARS or int(normalized) <= 0:
+        return ""
+    return normalized
+
+
+def _normalize_packet_sha(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    return text if _FULL_SHA_RE.fullmatch(text) else ""
+
+
+def _normalize_packet_merge_method(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    return text if text in _ALLOWED_MERGE_METHODS else ""
+
+
+def _sanitize_pr_merge_packet_identity(action_class: str, value: Any) -> dict[str, str]:
+    if action_class != "pr_merge" or not isinstance(value, dict):
+        return {}
+    candidate = {
+        "repo": _normalize_packet_repo(value.get("repo")),
+        "pr_number": _normalize_packet_pr_number(value.get("pr_number")),
+        "base_branch": _clean_text(value.get("base_branch"), _MAX_BASE_BRANCH_CHARS),
+        "head_commit": _normalize_packet_sha(value.get("head_commit")),
+        "expected_base_head": _normalize_packet_sha(value.get("expected_base_head")),
+        "merge_method": _normalize_packet_merge_method(value.get("merge_method")),
+    }
+    return {field: text for field, text in candidate.items() if text}
+
+
+def _sanitize_pr_merge_packet_hash(action_class: str, value: Any) -> str:
+    if action_class != "pr_merge":
+        return ""
+    text = str(value or "").strip()
+    return text if _PACKET_HASH_RE.fullmatch(text) else ""
+
+
+def _sanitize_pr_merge_packet_version(action_class: str, value: Any) -> str:
+    if action_class != "pr_merge":
+        return ""
+    text = str(value or "").strip() or _PACKET_VERSION
+    return text if text == _PACKET_VERSION else ""
 
 
 @dataclass(frozen=True)
@@ -247,6 +328,9 @@ class VerifierWorkflowEvidenceRecord:
     unresolved_policy_fields: tuple[str, ...] = ()
     dry_run_only: bool = True
     enforces_runtime: bool = False
+    packet_hash: str = ""
+    packet_version: str = ""
+    packet_identity: dict[str, str] = field(default_factory=dict)
 
     record_type: ClassVar[str] = "VerifierWorkflowEvidenceRecord"
 
@@ -258,9 +342,12 @@ class VerifierWorkflowEvidenceRecord:
         object.__setattr__(self, "unresolved_policy_fields", tuple(str(item) for item in _tuple(self.unresolved_policy_fields)))
         object.__setattr__(self, "dry_run_only", True)
         object.__setattr__(self, "enforces_runtime", False)
+        object.__setattr__(self, "packet_hash", _sanitize_pr_merge_packet_hash(self.action_class, self.packet_hash))
+        object.__setattr__(self, "packet_version", _sanitize_pr_merge_packet_version(self.action_class, self.packet_version))
+        object.__setattr__(self, "packet_identity", _sanitize_pr_merge_packet_identity(self.action_class, self.packet_identity))
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "record_id": self.record_id,
             "created_at": self.created_at,
             "guard_type": "verifier_workflow",
@@ -278,6 +365,13 @@ class VerifierWorkflowEvidenceRecord:
             "dry_run_only": True,
             "enforces_runtime": False,
         }
+        if self.packet_hash:
+            payload["packet_hash"] = self.packet_hash
+        if self.packet_version:
+            payload["packet_version"] = self.packet_version
+        if self.packet_identity:
+            payload["packet_identity"] = dict(self.packet_identity)
+        return payload
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> VerifierWorkflowEvidenceRecord:
@@ -295,6 +389,9 @@ class VerifierWorkflowEvidenceRecord:
             blocked_actions=data.get("blocked_actions") or (),
             required_approvals=data.get("required_approvals") or (),
             unresolved_policy_fields=data.get("unresolved_policy_fields") or (),
+            packet_hash=data.get("packet_hash", ""),
+            packet_version=data.get("packet_version", ""),
+            packet_identity=data.get("packet_identity") or {},
         )
 
 
