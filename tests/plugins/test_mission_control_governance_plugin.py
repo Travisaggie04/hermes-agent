@@ -142,6 +142,8 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/global-resource-guard/evaluate": {"POST"},
         "/storage-guard": {"GET"},
         "/storage-guard/evaluate": {"POST"},
+        "/verifier-workflow": {"GET"},
+        "/verifier-workflow/evaluate": {"POST"},
         "/model-registry": {"GET"},
         "/domain-governance": {"GET"},
         "/task-control-envelopes": {"GET"},
@@ -160,6 +162,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/start-gate",
         "/global-resource-guard",
         "/storage-guard",
+        "/verifier-workflow",
         "/model-registry",
         "/domain-governance",
         "/task-control-envelopes",
@@ -192,6 +195,10 @@ def test_api_routes_are_get_only(plugin_api, client):
         assert response.status_code == 405
         response = getattr(client, method)(
             "/api/plugins/mission-control-governance/storage-guard/evaluate"
+        )
+        assert response.status_code == 405
+        response = getattr(client, method)(
+            "/api/plugins/mission-control-governance/verifier-workflow/evaluate"
         )
         assert response.status_code == 405
 
@@ -1325,6 +1332,80 @@ def test_storage_guard_dry_run_endpoint_uses_caller_supplied_state_only(client):
     assert "delete artifacts" in payload["blocked_actions"]
     assert "explicit cloud upload approval" in payload["required_approvals"]
     assert "disk_warning_threshold_percent" in payload["unresolved_policy_fields"]
+
+
+def test_verifier_workflow_endpoint_exposes_inert_dry_run_policy(client):
+    response = client.get("/api/plugins/mission-control-governance/verifier-workflow")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["enforcement_enabled"] is False
+    assert payload["dry_run_only"] is True
+    assert payload["display_only"] is True
+    assert payload["source"] == "mission_control.verifier_workflow"
+    workflow = payload["workflow"]
+    assert workflow["workflow_id"] == "verifier_workflow_v1"
+    assert workflow["trusted_for_execution"] is False
+    assert workflow["enforcement_enabled"] is False
+    assert workflow["required_workflow"]["independent_verification_required"] is True
+    assert workflow["required_workflow"]["implementer_cannot_self_verify"] is True
+    assert workflow["pr_workflow"]["pr_merge_requires_approved_verification"] is True
+    assert workflow["deployment_workflow"]["rollback_plan_required"] is True
+    assert workflow["waha_workflow"]["waha_technical_verifier_required"] is True
+    assert workflow["model_workflow"]["verifier_model_must_be_qualified_before_verifier_role"] is True
+    assert workflow["storage_workflow"]["archive_verification_required_before_delete"] is True
+    assert "verifier_verdict" in workflow["evidence_requirements"]
+
+
+def test_verifier_workflow_dry_run_endpoint_uses_caller_supplied_state_only(client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/verifier-workflow/evaluate",
+        json={
+            "pr_merge_requested": True,
+            "independent_verification_present": False,
+            "verification_approved": False,
+            "implementer_id": "jenny",
+            "verifier_id": "jenny",
+            "deployment_requested": True,
+            "deployment_readiness_packet_present": False,
+            "rollback_plan_present": False,
+            "waha_work_requested": True,
+            "waha_technical_verifier_present": False,
+            "verifier_model_role_requested": True,
+            "verifier_model_qualified": False,
+            "storage_cleanup_requested": True,
+            "artifact_manifest_verified": False,
+            "storage_delta_verified": False,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["enforcement_enabled"] is False
+    assert payload["dry_run_only"] is True
+    assert payload["enforces_runtime"] is False
+    assert payload["stored"] is False
+    assert payload["source"] == "caller_supplied_workflow_state"
+    assert payload["decision_state"] == "would_block"
+    assert payload["would_block"] is True
+    assert "PR merge requested without independent verification" in payload["reasons"]
+    assert "implementer cannot self-verify" in payload["reasons"]
+    assert "deployment requested without deployment-readiness packet" in payload["reasons"]
+    assert "deployment requested without rollback plan" in payload["reasons"]
+    assert "Waha work requested without technical verifier" in payload["reasons"]
+    assert "verifier model role requested with unqualified model" in payload["reasons"]
+    assert "storage cleanup/delete requested without artifact manifest verification" in payload["reasons"]
+    assert "merge PR" in payload["blocked_actions"]
+    assert "deploy runtime" in payload["blocked_actions"]
+    assert "mark Waha work ready" in payload["blocked_actions"]
+    assert "assign model verifier role" in payload["blocked_actions"]
+    assert "cleanup/delete storage artifacts" in payload["blocked_actions"]
+    assert "qualified verifier model approval" in payload["required_approvals"]
+    assert "future_runtime_enforcement_wiring" in payload["unresolved_policy_fields"]
 
 
 def test_model_registry_endpoint_exposes_inert_display_only_policy(client):
