@@ -502,6 +502,8 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/storage-guard/evaluate": {"POST"},
         "/verifier-workflow": {"GET"},
         "/pr-merge-verifier-gate": {"GET"},
+        "/workspace-status": {"GET"},
+        "/workspace-status/preview": {"POST"},
         "/pr-merge-verifier-gate/evaluate": {"POST"},
         "/pr-merge-verifier-gate/visibility": {"POST"},
         "/verifier-workflow/evidence": {"GET"},
@@ -526,6 +528,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/storage-guard",
         "/verifier-workflow",
         "/pr-merge-verifier-gate",
+        "/workspace-status",
         "/verifier-workflow/evidence",
         "/model-registry",
         "/domain-governance",
@@ -571,6 +574,10 @@ def test_api_routes_are_get_only(plugin_api, client):
         assert response.status_code == 405
         response = getattr(client, method)(
             "/api/plugins/mission-control-governance/pr-merge-verifier-gate/visibility"
+        )
+        assert response.status_code == 405
+        response = getattr(client, method)(
+            "/api/plugins/mission-control-governance/workspace-status/preview"
         )
         assert response.status_code == 405
 
@@ -2589,3 +2596,60 @@ def test_summary_style_routes_include_operator_actions_without_read_all(plugin_a
 
     assert response.status_code == 200
     assert response.json()["source"] == "OperatorAction"
+
+
+def test_workspace_status_endpoint_returns_display_only_status(client):
+    response = client.get("/api/plugins/mission-control-governance/workspace-status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["display_only"] is True
+    assert payload["trusted_for_execution"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["enforcement_enabled"] is False
+    assert payload["dry_run_only"] is True
+    assert payload["enforces_runtime"] is False
+    assert "accepted_baseline" in payload
+    assert "rollback_baseline" in payload
+    assert "stale_context" in payload
+
+
+def test_workspace_status_preview_is_caller_supplied_and_stores_nothing(plugin_api, client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace-status/preview",
+        json={
+            "accepted_baseline": {"head": "775f49352189fdec3169f59e3378b6744da2bdda"},
+            "lane": {
+                "active_lane": "PR #43 verify",
+                "declared_baseline_head": "cb42bbc1ed372576079ce8162e6c66fe11872fa4",
+                "max_active_lane": 1,
+                "active_lane_count": 2,
+            },
+            "safety": {"dispatch_in_gateway": True},
+            "raw_log": "must not be stored or exposed",
+            "token": "secret-token-value",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stored"] is False
+    assert payload["source"] == "caller_supplied_workspace_status_preview"
+    warnings = set(payload["stale_context"]["warnings"])
+    assert "baseline_mismatch" in warnings
+    assert "active_lane_count_exceeds_max" in warnings
+    assert "dispatch_not_false" in warnings
+    rendered = str(payload).lower()
+    assert "must not be stored or exposed" not in rendered
+    assert "secret-token-value" not in rendered
+    assert plugin_api.record_store_path().exists() is False
+
+
+def test_workspace_status_has_no_action_routes(client):
+    for path in (
+        "/api/plugins/mission-control-governance/workspace-status/execute",
+        "/api/plugins/mission-control-governance/workspace-status/approve",
+        "/api/plugins/mission-control-governance/workspace-status/deploy",
+    ):
+        response = client.post(path, json={})
+        assert response.status_code == 404
