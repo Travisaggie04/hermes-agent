@@ -160,3 +160,87 @@ def test_workspace_status_flags_stale_discord_context_marker():
 
     assert "stale_discord_context" in status["stale_context"]["warnings"]
     assert status["stale_context"]["thread_mismatch"] is True
+
+
+
+def test_workspace_status_latest_handoff_absent_is_explicitly_not_present():
+    status = build_workspace_status(_baseline_payload())
+
+    assert status["latest_handoff"] == {"present": False}
+
+
+def test_workspace_status_exposes_latest_handoff_as_inert_display_context():
+    status = build_workspace_status(
+        _baseline_payload(
+            latest_handoff={
+                "handoff_id": "handoff-001",
+                "created_at": "2026-06-09T00:00:00Z",
+                "source": "operator_supplied_handoff",
+                "active_lane": "PR #45 Operating Workspace handoff records",
+                "lane_mode": "bounded display-only PR",
+                "accepted_runtime_path": "/home/jenny/.hermes/hermes-runtime-workspaceui-d11681f",
+                "accepted_head": "775f49352189fdec3169f59e3378b6744da2bdda",
+                "rollback_runtime_path": "/home/jenny/.hermes/hermes-runtime-evidencehash-cb42bbc",
+                "rollback_head": "cb42bbc1ed372576079ce8162e6c66fe11872fa4",
+                "dispatch_in_gateway": False,
+                "max_active_lane": 1,
+                "active_lane_count": 1,
+                "target_type": "pr",
+                "target_id": "45",
+                "target_head": "775f49352189fdec3169f59e3378b6744da2bdda",
+                "status": "active",
+                "last_result": "PR #44 accepted",
+                "next_action": "Implement PR #45",
+                "warnings": ["display-only"],
+                "dry_run_only": False,
+                "enforces_runtime": True,
+                "display_only": False,
+                "raw_log": "forbidden",
+                "discord_messages": ["forbidden"],
+                "token": "secret-token",
+                "github_response": {"raw": "forbidden"},
+            }
+        )
+    )
+
+    handoff = status["latest_handoff"]
+    assert handoff["present"] is True
+    assert handoff["handoff_id"] == "handoff-001"
+    assert handoff["active_lane"] == "PR #45 Operating Workspace handoff records"
+    assert handoff["accepted_head"] == "775f49352189fdec3169f59e3378b6744da2bdda"
+    assert handoff["target_head"] == "775f49352189fdec3169f59e3378b6744da2bdda"
+    assert handoff["dry_run_only"] is True
+    assert handoff["enforces_runtime"] is False
+    assert handoff["display_only"] is True
+    rendered = str(status).lower()
+    assert "raw_log" not in rendered
+    assert "discord_messages" not in rendered
+    assert "secret-token" not in rendered
+    assert "github_response" not in rendered
+
+
+def test_workspace_status_warns_on_handoff_baseline_dispatch_lane_and_missing_target():
+    status = build_workspace_status(
+        _baseline_payload(
+            latest_handoff={
+                "handoff_id": "handoff-002",
+                "created_at": "2026-06-09T00:00:00Z",
+                "accepted_head": "cb42bbc1ed372576079ce8162e6c66fe11872fa4",
+                "dispatch_in_gateway": True,
+                "max_active_lane": 1,
+                "active_lane_count": 2,
+                "target_type": "pr",
+                "target_id": "45",
+                "target_head": "",
+                "dry_run_only": True,
+                "enforces_runtime": False,
+                "display_only": True,
+            }
+        )
+    )
+
+    warnings = set(status["stale_context"]["warnings"])
+    assert "handoff_baseline_mismatch" in warnings
+    assert "handoff_dispatch_not_false" in warnings
+    assert "handoff_active_lane_count_exceeds_max" in warnings
+    assert "handoff_missing_target_head" in warnings

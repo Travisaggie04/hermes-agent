@@ -8,7 +8,9 @@ from mission_control.records.models import (
     EvidenceCard,
     GoalContract,
     MissionBrief,
+    OperatingWorkspaceHandoffRecord,
     OperatorAction,
+    RECORD_TYPES,
     StartGateCheck,
     TaskControlEnvelope,
 )
@@ -383,3 +385,104 @@ def test_operator_action_metadata_is_optional():
     assert action.evidence_ids == ()
     assert action.risk_level == ""
     assert action.status == "requested"
+
+
+
+def test_operating_workspace_handoff_record_round_trips_display_only_fields():
+    record = OperatingWorkspaceHandoffRecord(
+        handoff_id="handoff-001",
+        created_at="2026-06-09T00:00:00Z",
+        source="operator_supplied_handoff",
+        active_lane="PR #45 Operating Workspace handoff records",
+        lane_mode="bounded display-only PR",
+        accepted_runtime_path="/home/jenny/.hermes/hermes-runtime-workspaceui-d11681f",
+        accepted_head="d11681f81c7cd16a99c53649f157040b2d10a89f",
+        rollback_runtime_path="/home/jenny/.hermes/hermes-runtime-workspace-f20aa2d",
+        rollback_head="f20aa2da2a2e978d72f837007d8ab1b14301795b",
+        dispatch_in_gateway=False,
+        max_active_lane=1,
+        active_lane_count=1,
+        target_type="pr",
+        target_id="45",
+        target_head="d11681f81c7cd16a99c53649f157040b2d10a89f",
+        status="active",
+        last_result="PR #44 accepted",
+        next_action="Implement PR #45 tests",
+        warnings=("display-only",),
+        dry_run_only=False,
+        enforces_runtime=True,
+        display_only=False,
+    )
+
+    data = record.to_dict()
+
+    assert data == {
+        "handoff_id": "handoff-001",
+        "created_at": "2026-06-09T00:00:00Z",
+        "source": "operator_supplied_handoff",
+        "active_lane": "PR #45 Operating Workspace handoff records",
+        "lane_mode": "bounded display-only PR",
+        "accepted_runtime_path": "/home/jenny/.hermes/hermes-runtime-workspaceui-d11681f",
+        "accepted_head": "d11681f81c7cd16a99c53649f157040b2d10a89f",
+        "rollback_runtime_path": "/home/jenny/.hermes/hermes-runtime-workspace-f20aa2d",
+        "rollback_head": "f20aa2da2a2e978d72f837007d8ab1b14301795b",
+        "dispatch_in_gateway": False,
+        "max_active_lane": 1,
+        "active_lane_count": 1,
+        "target_type": "pr",
+        "target_id": "45",
+        "target_head": "d11681f81c7cd16a99c53649f157040b2d10a89f",
+        "status": "active",
+        "last_result": "PR #44 accepted",
+        "next_action": "Implement PR #45 tests",
+        "warnings": ["display-only"],
+        "dry_run_only": True,
+        "enforces_runtime": False,
+        "display_only": True,
+    }
+    assert OperatingWorkspaceHandoffRecord.from_dict(data) == record
+    assert isinstance(OperatingWorkspaceHandoffRecord.from_dict(data).warnings, tuple)
+    assert RECORD_TYPES["OperatingWorkspaceHandoffRecord"] is OperatingWorkspaceHandoffRecord
+
+
+def test_operating_workspace_handoff_record_sanitizes_allowlist_bounds_and_shas():
+    record = OperatingWorkspaceHandoffRecord.from_dict(
+        {
+            "handoff_id": "h" * 500,
+            "created_at": "2026-06-09T00:00:00Z",
+            "source": "operator",
+            "active_lane": "x" * 500,
+            "lane_mode": "mode",
+            "accepted_runtime_path": "/home/jenny/.hermes/hermes-runtime-workspaceui-d11681f",
+            "accepted_head": "not-a-sha",
+            "rollback_runtime_path": "/home/jenny/.hermes/hermes-runtime-workspace-f20aa2d",
+            "rollback_head": "f20aa2da2a2e978d72f837007d8ab1b14301795b",
+            "dispatch_in_gateway": True,
+            "max_active_lane": 5000,
+            "active_lane_count": 5001,
+            "target_type": "pr",
+            "target_id": "45",
+            "target_head": "also-not-a-sha",
+            "status": "active",
+            "last_result": "raw log must not appear",
+            "next_action": "next",
+            "warnings": [str(i) for i in range(25)],
+            "raw_log": "forbidden",
+            "discord_messages": ["forbidden"],
+            "token": "secret-token",
+            "github_response": {"raw": "forbidden"},
+        }
+    )
+
+    data = record.to_dict()
+
+    assert len(data["handoff_id"]) <= 160
+    assert len(data["active_lane"]) <= 160
+    assert data["accepted_head"] == ""
+    assert data["target_head"] == ""
+    assert len(data["warnings"]) == 20
+    rendered = str(data).lower()
+    assert "raw_log" not in rendered
+    assert "discord_messages" not in rendered
+    assert "secret-token" not in rendered
+    assert "github_response" not in rendered
