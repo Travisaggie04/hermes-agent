@@ -31,6 +31,7 @@ from mission_control.verifier_workflow import (
     evaluate_verifier_workflow,
     get_verifier_workflow_policy,
 )
+from mission_control.workspace_status import build_workspace_status, default_workspace_status_input
 from mission_control.lane_preflight import run_lane_start_preflight
 from mission_control.records.errors import RecordStoreError
 from mission_control.records.models import RECORD_TYPES
@@ -1318,6 +1319,33 @@ async def pr_merge_verifier_gate() -> dict[str, Any]:
         "display_only": True,
         "source": "mission_control.pr_merge_verifier_gate",
         "gate": gate,
+    }
+
+
+@router.get("/workspace-status")
+async def workspace_status() -> dict[str, Any]:
+    status = build_workspace_status(default_workspace_status_input())
+    return {
+        **INERT_FLAGS,
+        "enforcement_enabled": False,
+        "dry_run_only": True,
+        "display_only": True,
+        **status,
+    }
+
+
+@router.post("/workspace-status/preview")
+async def workspace_status_preview(request: Request) -> dict[str, Any]:
+    payload = await _read_json_object_body(request)
+    status = build_workspace_status(payload)
+    return {
+        **INERT_FLAGS,
+        "enforcement_enabled": False,
+        "dry_run_only": True,
+        "display_only": True,
+        **status,
+        "source": "caller_supplied_workspace_status_preview",
+        "stored": False,
     }
 
 
