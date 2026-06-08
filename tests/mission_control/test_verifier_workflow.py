@@ -1,5 +1,7 @@
 """Inert Verifier Workflow v1 policy tests."""
 
+from mission_control.pr_merge_packet_hash import compute_pr_merge_packet_hash
+from mission_control.pr_merge_verifier_gate import evaluate_pr_merge_verifier_gate
 from mission_control.records import JsonlRecordStore, VerifierWorkflowEvidenceRecord
 from mission_control.verifier_workflow import (
     VERIFIER_WORKFLOW_POLICY,
@@ -256,3 +258,168 @@ def test_verifier_workflow_evidence_record_is_append_only_and_inert(tmp_path):
     assert records[0].enforces_runtime is False
     assert records[0].to_dict()["dry_run_only"] is True
     assert records[0].to_dict()["enforces_runtime"] is False
+
+
+def _valid_pr_merge_packet_identity():
+    return {
+        "repo": "https://github.com/Travisaggie04/Hermes-Agent.git",
+        "pr_number": "#41",
+        "base_branch": "pr-base/v2026.5.29.2-mission-control-records",
+        "head_commit": "F14333C74219F23F39D0DC6110A16EF7DBA70BE1",
+        "expected_base_head": "a167cf137730f2b1cab0c608a23f280ffe2770dd",
+        "merge_method": "MERGE",
+    }
+
+
+def test_verifier_evidence_record_stores_pr_merge_packet_hash_identity_only():
+    identity = _valid_pr_merge_packet_identity()
+    packet = {
+        **identity,
+        "verifier_evidence_record_id": "record-41",
+    }
+    packet_hash = compute_pr_merge_packet_hash(packet)
+
+    record = VerifierWorkflowEvidenceRecord(
+        record_id="record-41",
+        created_at="2026-06-08T01:00:00Z",
+        action_class="pr_merge",
+        decision_state="warn",
+        packet_hash=packet_hash,
+        packet_version="pr_merge_packet_v1",
+        packet_identity={
+            **identity,
+            "raw_log": "do not store",
+            "transcript": "do not store",
+            "comments": "do not store",
+            "pr_body": "do not store",
+            "local_path": "/home/jenny/secret/path",
+            "token": "not-a-real-token-but-still-forbidden",
+            "api_key": "not-a-real-api-key-but-still-forbidden",
+            "canonical_packet_json": "do not store",
+        },
+    )
+
+    payload = record.to_dict()
+
+    assert payload["packet_hash"] == packet_hash
+    assert payload["packet_version"] == "pr_merge_packet_v1"
+    assert payload["packet_identity"] == {
+        "repo": "travisaggie04/hermes-agent",
+        "pr_number": "41",
+        "base_branch": "pr-base/v2026.5.29.2-mission-control-records",
+        "head_commit": "f14333c74219f23f39d0dc6110a16ef7dba70be1",
+        "expected_base_head": "a167cf137730f2b1cab0c608a23f280ffe2770dd",
+        "merge_method": "merge",
+    }
+    assert "canonical_packet_json" not in payload
+    for forbidden in ("raw_log", "transcript", "comments", "pr_body", "local_path", "token", "api_key"):
+        assert forbidden not in payload["packet_identity"]
+    assert payload["dry_run_only"] is True
+    assert payload["enforces_runtime"] is False
+
+
+def test_verifier_evidence_record_omits_invalid_pr_merge_packet_fields():
+    record = VerifierWorkflowEvidenceRecord(
+        record_id="record-bad-packet",
+        created_at="2026-06-08T01:01:00Z",
+        action_class="pr_merge",
+        packet_hash="sha256:not-valid",
+        packet_version="wrong-version",
+        packet_identity={
+            "repo": "not-a-valid-repo-name",
+            "pr_number": "not-decimal",
+            "base_branch": "pr-base/v2026.5.29.2-mission-control-records",
+            "head_commit": "short-sha",
+            "expected_base_head": "also-short",
+            "merge_method": "octopus",
+        },
+    )
+
+    payload = record.to_dict()
+
+    assert "packet_hash" not in payload
+    assert "packet_version" not in payload
+    assert payload["packet_identity"] == {
+        "base_branch": "pr-base/v2026.5.29.2-mission-control-records"
+    }
+    assert payload["dry_run_only"] is True
+    assert payload["enforces_runtime"] is False
+
+
+def test_verifier_evidence_packet_fields_round_trip_and_append_only(tmp_path):
+    store = JsonlRecordStore(tmp_path / "records.jsonl")
+    identity = _valid_pr_merge_packet_identity()
+    packet_hash = compute_pr_merge_packet_hash({**identity, "verifier_evidence_record_id": "record-roundtrip"})
+    first = VerifierWorkflowEvidenceRecord(
+        record_id="record-roundtrip",
+        created_at="2026-06-08T01:02:00Z",
+        action_class="pr_merge",
+        packet_hash=packet_hash,
+        packet_identity=identity,
+    )
+    second = VerifierWorkflowEvidenceRecord(
+        record_id="record-after",
+        created_at="2026-06-08T01:03:00Z",
+        action_class="pr_ready",
+    )
+
+    assert store.append(first) == 1
+    assert store.append(second) == 2
+    records = store.read_all(VerifierWorkflowEvidenceRecord)
+
+    assert [record.record_id for record in records] == ["record-roundtrip", "record-after"]
+    assert records[0].packet_hash == packet_hash
+    assert records[0].packet_version == "pr_merge_packet_v1"
+    assert records[0].packet_identity["repo"] == "travisaggie04/hermes-agent"
+    assert records[0].dry_run_only is True
+    assert records[0].enforces_runtime is False
+
+
+def test_pr_merge_gate_can_consume_stored_packet_evidence_summary():
+    identity = _valid_pr_merge_packet_identity()
+    record_id = "record-gate-summary"
+    packet = {**identity, "verifier_evidence_record_id": record_id}
+    packet_hash = compute_pr_merge_packet_hash(packet)
+    record = VerifierWorkflowEvidenceRecord(
+        record_id=record_id,
+        created_at="2026-06-08T01:04:00Z",
+        action_class="pr_merge",
+        decision_state="warn",
+        would_block=False,
+        packet_hash=packet_hash,
+        packet_identity=identity,
+    )
+    payload = record.to_dict()
+    packet_identity = payload["packet_identity"]
+    evidence_summary = {
+        "record_id": payload["record_id"],
+        "guard_type": payload["guard_type"],
+        "action_class": payload["action_class"],
+        "repo": packet_identity["repo"],
+        "pr_number": packet_identity["pr_number"],
+        "base_branch": packet_identity["base_branch"],
+        "head_commit": packet_identity["head_commit"],
+        "packet_hash": payload["packet_hash"],
+        "implementer_id": "jenny-implementer",
+        "verifier_id": "jenny-verifier",
+        "would_block": payload["would_block"],
+        "blocked_actions": payload["blocked_actions"],
+        "dry_run_only": payload["dry_run_only"],
+        "enforces_runtime": payload["enforces_runtime"],
+    }
+    state = {
+        **packet_identity,
+        "packet_hash": packet_hash,
+        "merge_packet": packet,
+        "implementer_id": "jenny-implementer",
+        "verifier_id": "jenny-verifier",
+        "verifier_evidence_record_id": record_id,
+        "verifier_evidence": evidence_summary,
+    }
+
+    result = evaluate_pr_merge_verifier_gate(state)
+
+    assert result["would_block"] is False
+    assert result["packet_hash_valid"] is True
+    assert result["dry_run_only"] is True
+    assert result["enforces_runtime"] is False
