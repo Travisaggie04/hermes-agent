@@ -19,6 +19,7 @@
   const APPROVAL_SLICES_URL = "/api/plugins/mission-control-governance/approval-slices";
   const EVIDENCE_CARDS_URL = "/api/plugins/mission-control-governance/evidence-cards";
   const OPERATOR_ACTIONS_URL = "/api/plugins/mission-control-governance/operator-actions";
+  const WORKSPACE_STATUS_URL = "/api/plugins/mission-control-governance/workspace-status";
   const RECORDS_URL = "/api/plugins/mission-control-governance/records?limit=25";
   const SCHEMA_URL = "/api/plugins/mission-control-governance/schema";
   const RECORD_DETAIL_URL = function (index) {
@@ -128,6 +129,38 @@
     return value ? "true" : "false";
   }
 
+  function valueText(value, fallback) {
+    if (value === true) return "true";
+    if (value === false) return "false";
+    if (value === null || typeof value === "undefined" || value === "") return fallback || "Unknown";
+    if (Array.isArray(value)) return value.length ? value.join(", ") : (fallback || "None");
+    return String(value);
+  }
+
+  function shortHead(value) {
+    const text = valueText(value, "Unknown");
+    return text.length > 12 ? text.slice(0, 12) : text;
+  }
+
+  function WorkspaceField(props) {
+    return h("div", { className: "mcg-workspace-field" },
+      h("span", { className: "mcg-start-label" }, props.label),
+      h("strong", null, valueText(props.value, props.fallback))
+    );
+  }
+
+  function WorkspaceList(props) {
+    const items = props.items || [];
+    return h("div", { className: "mcg-workspace-section" },
+      h("div", { className: "mcg-workspace-section-title" }, props.title),
+      h("div", { className: "mcg-workspace-list" },
+        items.map(function (item, index) {
+          return h("span", { className: "mcg-workspace-pill", key: props.title + "-" + index }, item);
+        })
+      )
+    );
+  }
+
   function GovernancePage() {
     const useState = hooks.useState;
     const useEffect = hooks.useEffect;
@@ -143,6 +176,7 @@
       approvals: null,
       evidence: null,
       actions: null,
+      workspaceStatus: null,
       rows: [],
       schema: null,
       detail: null,
@@ -167,6 +201,7 @@
         getJSON(APPROVAL_SLICES_URL),
         getJSON(EVIDENCE_CARDS_URL),
         getJSON(OPERATOR_ACTIONS_URL),
+        getJSON(WORKSPACE_STATUS_URL),
         getJSON(RECORDS_URL),
         getJSON(SCHEMA_URL),
       ])
@@ -184,8 +219,9 @@
             approvals: result[7],
             evidence: result[8],
             actions: result[9],
-            rows: (result[10] && result[10].records) || [],
-            schema: result[11],
+            workspaceStatus: result[10],
+            rows: (result[11] && result[11].records) || [],
+            schema: result[12],
             detail: null,
             detailLoading: false,
             detailError: "",
@@ -207,6 +243,7 @@
             approvals: null,
             evidence: null,
             actions: null,
+            workspaceStatus: null,
             rows: [],
             schema: null,
             detail: null,
@@ -262,6 +299,29 @@
     const approvals = data.approvals || {};
     const evidence = data.evidence || {};
     const actions = data.actions || {};
+    const workspaceStatus = data.workspaceStatus || {};
+    const acceptedBaseline = workspaceStatus.accepted_baseline || {};
+    const rollbackBaseline = workspaceStatus.rollback_baseline || {};
+    const workspaceLane = workspaceStatus.lane || {};
+    const workspaceSafety = workspaceStatus.safety || {};
+    const workspaceActivity = workspaceStatus.activity || {};
+    const prGate = workspaceStatus.pr_gate || {};
+    const deployment = workspaceStatus.deployment || {};
+    const staleContext = workspaceStatus.stale_context || {};
+    const staleWarnings = Array.isArray(staleContext.warnings) ? staleContext.warnings : [];
+    const safetyLocks = [
+      "dispatch_in_gateway=" + valueText(workspaceSafety.dispatch_in_gateway, "unknown"),
+      "workers_enabled=" + valueText(workspaceSafety.workers_enabled, "unknown"),
+      "queue_mutation_enabled=" + valueText(workspaceSafety.queue_mutation_enabled, "unknown"),
+      "model_routing_enabled=" + valueText(workspaceSafety.model_routing_enabled, "unknown"),
+      "enforcement_enabled=" + valueText(workspaceSafety.enforcement_enabled, "unknown"),
+    ];
+    const inertFlags = [
+      "display_only=" + valueText(workspaceStatus.display_only, "unknown"),
+      "dry_run_only=" + valueText(workspaceStatus.dry_run_only, "unknown"),
+      "stored=" + valueText(workspaceStatus.stored, "unknown"),
+      "enforces_runtime=" + valueText(workspaceStatus.enforces_runtime, "unknown"),
+    ];
     const envelopeRows = envelopes.task_control_envelopes || [];
     const checkRows = checks.start_gate_checks || [];
     const approvalRows = approvals.approval_slices || [];
@@ -298,6 +358,71 @@
         h(StatCard, { label: "Latest mission", value: summary.latest_mission_title || "None", hint: summary.latest_mission_created_at || "no mission brief" })
       ),
 
+
+      h(C.Card, { className: "mcg-workspace-card" },
+        h(C.CardContent, { className: "mcg-workspace-body" },
+          h("div", { className: "mcg-panel-heading" },
+            h("div", null,
+              h("div", { className: "mcg-panel-title" }, "Operating Workspace"),
+              h("p", { className: "mcg-muted" }, "Execution disabled — use approved lane.")
+            ),
+            h("span", { className: "mcg-badge" }, "Display-only")
+          ),
+          data.loading
+            ? h("p", { className: "mcg-muted" }, "Loading operating workspace...")
+            : h("div", { className: "mcg-workspace-grid" },
+              h("div", { className: "mcg-workspace-section" },
+                h("div", { className: "mcg-workspace-section-title" }, "Accepted Baseline"),
+                h(WorkspaceField, { label: "Runtime", value: acceptedBaseline.runtime_path }),
+                h(WorkspaceField, { label: "Head", value: shortHead(acceptedBaseline.head) }),
+                h(WorkspaceField, { label: "Status", value: acceptedBaseline.status })
+              ),
+              h("div", { className: "mcg-workspace-section" },
+                h("div", { className: "mcg-workspace-section-title" }, "Rollback Baseline"),
+                h(WorkspaceField, { label: "Runtime", value: rollbackBaseline.runtime_path }),
+                h(WorkspaceField, { label: "Head", value: shortHead(rollbackBaseline.head) }),
+                h(WorkspaceField, { label: "Clean", value: rollbackBaseline.clean })
+              ),
+              h("div", { className: "mcg-workspace-section" },
+                h("div", { className: "mcg-workspace-section-title" }, "Active Lane"),
+                h(WorkspaceField, { label: "Lane", value: workspaceLane.active_lane }),
+                h(WorkspaceField, { label: "Mode", value: workspaceLane.mode }),
+                h(WorkspaceField, { label: "Max active lane", value: workspaceLane.max_active_lane }),
+                h(WorkspaceField, { label: "Active lane count", value: workspaceLane.active_lane_count })
+              ),
+              h(WorkspaceList, { title: "Safety Locks", items: safetyLocks }),
+              h("div", { className: "mcg-workspace-section" },
+                h("div", { className: "mcg-workspace-section-title" }, "Activity Counts"),
+                h(WorkspaceField, { label: "Workers", value: workspaceActivity.active_workers }),
+                h(WorkspaceField, { label: "Tasks", value: workspaceActivity.active_tasks }),
+                h(WorkspaceField, { label: "Runs", value: workspaceActivity.active_runs }),
+                h(WorkspaceField, { label: "App/server pairs", value: workspaceActivity.appserver_pairs, fallback: "Unknown" })
+              ),
+              h("div", { className: "mcg-workspace-section" },
+                h("div", { className: "mcg-workspace-section-title" }, "PR Packet / Evidence / Approval Status"),
+                h(WorkspaceField, { label: "Latest PR", value: prGate.latest_pr, fallback: "None" }),
+                h(WorkspaceField, { label: "packet_hash", value: prGate.packet_hash, fallback: "Missing" }),
+                h(WorkspaceField, { label: "verifier_evidence_record_id", value: prGate.verifier_evidence_record_id, fallback: "Missing" }),
+                h(WorkspaceField, { label: "approval_record_id", value: prGate.approval_record_id, fallback: "Missing" }),
+                h(WorkspaceField, { label: "guard_advisory_only", value: prGate.guard_advisory_only })
+              ),
+              h("div", { className: "mcg-workspace-section" },
+                h("div", { className: "mcg-workspace-section-title" }, "Deployment Status"),
+                h(WorkspaceField, { label: "Status", value: deployment.status }),
+                h(WorkspaceField, { label: "Target runtime", value: deployment.target_runtime }),
+                h(WorkspaceField, { label: "Target head", value: shortHead(deployment.target_head) }),
+                h(WorkspaceField, { label: "rollback_used", value: deployment.rollback_used })
+              ),
+              h("div", { className: "mcg-workspace-section" },
+                h("div", { className: "mcg-workspace-section-title" }, "Stale Context Warnings"),
+                h(WorkspaceField, { label: "baseline_mismatch", value: staleContext.baseline_mismatch }),
+                h(WorkspaceField, { label: "thread_mismatch", value: staleContext.thread_mismatch }),
+                h(WorkspaceField, { label: "Warnings", value: staleWarnings, fallback: "None" })
+              )
+            ),
+          !data.loading ? h(WorkspaceList, { title: "Inert Flags", items: inertFlags }) : null
+        )
+      ),
       h(C.Card, { className: "mcg-start-card" },
         h(C.CardContent, { className: "mcg-start-body" },
           h("div", { className: "mcg-panel-title" }, "Start Gate"),

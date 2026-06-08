@@ -54,6 +54,7 @@
 
 .mcg-stat,
 .mcg-start-card,
+.mcg-workspace-card,
 .mcg-lane-preflight-card,
 .mcg-model-picker-card,
 .mcg-envelope-card,
@@ -136,6 +137,58 @@
   font-size: 13px;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+.mcg-workspace-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+.mcg-workspace-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mcg-workspace-section,
+.mcg-workspace-field,
+.mcg-workspace-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mcg-workspace-section {
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.mcg-workspace-section-title {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.mcg-workspace-field strong {
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.mcg-workspace-list {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.mcg-workspace-pill {
+  border: 1px solid hsl(var(--border));
+  border-radius: 999px;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  padding: 3px 8px;
 }
 
 .mcg-summary-panels,
@@ -365,6 +418,7 @@
   }
 
   .mcg-start-grid,
+  .mcg-workspace-grid,
   .mcg-summary-panels,
   .mcg-panels {
     grid-template-columns: 1fr;
