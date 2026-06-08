@@ -33,6 +33,8 @@ _ALLOWED_MERGE_METHODS = {"merge", "squash", "rebase"}
 _MAX_REPO_CHARS = 120
 _MAX_PR_NUMBER_CHARS = 20
 _MAX_BASE_BRANCH_CHARS = 200
+_MAX_OPERATOR_ID_CHARS = 80
+_APPROVED_PR_MERGE_SCOPE = "merge_pr_only"
 
 
 def _clean_text(value: Any, max_chars: int) -> str:
@@ -104,6 +106,20 @@ def _sanitize_pr_merge_packet_version(action_class: str, value: Any) -> str:
         return ""
     text = str(value or "").strip() or _PACKET_VERSION
     return text if text == _PACKET_VERSION else ""
+
+
+def _sanitize_pr_merge_action_class(value: Any) -> str:
+    text = str(value or "").strip()
+    return text if text == "pr_merge" else ""
+
+
+def _sanitize_pr_merge_approved_scope(value: Any) -> str:
+    text = str(value or "").strip()
+    return text if text == _APPROVED_PR_MERGE_SCOPE else ""
+
+
+def _sanitize_operator_id(value: Any) -> str:
+    return _clean_text(value, _MAX_OPERATOR_ID_CHARS)
 
 
 @dataclass(frozen=True)
@@ -393,6 +409,178 @@ class VerifierWorkflowEvidenceRecord:
             packet_version=data.get("packet_version", ""),
             packet_identity=data.get("packet_identity") or {},
         )
+
+
+@dataclass(frozen=True)
+class PrMergeApprovalRecord:
+    approval_id: str
+    created_at: str
+    expires_at: str | None = None
+    action_class: str = ""
+    packet_hash: str = ""
+    packet_version: str = ""
+    repo: str = ""
+    pr_number: str = ""
+    base_branch: str = ""
+    head_commit: str = ""
+    expected_base_head: str = ""
+    merge_method: str = ""
+    operator_id: str = ""
+    approved_scope: str = ""
+    consumed: bool = False
+    dry_run_only: bool = True
+    enforces_runtime: bool = False
+
+    record_type: ClassVar[str] = "PrMergeApprovalRecord"
+
+    def __post_init__(self) -> None:
+        action_class = _sanitize_pr_merge_action_class(self.action_class)
+        object.__setattr__(self, "action_class", action_class)
+        object.__setattr__(self, "packet_hash", _sanitize_pr_merge_packet_hash(action_class, self.packet_hash))
+        object.__setattr__(self, "packet_version", _sanitize_pr_merge_packet_version(action_class, self.packet_version))
+        object.__setattr__(self, "repo", _normalize_packet_repo(self.repo) if action_class == "pr_merge" else "")
+        object.__setattr__(self, "pr_number", _normalize_packet_pr_number(self.pr_number) if action_class == "pr_merge" else "")
+        object.__setattr__(self, "base_branch", _clean_text(self.base_branch, _MAX_BASE_BRANCH_CHARS) if action_class == "pr_merge" else "")
+        object.__setattr__(self, "head_commit", _normalize_packet_sha(self.head_commit) if action_class == "pr_merge" else "")
+        object.__setattr__(self, "expected_base_head", _normalize_packet_sha(self.expected_base_head) if action_class == "pr_merge" else "")
+        object.__setattr__(self, "merge_method", _normalize_packet_merge_method(self.merge_method) if action_class == "pr_merge" else "")
+        object.__setattr__(self, "operator_id", _sanitize_operator_id(self.operator_id))
+        object.__setattr__(self, "approved_scope", _sanitize_pr_merge_approved_scope(self.approved_scope) if action_class == "pr_merge" else "")
+        object.__setattr__(self, "expires_at", str(self.expires_at).strip() if self.expires_at else None)
+        object.__setattr__(self, "consumed", False)
+        object.__setattr__(self, "dry_run_only", True)
+        object.__setattr__(self, "enforces_runtime", False)
+
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "approval_id": self.approval_id,
+            "created_at": self.created_at,
+        }
+        if self.expires_at:
+            payload["expires_at"] = self.expires_at
+        for field_name in (
+            "action_class",
+            "packet_hash",
+            "packet_version",
+            "repo",
+            "pr_number",
+            "base_branch",
+            "head_commit",
+            "expected_base_head",
+            "merge_method",
+            "operator_id",
+            "approved_scope",
+        ):
+            value = getattr(self, field_name)
+            if value:
+                payload[field_name] = value
+        payload["consumed"] = False
+        payload["dry_run_only"] = True
+        payload["enforces_runtime"] = False
+        return payload
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> PrMergeApprovalRecord:
+        return cls(
+            approval_id=_required(data, "approval_id"),
+            created_at=_required(data, "created_at"),
+            expires_at=data.get("expires_at"),
+            action_class=data.get("action_class", ""),
+            packet_hash=data.get("packet_hash", ""),
+            packet_version=data.get("packet_version", ""),
+            repo=data.get("repo", ""),
+            pr_number=data.get("pr_number", ""),
+            base_branch=data.get("base_branch", ""),
+            head_commit=data.get("head_commit", ""),
+            expected_base_head=data.get("expected_base_head", ""),
+            merge_method=data.get("merge_method", ""),
+            operator_id=data.get("operator_id", ""),
+            approved_scope=data.get("approved_scope", ""),
+            consumed=False,
+            dry_run_only=True,
+            enforces_runtime=False,
+        )
+
+
+def approval_matches_pr_merge_packet(
+    approval: dict[str, Any] | PrMergeApprovalRecord | None,
+    packet: dict[str, Any] | None,
+    *,
+    now: str | None = None,
+) -> dict[str, Any]:
+    reasons: list[str] = []
+    missing_fields: list[str] = []
+    invalid_fields: list[str] = []
+    approval_record = approval if isinstance(approval, PrMergeApprovalRecord) else None
+    if approval_record is None and isinstance(approval, dict):
+        try:
+            approval_record = PrMergeApprovalRecord.from_dict(approval)
+        except (KeyError, TypeError, ValueError):
+            approval_record = None
+    packet_data = dict(packet or {})
+
+    if approval_record is None:
+        reasons.append("approval record missing or invalid")
+    required = (
+        "action_class",
+        "packet_hash",
+        "packet_version",
+        "repo",
+        "pr_number",
+        "base_branch",
+        "head_commit",
+        "expected_base_head",
+        "merge_method",
+    )
+    for field_name in required:
+        if not packet_data.get(field_name):
+            missing_fields.append(field_name)
+            reasons.append(f"missing packet field: {field_name}")
+
+    normalized_packet = {
+        "action_class": _sanitize_pr_merge_action_class(packet_data.get("action_class")),
+        "packet_hash": _sanitize_pr_merge_packet_hash("pr_merge", packet_data.get("packet_hash")),
+        "packet_version": _sanitize_pr_merge_packet_version("pr_merge", packet_data.get("packet_version")),
+        "repo": _normalize_packet_repo(packet_data.get("repo")),
+        "pr_number": _normalize_packet_pr_number(packet_data.get("pr_number")),
+        "base_branch": _clean_text(packet_data.get("base_branch"), _MAX_BASE_BRANCH_CHARS),
+        "head_commit": _normalize_packet_sha(packet_data.get("head_commit")),
+        "expected_base_head": _normalize_packet_sha(packet_data.get("expected_base_head")),
+        "merge_method": _normalize_packet_merge_method(packet_data.get("merge_method")),
+    }
+    for field_name, value in normalized_packet.items():
+        if packet_data.get(field_name) and not value:
+            invalid_fields.append(field_name)
+            reasons.append(f"invalid packet field: {field_name}")
+
+    if approval_record is not None:
+        approval_payload = approval_record.to_dict()
+        if approval_payload.get("consumed") is not False:
+            invalid_fields.append("consumed")
+            reasons.append("approval consumed")
+        if approval_payload.get("dry_run_only") is not True:
+            invalid_fields.append("dry_run_only")
+            reasons.append("approval dry_run_only is not true")
+        if approval_payload.get("enforces_runtime") is not False:
+            invalid_fields.append("enforces_runtime")
+            reasons.append("approval enforces_runtime is not false")
+        if now and approval_payload.get("expires_at") and str(now).strip() > str(approval_payload["expires_at"]).strip():
+            invalid_fields.append("expires_at")
+            reasons.append("approval expired")
+        for field_name in required:
+            if approval_payload.get(field_name) != normalized_packet.get(field_name):
+                reasons.append(f"{field_name} mismatch")
+
+    valid = not reasons
+    return {
+        "valid": valid,
+        "matches_packet": valid,
+        "reasons": reasons,
+        "missing_fields": missing_fields,
+        "invalid_fields": invalid_fields,
+        "dry_run_only": True,
+        "enforces_runtime": False,
+    }
 
 
 @dataclass(frozen=True)
@@ -690,6 +878,7 @@ RECORD_TYPES = {
     cls.record_type: cls
     for cls in (
         ApprovalSlice,
+        PrMergeApprovalRecord,
         ArtifactRef,
         EvidenceCard,
         GoalContract,
