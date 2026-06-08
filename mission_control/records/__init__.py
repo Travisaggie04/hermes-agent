@@ -1,6 +1,7 @@
 """Mission Control record models and JSONL persistence."""
 
 from mission_control.records.models import (
+    AcceptedBaselineRecord,
     ApprovalSlice,
     ArtifactRef,
     EvidenceCard,
@@ -16,6 +17,7 @@ from mission_control.records.models import (
 from mission_control.records.store import JsonlRecordStore
 
 __all__ = [
+    "AcceptedBaselineRecord",
     "ApprovalSlice",
     "ArtifactRef",
     "EvidenceCard",
