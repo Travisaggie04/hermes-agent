@@ -1,5 +1,6 @@
 """Inert PR merge verifier gate v1 policy tests."""
 
+from mission_control.pr_merge_packet_hash import compute_pr_merge_packet_hash
 from mission_control.pr_merge_verifier_gate import (
     PR_MERGE_VERIFIER_GATE_POLICY,
     evaluate_pr_merge_verifier_gate,
@@ -26,6 +27,48 @@ def _valid_state():
             "base_branch": "pr-base/v2026.5.29.2-mission-control-records",
             "head_commit": "abc123",
             "packet_hash": "sha256:packet",
+            "implementer_id": "jenny-implementer",
+            "verifier_id": "jenny-verifier",
+            "would_block": False,
+            "blocked_actions": [],
+            "dry_run_only": True,
+            "enforces_runtime": False,
+        },
+    }
+
+
+def _valid_state_with_merge_packet():
+    packet = {
+        "repo": "https://github.com/Travisaggie04/hermes-agent.git",
+        "pr_number": "#40",
+        "base_branch": "pr-base/v2026.5.29.2-mission-control-records",
+        "head_commit": "a167cf137730f2b1cab0c608a23f280ffe2770dd",
+        "merge_method": "merge",
+        "expected_base_head": "8db3bb13cb874734e3015a4cb2e140684f4d0362",
+        "verifier_evidence_record_id": "evidence-40",
+        "title": "PR #40 packet hash gate integration",
+        "operator_id": "jenny-operator",
+    }
+    packet_hash = compute_pr_merge_packet_hash(packet)
+    return {
+        "repo": "travisaggie04/hermes-agent",
+        "pr_number": "40",
+        "base_branch": "pr-base/v2026.5.29.2-mission-control-records",
+        "head_commit": "a167cf137730f2b1cab0c608a23f280ffe2770dd",
+        "packet_hash": packet_hash,
+        "merge_packet": packet,
+        "implementer_id": "jenny-implementer",
+        "verifier_id": "jenny-verifier",
+        "verifier_evidence_record_id": "evidence-40",
+        "verifier_evidence": {
+            "record_id": "evidence-40",
+            "guard_type": "verifier_workflow",
+            "action_class": "pr_merge",
+            "repo": "travisaggie04/hermes-agent",
+            "pr_number": "40",
+            "base_branch": "pr-base/v2026.5.29.2-mission-control-records",
+            "head_commit": "a167cf137730f2b1cab0c608a23f280ffe2770dd",
+            "packet_hash": packet_hash,
             "implementer_id": "jenny-implementer",
             "verifier_id": "jenny-verifier",
             "would_block": False,
@@ -83,6 +126,73 @@ def test_missing_verifier_evidence_would_block_pr_merge_packet_progression():
     assert "missing verifier evidence" in result["reasons"]
     assert "proceed with PR merge packet" in result["blocked_actions"]
     assert "matching verifier evidence record" in result["required_approvals"]
+
+
+def test_valid_canonical_merge_packet_hash_passes_inert_gate_with_metadata():
+    result = evaluate_pr_merge_verifier_gate(_valid_state_with_merge_packet())
+
+    assert result["decision_state"] == "warn"
+    assert result["would_block"] is False
+    assert result["packet_hash_valid"] is True
+    assert result["computed_packet_hash"] == result["supplied_packet_hash"]
+    assert result["packet_hash_reasons"] == []
+    assert result["canonical_packet_json"]
+    assert len(result["canonical_packet_json"]) < 2000
+    assert result["dry_run_only"] is True
+    assert result["enforces_runtime"] is False
+
+
+def test_supplied_merge_packet_requires_packet_hash():
+    state = _valid_state_with_merge_packet()
+    state["packet_hash"] = ""
+    state["verifier_evidence"]["packet_hash"] = ""
+
+    result = evaluate_pr_merge_verifier_gate(state)
+
+    assert result["would_block"] is True
+    assert result["packet_hash_valid"] is False
+    assert "packet_hash_invalid" in result["reasons"]
+    assert "expected_hash must use sha256:<64 lowercase hex> format" in result["packet_hash_reasons"]
+
+
+def test_supplied_merge_packet_hash_mismatch_blocks_with_metadata():
+    state = _valid_state_with_merge_packet()
+    state["packet_hash"] = "sha256:" + "0" * 64
+    state["verifier_evidence"]["packet_hash"] = state["packet_hash"]
+
+    result = evaluate_pr_merge_verifier_gate(state)
+
+    assert result["would_block"] is True
+    assert result["packet_hash_valid"] is False
+    assert result["supplied_packet_hash"] == "sha256:" + "0" * 64
+    assert result["computed_packet_hash"] != result["supplied_packet_hash"]
+    assert "packet_hash_invalid" in result["reasons"]
+    assert "packet_hash mismatch" in result["packet_hash_reasons"]
+
+
+def test_supplied_merge_packet_field_mismatch_blocks():
+    state = _valid_state_with_merge_packet()
+    state["merge_packet"]["pr_number"] = "41"
+    state["packet_hash"] = compute_pr_merge_packet_hash(state["merge_packet"])
+    state["verifier_evidence"]["packet_hash"] = state["packet_hash"]
+
+    result = evaluate_pr_merge_verifier_gate(state)
+
+    assert result["would_block"] is True
+    assert result["packet_hash_valid"] is True
+    assert "merge packet pr_number mismatch" in result["reasons"]
+
+
+def test_supplied_merge_packet_missing_required_field_blocks():
+    state = _valid_state_with_merge_packet()
+    state["merge_packet"].pop("expected_base_head")
+
+    result = evaluate_pr_merge_verifier_gate(state)
+
+    assert result["would_block"] is True
+    assert result["packet_hash_valid"] is False
+    assert "packet_hash_invalid" in result["reasons"]
+    assert "expected_base_head" in result["packet_hash_missing_fields"]
 
 
 def test_missing_packet_hash_would_block():

@@ -8,8 +8,11 @@ queues, databases, or runtime state, and it never performs a merge.
 
 from __future__ import annotations
 
+import json
 from copy import deepcopy
-from typing import Any
+from typing import Any, cast
+
+from mission_control.pr_merge_packet_hash import validate_pr_merge_packet_hash
 
 _INERT_GATE_FLAGS: dict[str, Any] = {
     "trusted_for_execution": False,
@@ -94,6 +97,7 @@ _EVIDENCE_FIELDS = {
     "enforces_runtime",
 }
 _MERGE_BLOCKED_ACTION_TERMS = ("merge pr", "pr merge", "merge pull request")
+_BOUND_CANONICAL_PACKET_JSON_CHARS = 2000
 
 
 def get_pr_merge_verifier_gate_policy() -> dict[str, Any]:
@@ -149,6 +153,56 @@ def _has_merge_blocked_action(actions: list[str]) -> bool:
     return False
 
 
+def _packet_hash_metadata() -> dict[str, Any]:
+    return {
+        "packet_hash_valid": None,
+        "computed_packet_hash": "",
+        "supplied_packet_hash": "",
+        "packet_hash_reasons": [],
+        "packet_hash_missing_fields": [],
+        "packet_hash_invalid_fields": [],
+        "canonical_packet_json": "",
+    }
+
+
+def _add_merge_packet_hash_decision(
+    observed: dict[str, Any],
+    reasons: list[str],
+    blocked_actions: list[str],
+) -> dict[str, Any]:
+    metadata = _packet_hash_metadata()
+    if "merge_packet" not in observed:
+        return metadata
+
+    merge_packet = cast(dict[str, Any], observed.get("merge_packet"))
+    validation = validate_pr_merge_packet_hash(merge_packet, _text(observed.get("packet_hash")))
+    metadata.update(
+        {
+            "packet_hash_valid": validation.get("valid") is True,
+            "computed_packet_hash": _text(validation.get("computed_hash")),
+            "supplied_packet_hash": _text(validation.get("expected_hash")),
+            "packet_hash_reasons": list(validation.get("reasons") or []),
+            "packet_hash_missing_fields": list(validation.get("missing_fields") or []),
+            "packet_hash_invalid_fields": list(validation.get("invalid_fields") or []),
+        }
+    )
+    canonical_json = _text(validation.get("canonical_json"))
+    if canonical_json and len(canonical_json) <= _BOUND_CANONICAL_PACKET_JSON_CHARS:
+        metadata["canonical_packet_json"] = canonical_json
+
+    if validation.get("valid") is not True:
+        _add_unique(reasons, "packet_hash_invalid")
+        _add_unique(blocked_actions, "proceed with PR merge packet")
+        return metadata
+
+    canonical_packet = json.loads(canonical_json)
+    for field in ("repo", "pr_number", "base_branch", "head_commit", "verifier_evidence_record_id"):
+        if not _same_text(canonical_packet.get(field), observed.get(field)):
+            _add_unique(reasons, f"merge packet {field} mismatch")
+            _add_unique(blocked_actions, "proceed with PR merge packet")
+    return metadata
+
+
 def evaluate_pr_merge_verifier_gate(state: dict[str, Any] | None) -> dict[str, Any]:
     """Dry-run evaluate caller-supplied PR merge packet/evidence state.
 
@@ -164,6 +218,7 @@ def evaluate_pr_merge_verifier_gate(state: dict[str, Any] | None) -> dict[str, A
     reasons: list[str] = []
     blocked_actions: list[str] = []
     required_approvals: list[str] = []
+    packet_hash_metadata = _packet_hash_metadata()
 
     if not observed:
         decision_state = "unknown"
@@ -175,6 +230,8 @@ def evaluate_pr_merge_verifier_gate(state: dict[str, Any] | None) -> dict[str, A
             if not _text(observed.get(field)):
                 _add_unique(reasons, f"missing PR merge packet field: {field}")
                 _add_unique(blocked_actions, "proceed with PR merge packet")
+
+        packet_hash_metadata = _add_merge_packet_hash_decision(observed, reasons, blocked_actions)
 
     if observed and not evidence:
         _add_unique(reasons, "missing verifier evidence")
@@ -225,7 +282,7 @@ def evaluate_pr_merge_verifier_gate(state: dict[str, Any] | None) -> dict[str, A
     elif decision_state != "unknown" and PR_MERGE_VERIFIER_GATE_POLICY.get("unresolved_policy_fields"):
         decision_state = "warn"
 
-    return {
+    result = {
         "decision_state": decision_state,
         "would_block": would_block,
         "reasons": reasons,
@@ -235,3 +292,5 @@ def evaluate_pr_merge_verifier_gate(state: dict[str, Any] | None) -> dict[str, A
         "dry_run_only": True,
         "enforces_runtime": False,
     }
+    result.update(packet_hash_metadata)
+    return result
