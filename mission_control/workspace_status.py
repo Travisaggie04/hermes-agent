@@ -145,7 +145,18 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
     rollback_override = _section(source, "rollback_baseline") if accepted_source == "static_fallback" else {}
     accepted = _baseline_section(baseline_override, defaults=accepted_defaults)
     rollback = _rollback_section(rollback_override, defaults=rollback_defaults)
-    lane = _lane_section(_section(source, "lane"), defaults=_DEFAULT_STATUS["lane"])
+    lane_input = _section(source, "lane")
+    lane_defaults = _DEFAULT_STATUS["lane"]
+    if accepted_record.get("present") is True:
+        lane_defaults = {
+            "active_lane": "",
+            "mode": "",
+            "declared_baseline_head": accepted_record.get("head", ""),
+            "max_active_lane": accepted_record.get("max_active_lane", 1),
+            "active_lane_count": 0,
+        }
+        lane_input = _record_authoritative_lane_input(lane_input)
+    lane = _lane_section(lane_input, defaults=lane_defaults)
     safety = _safety_section(_section(source, "safety"), defaults=_DEFAULT_STATUS["safety"])
     activity = _activity_section(_section(source, "activity"), defaults=_DEFAULT_STATUS["activity"])
     if accepted_record.get("present") is True:
@@ -243,6 +254,24 @@ def _accepted_baseline_record_section(section: dict[str, Any]) -> dict[str, Any]
         "dry_run_only": True,
         "enforces_runtime": False,
     }
+
+
+def _record_authoritative_lane_input(section: dict[str, Any]) -> dict[str, Any]:
+    """Drop stale static lane defaults when a baseline record is authoritative."""
+    if not section:
+        return {}
+    lane = dict(section)
+    default_lane = _DEFAULT_STATUS["lane"]
+    active_lane = _safe_text(lane.get("active_lane"))
+    has_caller_lane = bool(active_lane) and active_lane != default_lane["active_lane"]
+    for key in ("active_lane", "mode", "active_lane_count"):
+        if not has_caller_lane and lane.get(key) == default_lane.get(key):
+            lane.pop(key, None)
+    if lane.get("declared_baseline_head") == default_lane.get("declared_baseline_head"):
+        lane.pop("declared_baseline_head", None)
+    if lane.get("max_active_lane") == default_lane.get("max_active_lane"):
+        lane.pop("max_active_lane", None)
+    return lane
 
 
 def _handoff_has_baseline(handoff: dict[str, Any]) -> bool:

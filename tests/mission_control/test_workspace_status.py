@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mission_control.workspace_status import build_workspace_status
+from mission_control.workspace_status import build_workspace_status, default_workspace_status_input
 
 
 def _baseline_payload(**overrides):
@@ -278,6 +278,65 @@ def test_workspace_status_uses_accepted_baseline_record_source_when_present():
     assert status["rollback_baseline"]["head"] == "d11681f81c7cd16a99c53649f157040b2d10a89f"
     assert "accepted_baseline_source_missing" not in status["stale_context"]["warnings"]
 
+
+
+
+def test_workspace_status_record_source_defaults_lane_to_idle_and_matching_baseline():
+    payload = default_workspace_status_input()
+    payload["accepted_baseline_record"] = _accepted_baseline_record_payload()
+    status = build_workspace_status(payload)
+
+    assert status["accepted_baseline_source"] == "record"
+    assert status["lane"]["declared_baseline_head"] == "8c560c739606564aeeb4db464fe1989cb67a40b6"
+    assert status["lane"]["active_lane"] == ""
+    assert status["lane"]["active_lane_count"] == 0
+    assert status["lane"]["max_active_lane"] == 1
+    assert status["lane"]["lane_status"] == "within_limit"
+    assert "baseline_mismatch" not in status["stale_context"]["warnings"]
+    assert status["stale_context"]["baseline_mismatch"] is False
+    assert status["safety"]["dispatch_in_gateway"] is False
+    assert status["safety"]["workers_enabled"] is False
+    assert status["safety"]["queue_mutation_enabled"] is False
+    assert status["safety"]["model_routing_enabled"] is False
+    assert status["safety"]["enforcement_enabled"] is False
+    assert status["execution_enabled"] is False
+    assert status["display_only"] is True
+    assert status["dry_run_only"] is True
+    assert status["enforces_runtime"] is False
+
+
+def test_workspace_status_record_source_preserves_caller_supplied_active_lane():
+    status = build_workspace_status(
+        _baseline_payload(
+            accepted_baseline_record=_accepted_baseline_record_payload(),
+            lane={
+                "active_lane": "PR #47 Mission Control handoff draft",
+                "mode": "discovery only",
+                "declared_baseline_head": "8c560c739606564aeeb4db464fe1989cb67a40b6",
+                "active_lane_count": 1,
+            },
+        )
+    )
+
+    assert status["accepted_baseline_source"] == "record"
+    assert status["lane"]["active_lane"] == "PR #47 Mission Control handoff draft"
+    assert status["lane"]["mode"] == "discovery only"
+    assert status["lane"]["active_lane_count"] == 1
+    assert status["lane"]["declared_baseline_head"] == "8c560c739606564aeeb4db464fe1989cb67a40b6"
+    assert "baseline_mismatch" not in status["stale_context"]["warnings"]
+
+
+def test_workspace_status_record_source_still_warns_on_real_caller_baseline_mismatch():
+    status = build_workspace_status(
+        _baseline_payload(
+            accepted_baseline_record=_accepted_baseline_record_payload(),
+            lane={"declared_baseline_head": "d11681f81c7cd16a99c53649f157040b2d10a89f"},
+        )
+    )
+
+    assert status["accepted_baseline_source"] == "record"
+    assert status["lane"]["declared_baseline_head"] == "d11681f81c7cd16a99c53649f157040b2d10a89f"
+    assert "baseline_mismatch" in status["stale_context"]["warnings"]
 
 def test_workspace_status_uses_handoff_source_when_no_accepted_record_exists():
     status = build_workspace_status(_baseline_payload(latest_handoff={
