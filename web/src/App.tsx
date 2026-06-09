@@ -105,6 +105,10 @@ function UnknownRouteFallback({ pluginsLoading }: { pluginsLoading: boolean }) {
   return <Navigate to="/sessions" replace />;
 }
 
+function MissionControlRedirect() {
+  return <Navigate to="/mission-control-governance" replace />;
+}
+
 const CHAT_NAV_ITEM: NavItem = {
   path: "/chat",
   labelKey: "chat",
@@ -123,6 +127,7 @@ const CHAT_NAV_ITEM: NavItem = {
  */
 const BUILTIN_ROUTES_CORE: Record<string, ComponentType> = {
   "/": RootRedirect,
+  "/mission-control": MissionControlRedirect,
   "/sessions": SessionsPage,
   "/analytics": AnalyticsPage,
   "/models": ModelsPage,

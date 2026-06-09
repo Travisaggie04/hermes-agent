@@ -1,7 +1,7 @@
 {
   "name": "mission-control-governance",
-  "label": "Governance",
-  "description": "Read-only Mission Control governance record summary.",
+  "label": "Mission Control",
+  "description": "Read-only Mission Control governance workspace, lane handoff, and autonomy readiness surface.",
   "icon": "ShieldCheck",
   "version": "0.1.0",
   "tab": {

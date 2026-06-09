@@ -482,8 +482,19 @@ def test_plugin_manifest_loads():
 
     dashboard = yaml.safe_load((PLUGIN_DIR / "dashboard" / "manifest.json").read_text())
     assert dashboard["name"] == "mission-control-governance"
+    assert dashboard["label"] == "Mission Control"
+    assert dashboard["tab"]["path"] == "/mission-control-governance"
     assert dashboard["entry"] == "dist/index.js"
     assert dashboard["api"] == "plugin_api.py"
+
+
+def test_app_routes_mission_control_alias_to_governance_tab():
+    app_source = (REPO_ROOT / "web" / "src" / "App.tsx").read_text()
+
+    assert "function MissionControlRedirect()" in app_source
+    assert 'return <Navigate to="/mission-control-governance" replace />;' in app_source
+    assert '"/mission-control": MissionControlRedirect' in app_source
+    assert '"/mission-control-governance":' not in app_source
 
 
 def test_lane_handoff_draft_builder_bundle_is_inert_and_copy_only():
