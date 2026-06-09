@@ -365,6 +365,123 @@
     );
   }
 
+  const AUTONOMY_READINESS_LEDGER = [
+    {
+      occurred_at: "2026-06-09",
+      lane: "dashboard import-binding repair",
+      severity: "medium",
+      status: "fixed",
+      event: "dashboard import-binding verifier false rollback",
+      root_cause: "Local import-source emulation ran from the wrong working directory before live route checks.",
+      caught_by_jenny: "partial",
+      guardrail_added: "Verify live process cwd, command line, plugin inventory, and workspace-status before local import emulation.",
+      remaining_manual_dependency: "Live repair lanes still require explicit operator approval for service changes.",
+      autonomy_impact: "Improves deploy reliability by proving the process actually imports the selected runtime.",
+    },
+    {
+      occurred_at: "2026-06-09",
+      lane: "dashboard import-binding repair",
+      severity: "medium",
+      status: "accepted risk",
+      event: "unapproved skill/reference update during live repair",
+      root_cause: "A durable learning update was made during a narrow live-ops lane instead of being reported for later approval.",
+      caught_by_jenny: "no",
+      guardrail_added: "Report recommended durable learning updates and wait for explicit approval during narrow live-ops lanes.",
+      remaining_manual_dependency: "Operator approval remains required before skill, memory, or reference updates in gated operations.",
+      autonomy_impact: "Improves process discipline by separating live mutation from durable learning capture.",
+    },
+    {
+      occurred_at: "2026-06-09",
+      lane: "lane-handoff draft builder deployment",
+      severity: "medium",
+      status: "fixed",
+      event: "stale dashboard session token printed during final verification",
+      root_cause: "A verification command printed an ephemeral dashboard token while checking authenticated workspace-status.",
+      caught_by_jenny: "yes",
+      guardrail_added: "Never print dashboard session token values; report only boolean/status outcomes and fetch fresh tokens after dashboard process changes.",
+      remaining_manual_dependency: "Dashboard restarts for token rotation still require explicit approval unless urgent.",
+      autonomy_impact: "Reduces credential-handling risk while preserving authenticated smoke checks.",
+    },
+    {
+      occurred_at: "2026-06-09",
+      lane: "dashboard session-token hygiene",
+      severity: "low",
+      status: "fixed",
+      event: "token rotation remediation",
+      root_cause: "The previously printed dashboard session token needed process rotation proof.",
+      caught_by_jenny: "yes",
+      guardrail_added: "Confirm old token returns 401 and new token returns 200 without printing token values.",
+      remaining_manual_dependency: "Service restarts remain gated live operations.",
+      autonomy_impact: "Improves confidence that accidental token exposure can be remediated safely.",
+    },
+    {
+      occurred_at: "2026-06-09",
+      lane: "lane-handoff draft builder",
+      severity: "low",
+      status: "open",
+      event: "PR #48 / lane-handoff builder safely deployed",
+      root_cause: "Long Discord prompts create manual copy risk and approval drift.",
+      caught_by_jenny: "yes",
+      guardrail_added: "Mission Control now provides manual-copy draft prompts with fixed inert safety flags and no backend write path.",
+      remaining_manual_dependency: "Travis still manually copies/approves lane packets; no direct dispatch is enabled.",
+      autonomy_impact: "Improves OS usefulness while preserving manual approval and no-dispatch boundaries.",
+    },
+  ];
+
+  function AutonomyReadinessLedgerPanel() {
+    const safetyLocks = [
+      "display_only=true",
+      "dry_run_only=true",
+      "execution_enabled=false",
+      "dispatch_in_gateway=false",
+      "model_routing=false",
+      "queue_mutation=false",
+      "waha_mutation=false",
+      "enforcement_enabled=false",
+      "record_write_enabled=false",
+    ];
+    const entries = AUTONOMY_READINESS_LEDGER;
+    const fixedCount = entries.filter(function (entry) { return entry.status === "fixed"; }).length;
+    const openCount = entries.filter(function (entry) { return entry.status === "open"; }).length;
+    const acceptedRiskCount = entries.filter(function (entry) { return entry.status === "accepted risk"; }).length;
+    return h(C.Card, { className: "mcg-workspace-card mcg-autonomy-ledger-card" },
+      h(C.CardContent, { className: "mcg-workspace-body" },
+        h("div", { className: "mcg-panel-heading" },
+          h("div", null,
+            h("div", { className: "mcg-panel-title" }, "Autonomy Readiness Ledger"),
+            h("p", { className: "mcg-muted" }, "Display-only ledger. This is not an enforcement surface.")
+          ),
+          h("span", { className: "mcg-badge" }, "Display-only")
+        ),
+        h("div", { className: "mcg-workspace-grid" },
+          h("div", { className: "mcg-workspace-section" },
+            h("div", { className: "mcg-workspace-section-title" }, "Summary"),
+            h(WorkspaceField, { label: "Entries", value: entries.length }),
+            h(WorkspaceField, { label: "fixed", value: fixedCount }),
+            h(WorkspaceField, { label: "open", value: openCount }),
+            h(WorkspaceField, { label: "accepted risk", value: acceptedRiskCount })
+          ),
+          h(WorkspaceList, { title: "Ledger Safety Locks", items: safetyLocks })
+        ),
+        h("div", { className: "mcg-workspace-grid" }, entries.map(function (entry, index) {
+          return h("div", { className: "mcg-workspace-section", key: "autonomy-ledger-" + index },
+            h("div", { className: "mcg-workspace-section-title" }, entry.event),
+            h(WorkspaceField, { label: "date/time", value: entry.occurred_at }),
+            h(WorkspaceField, { label: "lane", value: entry.lane }),
+            h(WorkspaceField, { label: "severity", value: entry.severity }),
+            h(WorkspaceField, { label: "status", value: entry.status }),
+            h(WorkspaceField, { label: "mistake / near miss", value: entry.event }),
+            h(WorkspaceField, { label: "root cause", value: entry.root_cause }),
+            h(WorkspaceField, { label: "caught by Jenny", value: entry.caught_by_jenny }),
+            h(WorkspaceField, { label: "guardrail", value: entry.guardrail_added }),
+            h(WorkspaceField, { label: "remaining manual dependency", value: entry.remaining_manual_dependency }),
+            h(WorkspaceField, { label: "autonomy impact", value: entry.autonomy_impact })
+          );
+        }))
+      )
+    );
+  }
+
   function GovernancePage() {
     const useState = hooks.useState;
     const useEffect = hooks.useEffect;
@@ -648,6 +765,7 @@
         )
       ),
       h(LaneHandoffDraftBuilder, { workspaceStatus: workspaceStatus }),
+      h(AutonomyReadinessLedgerPanel, null),
       h(C.Card, { className: "mcg-start-card" },
         h(C.CardContent, { className: "mcg-start-body" },
           h("div", { className: "mcg-panel-title" }, "Start Gate"),

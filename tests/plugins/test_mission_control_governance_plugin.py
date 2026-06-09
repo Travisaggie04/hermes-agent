@@ -536,6 +536,62 @@ def test_lane_handoff_draft_builder_bundle_is_inert_and_copy_only():
         assert forbidden not in bundle
 
 
+def test_autonomy_readiness_ledger_bundle_is_static_display_only():
+    bundle = (PLUGIN_DIR / "dashboard" / "dist" / "index.js").read_text()
+
+    for required in (
+        "Autonomy Readiness Ledger",
+        "Display-only ledger. This is not an enforcement surface.",
+        "mistake / near miss",
+        "root cause",
+        "caught by Jenny",
+        "guardrail",
+        "remaining manual dependency",
+        "autonomy impact",
+        "fixed",
+        "open",
+        "accepted risk",
+        "dashboard import-binding verifier false rollback",
+        "unapproved skill/reference update during live repair",
+        "stale dashboard session token printed during final verification",
+        "token rotation remediation",
+        "PR #48 / lane-handoff builder safely deployed",
+        "display_only=true",
+        "dry_run_only=true",
+        "execution_enabled=false",
+        "dispatch_in_gateway=false",
+        "model_routing=false",
+        "queue_mutation=false",
+        "waha_mutation=false",
+        "enforcement_enabled=false",
+        "record_write_enabled=false",
+    ):
+        assert required in bundle
+
+    for forbidden in (
+        "/autonomy-readiness-ledger",
+        "/dispatch",
+        "/execute",
+        "/restart",
+        "/deploy",
+        "/merge",
+        "/api/plugins/kanban/tasks",
+        "JsonlRecordStore",
+        "OperatingWorkspaceHandoffRecord",
+        "AutonomyReadinessLedgerRecord",
+        "record_store_path",
+        ".append(",
+        ".write(",
+        "fetch('",
+        'fetch("',
+        "setInterval",
+        "setTimeout",
+        "localStorage",
+        "sessionStorage",
+    ):
+        assert forbidden not in bundle
+
+
 def test_api_routes_are_get_only(plugin_api, client):
     methods_by_path = {
         route.path: route.methods
