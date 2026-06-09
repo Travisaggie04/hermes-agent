@@ -486,6 +486,56 @@ def test_plugin_manifest_loads():
     assert dashboard["api"] == "plugin_api.py"
 
 
+def test_lane_handoff_draft_builder_bundle_is_inert_and_copy_only():
+    bundle = (PLUGIN_DIR / "dashboard" / "dist" / "index.js").read_text()
+
+    for required in (
+        "Lane Handoff Draft Builder",
+        "/api/plugins/mission-control-governance/workspace-status",
+        "Manual transport only — paste into Discord. This does not start work.",
+        "Draft packet only. This is not an active lane.",
+        "STOP: Mission Control stale-context warnings are present",
+        "Do not proceed until this is resolved.",
+        "Active lane:",
+        "Mode:",
+        "Objective:",
+        "Allowed actions:",
+        "Forbidden actions:",
+        "Stop conditions:",
+        "Expected report format:",
+        "Accepted baseline:",
+        "Rollback baseline:",
+        "max_active_lane=",
+        "dispatch_in_gateway=false",
+        "display_only=true",
+        "dry_run_only=true",
+        "execution_enabled=false",
+        "model_routing=false",
+        "queue_mutation=false",
+        "waha_mutation=false",
+        "enforcement_enabled=false",
+        "navigator.clipboard.writeText(prompt)",
+    ):
+        assert required in bundle
+
+    for forbidden in (
+        "/dispatch",
+        "/execute",
+        "/restart",
+        "/deploy",
+        "/merge",
+        "/api/plugins/kanban/tasks",
+        "OperatingWorkspaceHandoffRecord",
+        "JsonlRecordStore",
+        "record_store_path",
+        ".append(",
+        ".write(",
+        "fetch('/",
+        'fetch("/',
+    ):
+        assert forbidden not in bundle
+
+
 def test_api_routes_are_get_only(plugin_api, client):
     methods_by_path = {
         route.path: route.methods

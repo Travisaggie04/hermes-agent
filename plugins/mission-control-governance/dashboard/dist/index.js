@@ -161,6 +161,210 @@
     );
   }
 
+  function listFromText(value) {
+    return String(value || "")
+      .split("\n")
+      .map(function (item) { return item.trim(); })
+      .filter(Boolean);
+  }
+
+  function bulletListFromText(value, fallback) {
+    const items = listFromText(value);
+    if (!items.length) return "- " + (fallback || "None");
+    return items.map(function (item) { return "- " + item; }).join("\n");
+  }
+
+  function makeHandoffPrompt(form, workspaceStatus) {
+    const accepted = workspaceStatus.accepted_baseline || {};
+    const rollback = workspaceStatus.rollback_baseline || {};
+    const lane = workspaceStatus.lane || {};
+    const safety = workspaceStatus.safety || {};
+    const staleContext = workspaceStatus.stale_context || {};
+    const warnings = Array.isArray(staleContext.warnings) ? staleContext.warnings : [];
+    const staleBlock = warnings.length
+      ? [
+        "STOP: Mission Control stale-context warnings are present",
+        warnings.map(function (item) { return "- " + item; }).join("\n"),
+        "Do not proceed until this is resolved.",
+        "",
+      ].join("\n")
+      : "";
+    const targetLines = [];
+    if (form.target.trim()) {
+      targetLines.push("Target repo/path/branch:");
+      targetLines.push(form.target.trim());
+      targetLines.push("");
+    }
+    if (form.notes.trim()) {
+      targetLines.push("Notes:");
+      targetLines.push(form.notes.trim());
+      targetLines.push("");
+    }
+    return [
+      staleBlock,
+      "Active lane:",
+      form.laneName.trim() || "<lane name>",
+      "",
+      "Mode:",
+      form.mode.trim() || "Draft-only Mission Control handoff packet",
+      "",
+      "Objective:",
+      form.objective.trim() || "<objective>",
+      "",
+      "Allowed actions:",
+      bulletListFromText(form.allowedActions, "Read context and report only"),
+      "",
+      "Forbidden actions:",
+      bulletListFromText(form.forbiddenActions, "No deploy, restart, record, config, code, or live mutation unless separately approved"),
+      "",
+      "Stop conditions:",
+      bulletListFromText(form.stopConditions, "Stop if preflight fails or scope changes"),
+      "",
+      "Expected report format:",
+      bulletListFromText(form.reportFormat, "Preflight, actions taken, verification, risks, no-mutation confirmation"),
+      "",
+      targetLines.join("\n"),
+      "Accepted baseline:",
+      "- runtime=" + valueText(accepted.runtime_path, "unknown"),
+      "- head=" + valueText(accepted.head, "unknown"),
+      "",
+      "Rollback baseline:",
+      "- runtime=" + valueText(rollback.runtime_path, "unknown"),
+      "- head=" + valueText(rollback.head, "unknown"),
+      "",
+      "Mission Control lane limits:",
+      "- max_active_lane=" + valueText(lane.max_active_lane, "1"),
+      "- active_lane_count=" + valueText(lane.active_lane_count, "0"),
+      "- dispatch_in_gateway=" + valueText(safety.dispatch_in_gateway, "false"),
+      "",
+      "Inert safety flags:",
+      "- display_only=true",
+      "- dry_run_only=true",
+      "- execution_enabled=false",
+      "- dispatch_in_gateway=false",
+      "- model_routing=false",
+      "- queue_mutation=false",
+      "- waha_mutation=false",
+      "- enforcement_enabled=false",
+      "",
+      "Manual transport only — paste into Discord. This does not start work.",
+      "Draft packet only. This is not an active lane.",
+    ].filter(function (part) { return part !== "" || part === ""; }).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  function LaneDraftField(props) {
+    const common = {
+      className: "mcg-handoff-input",
+      value: props.value,
+      onChange: function (event) { props.onChange(event.target.value); },
+      placeholder: props.placeholder || "",
+    };
+    return h("label", { className: "mcg-handoff-field" },
+      h("span", { className: "mcg-start-label" }, props.label),
+      h("input", Object.assign({}, common, { type: "text" }))
+    );
+  }
+
+  function LaneHandoffDraftBuilder(props) {
+    const useState = hooks.useState;
+    const workspaceStatus = props.workspaceStatus || {};
+    const accepted = workspaceStatus.accepted_baseline || {};
+    const rollback = workspaceStatus.rollback_baseline || {};
+    const lane = workspaceStatus.lane || {};
+    const safety = workspaceStatus.safety || {};
+    const staleContext = workspaceStatus.stale_context || {};
+    const staleWarnings = Array.isArray(staleContext.warnings) ? staleContext.warnings : [];
+    const initial = {
+      laneName: "Mission Control lane-handoff draft copy",
+      objective: "Create a bounded lane handoff packet for manual Discord approval.",
+      mode: "Draft-only discovery/implementation lane. Manual transport only.",
+      allowedActions: "Read approved context\nImplement only approved files\nRun scoped tests\nReport verification",
+      forbiddenActions: "No deploy\nNo restart\nNo record mutation\nNo config migration\nNo dispatch\nNo enforcement\nNo queue/board mutation\nNo model routing\nNo Waha mutation",
+      stopConditions: "Stop if Mission Control preflight fails\nStop if scope changes\nStop if live mutation would be required",
+      reportFormat: "Preflight result\nFiles changed\nTests run\nSafety/inertness confirmation\nNo-mutation confirmation",
+      target: "",
+      notes: "",
+    };
+    const state = useState(initial);
+    const form = state[0];
+    const setForm = state[1];
+    const copyState = useState("");
+    const copyMessage = copyState[0];
+    const setCopyMessage = copyState[1];
+    function update(field, value) {
+      setForm(Object.assign({}, form, { [field]: value }));
+    }
+    const prompt = makeHandoffPrompt(form, workspaceStatus);
+    const safetyLocks = [
+      "display_only=true",
+      "dry_run_only=true",
+      "execution_enabled=false",
+      "dispatch_in_gateway=false",
+      "model_routing=false",
+      "queue_mutation=false",
+      "waha_mutation=false",
+      "enforcement_enabled=false",
+    ];
+    function copyPrompt() {
+      if (!navigator.clipboard || !navigator.clipboard.writeText) {
+        setCopyMessage("Clipboard unavailable — select and copy the prompt manually.");
+        return;
+      }
+      navigator.clipboard.writeText(prompt).then(function () {
+        setCopyMessage("Copied draft handoff prompt. Paste it into Discord manually.");
+      }).catch(function () {
+        setCopyMessage("Clipboard failed — select and copy the prompt manually.");
+      });
+    }
+    return h(C.Card, { className: "mcg-handoff-card" },
+      h(C.CardContent, { className: "mcg-handoff-body" },
+        h("div", { className: "mcg-panel-heading" },
+          h("div", null,
+            h("div", { className: "mcg-panel-title" }, "Lane Handoff Draft Builder"),
+            h("p", { className: "mcg-muted" }, "Manual transport only — paste into Discord. This does not start work.")
+          ),
+          h("span", { className: "mcg-badge" }, "Draft-only")
+        ),
+        h("p", { className: "mcg-handoff-warning" }, "Draft packet only. This is not an active lane."),
+        staleWarnings.length ? h("div", { className: "mcg-handoff-stop" },
+          h("strong", null, "STOP: Mission Control stale-context warnings are present"),
+          h("ul", null, staleWarnings.map(function (item, index) { return h("li", { key: "stale-" + index }, item); })),
+          h("span", null, "Do not proceed until this is resolved.")
+        ) : null,
+        h("div", { className: "mcg-handoff-baselines" },
+          h(WorkspaceField, { label: "Accepted runtime", value: accepted.runtime_path }),
+          h(WorkspaceField, { label: "Accepted head", value: accepted.head }),
+          h(WorkspaceField, { label: "Rollback runtime", value: rollback.runtime_path }),
+          h(WorkspaceField, { label: "Rollback head", value: rollback.head }),
+          h(WorkspaceField, { label: "Active lane count", value: lane.active_lane_count }),
+          h(WorkspaceField, { label: "Max active lane", value: lane.max_active_lane }),
+          h(WorkspaceField, { label: "dispatch_in_gateway", value: safety.dispatch_in_gateway }),
+          h(WorkspaceField, { label: "Stale warnings", value: staleWarnings, fallback: "None" })
+        ),
+        h("div", { className: "mcg-handoff-grid" },
+          h(LaneDraftField, { label: "Lane name", value: form.laneName, onChange: function (value) { update("laneName", value); } }),
+          h(LaneDraftField, { label: "Mode", value: form.mode, onChange: function (value) { update("mode", value); } }),
+          h(LaneDraftField, { label: "Objective", value: form.objective, onChange: function (value) { update("objective", value); } }),
+          h(LaneDraftField, { label: "Allowed actions", value: form.allowedActions, onChange: function (value) { update("allowedActions", value); } }),
+          h(LaneDraftField, { label: "Forbidden actions", value: form.forbiddenActions, onChange: function (value) { update("forbiddenActions", value); } }),
+          h(LaneDraftField, { label: "Stop conditions", value: form.stopConditions, onChange: function (value) { update("stopConditions", value); } }),
+          h(LaneDraftField, { label: "Expected report format", value: form.reportFormat, onChange: function (value) { update("reportFormat", value); } }),
+          h(LaneDraftField, { label: "Target repo/path/branch optional", value: form.target, onChange: function (value) { update("target", value); } }),
+          h(LaneDraftField, { label: "Notes optional", value: form.notes, onChange: function (value) { update("notes", value); } })
+        ),
+        h(WorkspaceList, { title: "Fixed Safety Locks", items: safetyLocks }),
+        h("div", { className: "mcg-handoff-output" },
+          h("div", { className: "mcg-panel-heading" },
+            h("div", { className: "mcg-workspace-section-title" }, "Generated handoff prompt"),
+            h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: copyPrompt, onKeyDown: function (event) { if (event.key === "Enter") copyPrompt(); } }, "Copy prompt")
+          ),
+          copyMessage ? h("p", { className: "mcg-muted" }, copyMessage) : null,
+          h("pre", { className: "mcg-handoff-prompt" }, prompt)
+        )
+      )
+    );
+  }
+
   function GovernancePage() {
     const useState = hooks.useState;
     const useEffect = hooks.useEffect;
@@ -443,6 +647,7 @@
           !data.loading ? h(WorkspaceList, { title: "Inert Flags", items: inertFlags }) : null
         )
       ),
+      h(LaneHandoffDraftBuilder, { workspaceStatus: workspaceStatus }),
       h(C.Card, { className: "mcg-start-card" },
         h(C.CardContent, { className: "mcg-start-body" },
           h("div", { className: "mcg-panel-title" }, "Start Gate"),
