@@ -253,15 +253,18 @@
   }
 
   function LaneDraftField(props) {
+    const multiline = props.multiline === true;
     const common = {
-      className: "mcg-handoff-input",
+      className: multiline ? "mcg-handoff-textarea" : "mcg-handoff-input",
       value: props.value,
       onChange: function (event) { props.onChange(event.target.value); },
       placeholder: props.placeholder || "",
     };
-    return h("label", { className: "mcg-handoff-field" },
+    return h("label", { className: multiline ? "mcg-handoff-field mcg-handoff-field-wide" : "mcg-handoff-field" },
       h("span", { className: "mcg-start-label" }, props.label),
-      h("input", Object.assign({}, common, { type: "text" }))
+      multiline
+        ? h("textarea", Object.assign({}, common, { rows: props.rows || 4 }))
+        : h("input", Object.assign({}, common, { type: "text" }))
     );
   }
 
@@ -304,6 +307,7 @@
       "queue_mutation=false",
       "waha_mutation=false",
       "enforcement_enabled=false",
+      "record_write_enabled=false",
     ];
     function copyPrompt() {
       if (!navigator.clipboard || !navigator.clipboard.writeText) {
@@ -320,8 +324,8 @@
       h(C.CardContent, { className: "mcg-handoff-body" },
         h("div", { className: "mcg-panel-heading" },
           h("div", null,
-            h("div", { className: "mcg-panel-title" }, "Lane Handoff Draft Builder"),
-            h("p", { className: "mcg-muted" }, "Manual transport only — paste into Discord. This does not start work.")
+            h("div", { className: "mcg-panel-title" }, "Start New Lane / Draft Handoff"),
+            h("p", { className: "mcg-muted" }, "Lane Handoff Draft Builder · Manual transport only — paste into Discord. This does not start work.")
           ),
           h("span", { className: "mcg-badge" }, "Draft-only")
         ),
@@ -344,19 +348,19 @@
         h("div", { className: "mcg-handoff-grid" },
           h(LaneDraftField, { label: "Lane name", value: form.laneName, onChange: function (value) { update("laneName", value); } }),
           h(LaneDraftField, { label: "Mode", value: form.mode, onChange: function (value) { update("mode", value); } }),
-          h(LaneDraftField, { label: "Objective", value: form.objective, onChange: function (value) { update("objective", value); } }),
-          h(LaneDraftField, { label: "Allowed actions", value: form.allowedActions, onChange: function (value) { update("allowedActions", value); } }),
-          h(LaneDraftField, { label: "Forbidden actions", value: form.forbiddenActions, onChange: function (value) { update("forbiddenActions", value); } }),
-          h(LaneDraftField, { label: "Stop conditions", value: form.stopConditions, onChange: function (value) { update("stopConditions", value); } }),
-          h(LaneDraftField, { label: "Expected report format", value: form.reportFormat, onChange: function (value) { update("reportFormat", value); } }),
+          h(LaneDraftField, { label: "Objective", value: form.objective, multiline: true, rows: 3, onChange: function (value) { update("objective", value); } }),
+          h(LaneDraftField, { label: "Allowed actions", value: form.allowedActions, multiline: true, rows: 5, onChange: function (value) { update("allowedActions", value); } }),
+          h(LaneDraftField, { label: "Forbidden actions", value: form.forbiddenActions, multiline: true, rows: 6, onChange: function (value) { update("forbiddenActions", value); } }),
+          h(LaneDraftField, { label: "Stop conditions", value: form.stopConditions, multiline: true, rows: 4, onChange: function (value) { update("stopConditions", value); } }),
+          h(LaneDraftField, { label: "Expected report format", value: form.reportFormat, multiline: true, rows: 4, onChange: function (value) { update("reportFormat", value); } }),
           h(LaneDraftField, { label: "Target repo/path/branch optional", value: form.target, onChange: function (value) { update("target", value); } }),
-          h(LaneDraftField, { label: "Notes optional", value: form.notes, onChange: function (value) { update("notes", value); } })
+          h(LaneDraftField, { label: "Notes optional", value: form.notes, multiline: true, rows: 3, onChange: function (value) { update("notes", value); } })
         ),
         h(WorkspaceList, { title: "Fixed Safety Locks", items: safetyLocks }),
         h("div", { className: "mcg-handoff-output" },
           h("div", { className: "mcg-panel-heading" },
             h("div", { className: "mcg-workspace-section-title" }, "Generated handoff prompt"),
-            h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: copyPrompt, onKeyDown: function (event) { if (event.key === "Enter") copyPrompt(); } }, "Copy prompt")
+            h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: copyPrompt, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") copyPrompt(); } }, "Copy prompt")
           ),
           copyMessage ? h("p", { className: "mcg-muted" }, copyMessage) : null,
           h("pre", { className: "mcg-handoff-prompt" }, prompt)

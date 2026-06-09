@@ -499,21 +499,26 @@ def test_app_routes_mission_control_alias_to_governance_tab():
 
 def test_lane_handoff_draft_builder_bundle_is_inert_and_copy_only():
     bundle = (PLUGIN_DIR / "dashboard" / "dist" / "index.js").read_text()
+    styles = (PLUGIN_DIR / "dashboard" / "dist" / "style.css").read_text()
 
     for required in (
+        "Start New Lane / Draft Handoff",
         "Lane Handoff Draft Builder",
         "/api/plugins/mission-control-governance/workspace-status",
         "Manual transport only — paste into Discord. This does not start work.",
         "Draft packet only. This is not an active lane.",
         "STOP: Mission Control stale-context warnings are present",
         "Do not proceed until this is resolved.",
+        "Lane name",
+        "Mode",
+        "Objective",
+        "Allowed actions",
+        "Forbidden actions",
+        "Stop conditions",
+        "Expected report format",
+        "Target repo/path/branch optional",
+        "Notes optional",
         "Active lane:",
-        "Mode:",
-        "Objective:",
-        "Allowed actions:",
-        "Forbidden actions:",
-        "Stop conditions:",
-        "Expected report format:",
         "Accepted baseline:",
         "Rollback baseline:",
         "max_active_lane=",
@@ -525,9 +530,32 @@ def test_lane_handoff_draft_builder_bundle_is_inert_and_copy_only():
         "queue_mutation=false",
         "waha_mutation=false",
         "enforcement_enabled=false",
+        "record_write_enabled=false",
         "navigator.clipboard.writeText(prompt)",
+        'h("textarea"',
+        "mcg-handoff-textarea",
+        "mcg-handoff-field-wide",
+        "Copy prompt",
+        'role: "link"',
     ):
         assert required in bundle
+
+    assert bundle.count('h("input"') == 1
+    assert bundle.count('h("textarea"') == 1
+    assert bundle.count("multiline: true") >= 6
+
+    for required_style in (
+        ".mcg-handoff-grid",
+        ".mcg-handoff-input",
+        ".mcg-handoff-textarea",
+        "min-height: 96px",
+        "resize: vertical",
+        ".mcg-handoff-output",
+        ".mcg-handoff-prompt",
+        ".mcg-copy-control",
+        "@media (max-width: 860px)",
+    ):
+        assert required_style in styles
 
     for forbidden in (
         "/dispatch",
@@ -543,6 +571,10 @@ def test_lane_handoff_draft_builder_bundle_is_inert_and_copy_only():
         ".write(",
         "fetch('/",
         'fetch("/',
+        "setInterval",
+        "setTimeout",
+        "localStorage",
+        "sessionStorage",
     ):
         assert forbidden not in bundle
 
@@ -2494,7 +2526,6 @@ def test_dashboard_start_gate_evaluator_panel_is_bounded_display_only():
     assert re.findall(r'method:\s*"([A-Z]+)"', bundle) == ["POST"]
 
     for token in (
-        "textarea",
         "contenteditable",
         "conversation_history",
         "conversationhistory",
@@ -2528,7 +2559,6 @@ def test_dashboard_lane_preflight_panel_is_bounded_display_only():
     assert re.findall(r'method:\s*"([A-Z]+)"', bundle) == ["POST"]
 
     for token in (
-        "textarea",
         "contenteditable",
         "conversation_history",
         "conversationhistory",
