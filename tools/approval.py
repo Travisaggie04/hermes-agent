@@ -639,15 +639,18 @@ def is_current_session_yolo_enabled() -> bool:
 def is_approved(session_key: str, pattern_key: str) -> bool:
     """Check if a pattern is approved (session-scoped or permanent).
 
-    Accept both the current canonical key and the legacy regex-derived key so
-    existing command_allowlist entries continue to work after key migrations.
+    Permanent allowlists accept legacy regex-derived aliases for backwards
+    compatibility. Session approvals are intentionally exact-match only: a
+    transient approval for one canonical pattern must not inherit a colliding
+    legacy alias and approve a different dangerous command in the same session
+    (for example ``find -exec rm`` versus ``find -delete``).
     """
     aliases = _approval_key_aliases(pattern_key)
     with _lock:
         if any(alias in _permanent_approved for alias in aliases):
             return True
         session_approvals = _session_approved.get(session_key, set())
-        return any(alias in session_approvals for alias in aliases)
+        return pattern_key in session_approvals
 
 
 def approve_permanent(pattern_key: str):
@@ -1050,6 +1053,22 @@ def _format_tirith_description(tirith_result: dict) -> str:
     return "Security scan — " + "; ".join(parts)
 
 
+def _tool_guard_block_result(message: str) -> dict:
+    """Return a structured non-consent block for Tool Guard stops."""
+    if not message.startswith("BLOCKED"):
+        message = (
+            f"BLOCKED: {message}. The user has NOT consented to this action. "
+            "Do NOT retry this command, do NOT rephrase it, and do NOT "
+            "attempt the same outcome via a different command."
+        )
+    return {
+        "approved": False,
+        "message": message,
+        "outcome": "blocked",
+        "user_consent": False,
+    }
+
+
 def check_all_command_guards(command: str, env_type: str,
                              approval_callback=None) -> dict:
     """Run all pre-exec security checks and return a single approval decision.
@@ -1063,6 +1082,8 @@ def check_all_command_guards(command: str, env_type: str,
     if env_type in {"docker", "singularity", "modal", "daytona"}:
         return {"approved": True, "message": None}
 
+    safety_decision = None
+    safety_message = None
     try:
         from hermes_cli.safety_guard import evaluate_tool_guard, config_from_env, format_stop_report
 
@@ -1072,7 +1093,7 @@ def check_all_command_guards(command: str, env_type: str,
             config_from_env(),
         )
         if safety_decision.blocked:
-            return {"approved": False, "message": format_stop_report(safety_decision)}
+            safety_message = format_stop_report(safety_decision)
     except Exception as exc:
         logger.debug("Tool Guard command evaluation skipped: %s", exc)
 
@@ -1105,6 +1126,9 @@ def check_all_command_guards(command: str, env_type: str,
     is_cli = env_var_enabled("HERMES_INTERACTIVE")
     is_gateway = _is_gateway_approval_context()
     is_ask = env_var_enabled("HERMES_EXEC_ASK")
+
+    if safety_decision is not None and safety_decision.blocked and not (is_gateway or is_ask):
+        return _tool_guard_block_result(safety_message or "STOP: command blocked by Tool Guard")
 
     # Preserve the existing non-interactive behavior: outside CLI/gateway/ask
     # flows, we do not block on approvals and we skip external guard work.
@@ -1147,6 +1171,15 @@ def check_all_command_guards(command: str, env_type: str,
     warnings = []  # list of (pattern_key, description, is_tirith)
 
     session_key = get_current_session_key()
+    defer_safety_for_gateway_approval = (
+        safety_decision is not None
+        and safety_decision.blocked
+        and (is_gateway or is_ask)
+        and is_dangerous
+        and not is_approved(session_key, pattern_key)
+    )
+    if safety_decision is not None and safety_decision.blocked and not defer_safety_for_gateway_approval:
+        return _tool_guard_block_result(safety_message or "STOP: command blocked by Tool Guard")
 
     # Tirith block/warn → approvable warning with rich findings.
     # Previously, tirith "block" was a hard block with no approval prompt.
@@ -1362,6 +1395,12 @@ def check_all_command_guards(command: str, env_type: str,
                     save_permanent_allowlist(_permanent_approved)
                 # choice == "once": no persistence — command allowed this
                 # single time only, matching the CLI's behavior.
+
+            if safety_decision is not None and safety_decision.blocked:
+                # User consent does not override the Safety Tool Guard. This
+                # preserves cleanup/revert lane boundaries and other local
+                # guardrails even after an approval response.
+                return _tool_guard_block_result(safety_message or "STOP: command blocked by Tool Guard")
 
             return {"approved": True, "message": None,
                     "user_approved": True, "description": combined_desc}
