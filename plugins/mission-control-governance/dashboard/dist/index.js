@@ -252,6 +252,176 @@
     ].filter(function (part) { return part !== "" || part === ""; }).join("\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
+
+  const PROJECT_WORKSPACE_CARDS = [
+    {
+      name: "Hermes / Mission Control",
+      status: "Live accepted baseline; workspace v1 is display/manual-copy only.",
+      current_goal: "Make Mission Control the obvious operating surface before enabling any execution path.",
+      last_report_summary: "PR #51 deployed the handoff builder usability fix and accepted the handoffbuilder baseline.",
+      next_recommended_lane: "Project Workspace v1 static cards PR: no backend, no records, no dispatch.",
+      mistakes_guards: "Guard against gateway restarts, token printing, stale baseline drift, and accidental runtime enforcement.",
+    },
+    {
+      name: "Long-form Video",
+      status: "Planning/toolchain proof lane; no publishing from Mission Control.",
+      current_goal: "Keep adult animated long-form work on the best-product toolchain path.",
+      last_report_summary: "Toolchain direction favors character-rig proofs and HyperFrames assembly before long content runs.",
+      next_recommended_lane: "Read-only status refresh or bounded proof packet for the video profile.",
+      mistakes_guards: "Guard against avatar-first fallback, static-card regression, unapproved paid renders, and public posting.",
+    },
+    {
+      name: "Shorts Video",
+      status: "Production strategy exists; posting remains gated.",
+      current_goal: "Produce source-backed short-form concepts with strong hooks and visible review packages.",
+      last_report_summary: "Signal Room and Impossible Footage lanes require research-backed packaging and proof review before publishing.",
+      next_recommended_lane: "Manual-copy research or review packet lane for a specific short concept.",
+      mistakes_guards: "Guard against generic AI clips, weak hooks, skipped source checks, paid API drift, and public posting.",
+    },
+    {
+      name: "Tool & Tally",
+      status: "Pre-launch gated; customer/public actions require explicit approval.",
+      current_goal: "Keep owner-facing evidence-first pages and paid-order monitoring stable without accidental launch actions.",
+      last_report_summary: "Public site and API exist, but outreach, paid delivery, and customer sends remain approval-gated.",
+      next_recommended_lane: "Read-only status check or critical hardening packet only.",
+      mistakes_guards: "Guard against payment changes, public intake drift, outreach sends, customer delivery, and private asset leaks.",
+    },
+    {
+      name: "Waha Work",
+      status: "Owner-side engineering workspace; isolated from Main Jenny execution.",
+      current_goal: "Support Waha inspection/reporting work with exact, review-only engineering packets.",
+      last_report_summary: "Waha work should stay in the Waha profile with simple management summaries and review gates.",
+      next_recommended_lane: "Manual-copy Waha profile handoff for one bounded document, tracker, or review task.",
+      mistakes_guards: "Guard against mixing Waha context into Main Jenny memory, unapproved figures, and management-ready claims without review.",
+    },
+  ];
+
+  function makeProjectWorkspacePrompt(project, workspaceStatus) {
+    const accepted = workspaceStatus.accepted_baseline || {};
+    const lane = workspaceStatus.lane || {};
+    const safety = workspaceStatus.safety || {};
+    return [
+      "Active lane:",
+      project.next_recommended_lane,
+      "",
+      "Mode:",
+      "Read-only/manual-copy Mission Control project workspace lane.",
+      "",
+      "Project:",
+      project.name,
+      "",
+      "Status:",
+      project.status,
+      "",
+      "Current goal:",
+      project.current_goal,
+      "",
+      "Last report summary:",
+      project.last_report_summary,
+      "",
+      "Objective:",
+      "Use this project card as context, then inspect only the approved source of truth before recommending work.",
+      "",
+      "Allowed actions:",
+      "- Read approved context",
+      "- Report status and next safe lane",
+      "- Propose bounded manual-copy prompt",
+      "",
+      "Forbidden actions:",
+      "- No dispatch, execution, records, queue mutation, Waha mutation, model routing, enforcement, deploy, restart, config mutation, or public/customer action unless separately approved",
+      "",
+      "Stop conditions:",
+      "- Stop if workspace-status preflight fails",
+      "- Stop if the request needs live mutation or a different profile",
+      "- Stop if project source of truth is missing or stale",
+      "",
+      "Expected report format:",
+      "- preflight",
+      "- current project state",
+      "- recommended next lane",
+      "- risks/guards",
+      "- no-mutation confirmation",
+      "",
+      "Mistakes/guards:",
+      "- " + project.mistakes_guards,
+      "",
+      "Accepted baseline:",
+      "- runtime=" + valueText(accepted.runtime_path, "unknown"),
+      "- head=" + valueText(accepted.head, "unknown"),
+      "- active_lane_count=" + valueText(lane.active_lane_count, "0"),
+      "- dispatch_in_gateway=" + valueText(safety.dispatch_in_gateway, "false"),
+      "",
+      "Manual transport only — paste into Discord. This does not start work.",
+      "Draft packet only. This is not an active lane.",
+    ].join("\n").trim();
+  }
+
+  function ProjectWorkspaceCard(props) {
+    const project = props.project;
+    const prompt = makeProjectWorkspacePrompt(project, props.workspaceStatus || {});
+    function copyPrompt() {
+      props.onCopy(prompt);
+    }
+    return h("div", { className: "mcg-project-card" },
+      h("div", { className: "mcg-project-card-head" },
+        h("div", { className: "mcg-workspace-section-title" }, project.name),
+        h("span", { className: "mcg-badge" }, "Manual-copy")
+      ),
+      h(WorkspaceField, { label: "status", value: project.status }),
+      h(WorkspaceField, { label: "current goal", value: project.current_goal }),
+      h(WorkspaceField, { label: "last report summary", value: project.last_report_summary }),
+      h(WorkspaceField, { label: "next recommended lane", value: project.next_recommended_lane }),
+      h(WorkspaceField, { label: "mistakes/guards", value: project.mistakes_guards }),
+      h("div", { className: "mcg-project-prompt-preview" },
+        h("span", { className: "mcg-start-label" }, "Generated prompt content"),
+        h("pre", null, prompt)
+      ),
+      h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: copyPrompt, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") copyPrompt(); } }, "Copy prompt")
+    );
+  }
+
+  function ProjectWorkspacePanel(props) {
+    const useState = hooks.useState;
+    const copyState = useState("");
+    const copyMessage = copyState[0];
+    const setCopyMessage = copyState[1];
+    function copyProjectPrompt(prompt) {
+      if (!navigator.clipboard || !navigator.clipboard.writeText) {
+        setCopyMessage("Clipboard unavailable — select and copy the generated prompt manually.");
+        return;
+      }
+      navigator.clipboard.writeText(prompt).then(function () {
+        setCopyMessage("Copied project workspace prompt. Paste it into Discord manually.");
+      }).catch(function () {
+        setCopyMessage("Clipboard failed — select and copy the generated prompt manually.");
+      });
+    }
+    return h(C.Card, { className: "mcg-project-workspace-card" },
+      h(C.CardContent, { className: "mcg-project-workspace-body" },
+        h("div", { className: "mcg-panel-heading" },
+          h("div", null,
+            h("div", { className: "mcg-panel-title" }, "Project Workspace"),
+            h("p", { className: "mcg-muted" }, "Manual transport only — paste into Discord. This does not start work.")
+          ),
+          h("span", { className: "mcg-badge" }, "Display/manual-copy only")
+        ),
+        h("p", { className: "mcg-handoff-warning" }, "Draft packet only. This is not an active lane."),
+        h("p", { className: "mcg-muted" }, "Static project cards for choosing the next safe lane. No dispatch, execution, records, queue mutation, Waha mutation, model routing, or enforcement."),
+        copyMessage ? h("p", { className: "mcg-muted" }, copyMessage) : null,
+        h("div", { className: "mcg-project-grid" },
+          PROJECT_WORKSPACE_CARDS.map(function (project) {
+            return h(ProjectWorkspaceCard, {
+              key: project.name,
+              project: project,
+              workspaceStatus: props.workspaceStatus || {},
+              onCopy: copyProjectPrompt,
+            });
+          })
+        )
+      )
+    );
+  }
+
   function LaneDraftField(props) {
     const multiline = props.multiline === true;
     const common = {
@@ -441,6 +611,18 @@
       guardrail_added: "runtime/worktree guard reports live-runtime and rollback-runtime candidate paths, runtime disk-head mismatch, runtime feature branch, rollback mismatch, and missing requested dev worktree blockers.",
       remaining_manual_dependency: "Guard remains display-only/dry-run until a separately approved enforcement lane wires it into real execution gates.",
       autonomy_impact: "Blocks the class of mistake that contaminated the live runtime checkout before more workspace autonomy or PR #52 deployment work.",
+    },
+    {
+      occurred_at: "2026-06-10",
+      lane: "mission-control-project-workspace-v1",
+      severity: "low",
+      status: "open",
+      event: "Project Workspace v1 static cards added",
+      root_cause: "Mission Control was still a safety console and prompt builder, not a project operating surface.",
+      caught_by_jenny: "yes",
+      guardrail_added: "Five static manual-copy project cards keep work selection visible without backend writes or dispatch.",
+      remaining_manual_dependency: "Travis still manually approves and transports every project lane packet.",
+      autonomy_impact: "Improves project navigation while preserving display-only and no-dispatch boundaries.",
     },
   ];
 
@@ -709,6 +891,7 @@
       ),
 
 
+      h(ProjectWorkspacePanel, { workspaceStatus: workspaceStatus }),
       h(C.Card, { className: "mcg-workspace-card" },
         h(C.CardContent, { className: "mcg-workspace-body" },
           h("div", { className: "mcg-panel-heading" },

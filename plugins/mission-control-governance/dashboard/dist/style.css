@@ -200,6 +200,61 @@
   padding: 3px 8px;
 }
 
+
+.mcg-project-workspace-card {
+  border-radius: 8px;
+}
+
+.mcg-project-workspace-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+.mcg-project-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mcg-project-card {
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.mcg-project-card-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.mcg-project-prompt-preview {
+  background: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+}
+
+.mcg-project-prompt-preview pre {
+  color: hsl(var(--foreground));
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
 .mcg-summary-panels,
 .mcg-panels {
   display: grid;
@@ -428,6 +483,7 @@
 
   .mcg-start-grid,
   .mcg-workspace-grid,
+  .mcg-project-grid,
   .mcg-summary-panels,
   .mcg-panels {
     grid-template-columns: 1fr;

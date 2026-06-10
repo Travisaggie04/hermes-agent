@@ -579,6 +579,74 @@ def test_lane_handoff_draft_builder_bundle_is_inert_and_copy_only():
         assert forbidden not in bundle
 
 
+def test_project_workspace_v1_bundle_is_static_manual_copy_only():
+    bundle = (PLUGIN_DIR / "dashboard" / "dist" / "index.js").read_text()
+    styles = (PLUGIN_DIR / "dashboard" / "dist" / "style.css").read_text()
+
+    for required in (
+        "Project Workspace",
+        "Hermes / Mission Control",
+        "Long-form Video",
+        "Shorts Video",
+        "Tool & Tally",
+        "Waha Work",
+        "status",
+        "current goal",
+        "last report summary",
+        "next recommended lane",
+        "mistakes/guards",
+        "Copy prompt",
+        "Manual transport only — paste into Discord. This does not start work.",
+        "Draft packet only. This is not an active lane.",
+        "Generated prompt content",
+        "Read-only/manual-copy Mission Control project workspace lane.",
+        "Use this project card as context",
+        "No dispatch, execution, records, queue mutation, Waha mutation, model routing, or enforcement.",
+        "PROJECT_WORKSPACE_CARDS",
+        "ProjectWorkspacePanel",
+        "ProjectWorkspaceCard",
+    ):
+        assert required in bundle
+
+    assert bundle.count('name: "Hermes / Mission Control"') == 1
+    assert bundle.count('name: "Long-form Video"') == 1
+    assert bundle.count('name: "Shorts Video"') == 1
+    assert bundle.count('name: "Tool & Tally"') == 1
+    assert bundle.count('name: "Waha Work"') == 1
+    assert bundle.count("name: ") == 5
+
+    for required_style in (
+        ".mcg-project-workspace-card",
+        ".mcg-project-workspace-body",
+        ".mcg-project-grid",
+        ".mcg-project-card",
+        ".mcg-project-card-head",
+        ".mcg-project-prompt-preview",
+        "grid-template-columns: repeat(2, minmax(0, 1fr))",
+        "@media (max-width: 760px)",
+    ):
+        assert required_style in styles
+
+    for forbidden in (
+        "/dispatch",
+        "/execute",
+        "/restart",
+        "/deploy",
+        "/merge",
+        "/api/plugins/kanban/tasks",
+        "OperatingWorkspaceHandoffRecord",
+        "JsonlRecordStore",
+        "record_store_path",
+        ".append(",
+        ".write(",
+        "localStorage",
+        "sessionStorage",
+        "setInterval",
+        "setTimeout",
+    ):
+        assert forbidden not in bundle
+
+
 def test_autonomy_readiness_ledger_bundle_is_static_display_only():
     bundle = (PLUGIN_DIR / "dashboard" / "dist" / "index.js").read_text()
 
