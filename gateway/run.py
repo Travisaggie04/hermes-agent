@@ -14993,6 +14993,16 @@ class GatewayRunner:
         project_root = Path(__file__).parent.parent.resolve()
         git_dir = project_root / '.git'
 
+        try:
+            from mission_control.live_runtime_mutation_guard import evaluate_runtime_mutation
+
+            decision = evaluate_runtime_mutation("update", cwd=project_root)
+        except Exception as exc:
+            logger.debug("Live runtime mutation guard skipped for gateway update: %s", exc)
+            decision = None
+        if decision is not None and not decision.allowed:
+            return f"BLOCKED: {decision.reason}"
+
         if not git_dir.exists():
             return t("gateway.update.not_git_repo")
 

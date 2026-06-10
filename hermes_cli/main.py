@@ -10130,6 +10130,14 @@ def cmd_update(args):
         print(format_docker_update_message())
         sys.exit(1)
 
+    try:
+        from mission_control.live_runtime_mutation_guard import assert_runtime_mutation_allowed
+
+        assert_runtime_mutation_allowed("update", cwd=PROJECT_ROOT)
+    except RuntimeError as exc:
+        print(f"✗ {exc}")
+        sys.exit(2)
+
     if getattr(args, "check", False):
         # --check honors --branch so the "any new commits?" answer matches
         # what a subsequent `hermes update --branch=<x>` would actually pull.

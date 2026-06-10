@@ -1239,7 +1239,8 @@ def _tool_guard_block_result(message: str) -> dict:
 
 
 def check_all_command_guards(command: str, env_type: str,
-                             approval_callback=None) -> dict:
+                             approval_callback=None,
+                             cwd: str | os.PathLike[str] | None = None) -> dict:
     """Run all pre-exec security checks and return a single approval decision.
 
     Gathers findings from tirith and dangerous-command detection, then
@@ -1250,6 +1251,21 @@ def check_all_command_guards(command: str, env_type: str,
     # Skip containers for both checks
     if env_type in {"docker", "singularity", "modal", "daytona"}:
         return {"approved": True, "message": None}
+
+    try:
+        from mission_control.live_runtime_mutation_guard import (
+            block_result as _live_runtime_block_result,
+            detect_git_mutation_action,
+            evaluate_runtime_mutation,
+        )
+
+        action = detect_git_mutation_action(command)
+        if action:
+            live_runtime_decision = evaluate_runtime_mutation(action, cwd=os.fspath(cwd) if cwd is not None else None)
+            if not live_runtime_decision.allowed:
+                return _live_runtime_block_result(live_runtime_decision)
+    except Exception as exc:
+        logger.debug("Live runtime mutation guard skipped: %s", exc)
 
     safety_decision = None
     safety_message = None

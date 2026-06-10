@@ -1259,6 +1259,24 @@ async def update_hermes():
         }
 
     try:
+        from mission_control.live_runtime_mutation_guard import evaluate_runtime_mutation
+
+        decision = evaluate_runtime_mutation("update", cwd=PROJECT_ROOT)
+    except Exception as exc:
+        _log.debug("Live runtime mutation guard skipped for dashboard update: %s", exc)
+        decision = None
+    if decision is not None and not decision.allowed:
+        message = f"BLOCKED: {decision.reason}"
+        _record_completed_action("hermes-update", message, exit_code=2)
+        return {
+            "ok": False,
+            "pid": None,
+            "name": "hermes-update",
+            "error": decision.blocker,
+            "message": message,
+        }
+
+    try:
         proc = _spawn_hermes_action(["update"], "hermes-update")
     except Exception as exc:
         _log.exception("Failed to spawn hermes update")
