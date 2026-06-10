@@ -439,6 +439,65 @@ def _latest_workspace_records(record_class: type[Any], limit: int) -> list[dict[
     ]
 
 
+def _project_state_projection(limit: int) -> list[dict[str, Any]]:
+    projects = _latest_workspace_records(ProjectRecord, limit)
+    lanes = _latest_workspace_records(LaneRequestRecord, limit)
+    reports = _latest_workspace_records(JennyReportRecord, limit)
+
+    latest_lane_by_project: dict[str, dict[str, Any]] = {}
+    for item in lanes:
+        record = item.get("record", {})
+        project_id = record.get("project_id", "")
+        if project_id:
+            latest_lane_by_project[project_id] = item
+
+    latest_report_by_project: dict[str, dict[str, Any]] = {}
+    for item in reports:
+        record = item.get("record", {})
+        project_id = record.get("project_id", "")
+        if project_id:
+            latest_report_by_project[project_id] = item
+
+    states: list[dict[str, Any]] = []
+    for item in projects:
+        project = item.get("record", {})
+        project_id = project.get("project_id") or project.get("name", "")
+        lane_item = latest_lane_by_project.get(project_id)
+        report_item = latest_report_by_project.get(project_id)
+        lane = lane_item.get("record", {}) if lane_item else {}
+        report = report_item.get("record", {}) if report_item else {}
+        risks = report.get("risks") or []
+        last_updated = (
+            report.get("created_at")
+            or lane.get("updated_at")
+            or lane.get("created_at")
+            or project.get("updated_at")
+            or project.get("created_at")
+            or ""
+        )
+        states.append({
+            "project_id": project_id,
+            "name": project.get("name", project_id),
+            "status": project.get("status", ""),
+            "current_goal": project.get("current_goal", ""),
+            "latest_lane_request": lane,
+            "latest_lane_title": lane.get("title", ""),
+            "latest_lane_objective": lane.get("objective", ""),
+            "latest_jenny_report": report,
+            "latest_report_summary": report.get("summary") or project.get("last_report_summary", ""),
+            "latest_result": report.get("result", ""),
+            "risks_blockers": risks,
+            "next_recommended_lane": report.get("next_recommended_lane") or project.get("next_recommended_lane", ""),
+            "last_updated": last_updated,
+            "source_record_indexes": {
+                "project": item.get("record_index"),
+                "lane_request": lane_item.get("record_index") if lane_item else None,
+                "jenny_report": report_item.get("record_index") if report_item else None,
+            },
+        })
+    return states
+
+
 def _build_project_record(payload: dict[str, Any]) -> ProjectRecord:
     name = _workspace_text(payload.get("name"), max_chars=120)
     if not name:
@@ -1799,6 +1858,22 @@ async def workspace_lane_request_create(request: Request) -> dict[str, Any]:
         "record_index": index,
         "record_type": record.record_type,
         "lane_request": _lane_request_payload(record),
+    }
+
+
+@router.get("/workspace/project-state")
+async def workspace_project_state(limit: str | None = Query(default=None)) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    states = _project_state_projection(applied_limit)
+    return {
+        **INERT_FLAGS,
+        "display_only": True,
+        "manual_copy_only": True,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "stored": False,
+        "count": len(states),
+        "project_states": states,
     }
 
 

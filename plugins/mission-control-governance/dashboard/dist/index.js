@@ -27,6 +27,7 @@
   const WORKSPACE_LANE_REQUEST_CREATE_URL = "/api/plugins/mission-control-governance/workspace/lane-requests/create";
   const WORKSPACE_REPORTS_URL = "/api/plugins/mission-control-governance/workspace/reports";
   const WORKSPACE_REPORT_CREATE_URL = "/api/plugins/mission-control-governance/workspace/reports/create";
+  const WORKSPACE_PROJECT_STATE_URL = "/api/plugins/mission-control-governance/workspace/project-state";
   const SCHEMA_URL = "/api/plugins/mission-control-governance/schema";
   const RECORD_DETAIL_URL = function (index) {
     return "/api/plugins/mission-control-governance/records/" + encodeURIComponent(String(index));
@@ -415,6 +416,24 @@
     );
   }
 
+  function ProjectStateProjection(props) {
+    const state = props.state || {};
+    const risks = Array.isArray(state.risks_blockers) ? state.risks_blockers : [];
+    return h("div", { className: "mcg-project-state-projection" },
+      h("div", { className: "mcg-workspace-section-title" }, "Project State Projection"),
+      h("p", { className: "mcg-muted" }, "Derived read-only view from ProjectRecord, LaneRequestRecord, and JennyReportRecord. No ProjectStateRecord is written."),
+      h("div", { className: "mcg-project-state-grid" },
+        h(WorkspaceField, { label: "current goal", value: state.current_goal }),
+        h(WorkspaceField, { label: "latest lane request", value: state.latest_lane_title || state.latest_lane_objective }),
+        h(WorkspaceField, { label: "latest Jenny report summary", value: state.latest_report_summary }),
+        h(WorkspaceField, { label: "latest result", value: state.latest_result }),
+        h(WorkspaceField, { label: "risks/blockers", value: risks.length ? risks.join("; ") : "none" }),
+        h(WorkspaceField, { label: "next recommended lane", value: state.next_recommended_lane }),
+        h(WorkspaceField, { label: "last updated", value: state.last_updated })
+      )
+    );
+  }
+
   function ManualJennyReportInbox(props) {
     const useState = hooks.useState;
     const summaryState = useState("");
@@ -476,7 +495,7 @@
     const copyState = useState("");
     const copyMessage = copyState[0];
     const setCopyMessage = copyState[1];
-    const recordsState = useState({ loading: true, projects: [], laneRequests: [], reports: [], error: "" });
+    const recordsState = useState({ loading: true, projects: [], laneRequests: [], reports: [], projectStates: [], error: "" });
     const records = recordsState[0];
     const setRecords = recordsState[1];
     const selectedState = useState(null);
@@ -488,16 +507,18 @@
         getJSON(WORKSPACE_PROJECTS_URL),
         getJSON(WORKSPACE_LANE_REQUESTS_URL),
         getJSON(WORKSPACE_REPORTS_URL),
+        getJSON(WORKSPACE_PROJECT_STATE_URL),
       ]).then(function (result) {
         setRecords({
           loading: false,
           projects: (result[0] && result[0].projects) || [],
           laneRequests: (result[1] && result[1].lane_requests) || [],
           reports: (result[2] && result[2].reports) || [],
+          projectStates: (result[3] && result[3].project_states) || [],
           error: "",
         });
       }).catch(function (err) {
-        setRecords({ loading: false, projects: [], laneRequests: [], reports: [], error: String(err && err.message ? err.message : err) });
+        setRecords({ loading: false, projects: [], laneRequests: [], reports: [], projectStates: [], error: String(err && err.message ? err.message : err) });
       });
     }
 
@@ -560,6 +581,7 @@
     const selectedId = selectedProject ? (selectedProject.project_id || selectedProject.name) : "";
     const projectLaneRequests = records.laneRequests.map(laneRequestFromRecord).filter(function (lane) { return lane && lane.project_id === selectedId; });
     const projectReports = records.reports.map(reportFromRecord).filter(function (report) { return report && report.project_id === selectedId; });
+    const selectedProjectState = records.projectStates.filter(function (state) { return state && state.project_id === selectedId; })[0] || null;
 
     return h(C.Card, { className: "mcg-project-workspace-card" },
       h(C.CardContent, { className: "mcg-project-workspace-body" },
@@ -590,6 +612,7 @@
             h("div", { className: "mcg-workspace-section-title" }, "Open Project: " + selectedProject.name),
             h("span", { className: "mcg-badge" }, "Send to Jenny disabled")
           ),
+          selectedProjectState ? h(ProjectStateProjection, { state: selectedProjectState }) : null,
           h(WorkspaceField, { label: "current goal", value: selectedProject.current_goal }),
           h(WorkspaceField, { label: "last report summary", value: selectedProject.last_report_summary }),
           h(WorkspaceField, { label: "next recommended lane", value: selectedProject.next_recommended_lane }),

@@ -258,6 +258,7 @@
 .mcg-project-actions,
 .mcg-project-lane-draft,
 .mcg-manual-report-inbox,
+.mcg-project-state-projection,
 .mcg-project-report-list,
 .mcg-project-lane-list,
 .mcg-project-detail-workspace {
@@ -270,6 +271,12 @@
   border: 1px solid hsl(var(--border));
   border-radius: 8px;
   padding: 12px;
+}
+
+.mcg-project-state-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .mcg-project-actions {

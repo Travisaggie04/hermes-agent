@@ -181,6 +181,98 @@ def test_workspace_jenny_report_api_creates_lists_and_stays_inert(plugin_api, cl
     assert listed.json()["reports"][0]["record"]["summary"] == "Jenny completed the read-only status refresh."
 
 
+def test_workspace_project_state_projection_is_read_only_and_derived(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(
+        ProjectRecord(
+            project_id="project-hermes",
+            name="Hermes / Mission Control",
+            current_goal="Make Mission Control the workspace.",
+            next_recommended_lane="Initial lane",
+            updated_at="2026-06-10T10:00:00Z",
+        )
+    )
+    store.append(
+        ProjectRecord(
+            project_id="project-empty",
+            name="Empty Project",
+            current_goal="Awaiting first lane.",
+            next_recommended_lane="Create first lane",
+            updated_at="2026-06-10T10:05:00Z",
+        )
+    )
+    store.append(
+        LaneRequestRecord(
+            lane_request_id="lane-old",
+            project_id="project-hermes",
+            title="Old lane",
+            objective="Older request",
+            updated_at="2026-06-10T10:10:00Z",
+        )
+    )
+    store.append(
+        LaneRequestRecord(
+            lane_request_id="lane-new",
+            project_id="project-hermes",
+            title="Latest lane",
+            objective="Newest request",
+            updated_at="2026-06-10T10:20:00Z",
+        )
+    )
+    store.append(
+        JennyReportRecord(
+            report_id="report-old",
+            project_id="project-hermes",
+            lane_request_id="lane-old",
+            summary="Old report",
+            result="Old result",
+            risks=("old risk",),
+            next_recommended_lane="Old next lane",
+            created_at="2026-06-10T10:30:00Z",
+        )
+    )
+    store.append(
+        JennyReportRecord(
+            report_id="report-new",
+            project_id="project-hermes",
+            lane_request_id="lane-new",
+            summary="Latest report",
+            result="Latest result",
+            risks=("risk one", "risk two"),
+            next_recommended_lane="Derived next lane",
+            created_at="2026-06-10T10:40:00Z",
+        )
+    )
+    before = len(store.read_all())
+
+    response = client.get("/api/plugins/mission-control-governance/workspace/project-state")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["manual_copy_only"] is True
+    assert payload["send_to_jenny_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["stored"] is False
+    assert len(store.read_all()) == before
+
+    states = {item["project_id"]: item for item in payload["project_states"]}
+    hermes_state = states["project-hermes"]
+    assert hermes_state["current_goal"] == "Make Mission Control the workspace."
+    assert hermes_state["latest_lane_title"] == "Latest lane"
+    assert hermes_state["latest_report_summary"] == "Latest report"
+    assert hermes_state["latest_result"] == "Latest result"
+    assert hermes_state["risks_blockers"] == ["risk one", "risk two"]
+    assert hermes_state["next_recommended_lane"] == "Derived next lane"
+    assert hermes_state["last_updated"] == "2026-06-10T10:40:00Z"
+
+    empty_state = states["project-empty"]
+    assert empty_state["latest_lane_request"] == {}
+    assert empty_state["latest_jenny_report"] == {}
+    assert empty_state["next_recommended_lane"] == "Create first lane"
+
+
 def test_workspace_record_api_rejects_unsafe_oversized_and_malformed_payloads(client):
     assert client.post(
         "/api/plugins/mission-control-governance/workspace/projects/create",
@@ -747,6 +839,14 @@ def test_project_workspace_records_pr_a_bundle_is_manual_copy_only():
         "WORKSPACE_LANE_REQUESTS_URL",
         "WORKSPACE_REPORTS_URL",
         "WORKSPACE_REPORT_CREATE_URL",
+        "WORKSPACE_PROJECT_STATE_URL",
+        "Project State Projection",
+        "Derived read-only view from ProjectRecord, LaneRequestRecord, and JennyReportRecord",
+        "latest lane request",
+        "latest Jenny report summary",
+        "latest result",
+        "risks/blockers",
+        "last updated",
         "Manual Jenny Report Inbox",
         "Save Jenny report manually",
         "Saved Jenny reports",
@@ -777,6 +877,8 @@ def test_project_workspace_records_pr_a_bundle_is_manual_copy_only():
         ".mcg-project-card-head",
         ".mcg-project-prompt-preview",
         ".mcg-manual-report-inbox",
+        ".mcg-project-state-projection",
+        ".mcg-project-state-grid",
         ".mcg-project-report-list",
         "grid-template-columns: repeat(2, minmax(0, 1fr))",
         "@media (max-width: 760px)",
@@ -917,6 +1019,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/lane-requests/create": {"POST"},
         "/workspace/reports": {"GET"},
         "/workspace/reports/create": {"POST"},
+        "/workspace/project-state": {"GET"},
         "/records": {"GET"},
         "/schema": {"GET"},
         "/records/{record_index}": {"GET"},
@@ -942,6 +1045,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/projects",
         "/workspace/lane-requests",
         "/workspace/reports",
+        "/workspace/project-state",
         "/records",
         "/schema",
         "/records/0",
