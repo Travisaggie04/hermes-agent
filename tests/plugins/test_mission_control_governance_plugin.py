@@ -97,6 +97,71 @@ def test_workspace_project_api_creates_and_lists_append_only_records(plugin_api,
     assert listed.json()["projects"][0]["record_type"] == "ProjectRecord"
 
 
+def test_workspace_project_template_seed_creates_defaults_and_skips_duplicates(plugin_api, client):
+    templates = client.get("/api/plugins/mission-control-governance/workspace/project-templates")
+    assert templates.status_code == 200
+    template_payload = templates.json()
+    assert template_payload["stored"] is False
+    assert template_payload["send_to_jenny_enabled"] is False
+    assert template_payload["dispatch_enabled"] is False
+    assert template_payload["count"] == 5
+    assert {item["name"] for item in template_payload["templates"]} == {
+        "Hermes / Mission Control",
+        "Long-form Video",
+        "Shorts Video",
+        "Tool & Tally",
+        "Waha Work",
+    }
+    assert all(item["exists"] is False for item in template_payload["templates"])
+    assert all(item["default_guards"] for item in template_payload["templates"])
+
+    seeded = client.post("/api/plugins/mission-control-governance/workspace/projects/seed-defaults", json={})
+    assert seeded.status_code == 200
+    payload = seeded.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["manual_copy_only"] is True
+    assert payload["send_to_jenny_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["stored"] is True
+    assert payload["created_count"] == 5
+    assert payload["skipped_count"] == 0
+
+    projects = JsonlRecordStore(plugin_api.record_store_path()).read_all(ProjectRecord)
+    assert len(projects) == 5
+    assert {project.project_id for project in projects} == {
+        "project-hermes-mission-control",
+        "project-long-form-video",
+        "project-shorts-video",
+        "project-tool-tally",
+        "project-waha-work",
+    }
+    assert all(project.source_of_truth for project in projects)
+    assert all(project.current_goal for project in projects)
+    assert all(project.mistakes_guards for project in projects)
+    assert all(project.metadata.get("default_guards") for project in projects)
+    assert all(project.metadata.get("send_to_jenny_enabled") is False for project in projects)
+    assert all(project.metadata.get("dispatch_enabled") is False for project in projects)
+
+    reseed = client.post("/api/plugins/mission-control-governance/workspace/projects/seed-defaults", json={})
+    assert reseed.status_code == 200
+    reseed_payload = reseed.json()
+    assert reseed_payload["stored"] is False
+    assert reseed_payload["created_count"] == 0
+    assert reseed_payload["skipped_count"] == 5
+    assert len(JsonlRecordStore(plugin_api.record_store_path()).read_all(ProjectRecord)) == 5
+
+    after_templates = client.get("/api/plugins/mission-control-governance/workspace/project-templates")
+    assert after_templates.status_code == 200
+    assert all(item["exists"] is True for item in after_templates.json()["templates"])
+
+    state = client.get("/api/plugins/mission-control-governance/workspace/project-state")
+    assert state.status_code == 200
+    state_payload = state.json()
+    assert state_payload["stored"] is False
+    assert state_payload["count"] == 5
+
+
 def test_workspace_lane_request_api_creates_lists_and_stays_inert(plugin_api, client):
     store = JsonlRecordStore(plugin_api.record_store_path())
     store.append(ProjectRecord(project_id="project-hermes", name="Hermes / Mission Control"))
@@ -877,8 +942,6 @@ def test_project_workspace_records_pr_a_bundle_is_manual_copy_only():
         ".mcg-project-card-head",
         ".mcg-project-prompt-preview",
         ".mcg-manual-report-inbox",
-        ".mcg-project-state-projection",
-        ".mcg-project-state-grid",
         ".mcg-project-report-list",
         "grid-template-columns: repeat(2, minmax(0, 1fr))",
         "@media (max-width: 760px)",
@@ -1015,6 +1078,8 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/operator-actions": {"GET"},
         "/workspace/projects": {"GET"},
         "/workspace/projects/create": {"POST"},
+        "/workspace/project-templates": {"GET"},
+        "/workspace/projects/seed-defaults": {"POST"},
         "/workspace/lane-requests": {"GET"},
         "/workspace/lane-requests/create": {"POST"},
         "/workspace/reports": {"GET"},
@@ -1043,6 +1108,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/evidence-cards",
         "/operator-actions",
         "/workspace/projects",
+        "/workspace/project-templates",
         "/workspace/lane-requests",
         "/workspace/reports",
         "/workspace/project-state",

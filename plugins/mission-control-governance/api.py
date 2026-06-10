@@ -107,6 +107,64 @@ INERT_FLAGS = {
     "inert_context_only": True,
     "execution_enabled": False,
 }
+
+PROJECT_ONBOARDING_TEMPLATES = (
+    {
+        "project_id": "project-hermes-mission-control",
+        "slug": "hermes-mission-control",
+        "name": "Hermes / Mission Control",
+        "status": "Live ops workspace; execution remains gated.",
+        "source_of_truth": "Mission Control records + accepted-live baseline",
+        "current_goal": "Make Mission Control the obvious operating surface before enabling any execution path.",
+        "next_recommended_lane": "Read-only project status refresh or bounded workspace improvement PR.",
+        "default_guards": "No deploy, restart, runtime switch, dispatch, queue mutation, model routing, enforcement, or secrets without explicit approval.",
+        "profile": "default",
+    },
+    {
+        "project_id": "project-long-form-video",
+        "slug": "long-form-video",
+        "name": "Long-form Video",
+        "status": "Toolchain/proof lane; no publishing from Mission Control.",
+        "source_of_truth": "money-signal-video profile + approved review packages",
+        "current_goal": "Choose the best adult animated/character toolchain before long content production.",
+        "next_recommended_lane": "Manual-copy toolchain proof/status packet for one bounded video question.",
+        "default_guards": "No avatar-first fallback, static-card regression, paid render, or public posting without explicit approval.",
+        "profile": "money-signal-video",
+    },
+    {
+        "project_id": "project-shorts-video",
+        "slug": "shorts-video",
+        "name": "Shorts Video",
+        "status": "Production strategy exists; publishing remains gated.",
+        "source_of_truth": "money-signal-video profile + visible review packages",
+        "current_goal": "Produce source-backed short-form concepts with strong hooks and reviewable proofs.",
+        "next_recommended_lane": "Manual-copy research/review packet for one specific short concept.",
+        "default_guards": "No generic AI clips, weak hooks, skipped source checks, paid API drift, or public posting without approval.",
+        "profile": "money-signal-video",
+    },
+    {
+        "project_id": "project-tool-tally",
+        "slug": "tool-tally",
+        "name": "Tool & Tally",
+        "status": "Pre-launch gated; customer/public actions require explicit approval.",
+        "source_of_truth": "Tool & Tally OS notes + no-call-estimateready profile",
+        "current_goal": "Keep owner-facing evidence-first pages and paid-order monitoring stable without accidental launch actions.",
+        "next_recommended_lane": "Read-only status check or critical hardening packet only.",
+        "default_guards": "No payment changes, public intake drift, outreach sends, customer delivery, or private asset leaks without approval.",
+        "profile": "no-call-estimateready",
+    },
+    {
+        "project_id": "project-waha-work",
+        "slug": "waha-work",
+        "name": "Waha Work",
+        "status": "Owner-side engineering workspace; isolated profile required.",
+        "source_of_truth": "wahainspection profile",
+        "current_goal": "Support Waha inspection/reporting with exact review-only engineering packets.",
+        "next_recommended_lane": "Manual-copy Waha profile handoff for one bounded document, tracker, or review task.",
+        "default_guards": "Keep Waha context isolated; no unapproved figures or management-ready claims without review.",
+        "profile": "wahainspection",
+    },
+)
 _EVALUATION_FIELDS = {
     "envelope_id",
     "active_lane",
@@ -437,6 +495,71 @@ def _latest_workspace_records(record_class: type[Any], limit: int) -> list[dict[
         }
         for index, record in records
     ]
+
+
+def _project_slug(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "project"
+
+
+def _project_template_payload(template: dict[str, str], existing_projects: tuple[ProjectRecord, ...] = ()) -> dict[str, Any]:
+    slug = template["slug"]
+    names = {_project_slug(project.name) for project in existing_projects}
+    ids = {project.project_id for project in existing_projects}
+    exists = slug in names or template["project_id"] in ids
+    return {
+        **template,
+        "canonical_slug": slug,
+        "exists": exists,
+        "default_guards": template["default_guards"],
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "manual_copy_only": True,
+    }
+
+
+def _project_record_from_template(template: dict[str, str]) -> ProjectRecord:
+    now = _utc_now()
+    return ProjectRecord(
+        project_id=template["project_id"],
+        name=template["name"],
+        status=template["status"],
+        current_goal=template["current_goal"],
+        next_recommended_lane=template["next_recommended_lane"],
+        mistakes_guards=template["default_guards"],
+        source_of_truth=template["source_of_truth"],
+        profile=template["profile"],
+        created_at=now,
+        updated_at=now,
+        metadata={
+            "source": "mission_control_real_project_onboarding_v1",
+            "canonical_slug": template["slug"],
+            "default_guards": template["default_guards"],
+            "manual_copy_only": True,
+            "send_to_jenny_enabled": False,
+            "dispatch_enabled": False,
+        },
+    )
+
+
+def _seed_project_templates() -> dict[str, Any]:
+    store = JsonlRecordStore(record_store_path())
+    existing_projects = store.read_all(ProjectRecord)
+    existing_slugs = {_project_slug(project.name) for project in existing_projects}
+    existing_ids = {project.project_id for project in existing_projects}
+    created: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for template in PROJECT_ONBOARDING_TEMPLATES:
+        duplicate = template["slug"] in existing_slugs or template["project_id"] in existing_ids
+        if duplicate:
+            skipped.append({"project_id": template["project_id"], "name": template["name"], "reason": "already_exists"})
+            continue
+        record = _project_record_from_template(template)
+        index = store.append(record)
+        created.append({"record_index": index, "record_type": record.record_type, "project": _project_payload(record)})
+        existing_slugs.add(template["slug"])
+        existing_ids.add(template["project_id"])
+    return {"created": created, "skipped": skipped}
 
 
 def _project_state_projection(limit: int) -> list[dict[str, Any]]:
@@ -1785,6 +1908,39 @@ async def lane_preflight_evaluate() -> dict[str, Any]:
             include_missing=True,
         ),
         **_lane_preflight_visibility_payload(result),
+    }
+
+
+@router.get("/workspace/project-templates")
+async def workspace_project_templates() -> dict[str, Any]:
+    existing_projects = JsonlRecordStore(record_store_path()).read_all(ProjectRecord)
+    templates = [_project_template_payload(template, existing_projects) for template in PROJECT_ONBOARDING_TEMPLATES]
+    return {
+        **INERT_FLAGS,
+        "display_only": True,
+        "manual_copy_only": True,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "stored": False,
+        "count": len(templates),
+        "templates": templates,
+    }
+
+
+@router.post("/workspace/projects/seed-defaults")
+async def workspace_projects_seed_defaults() -> dict[str, Any]:
+    result = _seed_project_templates()
+    return {
+        **INERT_FLAGS,
+        "stored": bool(result["created"]),
+        "display_only": True,
+        "manual_copy_only": True,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "created_count": len(result["created"]),
+        "skipped_count": len(result["skipped"]),
+        "created": result["created"],
+        "skipped": result["skipped"],
     }
 
 
