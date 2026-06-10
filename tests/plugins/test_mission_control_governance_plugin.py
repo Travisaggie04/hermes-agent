@@ -20,6 +20,7 @@ from mission_control.records import (
     EvidenceCard,
     GoalContract,
     JsonlRecordStore,
+    JennyReportRecord,
     LaneRequestRecord,
     MissionBrief,
     OperatingWorkspaceHandoffRecord,
@@ -137,6 +138,49 @@ def test_workspace_lane_request_api_creates_lists_and_stays_inert(plugin_api, cl
     assert listed.json()["lane_requests"][0]["record"]["project_id"] == "project-hermes"
 
 
+def test_workspace_jenny_report_api_creates_lists_and_stays_inert(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(ProjectRecord(project_id="project-hermes", name="Hermes / Mission Control"))
+    store.append(LaneRequestRecord(lane_request_id="lane-request-1", project_id="project-hermes", title="Read-only status refresh"))
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/reports/create",
+        json={
+            "project_id": "project-hermes",
+            "lane_request_id": "lane-request-1",
+            "summary": "Jenny completed the read-only status refresh.",
+            "result": "No runtime mutation occurred.",
+            "changed_files": ["mission_control/records/models.py"],
+            "tests": ["pytest -q"],
+            "risks": ["none"],
+            "next_recommended_lane": "Review next report inbox slice.",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["manual_copy_only"] is True
+    assert payload["send_to_jenny_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["stored"] is True
+    assert payload["record_type"] == "JennyReportRecord"
+    assert payload["report"]["project_id"] == "project-hermes"
+    assert payload["report"]["lane_request_id"] == "lane-request-1"
+    assert payload["report"]["metadata"]["dispatch_enabled"] is False
+
+    reports = JsonlRecordStore(plugin_api.record_store_path()).read_all(JennyReportRecord)
+    assert len(reports) == 1
+    assert reports[0].summary == "Jenny completed the read-only status refresh."
+    assert reports[0].changed_files == ("mission_control/records/models.py",)
+
+    listed = client.get("/api/plugins/mission-control-governance/workspace/reports?project_id=project-hermes&lane_request_id=lane-request-1")
+    assert listed.status_code == 200
+    assert listed.json()["count"] == 1
+    assert listed.json()["reports"][0]["record"]["summary"] == "Jenny completed the read-only status refresh."
+
+
 def test_workspace_record_api_rejects_unsafe_oversized_and_malformed_payloads(client):
     assert client.post(
         "/api/plugins/mission-control-governance/workspace/projects/create",
@@ -150,6 +194,14 @@ def test_workspace_record_api_rejects_unsafe_oversized_and_malformed_payloads(cl
     assert client.post(
         "/api/plugins/mission-control-governance/workspace/lane-requests/create",
         json={"project_id": "project-hermes"},
+    ).status_code == 422
+    assert client.post(
+        "/api/plugins/mission-control-governance/workspace/reports/create",
+        json={"project_id": "project-hermes"},
+    ).status_code == 422
+    assert client.post(
+        "/api/plugins/mission-control-governance/workspace/reports/create",
+        json={"project_id": "project-hermes", "summary": "x" * 5000},
     ).status_code == 422
 
 
@@ -693,6 +745,12 @@ def test_project_workspace_records_pr_a_bundle_is_manual_copy_only():
         "Send to Jenny — disabled",
         "WORKSPACE_PROJECTS_URL",
         "WORKSPACE_LANE_REQUESTS_URL",
+        "WORKSPACE_REPORTS_URL",
+        "WORKSPACE_REPORT_CREATE_URL",
+        "Manual Jenny Report Inbox",
+        "Save Jenny report manually",
+        "Saved Jenny reports",
+        "Paste Jenny’s report manually",
         "Manual transport only — paste into Discord. This does not start work.",
         "Draft packet only. This is not an active lane.",
         "Read-only/manual-copy Mission Control project workspace lane.",
@@ -718,6 +776,8 @@ def test_project_workspace_records_pr_a_bundle_is_manual_copy_only():
         ".mcg-project-card",
         ".mcg-project-card-head",
         ".mcg-project-prompt-preview",
+        ".mcg-manual-report-inbox",
+        ".mcg-project-report-list",
         "grid-template-columns: repeat(2, minmax(0, 1fr))",
         "@media (max-width: 760px)",
     ):
@@ -855,6 +915,8 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/projects/create": {"POST"},
         "/workspace/lane-requests": {"GET"},
         "/workspace/lane-requests/create": {"POST"},
+        "/workspace/reports": {"GET"},
+        "/workspace/reports/create": {"POST"},
         "/records": {"GET"},
         "/schema": {"GET"},
         "/records/{record_index}": {"GET"},
@@ -879,6 +941,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/operator-actions",
         "/workspace/projects",
         "/workspace/lane-requests",
+        "/workspace/reports",
         "/records",
         "/schema",
         "/records/0",

@@ -3,7 +3,7 @@ import json
 import pytest
 
 from mission_control.records.errors import RecordDecodeError, UnknownRecordTypeError
-from mission_control.records.models import ApprovalSlice, ArtifactRef, GoalContract, LaneRequestRecord, ProjectRecord
+from mission_control.records.models import ApprovalSlice, ArtifactRef, GoalContract, JennyReportRecord, LaneRequestRecord, ProjectRecord
 from mission_control.records.store import JsonlRecordStore
 
 
@@ -58,6 +58,16 @@ def test_jsonl_store_appends_and_reads_workspace_records(tmp_path):
     assert store.read_all(ProjectRecord) == (project,)
     assert store.read_all(LaneRequestRecord) == (lane,)
     assert store.read_latest(record_class=LaneRequestRecord, limit=1) == ((1, lane),)
+
+    report = JennyReportRecord(
+        report_id="report-1",
+        project_id="project-hermes",
+        lane_request_id="lane-request-1",
+        summary="Manual report",
+    )
+    assert store.append(report) == 3
+    assert store.read_all(JennyReportRecord) == (report,)
+    assert store.read_latest(record_class=JennyReportRecord, limit=1) == ((2, report),)
 
 
 def test_jsonl_store_missing_file_reads_empty_tuple(tmp_path):

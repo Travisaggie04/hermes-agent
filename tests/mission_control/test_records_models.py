@@ -7,6 +7,7 @@ from mission_control.records.models import (
     ArtifactRef,
     EvidenceCard,
     GoalContract,
+    JennyReportRecord,
     LaneRequestRecord,
     MissionBrief,
     AcceptedBaselineRecord,
@@ -68,6 +69,31 @@ def test_lane_request_record_round_trips_manual_copy_fields():
     assert LaneRequestRecord.from_dict(data) == record
     assert isinstance(LaneRequestRecord.from_dict(data).allowed_actions, tuple)
     assert RECORD_TYPES["LaneRequestRecord"] is LaneRequestRecord
+
+
+def test_jenny_report_record_round_trips_manual_report_fields():
+    record = JennyReportRecord(
+        report_id="report-1",
+        project_id="project-hermes",
+        lane_request_id="lane-request-1",
+        summary="Report summary",
+        result="Completed safely.",
+        changed_files=("a.py", "b.py"),
+        tests=("pytest -q",),
+        risks=("none",),
+        next_recommended_lane="Review next lane",
+        created_at="2026-06-10T12:00:00Z",
+        metadata={"manual": True},
+    )
+
+    data = record.to_dict()
+
+    assert data["changed_files"] == ["a.py", "b.py"]
+    assert data["tests"] == ["pytest -q"]
+    assert data["risks"] == ["none"]
+    assert JennyReportRecord.from_dict(data) == record
+    assert isinstance(JennyReportRecord.from_dict(data).changed_files, tuple)
+    assert RECORD_TYPES["JennyReportRecord"] is JennyReportRecord
 
 
 def test_mission_brief_round_trips_nested_records_to_plain_dicts():

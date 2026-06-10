@@ -43,6 +43,7 @@ from mission_control.records import (
     EvidenceCard,
     GoalContract,
     JsonlRecordStore,
+    JennyReportRecord,
     LaneRequestRecord,
     MissionBrief,
     OperatingWorkspaceHandoffRecord,
@@ -412,11 +413,17 @@ def _lane_request_payload(record: LaneRequestRecord) -> dict[str, Any]:
     return record.to_dict()
 
 
+def _jenny_report_payload(record: JennyReportRecord) -> dict[str, Any]:
+    return record.to_dict()
+
+
 def _workspace_record_payload(record: Any) -> dict[str, Any]:
     if isinstance(record, ProjectRecord):
         return _project_payload(record)
     if isinstance(record, LaneRequestRecord):
         return _lane_request_payload(record)
+    if isinstance(record, JennyReportRecord):
+        return _jenny_report_payload(record)
     return _record_payload(record)
 
 
@@ -479,6 +486,35 @@ def _build_lane_request_record(payload: dict[str, Any]) -> LaneRequestRecord:
         updated_at=now,
         metadata={
             "source": "mission_control_project_workspace_pr_a",
+            "manual_copy_only": True,
+            "send_to_jenny_enabled": False,
+            "dispatch_enabled": False,
+        },
+    )
+
+
+def _build_jenny_report_record(payload: dict[str, Any]) -> JennyReportRecord:
+    project_id = _workspace_text(payload.get("project_id"), max_chars=120)
+    summary = _workspace_text(payload.get("summary"), max_chars=MAX_WORKSPACE_PROMPT_CHARS)
+    if not project_id:
+        raise HTTPException(status_code=422, detail="project_id is required")
+    if not summary:
+        raise HTTPException(status_code=422, detail="report summary is required")
+    now = _utc_now()
+    report_id = _workspace_text(payload.get("report_id"), max_chars=120) or f"jenny-report-{uuid.uuid4().hex[:12]}"
+    return JennyReportRecord(
+        report_id=report_id,
+        project_id=project_id,
+        lane_request_id=_workspace_text(payload.get("lane_request_id"), max_chars=120),
+        summary=summary,
+        result=_workspace_text(payload.get("result"), max_chars=MAX_WORKSPACE_PROMPT_CHARS),
+        changed_files=_workspace_list(payload.get("changed_files")),
+        tests=_workspace_list(payload.get("tests")),
+        risks=_workspace_list(payload.get("risks")),
+        next_recommended_lane=_workspace_text(payload.get("next_recommended_lane")),
+        created_at=now,
+        metadata={
+            "source": "mission_control_manual_jenny_report_inbox_pr_b",
             "manual_copy_only": True,
             "send_to_jenny_enabled": False,
             "dispatch_enabled": False,
@@ -1763,6 +1799,51 @@ async def workspace_lane_request_create(request: Request) -> dict[str, Any]:
         "record_index": index,
         "record_type": record.record_type,
         "lane_request": _lane_request_payload(record),
+    }
+
+
+@router.get("/workspace/reports")
+async def workspace_jenny_reports(
+    project_id: str | None = Query(default=None),
+    lane_request_id: str | None = Query(default=None),
+    limit: str | None = Query(default=None),
+) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    safe_project_id = _workspace_text(project_id, max_chars=120) if project_id else ""
+    safe_lane_request_id = _workspace_text(lane_request_id, max_chars=120) if lane_request_id else ""
+    reports = _latest_workspace_records(JennyReportRecord, applied_limit)
+    if safe_project_id:
+        reports = [item for item in reports if item.get("record", {}).get("project_id") == safe_project_id]
+    if safe_lane_request_id:
+        reports = [item for item in reports if item.get("record", {}).get("lane_request_id") == safe_lane_request_id]
+    return {
+        **INERT_FLAGS,
+        "display_only": True,
+        "manual_copy_only": True,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "project_id": safe_project_id,
+        "lane_request_id": safe_lane_request_id,
+        "count": len(reports),
+        "reports": reports,
+    }
+
+
+@router.post("/workspace/reports/create")
+async def workspace_jenny_report_create(request: Request) -> dict[str, Any]:
+    payload = await _read_workspace_json_body(request)
+    record = _build_jenny_report_record(payload)
+    index = JsonlRecordStore(record_store_path()).append(record)
+    return {
+        **INERT_FLAGS,
+        "stored": True,
+        "display_only": True,
+        "manual_copy_only": True,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "record_index": index,
+        "record_type": record.record_type,
+        "report": _jenny_report_payload(record),
     }
 
 

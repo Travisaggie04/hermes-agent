@@ -257,6 +257,8 @@
 
 .mcg-project-actions,
 .mcg-project-lane-draft,
+.mcg-manual-report-inbox,
+.mcg-project-report-list,
 .mcg-project-lane-list,
 .mcg-project-detail-workspace {
   display: flex;

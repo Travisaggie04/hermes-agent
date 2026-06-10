@@ -306,6 +306,60 @@ class LaneRequestRecord:
 
 
 @dataclass(frozen=True)
+class JennyReportRecord:
+    report_id: str
+    project_id: str
+    lane_request_id: str = ""
+    summary: str = ""
+    result: str = ""
+    changed_files: tuple[str, ...] = ()
+    tests: tuple[str, ...] = ()
+    risks: tuple[str, ...] = ()
+    next_recommended_lane: str = ""
+    created_at: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "JennyReportRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "changed_files", tuple(str(item) for item in _tuple(self.changed_files)))
+        object.__setattr__(self, "tests", tuple(str(item) for item in _tuple(self.tests)))
+        object.__setattr__(self, "risks", tuple(str(item) for item in _tuple(self.risks)))
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "report_id": self.report_id,
+            "project_id": self.project_id,
+            "lane_request_id": self.lane_request_id,
+            "summary": self.summary,
+            "result": self.result,
+            "changed_files": list(self.changed_files),
+            "tests": list(self.tests),
+            "risks": list(self.risks),
+            "next_recommended_lane": self.next_recommended_lane,
+            "created_at": self.created_at,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> JennyReportRecord:
+        return cls(
+            report_id=_required(data, "report_id"),
+            project_id=_required(data, "project_id"),
+            lane_request_id=data.get("lane_request_id", ""),
+            summary=_required(data, "summary"),
+            result=data.get("result", ""),
+            changed_files=data.get("changed_files") or (),
+            tests=data.get("tests") or (),
+            risks=data.get("risks") or (),
+            next_recommended_lane=data.get("next_recommended_lane", ""),
+            created_at=data.get("created_at", ""),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
 class TaskControlEnvelope:
     envelope_id: str = ""
     active_lane: str = ""
@@ -1211,6 +1265,7 @@ RECORD_TYPES = {
         GoalContract,
         ProjectRecord,
         LaneRequestRecord,
+        JennyReportRecord,
         MissionBrief,
         OperatingWorkspaceHandoffRecord,
         OperatorAction,

@@ -25,6 +25,8 @@
   const WORKSPACE_PROJECT_CREATE_URL = "/api/plugins/mission-control-governance/workspace/projects/create";
   const WORKSPACE_LANE_REQUESTS_URL = "/api/plugins/mission-control-governance/workspace/lane-requests";
   const WORKSPACE_LANE_REQUEST_CREATE_URL = "/api/plugins/mission-control-governance/workspace/lane-requests/create";
+  const WORKSPACE_REPORTS_URL = "/api/plugins/mission-control-governance/workspace/reports";
+  const WORKSPACE_REPORT_CREATE_URL = "/api/plugins/mission-control-governance/workspace/reports/create";
   const SCHEMA_URL = "/api/plugins/mission-control-governance/schema";
   const RECORD_DETAIL_URL = function (index) {
     return "/api/plugins/mission-control-governance/records/" + encodeURIComponent(String(index));
@@ -364,6 +366,10 @@
     return item && item.record ? item.record : null;
   }
 
+  function reportFromRecord(item) {
+    return item && item.record ? item.record : null;
+  }
+
   function ProjectWorkspaceCard(props) {
     const project = props.project;
     return h("div", { className: "mcg-project-card" },
@@ -409,13 +415,68 @@
     );
   }
 
+  function ManualJennyReportInbox(props) {
+    const useState = hooks.useState;
+    const summaryState = useState("");
+    const resultState = useState("");
+    const nextLaneState = useState("");
+    const summary = summaryState[0];
+    const setSummary = summaryState[1];
+    const result = resultState[0];
+    const setResult = resultState[1];
+    const nextLane = nextLaneState[0];
+    const setNextLane = nextLaneState[1];
+    const lanes = props.laneRequests || [];
+    const reports = props.reports || [];
+
+    function submitReport() {
+      props.onCreate({
+        summary: summary,
+        result: result,
+        next_recommended_lane: nextLane,
+        lane_request_id: lanes[0] ? lanes[0].lane_request_id : "",
+      });
+      setSummary("");
+      setResult("");
+      setNextLane("");
+    }
+
+    return h("div", { className: "mcg-manual-report-inbox" },
+      h("div", { className: "mcg-workspace-section-title" }, "Manual Jenny Report Inbox"),
+      h("p", { className: "mcg-muted" }, "Paste Jenny’s report manually and attach it to this project and optional lane request. Append-only record; no callback, dispatch, queue, Waha, model routing, enforcement, or hidden worker."),
+      h("label", { className: "mcg-handoff-field" },
+        h("span", { className: "mcg-start-label" }, "Report summary"),
+        h("textarea", { className: "mcg-handoff-textarea", rows: 3, value: summary, placeholder: "Short report summary", onChange: function (event) { setSummary(event.target.value); } })
+      ),
+      h("label", { className: "mcg-handoff-field" },
+        h("span", { className: "mcg-start-label" }, "Result"),
+        h("textarea", { className: "mcg-handoff-textarea", rows: 3, value: result, placeholder: "What Jenny completed or found", onChange: function (event) { setResult(event.target.value); } })
+      ),
+      h("label", { className: "mcg-handoff-field" },
+        h("span", { className: "mcg-start-label" }, "Next recommended lane"),
+        h("input", { className: "mcg-handoff-input", value: nextLane, placeholder: "Optional next lane", onChange: function (event) { setNextLane(event.target.value); } })
+      ),
+      h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: submitReport, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") submitReport(); } }, "Save Jenny report manually"),
+      h("div", { className: "mcg-project-report-list" },
+        h("div", { className: "mcg-workspace-section-title" }, "Saved Jenny reports"),
+        reports.length ? reports.map(function (report) {
+          return h("div", { className: "mcg-compact-row", key: report.report_id },
+            h("strong", null, report.summary),
+            h("span", null, report.result || "Manual report record"),
+            h("span", null, "next: " + valueText(report.next_recommended_lane, "none"))
+          );
+        }) : h("p", { className: "mcg-muted" }, "No manual Jenny reports saved for this project yet.")
+      )
+    );
+  }
+
   function ProjectWorkspacePanel(props) {
     const useState = hooks.useState;
     const useEffect = hooks.useEffect;
     const copyState = useState("");
     const copyMessage = copyState[0];
     const setCopyMessage = copyState[1];
-    const recordsState = useState({ loading: true, projects: [], laneRequests: [], error: "" });
+    const recordsState = useState({ loading: true, projects: [], laneRequests: [], reports: [], error: "" });
     const records = recordsState[0];
     const setRecords = recordsState[1];
     const selectedState = useState(null);
@@ -426,15 +487,17 @@
       Promise.all([
         getJSON(WORKSPACE_PROJECTS_URL),
         getJSON(WORKSPACE_LANE_REQUESTS_URL),
+        getJSON(WORKSPACE_REPORTS_URL),
       ]).then(function (result) {
         setRecords({
           loading: false,
           projects: (result[0] && result[0].projects) || [],
           laneRequests: (result[1] && result[1].lane_requests) || [],
+          reports: (result[2] && result[2].reports) || [],
           error: "",
         });
       }).catch(function (err) {
-        setRecords({ loading: false, projects: [], laneRequests: [], error: String(err && err.message ? err.message : err) });
+        setRecords({ loading: false, projects: [], laneRequests: [], reports: [], error: String(err && err.message ? err.message : err) });
       });
     }
 
@@ -473,10 +536,30 @@
       });
     }
 
+    function createJennyReport(report) {
+      if (!selectedProject) return;
+      postJSON(WORKSPACE_REPORT_CREATE_URL, {
+        project_id: selectedProject.project_id || selectedProject.name,
+        lane_request_id: report.lane_request_id || "",
+        summary: report.summary,
+        result: report.result,
+        changed_files: [],
+        tests: [],
+        risks: [],
+        next_recommended_lane: report.next_recommended_lane,
+      }).then(function () {
+        setCopyMessage("Saved manual Jenny report. Send to Jenny remains disabled.");
+        refreshWorkspaceRecords();
+      }).catch(function (err) {
+        setCopyMessage("Jenny report was not saved: " + String(err && err.message ? err.message : err));
+      });
+    }
+
     const durableProjects = records.projects.map(projectFromRecord).filter(Boolean);
     const projectCards = durableProjects.length ? durableProjects : PROJECT_WORKSPACE_CARDS;
     const selectedId = selectedProject ? (selectedProject.project_id || selectedProject.name) : "";
     const projectLaneRequests = records.laneRequests.map(laneRequestFromRecord).filter(function (lane) { return lane && lane.project_id === selectedId; });
+    const projectReports = records.reports.map(reportFromRecord).filter(function (report) { return report && report.project_id === selectedId; });
 
     return h(C.Card, { className: "mcg-project-workspace-card" },
       h(C.CardContent, { className: "mcg-project-workspace-body" },
@@ -521,7 +604,8 @@
                 h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: function () { copyProjectPrompt(lane.draft_prompt); }, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") copyProjectPrompt(lane.draft_prompt); } }, "Copy saved prompt")
               );
             }) : h("p", { className: "mcg-muted" }, "No saved lane request records yet.")
-          )
+          ),
+          h(ManualJennyReportInbox, { laneRequests: projectLaneRequests, reports: projectReports, onCreate: createJennyReport })
         ) : null
       )
     );
