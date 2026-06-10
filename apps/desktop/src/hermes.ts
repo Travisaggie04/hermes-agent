@@ -168,6 +168,123 @@ export async function listAllProfileSessions(
   }
 }
 
+export interface MissionControlProjectRecord {
+  project_id: string
+  name: string
+  status?: string
+  current_goal?: string
+  next_recommended_lane?: string
+  mistakes_guards?: string
+  source_of_truth?: string
+  profile?: string
+  updated_at?: string
+}
+
+export interface MissionControlRecordEnvelope<T> {
+  record: T
+  record_index?: number
+  record_type?: string
+}
+
+export interface MissionControlLaneRequestRecord {
+  lane_request_id: string
+  project_id: string
+  title: string
+  mode?: string
+  objective?: string
+  status?: string
+  updated_at?: string
+}
+
+export interface MissionControlReportRecord {
+  report_id: string
+  project_id: string
+  lane_request_id?: string
+  summary?: string
+  result?: string
+  risks?: string[]
+  blockers?: string[]
+  next_recommended_lane?: string
+  updated_at?: string
+}
+
+export interface MissionControlProjectState {
+  project_id: string
+  name: string
+  status?: string
+  current_goal?: string
+  latest_report_summary?: string
+  latest_result?: string
+  risks?: string[]
+  blockers?: string[]
+  next_recommended_lane?: string
+  latest_lane_request?: MissionControlLaneRequestRecord | null
+  latest_report?: MissionControlReportRecord | null
+}
+
+export interface MissionControlWorkspaceStatus {
+  accepted_baseline?: { head?: string; runtime_path?: string }
+  lane?: { active_lane_count?: number; max_active_lane?: number }
+  runtime_worktree_guard?: { decision_state?: string; reason?: string }
+  safety?: { dispatch_in_gateway?: boolean; send_to_jenny_enabled?: boolean }
+  stale_context?: { warnings?: string[] }
+}
+
+export interface MissionControlProjectsResponse {
+  count: number
+  dispatch_enabled?: boolean
+  manual_copy_only?: boolean
+  projects: Array<MissionControlRecordEnvelope<MissionControlProjectRecord>>
+  send_to_jenny_enabled?: boolean
+}
+
+export interface MissionControlLaneRequestsResponse {
+  count: number
+  dispatch_enabled?: boolean
+  lane_requests: Array<MissionControlRecordEnvelope<MissionControlLaneRequestRecord>>
+  manual_copy_only?: boolean
+  send_to_jenny_enabled?: boolean
+}
+
+export interface MissionControlReportsResponse {
+  count: number
+  dispatch_enabled?: boolean
+  manual_copy_only?: boolean
+  reports: Array<MissionControlRecordEnvelope<MissionControlReportRecord>>
+  send_to_jenny_enabled?: boolean
+}
+
+export interface MissionControlProjectStateResponse {
+  count: number
+  dispatch_enabled?: boolean
+  manual_copy_only?: boolean
+  project_states: MissionControlProjectState[]
+  send_to_jenny_enabled?: boolean
+  stored?: boolean
+}
+
+const MISSION_CONTROL_API = '/api/plugins/mission-control-governance'
+
+export function getMissionControlWorkspaceStatus(): Promise<MissionControlWorkspaceStatus> {
+  return window.hermesDesktop.api<MissionControlWorkspaceStatus>({ path: `${MISSION_CONTROL_API}/workspace-status` })
+}
+
+export function getMissionControlProjects(): Promise<MissionControlProjectsResponse> {
+  return window.hermesDesktop.api<MissionControlProjectsResponse>({ path: `${MISSION_CONTROL_API}/workspace/projects` })
+}
+
+export function getMissionControlLaneRequests(): Promise<MissionControlLaneRequestsResponse> {
+  return window.hermesDesktop.api<MissionControlLaneRequestsResponse>({ path: `${MISSION_CONTROL_API}/workspace/lane-requests` })
+}
+
+export function getMissionControlReports(): Promise<MissionControlReportsResponse> {
+  return window.hermesDesktop.api<MissionControlReportsResponse>({ path: `${MISSION_CONTROL_API}/workspace/reports` })
+}
+
+export function getMissionControlProjectState(): Promise<MissionControlProjectStateResponse> {
+  return window.hermesDesktop.api<MissionControlProjectStateResponse>({ path: `${MISSION_CONTROL_API}/workspace/project-state` })
+}
+
 // Mutations take the owning `profile` so Electron routes them to that profile's
 // backend (remote pool or local primary) via request.profile — matching the
 // read path. A remote session's row lives only on its remote host, so a mutation
