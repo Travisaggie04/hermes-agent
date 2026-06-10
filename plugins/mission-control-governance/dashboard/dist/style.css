@@ -255,6 +255,25 @@
   white-space: pre-wrap;
 }
 
+.mcg-project-actions,
+.mcg-project-lane-draft,
+.mcg-project-lane-list,
+.mcg-project-detail-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mcg-project-detail-workspace {
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.mcg-project-actions {
+  align-items: flex-start;
+}
+
 .mcg-summary-panels,
 .mcg-panels {
   display: grid;

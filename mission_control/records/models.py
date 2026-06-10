@@ -191,6 +191,121 @@ class GoalContract:
 
 
 @dataclass(frozen=True)
+class ProjectRecord:
+    project_id: str
+    name: str
+    status: str = ""
+    current_goal: str = ""
+    next_recommended_lane: str = ""
+    mistakes_guards: str = ""
+    source_of_truth: str = ""
+    profile: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "ProjectRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "project_id": self.project_id,
+            "name": self.name,
+            "status": self.status,
+            "current_goal": self.current_goal,
+            "next_recommended_lane": self.next_recommended_lane,
+            "mistakes_guards": self.mistakes_guards,
+            "source_of_truth": self.source_of_truth,
+            "profile": self.profile,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ProjectRecord:
+        return cls(
+            project_id=_required(data, "project_id"),
+            name=_required(data, "name"),
+            status=data.get("status", ""),
+            current_goal=data.get("current_goal", ""),
+            next_recommended_lane=data.get("next_recommended_lane", ""),
+            mistakes_guards=data.get("mistakes_guards", ""),
+            source_of_truth=data.get("source_of_truth", ""),
+            profile=data.get("profile", ""),
+            created_at=data.get("created_at", ""),
+            updated_at=data.get("updated_at", ""),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
+class LaneRequestRecord:
+    lane_request_id: str
+    project_id: str
+    title: str
+    mode: str = "read-only/manual-copy"
+    objective: str = ""
+    allowed_actions: tuple[str, ...] = ()
+    forbidden_actions: tuple[str, ...] = ()
+    stop_conditions: tuple[str, ...] = ()
+    expected_report_format: tuple[str, ...] = ()
+    draft_prompt: str = ""
+    status: str = "draft"
+    created_at: str = ""
+    updated_at: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "LaneRequestRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "allowed_actions", tuple(str(item) for item in _tuple(self.allowed_actions)))
+        object.__setattr__(self, "forbidden_actions", tuple(str(item) for item in _tuple(self.forbidden_actions)))
+        object.__setattr__(self, "stop_conditions", tuple(str(item) for item in _tuple(self.stop_conditions)))
+        object.__setattr__(self, "expected_report_format", tuple(str(item) for item in _tuple(self.expected_report_format)))
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "lane_request_id": self.lane_request_id,
+            "project_id": self.project_id,
+            "title": self.title,
+            "mode": self.mode,
+            "objective": self.objective,
+            "allowed_actions": list(self.allowed_actions),
+            "forbidden_actions": list(self.forbidden_actions),
+            "stop_conditions": list(self.stop_conditions),
+            "expected_report_format": list(self.expected_report_format),
+            "draft_prompt": self.draft_prompt,
+            "status": self.status,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> LaneRequestRecord:
+        return cls(
+            lane_request_id=_required(data, "lane_request_id"),
+            project_id=_required(data, "project_id"),
+            title=_required(data, "title"),
+            mode=data.get("mode", "read-only/manual-copy"),
+            objective=data.get("objective", ""),
+            allowed_actions=data.get("allowed_actions") or (),
+            forbidden_actions=data.get("forbidden_actions") or (),
+            stop_conditions=data.get("stop_conditions") or (),
+            expected_report_format=data.get("expected_report_format") or (),
+            draft_prompt=data.get("draft_prompt", ""),
+            status=data.get("status", "draft"),
+            created_at=data.get("created_at", ""),
+            updated_at=data.get("updated_at", ""),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
 class TaskControlEnvelope:
     envelope_id: str = ""
     active_lane: str = ""
@@ -1094,6 +1209,8 @@ RECORD_TYPES = {
         ArtifactRef,
         EvidenceCard,
         GoalContract,
+        ProjectRecord,
+        LaneRequestRecord,
         MissionBrief,
         OperatingWorkspaceHandoffRecord,
         OperatorAction,

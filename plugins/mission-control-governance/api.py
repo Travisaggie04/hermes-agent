@@ -43,9 +43,11 @@ from mission_control.records import (
     EvidenceCard,
     GoalContract,
     JsonlRecordStore,
+    LaneRequestRecord,
     MissionBrief,
     OperatingWorkspaceHandoffRecord,
     OperatorAction,
+    ProjectRecord,
     StartGateCheck,
     TaskControlEnvelope,
     VerifierWorkflowEvidenceRecord,
@@ -60,6 +62,10 @@ MAX_EVALUATION_STRING_CHARS = 500
 MAX_EVALUATION_LIST_ITEMS = 20
 MAX_EVALUATION_METADATA_ITEMS = 8
 MAX_VERIFIER_EVIDENCE_RECORDS = 10
+MAX_WORKSPACE_BODY_BYTES = 12000
+MAX_WORKSPACE_TEXT_CHARS = 1200
+MAX_WORKSPACE_PROMPT_CHARS = 4000
+MAX_WORKSPACE_LIST_ITEMS = 12
 _PR_MERGE_GATE_FIELDS = {
     "repo",
     "pr_number",
@@ -353,6 +359,131 @@ def _latest_handoff_payload() -> dict[str, Any]:
         return {}
     _index, record = records[-1]
     return record.to_dict()
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _workspace_text(value: Any, *, max_chars: int = MAX_WORKSPACE_TEXT_CHARS) -> str:
+    text = _SECRET_LIKE_RE.sub("[redacted]", str(value or "").strip())
+    text = _PATH_LIKE_RE.sub("[path]", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) > max_chars:
+        raise HTTPException(status_code=422, detail="workspace field is too large")
+    return text
+
+
+def _workspace_list(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        values = [value]
+    elif isinstance(value, (list, tuple)):
+        values = list(value)
+    else:
+        raise HTTPException(status_code=422, detail="workspace list field must be a list")
+    if len(values) > MAX_WORKSPACE_LIST_ITEMS:
+        raise HTTPException(status_code=422, detail="workspace list field has too many items")
+    return tuple(_workspace_text(item, max_chars=240) for item in values if str(item).strip())
+
+
+async def _read_workspace_json_body(request: Request) -> dict[str, Any]:
+    content_type = request.headers.get("content-type", "")
+    if content_type and "application/json" not in content_type.lower():
+        raise HTTPException(status_code=415, detail="JSON body required")
+    body = await request.body()
+    if len(body) > MAX_WORKSPACE_BODY_BYTES:
+        raise HTTPException(status_code=413, detail="workspace payload is too large")
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="malformed JSON body") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="JSON body must be an object")
+    return payload
+
+
+def _project_payload(record: ProjectRecord) -> dict[str, Any]:
+    return record.to_dict()
+
+
+def _lane_request_payload(record: LaneRequestRecord) -> dict[str, Any]:
+    return record.to_dict()
+
+
+def _workspace_record_payload(record: Any) -> dict[str, Any]:
+    if isinstance(record, ProjectRecord):
+        return _project_payload(record)
+    if isinstance(record, LaneRequestRecord):
+        return _lane_request_payload(record)
+    return _record_payload(record)
+
+
+def _latest_workspace_records(record_class: type[Any], limit: int) -> list[dict[str, Any]]:
+    records, _store_status, _error = _load_latest_records_with_state(record_class=record_class, limit=limit)
+    return [
+        {
+            "record_index": index,
+            "record_type": _record_type(record),
+            "record": _workspace_record_payload(record),
+        }
+        for index, record in records
+    ]
+
+
+def _build_project_record(payload: dict[str, Any]) -> ProjectRecord:
+    name = _workspace_text(payload.get("name"), max_chars=120)
+    if not name:
+        raise HTTPException(status_code=422, detail="project name is required")
+    now = _utc_now()
+    project_id = _workspace_text(payload.get("project_id"), max_chars=120) or f"project-{uuid.uuid4().hex[:12]}"
+    return ProjectRecord(
+        project_id=project_id,
+        name=name,
+        status=_workspace_text(payload.get("status"), max_chars=240),
+        current_goal=_workspace_text(payload.get("current_goal")),
+        next_recommended_lane=_workspace_text(payload.get("next_recommended_lane")),
+        mistakes_guards=_workspace_text(payload.get("mistakes_guards")),
+        source_of_truth=_workspace_text(payload.get("source_of_truth"), max_chars=240),
+        profile=_workspace_text(payload.get("profile"), max_chars=80),
+        created_at=now,
+        updated_at=now,
+        metadata={"source": "mission_control_project_workspace_pr_a"},
+    )
+
+
+def _build_lane_request_record(payload: dict[str, Any]) -> LaneRequestRecord:
+    project_id = _workspace_text(payload.get("project_id"), max_chars=120)
+    title = _workspace_text(payload.get("title"), max_chars=180)
+    if not project_id:
+        raise HTTPException(status_code=422, detail="project_id is required")
+    if not title:
+        raise HTTPException(status_code=422, detail="lane request title is required")
+    now = _utc_now()
+    lane_request_id = _workspace_text(payload.get("lane_request_id"), max_chars=120) or f"lane-request-{uuid.uuid4().hex[:12]}"
+    draft_prompt = _workspace_text(payload.get("draft_prompt"), max_chars=MAX_WORKSPACE_PROMPT_CHARS)
+    return LaneRequestRecord(
+        lane_request_id=lane_request_id,
+        project_id=project_id,
+        title=title,
+        mode=_workspace_text(payload.get("mode"), max_chars=160) or "read-only/manual-copy",
+        objective=_workspace_text(payload.get("objective")),
+        allowed_actions=_workspace_list(payload.get("allowed_actions")),
+        forbidden_actions=_workspace_list(payload.get("forbidden_actions")),
+        stop_conditions=_workspace_list(payload.get("stop_conditions")),
+        expected_report_format=_workspace_list(payload.get("expected_report_format")),
+        draft_prompt=draft_prompt,
+        status="draft",
+        created_at=now,
+        updated_at=now,
+        metadata={
+            "source": "mission_control_project_workspace_pr_a",
+            "manual_copy_only": True,
+            "send_to_jenny_enabled": False,
+            "dispatch_enabled": False,
+        },
+    )
 
 
 def _safe_records_limit(limit: str | None) -> int:
@@ -1559,6 +1690,79 @@ async def lane_preflight_evaluate() -> dict[str, Any]:
             include_missing=True,
         ),
         **_lane_preflight_visibility_payload(result),
+    }
+
+
+@router.get("/workspace/projects")
+async def workspace_projects(limit: str | None = Query(default=None)) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    projects = _latest_workspace_records(ProjectRecord, applied_limit)
+    return {
+        **INERT_FLAGS,
+        "display_only": True,
+        "manual_copy_only": True,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "count": len(projects),
+        "projects": projects,
+    }
+
+
+@router.post("/workspace/projects/create")
+async def workspace_project_create(request: Request) -> dict[str, Any]:
+    payload = await _read_workspace_json_body(request)
+    record = _build_project_record(payload)
+    index = JsonlRecordStore(record_store_path()).append(record)
+    return {
+        **INERT_FLAGS,
+        "stored": True,
+        "display_only": True,
+        "manual_copy_only": True,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "record_index": index,
+        "record_type": record.record_type,
+        "project": _project_payload(record),
+    }
+
+
+@router.get("/workspace/lane-requests")
+async def workspace_lane_requests(
+    project_id: str | None = Query(default=None),
+    limit: str | None = Query(default=None),
+) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    project_filter = _workspace_text(project_id, max_chars=120) if project_id else ""
+    records = _latest_workspace_records(LaneRequestRecord, applied_limit)
+    if project_filter:
+        records = [item for item in records if item.get("record", {}).get("project_id") == project_filter]
+    return {
+        **INERT_FLAGS,
+        "display_only": True,
+        "manual_copy_only": True,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "project_id": project_filter,
+        "count": len(records),
+        "lane_requests": records,
+    }
+
+
+@router.post("/workspace/lane-requests/create")
+async def workspace_lane_request_create(request: Request) -> dict[str, Any]:
+    payload = await _read_workspace_json_body(request)
+    record = _build_lane_request_record(payload)
+    index = JsonlRecordStore(record_store_path()).append(record)
+    return {
+        **INERT_FLAGS,
+        "stored": True,
+        "display_only": True,
+        "manual_copy_only": True,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "record_index": index,
+        "record_type": record.record_type,
+        "lane_request": _lane_request_payload(record),
     }
 
 

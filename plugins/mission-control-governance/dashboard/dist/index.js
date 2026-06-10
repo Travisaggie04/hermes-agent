@@ -21,6 +21,10 @@
   const OPERATOR_ACTIONS_URL = "/api/plugins/mission-control-governance/operator-actions";
   const WORKSPACE_STATUS_URL = "/api/plugins/mission-control-governance/workspace-status";
   const RECORDS_URL = "/api/plugins/mission-control-governance/records?limit=25";
+  const WORKSPACE_PROJECTS_URL = "/api/plugins/mission-control-governance/workspace/projects";
+  const WORKSPACE_PROJECT_CREATE_URL = "/api/plugins/mission-control-governance/workspace/projects/create";
+  const WORKSPACE_LANE_REQUESTS_URL = "/api/plugins/mission-control-governance/workspace/lane-requests";
+  const WORKSPACE_LANE_REQUEST_CREATE_URL = "/api/plugins/mission-control-governance/workspace/lane-requests/create";
   const SCHEMA_URL = "/api/plugins/mission-control-governance/schema";
   const RECORD_DETAIL_URL = function (index) {
     return "/api/plugins/mission-control-governance/records/" + encodeURIComponent(String(index));
@@ -296,31 +300,23 @@
     },
   ];
 
-  function makeProjectWorkspacePrompt(project, workspaceStatus) {
+  function makeProjectWorkspacePrompt(project, workspaceStatus, laneDraft) {
     const accepted = workspaceStatus.accepted_baseline || {};
     const lane = workspaceStatus.lane || {};
     const safety = workspaceStatus.safety || {};
+    const draft = laneDraft || {};
     return [
       "Active lane:",
-      project.next_recommended_lane,
+      draft.title || project.next_recommended_lane,
       "",
       "Mode:",
-      "Read-only/manual-copy Mission Control project workspace lane.",
+      draft.mode || "Read-only/manual-copy Mission Control project workspace lane.",
       "",
       "Project:",
       project.name,
       "",
-      "Status:",
-      project.status,
-      "",
-      "Current goal:",
-      project.current_goal,
-      "",
-      "Last report summary:",
-      project.last_report_summary,
-      "",
       "Objective:",
-      "Use this project card as context, then inspect only the approved source of truth before recommending work.",
+      draft.objective || "Use this project card as context, then inspect only the approved source of truth before recommending work.",
       "",
       "Allowed actions:",
       "- Read approved context",
@@ -328,7 +324,7 @@
       "- Propose bounded manual-copy prompt",
       "",
       "Forbidden actions:",
-      "- No dispatch, execution, records, queue mutation, Waha mutation, model routing, enforcement, deploy, restart, config mutation, or public/customer action unless separately approved",
+      "- No dispatch, execution, records beyond the approved workspace record, queue mutation, Waha mutation, model routing, enforcement, deploy, restart, config mutation, or public/customer action unless separately approved",
       "",
       "Stop conditions:",
       "- Stop if workspace-status preflight fails",
@@ -342,8 +338,12 @@
       "- risks/guards",
       "- no-mutation confirmation",
       "",
-      "Mistakes/guards:",
-      "- " + project.mistakes_guards,
+      "Project state:",
+      "- status=" + valueText(project.status, "unknown"),
+      "- current_goal=" + valueText(project.current_goal, "unknown"),
+      "- last_report_summary=" + valueText(project.last_report_summary, "not recorded"),
+      "- next_recommended_lane=" + valueText(project.next_recommended_lane, "unknown"),
+      "- mistakes_guards=" + valueText(project.mistakes_guards, "none"),
       "",
       "Accepted baseline:",
       "- runtime=" + valueText(accepted.runtime_path, "unknown"),
@@ -356,68 +356,173 @@
     ].join("\n").trim();
   }
 
+  function projectFromRecord(item) {
+    return item && item.record ? item.record : null;
+  }
+
+  function laneRequestFromRecord(item) {
+    return item && item.record ? item.record : null;
+  }
+
   function ProjectWorkspaceCard(props) {
     const project = props.project;
-    const prompt = makeProjectWorkspacePrompt(project, props.workspaceStatus || {});
-    function copyPrompt() {
-      props.onCopy(prompt);
-    }
     return h("div", { className: "mcg-project-card" },
       h("div", { className: "mcg-project-card-head" },
         h("div", { className: "mcg-workspace-section-title" }, project.name),
-        h("span", { className: "mcg-badge" }, "Manual-copy")
+        h("span", { className: "mcg-badge" }, project.project_id ? "Durable" : "Seed")
       ),
       h(WorkspaceField, { label: "status", value: project.status }),
       h(WorkspaceField, { label: "current goal", value: project.current_goal }),
-      h(WorkspaceField, { label: "last report summary", value: project.last_report_summary }),
       h(WorkspaceField, { label: "next recommended lane", value: project.next_recommended_lane }),
-      h(WorkspaceField, { label: "mistakes/guards", value: project.mistakes_guards }),
-      h("div", { className: "mcg-project-prompt-preview" },
-        h("span", { className: "mcg-start-label" }, "Generated prompt content"),
-        h("pre", null, prompt)
+      h("div", { className: "mcg-project-actions" },
+        h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: function () { props.onOpen(project); }, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") props.onOpen(project); } }, "Open Project"),
+        h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: function () { props.onCopy(makeProjectWorkspacePrompt(project, props.workspaceStatus || {})); }, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") props.onCopy(makeProjectWorkspacePrompt(project, props.workspaceStatus || {})); } }, "Copy prompt")
+      )
+    );
+  }
+
+  function LaneRequestDraftForm(props) {
+    const useState = hooks.useState;
+    const titleState = useState("");
+    const objectiveState = useState("");
+    const title = titleState[0];
+    const setTitle = titleState[1];
+    const objective = objectiveState[0];
+    const setObjective = objectiveState[1];
+    function submitDraft() {
+      props.onCreate({ title: title, objective: objective });
+      setTitle("");
+      setObjective("");
+    }
+    return h("div", { className: "mcg-project-lane-draft" },
+      h("div", { className: "mcg-workspace-section-title" }, "Create durable lane request draft"),
+      h("p", { className: "mcg-muted" }, "Append-only record. No send, dispatch, queue, Waha, model routing, enforcement, or hidden worker."),
+      h("label", { className: "mcg-handoff-field" },
+        h("span", { className: "mcg-start-label" }, "Lane title"),
+        h("input", { className: "mcg-handoff-input", value: title, placeholder: "Read-only project status refresh", onChange: function (event) { setTitle(event.target.value); } })
       ),
-      h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: copyPrompt, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") copyPrompt(); } }, "Copy prompt")
+      h("label", { className: "mcg-handoff-field" },
+        h("span", { className: "mcg-start-label" }, "Objective"),
+        h("textarea", { className: "mcg-handoff-textarea", rows: 3, value: objective, placeholder: "Inspect current project state and recommend the next safe lane.", onChange: function (event) { setObjective(event.target.value); } })
+      ),
+      h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: submitDraft, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") submitDraft(); } }, "Save lane request draft")
     );
   }
 
   function ProjectWorkspacePanel(props) {
     const useState = hooks.useState;
+    const useEffect = hooks.useEffect;
     const copyState = useState("");
     const copyMessage = copyState[0];
     const setCopyMessage = copyState[1];
+    const recordsState = useState({ loading: true, projects: [], laneRequests: [], error: "" });
+    const records = recordsState[0];
+    const setRecords = recordsState[1];
+    const selectedState = useState(null);
+    const selectedProject = selectedState[0] || (records.projects[0] ? projectFromRecord(records.projects[0]) : PROJECT_WORKSPACE_CARDS[0]);
+    const setSelectedProject = selectedState[1];
+
+    function refreshWorkspaceRecords() {
+      Promise.all([
+        getJSON(WORKSPACE_PROJECTS_URL),
+        getJSON(WORKSPACE_LANE_REQUESTS_URL),
+      ]).then(function (result) {
+        setRecords({
+          loading: false,
+          projects: (result[0] && result[0].projects) || [],
+          laneRequests: (result[1] && result[1].lane_requests) || [],
+          error: "",
+        });
+      }).catch(function (err) {
+        setRecords({ loading: false, projects: [], laneRequests: [], error: String(err && err.message ? err.message : err) });
+      });
+    }
+
+    useEffect(function () { refreshWorkspaceRecords(); }, []);
+
     function copyProjectPrompt(prompt) {
       if (!navigator.clipboard || !navigator.clipboard.writeText) {
         setCopyMessage("Clipboard unavailable — select and copy the generated prompt manually.");
         return;
       }
       navigator.clipboard.writeText(prompt).then(function () {
-        setCopyMessage("Copied project workspace prompt. Paste it into Discord manually.");
+        setCopyMessage("Copied project workspace prompt. Paste it manually.");
       }).catch(function () {
         setCopyMessage("Clipboard failed — select and copy the generated prompt manually.");
       });
     }
+
+    function createLaneRequest(draft) {
+      if (!selectedProject) return;
+      const prompt = makeProjectWorkspacePrompt(selectedProject, props.workspaceStatus || {}, draft);
+      postJSON(WORKSPACE_LANE_REQUEST_CREATE_URL, {
+        project_id: selectedProject.project_id || selectedProject.name,
+        title: draft.title || selectedProject.next_recommended_lane,
+        objective: draft.objective || selectedProject.current_goal,
+        mode: "read-only/manual-copy",
+        allowed_actions: ["read approved context", "report status", "recommend next lane"],
+        forbidden_actions: ["dispatch", "run tools", "queue mutation", "Waha mutation", "model routing", "enforcement", "automatic session send"],
+        stop_conditions: ["workspace-status preflight fails", "scope requires live mutation"],
+        expected_report_format: ["preflight", "current project state", "recommended next lane", "no-mutation confirmation"],
+        draft_prompt: prompt,
+      }).then(function () {
+        setCopyMessage("Saved durable lane request draft. Send to Jenny remains disabled.");
+        refreshWorkspaceRecords();
+      }).catch(function (err) {
+        setCopyMessage("Lane request was not saved: " + String(err && err.message ? err.message : err));
+      });
+    }
+
+    const durableProjects = records.projects.map(projectFromRecord).filter(Boolean);
+    const projectCards = durableProjects.length ? durableProjects : PROJECT_WORKSPACE_CARDS;
+    const selectedId = selectedProject ? (selectedProject.project_id || selectedProject.name) : "";
+    const projectLaneRequests = records.laneRequests.map(laneRequestFromRecord).filter(function (lane) { return lane && lane.project_id === selectedId; });
+
     return h(C.Card, { className: "mcg-project-workspace-card" },
       h(C.CardContent, { className: "mcg-project-workspace-body" },
         h("div", { className: "mcg-panel-heading" },
           h("div", null,
             h("div", { className: "mcg-panel-title" }, "Project Workspace"),
-            h("p", { className: "mcg-muted" }, "Manual transport only — paste into Discord. This does not start work.")
+            h("p", { className: "mcg-muted" }, "Project + LaneRequest records only. Manual-copy workspace; no send path.")
           ),
-          h("span", { className: "mcg-badge" }, "Display/manual-copy only")
+          h("span", { className: "mcg-badge" }, "Records v1 thin slice")
         ),
-        h("p", { className: "mcg-handoff-warning" }, "Draft packet only. This is not an active lane."),
-        h("p", { className: "mcg-muted" }, "Static project cards for choosing the next safe lane. No dispatch, execution, records, queue mutation, Waha mutation, model routing, or enforcement."),
+        h("p", { className: "mcg-handoff-warning" }, "Manual transport only — paste into Discord. This does not start work. Draft packet only. This is not an active lane."),
+        h("p", { className: "mcg-muted" }, "Send to Jenny — disabled. No dispatch, queue, Waha, model routing, enforcement, automatic session send, storage, timers, or hidden workers."),
+        records.error ? h("p", { className: "mcg-handoff-stop" }, records.error) : null,
         copyMessage ? h("p", { className: "mcg-muted" }, copyMessage) : null,
         h("div", { className: "mcg-project-grid" },
-          PROJECT_WORKSPACE_CARDS.map(function (project) {
+          projectCards.map(function (project) {
             return h(ProjectWorkspaceCard, {
-              key: project.name,
+              key: project.project_id || project.name,
               project: project,
               workspaceStatus: props.workspaceStatus || {},
+              onOpen: setSelectedProject,
               onCopy: copyProjectPrompt,
             });
           })
-        )
+        ),
+        selectedProject ? h("div", { className: "mcg-project-detail-workspace" },
+          h("div", { className: "mcg-project-card-head" },
+            h("div", { className: "mcg-workspace-section-title" }, "Open Project: " + selectedProject.name),
+            h("span", { className: "mcg-badge" }, "Send to Jenny disabled")
+          ),
+          h(WorkspaceField, { label: "current goal", value: selectedProject.current_goal }),
+          h(WorkspaceField, { label: "last report summary", value: selectedProject.last_report_summary }),
+          h(WorkspaceField, { label: "next recommended lane", value: selectedProject.next_recommended_lane }),
+          h(WorkspaceField, { label: "mistakes/guards", value: selectedProject.mistakes_guards }),
+          h(LaneRequestDraftForm, { onCreate: createLaneRequest }),
+          h("div", { className: "mcg-project-lane-list" },
+            h("div", { className: "mcg-workspace-section-title" }, "Saved lane request drafts"),
+            projectLaneRequests.length ? projectLaneRequests.map(function (lane) {
+              return h("div", { className: "mcg-compact-row", key: lane.lane_request_id },
+                h("strong", null, lane.title),
+                h("span", null, lane.objective || lane.mode),
+                h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: function () { copyProjectPrompt(lane.draft_prompt); }, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") copyProjectPrompt(lane.draft_prompt); } }, "Copy saved prompt")
+              );
+            }) : h("p", { className: "mcg-muted" }, "No saved lane request records yet.")
+          )
+        ) : null
       )
     );
   }

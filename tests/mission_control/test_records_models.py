@@ -7,14 +7,67 @@ from mission_control.records.models import (
     ArtifactRef,
     EvidenceCard,
     GoalContract,
+    LaneRequestRecord,
     MissionBrief,
     AcceptedBaselineRecord,
     OperatingWorkspaceHandoffRecord,
     OperatorAction,
+    ProjectRecord,
     RECORD_TYPES,
     StartGateCheck,
     TaskControlEnvelope,
 )
+
+
+def test_project_record_round_trips_workspace_fields():
+    record = ProjectRecord(
+        project_id="project-hermes",
+        name="Hermes / Mission Control",
+        status="live",
+        current_goal="Make Mission Control the workspace.",
+        next_recommended_lane="Draft the next safe lane.",
+        mistakes_guards="No dispatch without approval.",
+        source_of_truth="Mission Control",
+        profile="default",
+        created_at="2026-06-10T10:00:00Z",
+        updated_at="2026-06-10T10:01:00Z",
+        metadata={"source": "unit-test"},
+    )
+
+    data = record.to_dict()
+
+    assert data["project_id"] == "project-hermes"
+    assert data["name"] == "Hermes / Mission Control"
+    assert data["metadata"] == {"source": "unit-test"}
+    assert ProjectRecord.from_dict(data) == record
+    assert RECORD_TYPES["ProjectRecord"] is ProjectRecord
+
+
+def test_lane_request_record_round_trips_manual_copy_fields():
+    record = LaneRequestRecord(
+        lane_request_id="lane-request-1",
+        project_id="project-hermes",
+        title="Read-only status refresh",
+        mode="read-only/manual-copy",
+        objective="Inspect project state and recommend next lane.",
+        allowed_actions=("read context", "report status"),
+        forbidden_actions=("dispatch", "execute", "queue mutation"),
+        stop_conditions=("workspace-status fails",),
+        expected_report_format=("preflight", "no-mutation confirmation"),
+        draft_prompt="Active lane:\nRead-only status refresh",
+        status="draft",
+        created_at="2026-06-10T10:00:00Z",
+        updated_at="2026-06-10T10:01:00Z",
+        metadata={"manual_copy_only": True},
+    )
+
+    data = record.to_dict()
+
+    assert data["allowed_actions"] == ["read context", "report status"]
+    assert data["forbidden_actions"] == ["dispatch", "execute", "queue mutation"]
+    assert LaneRequestRecord.from_dict(data) == record
+    assert isinstance(LaneRequestRecord.from_dict(data).allowed_actions, tuple)
+    assert RECORD_TYPES["LaneRequestRecord"] is LaneRequestRecord
 
 
 def test_mission_brief_round_trips_nested_records_to_plain_dicts():

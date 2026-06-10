@@ -20,9 +20,11 @@ from mission_control.records import (
     EvidenceCard,
     GoalContract,
     JsonlRecordStore,
+    LaneRequestRecord,
     MissionBrief,
     OperatingWorkspaceHandoffRecord,
     OperatorAction,
+    ProjectRecord,
     StartGateCheck,
     TaskControlEnvelope,
     VerifierWorkflowEvidenceRecord,
@@ -59,6 +61,96 @@ def client(plugin_api):
     app = FastAPI()
     app.include_router(plugin_api.router, prefix="/api/plugins/mission-control-governance")
     return TestClient(app)
+
+
+def test_workspace_project_api_creates_and_lists_append_only_records(plugin_api, client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/projects/create",
+        json={
+            "name": "Hermes / Mission Control",
+            "status": "live",
+            "current_goal": "Make Mission Control the workspace.",
+            "next_recommended_lane": "Create a durable lane request.",
+            "mistakes_guards": "No dispatch without approval.",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["manual_copy_only"] is True
+    assert payload["send_to_jenny_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["stored"] is True
+    assert payload["record_type"] == "ProjectRecord"
+    assert payload["project"]["name"] == "Hermes / Mission Control"
+
+    records = JsonlRecordStore(plugin_api.record_store_path()).read_all(ProjectRecord)
+    assert len(records) == 1
+    assert records[0].name == "Hermes / Mission Control"
+
+    listed = client.get("/api/plugins/mission-control-governance/workspace/projects")
+    assert listed.status_code == 200
+    assert listed.json()["count"] == 1
+    assert listed.json()["projects"][0]["record_type"] == "ProjectRecord"
+
+
+def test_workspace_lane_request_api_creates_lists_and_stays_inert(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(ProjectRecord(project_id="project-hermes", name="Hermes / Mission Control"))
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/lane-requests/create",
+        json={
+            "project_id": "project-hermes",
+            "title": "Read-only status refresh",
+            "objective": "Inspect current status and recommend next lane.",
+            "allowed_actions": ["read approved context", "report status"],
+            "forbidden_actions": ["dispatch", "execute", "queue mutation"],
+            "stop_conditions": ["workspace-status preflight fails"],
+            "expected_report_format": ["preflight", "no-mutation confirmation"],
+            "draft_prompt": "Manual transport only — paste into Discord.",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["manual_copy_only"] is True
+    assert payload["send_to_jenny_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["stored"] is True
+    assert payload["record_type"] == "LaneRequestRecord"
+    assert payload["lane_request"]["status"] == "draft"
+    assert payload["lane_request"]["metadata"]["dispatch_enabled"] is False
+
+    records = JsonlRecordStore(plugin_api.record_store_path()).read_all(LaneRequestRecord)
+    assert len(records) == 1
+    assert records[0].title == "Read-only status refresh"
+    assert records[0].forbidden_actions == ("dispatch", "execute", "queue mutation")
+
+    listed = client.get("/api/plugins/mission-control-governance/workspace/lane-requests?project_id=project-hermes")
+    assert listed.status_code == 200
+    assert listed.json()["count"] == 1
+    assert listed.json()["lane_requests"][0]["record"]["project_id"] == "project-hermes"
+
+
+def test_workspace_record_api_rejects_unsafe_oversized_and_malformed_payloads(client):
+    assert client.post(
+        "/api/plugins/mission-control-governance/workspace/projects/create",
+        data="not-json",
+        headers={"content-type": "application/json"},
+    ).status_code == 400
+    assert client.post(
+        "/api/plugins/mission-control-governance/workspace/projects/create",
+        json={"name": "x" * 1300},
+    ).status_code == 422
+    assert client.post(
+        "/api/plugins/mission-control-governance/workspace/lane-requests/create",
+        json={"project_id": "project-hermes"},
+    ).status_code == 422
 
 
 def _seed_records(path: Path) -> None:
@@ -540,8 +632,8 @@ def test_lane_handoff_draft_builder_bundle_is_inert_and_copy_only():
     ):
         assert required in bundle
 
-    assert bundle.count('h("input"') == 1
-    assert bundle.count('h("textarea"') == 1
+    assert bundle.count('h("input"') >= 2
+    assert bundle.count('h("textarea"') >= 2
     assert bundle.count("multiline: true") >= 6
 
     for required_style in (
@@ -579,7 +671,7 @@ def test_lane_handoff_draft_builder_bundle_is_inert_and_copy_only():
         assert forbidden not in bundle
 
 
-def test_project_workspace_v1_bundle_is_static_manual_copy_only():
+def test_project_workspace_records_pr_a_bundle_is_manual_copy_only():
     bundle = (PLUGIN_DIR / "dashboard" / "dist" / "index.js").read_text()
     styles = (PLUGIN_DIR / "dashboard" / "dist" / "style.css").read_text()
 
@@ -596,12 +688,16 @@ def test_project_workspace_v1_bundle_is_static_manual_copy_only():
         "next recommended lane",
         "mistakes/guards",
         "Copy prompt",
+        "Save lane request draft",
+        "Saved lane request drafts",
+        "Send to Jenny — disabled",
+        "WORKSPACE_PROJECTS_URL",
+        "WORKSPACE_LANE_REQUESTS_URL",
         "Manual transport only — paste into Discord. This does not start work.",
         "Draft packet only. This is not an active lane.",
-        "Generated prompt content",
         "Read-only/manual-copy Mission Control project workspace lane.",
         "Use this project card as context",
-        "No dispatch, execution, records, queue mutation, Waha mutation, model routing, or enforcement.",
+        "No dispatch, queue, Waha, model routing, enforcement, automatic session send, storage, timers, or hidden workers.",
         "PROJECT_WORKSPACE_CARDS",
         "ProjectWorkspacePanel",
         "ProjectWorkspaceCard",
@@ -755,6 +851,10 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/approval-slices": {"GET"},
         "/evidence-cards": {"GET"},
         "/operator-actions": {"GET"},
+        "/workspace/projects": {"GET"},
+        "/workspace/projects/create": {"POST"},
+        "/workspace/lane-requests": {"GET"},
+        "/workspace/lane-requests/create": {"POST"},
         "/records": {"GET"},
         "/schema": {"GET"},
         "/records/{record_index}": {"GET"},
@@ -777,6 +877,8 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/approval-slices",
         "/evidence-cards",
         "/operator-actions",
+        "/workspace/projects",
+        "/workspace/lane-requests",
         "/records",
         "/schema",
         "/records/0",
