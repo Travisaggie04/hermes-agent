@@ -608,6 +608,8 @@ def test_autonomy_readiness_ledger_bundle_is_static_display_only():
         "waha_mutation=false",
         "enforcement_enabled=false",
         "record_write_enabled=false",
+        "runtime worktree used as PR checkout",
+        "runtime/worktree guard",
     ):
         assert required in bundle
 
@@ -633,6 +635,25 @@ def test_autonomy_readiness_ledger_bundle_is_static_display_only():
         "sessionStorage",
     ):
         assert forbidden not in bundle
+
+
+def test_dashboard_bundle_shows_runtime_worktree_guard_blocker_labels():
+    bundle = (PLUGIN_DIR / "dashboard" / "dist" / "index.js").read_text()
+    styles = (PLUGIN_DIR / "dashboard" / "dist" / "style.css").read_text()
+
+    for required in (
+        "Runtime Worktree Guard",
+        "dev_worktree_is_live_runtime",
+        "dev_worktree_is_rollback_runtime",
+        "runtime_disk_head_mismatch",
+        "runtime_on_feature_branch",
+        "rollback_disk_head_mismatch",
+        "requested_dev_worktree_missing",
+        "mcg-runtime-guard-blockers",
+    ):
+        assert required in bundle
+
+    assert ".mcg-runtime-guard-blockers" in styles
 
 
 def test_api_routes_are_get_only(plugin_api, client):

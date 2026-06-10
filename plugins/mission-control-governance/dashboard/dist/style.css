@@ -167,6 +167,15 @@
   padding: 12px;
 }
 
+.mcg-runtime-guard-blockers {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.mcg-runtime-guard-blockers .mcg-workspace-pill {
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
 .mcg-workspace-section-title {
   font-size: 13px;
   font-weight: 650;

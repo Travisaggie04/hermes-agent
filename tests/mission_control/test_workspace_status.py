@@ -101,6 +101,35 @@ def test_workspace_status_warns_on_stale_baseline_dispatch_lane_and_workers():
     assert status["lane"]["lane_status"] == "exceeds_limit"
 
 
+def test_workspace_status_exposes_runtime_worktree_guard_blockers_display_only():
+    runtime = "/home/jenny/.hermes/hermes-runtime-approvalhash-775f493"
+    status = build_workspace_status(
+        _baseline_payload(
+            runtime_worktree_guard={
+                "candidate_worktree_path": runtime,
+                "candidate_git_top_level": runtime,
+                "requested_action_class": "pr_create",
+                "accepted_runtime_disk_head": "wrong-head",
+                "accepted_runtime_branch": "feature/accidental-runtime-branch",
+                "requested_dev_worktree_exists": False,
+            }
+        )
+    )
+
+    guard = status["runtime_worktree_guard"]
+    assert guard["dry_run_only"] is True
+    assert guard["enforces_runtime"] is False
+    assert guard["would_block"] is True
+    assert guard["decision_state"] == "blocked"
+    assert "dev_worktree_is_live_runtime" in guard["blockers"]
+    assert "runtime_disk_head_mismatch" in guard["blockers"]
+    assert "runtime_on_feature_branch" in guard["blockers"]
+    assert "requested_dev_worktree_missing" in guard["blockers"]
+    warnings = set(status["stale_context"]["warnings"])
+    assert "dev_worktree_is_live_runtime" in warnings
+    assert "runtime_disk_head_mismatch" in warnings
+
+
 def test_workspace_status_warns_when_pr_lane_lacks_packet_evidence_or_approval():
     status = build_workspace_status(
         _baseline_payload(

@@ -19,6 +19,7 @@ from mission_control.preflight import (
     evaluate_lane_start_preflight,
 )
 from mission_control.records import StartGateCheck
+from mission_control.runtime_worktree_guard import evaluate_runtime_worktree_guard
 
 
 CALLER_POLICY = "mission_control.lane_preflight.caller.v1"
@@ -36,6 +37,23 @@ SUPPORTED_INPUT_FIELDS = (
     "requested_actions",
     "approval_required",
     "approval_slice_ids",
+    "candidate_worktree_path",
+    "candidate_git_top_level",
+    "candidate_head",
+    "candidate_branch",
+    "candidate_status_clean",
+    "requested_action_class",
+    "accepted_runtime_path",
+    "accepted_head",
+    "accepted_runtime_disk_head",
+    "accepted_runtime_branch",
+    "accepted_runtime_status_clean",
+    "rollback_runtime_path",
+    "rollback_head",
+    "rollback_runtime_disk_head",
+    "rollback_runtime_branch",
+    "rollback_runtime_status_clean",
+    "requested_dev_worktree_exists",
 )
 
 
@@ -43,11 +61,13 @@ def run_lane_start_preflight(lane_start: Mapping[str, Any]) -> dict[str, Any]:
     """Return a dry-run lane-start preflight decision without runtime enforcement."""
 
     check = evaluate_lane_start_preflight(lane_start)
-    would_block = check.decision_state == "blocked"
+    runtime_guard = evaluate_runtime_worktree_guard(lane_start)
+    would_block = check.decision_state == "blocked" or runtime_guard["would_block"] is True
     would_require_approval = (
         bool(check.required_approvals)
         or check.decision_state == "needs_approval"
     )
+    decision_state = "blocked" if runtime_guard["would_block"] is True else check.decision_state
 
     return {
         "caller": CALLER_POLICY,
@@ -57,11 +77,12 @@ def run_lane_start_preflight(lane_start: Mapping[str, Any]) -> dict[str, Any]:
         "enforces_runtime": ENFORCES_RUNTIME,
         "would_block": would_block,
         "would_require_approval": would_require_approval,
-        "decision_state": check.decision_state,
-        "reasons": list(check.reasons),
-        "blocked_actions": list(check.blocked_actions),
+        "decision_state": decision_state,
+        "reasons": [*list(check.reasons), *runtime_guard["blockers"]],
+        "blocked_actions": [*list(check.blocked_actions), *runtime_guard["blocked_actions"]],
         "required_approvals": list(check.required_approvals),
         "supported_input_fields": list(SUPPORTED_INPUT_FIELDS),
+        "runtime_worktree_guard": runtime_guard,
         "start_gate_check": _start_gate_check_report(check),
     }
 

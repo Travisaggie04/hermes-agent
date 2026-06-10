@@ -11,6 +11,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from mission_control.runtime_worktree_guard import evaluate_runtime_worktree_guard
+
 MAX_TEXT_CHARS = 160
 MAX_WARNINGS = 20
 _PACKET_HASH_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -165,6 +167,7 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         lane = {**lane, "max_active_lane": accepted_record.get("max_active_lane", lane.get("max_active_lane", 1))}
     pr_gate = _pr_gate_section(_section(source, "pr_gate"), defaults=_DEFAULT_STATUS["pr_gate"])
     deployment = _deployment_section(_section(source, "deployment"), defaults=_DEFAULT_STATUS["deployment"])
+    runtime_guard = evaluate_runtime_worktree_guard(_runtime_worktree_guard_input(_section(source, "runtime_worktree_guard"), accepted, rollback))
 
     warnings: list[str] = []
     if accepted_source == "static_fallback":
@@ -207,6 +210,7 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
             warnings.append("handoff_missing_target_head")
     if source.get("stale_discord_context") is True:
         warnings.append("stale_discord_context")
+    warnings.extend(runtime_guard.get("blockers", ()))
 
     warnings = _dedupe_bounded(warnings)
     return {
@@ -223,6 +227,7 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         "activity": activity,
         "pr_gate": pr_gate,
         "deployment": deployment,
+        "runtime_worktree_guard": runtime_guard,
         "latest_handoff": latest_handoff,
         "stale_context": {
             "baseline_mismatch": "baseline_mismatch" in warnings,
@@ -254,6 +259,34 @@ def _accepted_baseline_record_section(section: dict[str, Any]) -> dict[str, Any]
         "dry_run_only": True,
         "enforces_runtime": False,
     }
+
+
+def _runtime_worktree_guard_input(section: dict[str, Any], accepted: dict[str, Any], rollback: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "candidate_worktree_path",
+        "candidate_git_top_level",
+        "candidate_head",
+        "candidate_branch",
+        "candidate_status_clean",
+        "requested_action_class",
+        "accepted_runtime_path",
+        "accepted_head",
+        "accepted_runtime_disk_head",
+        "accepted_runtime_branch",
+        "accepted_runtime_status_clean",
+        "rollback_runtime_path",
+        "rollback_head",
+        "rollback_runtime_disk_head",
+        "rollback_runtime_branch",
+        "rollback_runtime_status_clean",
+        "requested_dev_worktree_exists",
+    }
+    result = {key: section.get(key) for key in allowed if key in section}
+    result.setdefault("accepted_runtime_path", accepted.get("runtime_path", ""))
+    result.setdefault("accepted_head", accepted.get("head", ""))
+    result.setdefault("rollback_runtime_path", rollback.get("runtime_path", ""))
+    result.setdefault("rollback_head", rollback.get("head", ""))
+    return result
 
 
 def _record_authoritative_lane_input(section: dict[str, Any]) -> dict[str, Any]:

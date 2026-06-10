@@ -127,6 +127,33 @@ def test_wrong_repo_or_remote_states_are_reported(repo_target, expected_state):
     assert result["start_gate_check"]["branch_safety_state"] == expected_state
 
 
+def test_lane_preflight_blocks_pr_create_from_accepted_runtime_worktree():
+    from mission_control.lane_preflight import run_lane_start_preflight
+
+    runtime = "/home/jenny/.hermes/hermes-runtime-handoffbuilder-13a19cf"
+    result = run_lane_start_preflight(
+        _lane_start_request(
+            candidate_worktree_path=runtime,
+            candidate_git_top_level=runtime,
+            requested_action_class="pr_create",
+            accepted_runtime_path=runtime,
+            accepted_head="13a19cfedc7783ca2f141d9149b4c382f841c36f",
+            accepted_runtime_disk_head="13a19cfedc7783ca2f141d9149b4c382f841c36f",
+            accepted_runtime_branch="",
+            accepted_runtime_status_clean=True,
+            requested_dev_worktree_exists=True,
+        )
+    )
+
+    assert result["dry_run_only"] is True
+    assert result["enforces_runtime"] is False
+    assert result["would_block"] is True
+    assert result["decision_state"] == "blocked"
+    assert "dev_worktree_is_live_runtime" in result["reasons"]
+    assert result["runtime_worktree_guard"]["would_block"] is True
+    assert "dev_worktree_is_live_runtime" in result["runtime_worktree_guard"]["blockers"]
+
+
 @pytest.mark.parametrize("worktree_state", ("dirty", "quarantined", "dirty/quarantined"))
 def test_dirty_or_quarantined_worktree_states_are_reported(worktree_state):
     from mission_control.lane_preflight import run_lane_start_preflight

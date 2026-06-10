@@ -430,6 +430,18 @@
       remaining_manual_dependency: "Travis still manually copies/approves lane packets; no direct dispatch is enabled.",
       autonomy_impact: "Improves OS usefulness while preserving manual approval and no-dispatch boundaries.",
     },
+    {
+      occurred_at: "2026-06-10",
+      lane: "mission-control-runtime-worktree-guard-v1",
+      severity: "high",
+      status: "fixed",
+      event: "runtime worktree used as PR checkout",
+      root_cause: "A PR-opening lane fell back to the accepted live runtime when the requested non-live worktree was missing.",
+      caught_by_jenny: "yes",
+      guardrail_added: "runtime/worktree guard reports live-runtime and rollback-runtime candidate paths, runtime disk-head mismatch, runtime feature branch, rollback mismatch, and missing requested dev worktree blockers.",
+      remaining_manual_dependency: "Guard remains display-only/dry-run until a separately approved enforcement lane wires it into real execution gates.",
+      autonomy_impact: "Blocks the class of mistake that contaminated the live runtime checkout before more workspace autonomy or PR #52 deployment work.",
+    },
   ];
 
   function AutonomyReadinessLedgerPanel() {
@@ -634,6 +646,17 @@
     const deployment = workspaceStatus.deployment || {};
     const latestHandoff = workspaceStatus.latest_handoff || { present: false };
     const handoffWarnings = Array.isArray(latestHandoff.warnings) ? latestHandoff.warnings : [];
+    const runtimeGuard = workspaceStatus.runtime_worktree_guard || {};
+    const runtimeGuardBlockers = Array.isArray(runtimeGuard.blockers) ? runtimeGuard.blockers : [];
+    const runtimeGuardRisks = Array.isArray(runtimeGuard.observed_risks) ? runtimeGuard.observed_risks : [];
+    const runtimeGuardLabels = [
+      "dev_worktree_is_live_runtime",
+      "dev_worktree_is_rollback_runtime",
+      "runtime_disk_head_mismatch",
+      "runtime_on_feature_branch",
+      "rollback_disk_head_mismatch",
+      "requested_dev_worktree_missing",
+    ];
     const staleContext = workspaceStatus.stale_context || {};
     const staleWarnings = Array.isArray(staleContext.warnings) ? staleContext.warnings : [];
     const safetyLocks = [
@@ -757,6 +780,16 @@
                 h(WorkspaceField, { label: "Target runtime", value: deployment.target_runtime }),
                 h(WorkspaceField, { label: "Target head", value: shortHead(deployment.target_head) }),
                 h(WorkspaceField, { label: "rollback_used", value: deployment.rollback_used })
+              ),
+              h("div", { className: "mcg-workspace-section mcg-runtime-guard-blockers" },
+                h("div", { className: "mcg-workspace-section-title" }, "Runtime Worktree Guard"),
+                h(WorkspaceField, { label: "decision_state", value: runtimeGuard.decision_state, fallback: "unknown" }),
+                h(WorkspaceField, { label: "would_block", value: runtimeGuard.would_block, fallback: "false" }),
+                h(WorkspaceField, { label: "dry_run_only", value: runtimeGuard.dry_run_only, fallback: "true" }),
+                h(WorkspaceField, { label: "enforces_runtime", value: runtimeGuard.enforces_runtime, fallback: "false" }),
+                h(WorkspaceField, { label: "blockers", value: runtimeGuardBlockers, fallback: "None" }),
+                h(WorkspaceField, { label: "observed_risks", value: runtimeGuardRisks, fallback: "None" }),
+                h(WorkspaceList, { title: "Blocker labels", items: runtimeGuardLabels })
               ),
               h("div", { className: "mcg-workspace-section" },
                 h("div", { className: "mcg-workspace-section-title" }, "Stale Context Warnings"),
