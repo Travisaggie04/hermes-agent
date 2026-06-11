@@ -202,10 +202,14 @@ export interface MissionControlReportRecord {
   lane_request_id?: string
   summary?: string
   result?: string
+  changed_files?: string[]
+  tests?: string[]
   risks?: string[]
   blockers?: string[]
   next_recommended_lane?: string
+  created_at?: string
   updated_at?: string
+  metadata?: { artifact_links?: string[]; [key: string]: unknown }
 }
 
 export interface MissionControlProjectState {
@@ -217,9 +221,38 @@ export interface MissionControlProjectState {
   latest_result?: string
   risks?: string[]
   blockers?: string[]
+  risks_blockers?: string[]
   next_recommended_lane?: string
   latest_lane_request?: MissionControlLaneRequestRecord | null
   latest_report?: MissionControlReportRecord | null
+  latest_jenny_report?: MissionControlReportRecord | null
+  has_real_report?: boolean
+  missing_state_fields?: string[]
+  latest_activity_at?: string
+  latest_activity_source?: string
+  artifact_links?: string[]
+}
+
+export interface MissionControlReportCreatePayload {
+  project_id: string
+  lane_request_id?: string
+  summary: string
+  result?: string
+  changed_files?: string[]
+  tests?: string[]
+  risks?: string[]
+  next_recommended_lane?: string
+  artifact_links?: string[]
+}
+
+export interface MissionControlReportCreateResponse {
+  dispatch_enabled?: boolean
+  manual_copy_only?: boolean
+  record_index?: number
+  record_type?: string
+  report: MissionControlReportRecord
+  send_to_jenny_enabled?: boolean
+  stored?: boolean
 }
 
 export interface MissionControlWorkspaceStatus {
@@ -279,6 +312,14 @@ export function getMissionControlLaneRequests(): Promise<MissionControlLaneReque
 
 export function getMissionControlReports(): Promise<MissionControlReportsResponse> {
   return window.hermesDesktop.api<MissionControlReportsResponse>({ path: `${MISSION_CONTROL_API}/workspace/reports` })
+}
+
+export function createMissionControlReport(payload: MissionControlReportCreatePayload): Promise<MissionControlReportCreateResponse> {
+  return window.hermesDesktop.api<MissionControlReportCreateResponse>({
+    body: payload,
+    method: 'POST',
+    path: `${MISSION_CONTROL_API}/workspace/reports/create`
+  })
 }
 
 export function getMissionControlProjectState(): Promise<MissionControlProjectStateResponse> {

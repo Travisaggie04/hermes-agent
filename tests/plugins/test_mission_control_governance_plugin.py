@@ -216,6 +216,7 @@ def test_workspace_jenny_report_api_creates_lists_and_stays_inert(plugin_api, cl
             "summary": "Jenny completed the read-only status refresh.",
             "result": "No runtime mutation occurred.",
             "changed_files": ["mission_control/records/models.py"],
+            "artifact_links": ["reports/hermes/status.md"],
             "tests": ["pytest -q"],
             "risks": ["none"],
             "next_recommended_lane": "Review next report inbox slice.",
@@ -234,6 +235,7 @@ def test_workspace_jenny_report_api_creates_lists_and_stays_inert(plugin_api, cl
     assert payload["report"]["project_id"] == "project-hermes"
     assert payload["report"]["lane_request_id"] == "lane-request-1"
     assert payload["report"]["metadata"]["dispatch_enabled"] is False
+    assert payload["report"]["metadata"]["artifact_links"] == ["reports/hermes/status.md"]
 
     reports = JsonlRecordStore(plugin_api.record_store_path()).read_all(JennyReportRecord)
     assert len(reports) == 1
@@ -304,6 +306,7 @@ def test_workspace_project_state_projection_is_read_only_and_derived(plugin_api,
             summary="Latest report",
             result="Latest result",
             risks=("risk one", "risk two"),
+            changed_files=("reports/hermes/status.md",),
             next_recommended_lane="Derived next lane",
             created_at="2026-06-10T10:40:00Z",
         )
@@ -331,11 +334,25 @@ def test_workspace_project_state_projection_is_read_only_and_derived(plugin_api,
     assert hermes_state["risks_blockers"] == ["risk one", "risk two"]
     assert hermes_state["next_recommended_lane"] == "Derived next lane"
     assert hermes_state["last_updated"] == "2026-06-10T10:40:00Z"
+    assert hermes_state["latest_activity_at"] == "2026-06-10T10:40:00Z"
+    assert hermes_state["latest_activity_source"] == "report"
+    assert hermes_state["has_real_report"] is True
+    assert hermes_state["missing_state_fields"] == []
+    assert hermes_state["artifact_links"] == ["reports/hermes/status.md"]
 
     empty_state = states["project-empty"]
     assert empty_state["latest_lane_request"] == {}
     assert empty_state["latest_jenny_report"] == {}
     assert empty_state["next_recommended_lane"] == "Create first lane"
+    assert empty_state["has_real_report"] is False
+    assert empty_state["latest_activity_source"] == "project"
+    assert empty_state["missing_state_fields"] == [
+        "latest_lane",
+        "latest_jenny_report",
+        "latest_result",
+        "risks_blockers",
+        "artifact_links",
+    ]
 
 
 def test_workspace_record_api_rejects_unsafe_oversized_and_malformed_payloads(client):
