@@ -212,6 +212,33 @@ export interface MissionControlReportRecord {
   metadata?: { artifact_links?: string[]; [key: string]: unknown }
 }
 
+export interface MissionControlProjectSession {
+  cwd?: null | string
+  durable_session_id?: string
+  is_default_profile?: boolean
+  last_active?: number
+  lineage_root_id?: null | string
+  link_record?: unknown
+  linked_project_id?: string
+  message_count?: number
+  preview?: null | string
+  profile?: string
+  session_id: string
+  source?: null | string
+  started_at?: number
+  suggested_project_id?: string
+  title?: null | string
+  tool_call_count?: number
+}
+
+export interface MissionControlProjectSessionGroup {
+  linked_session_count?: number
+  name: string
+  project_id: string
+  sessions: MissionControlProjectSession[]
+  unassigned_suggestion_count?: number
+}
+
 export interface MissionControlProjectState {
   project_id: string
   name: string
@@ -231,6 +258,9 @@ export interface MissionControlProjectState {
   latest_activity_at?: string
   latest_activity_source?: string
   artifact_links?: string[]
+  linked_session_count?: number
+  recent_sessions?: MissionControlProjectSession[]
+  unassigned_suggestion_count?: number
 }
 
 export interface MissionControlReportCreatePayload {
@@ -296,6 +326,22 @@ export interface MissionControlProjectStateResponse {
   stored?: boolean
 }
 
+export interface MissionControlProjectSessionsResponse {
+  active_link_count?: number
+  count: number
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  errors?: string[]
+  execution_enabled?: boolean
+  groups: MissionControlProjectSessionGroup[]
+  inert_context_only?: boolean
+  manual_copy_only?: boolean
+  send_to_jenny_enabled?: boolean
+  session_count?: number
+  stored?: boolean
+  trusted_for_execution?: boolean
+}
+
 const MISSION_CONTROL_API = '/api/plugins/mission-control-governance'
 
 export function getMissionControlWorkspaceStatus(): Promise<MissionControlWorkspaceStatus> {
@@ -324,6 +370,10 @@ export function createMissionControlReport(payload: MissionControlReportCreatePa
 
 export function getMissionControlProjectState(): Promise<MissionControlProjectStateResponse> {
   return window.hermesDesktop.api<MissionControlProjectStateResponse>({ path: `${MISSION_CONTROL_API}/workspace/project-state` })
+}
+
+export function getMissionControlProjectSessions(): Promise<MissionControlProjectSessionsResponse> {
+  return window.hermesDesktop.api<MissionControlProjectSessionsResponse>({ path: `${MISSION_CONTROL_API}/workspace/project-sessions` })
 }
 
 // Mutations take the owning `profile` so Electron routes them to that profile's

@@ -4,11 +4,14 @@ import {
   createMissionControlReport,
   getMissionControlLaneRequests,
   getMissionControlProjects,
+  getMissionControlProjectSessions,
   getMissionControlProjectState,
   getMissionControlReports,
   getMissionControlWorkspaceStatus,
   type MissionControlLaneRequestRecord,
   type MissionControlProjectRecord,
+  type MissionControlProjectSession,
+  type MissionControlProjectSessionGroup,
   type MissionControlProjectState,
   type MissionControlReportRecord,
   type MissionControlWorkspaceStatus
@@ -17,6 +20,7 @@ import { cn } from '@/lib/utils'
 
 interface MissionControlSnapshot {
   laneRequests: MissionControlLaneRequestRecord[]
+  projectSessionGroups: MissionControlProjectSessionGroup[]
   projects: MissionControlProjectRecord[]
   projectStates: MissionControlProjectState[]
   reports: MissionControlReportRecord[]
@@ -25,6 +29,7 @@ interface MissionControlSnapshot {
 
 const emptySnapshot: MissionControlSnapshot = {
   laneRequests: [],
+  projectSessionGroups: [],
   projects: [],
   projectStates: [],
   reports: [],
@@ -119,6 +124,44 @@ function sortRealProjects(projects: MissionControlProjectRecord[]): MissionContr
 
 function stateForProject(project: MissionControlProjectRecord, states: MissionControlProjectState[]) {
   return states.find(state => state.project_id === project.project_id) ?? null
+}
+
+function sessionGroupForProject(project: MissionControlProjectRecord, groups: MissionControlProjectSessionGroup[]) {
+  return groups.find(group => group.project_id === project.project_id) ?? null
+}
+
+function unassignedSessionGroup(groups: MissionControlProjectSessionGroup[]) {
+  return groups.find(group => group.project_id === 'unassigned-general') ?? null
+}
+
+function suggestedSessionsForProject(projectId: string, groups: MissionControlProjectSessionGroup[]): MissionControlProjectSession[] {
+  return (unassignedSessionGroup(groups)?.sessions ?? []).filter(session => session.suggested_project_id === projectId).slice(0, 3)
+}
+
+function projectNameForId(projectId: string, projects: MissionControlProjectRecord[]): string {
+  return projects.find(project => project.project_id === projectId)?.name ?? projectId
+}
+
+function sessionTitle(session: MissionControlProjectSession): string {
+  return text(session.title || session.preview || session.session_id, 'Untitled session')
+}
+
+function basename(path: string | null | undefined): string {
+  if (!path) {
+    return ''
+  }
+
+  return path
+    .replace(/[\\/]+$/, '')
+    .split(/[\\/]/)
+    .filter(Boolean)
+    .pop() ?? path
+}
+
+function sessionMeta(session: MissionControlProjectSession): string {
+  const meta = [session.profile, session.source, basename(session.cwd)].filter(Boolean)
+
+  return meta.length ? meta.join(' · ') : 'No profile/source recorded'
 }
 
 function latestLaneForProject(projectId: string, lanes: MissionControlLaneRequestRecord[]) {
@@ -299,16 +342,18 @@ Send to Jenny remains disabled; paste manually only after review.`
 }
 
 async function loadMissionControlSnapshot(): Promise<MissionControlSnapshot> {
-  const [workspaceStatus, projects, laneRequests, reports, projectState] = await Promise.all([
+  const [workspaceStatus, projects, laneRequests, reports, projectState, projectSessions] = await Promise.all([
     getMissionControlWorkspaceStatus(),
     getMissionControlProjects(),
     getMissionControlLaneRequests(),
     getMissionControlReports(),
-    getMissionControlProjectState()
+    getMissionControlProjectState(),
+    getMissionControlProjectSessions()
   ])
 
   return {
     laneRequests: unwrapRecords(laneRequests.lane_requests),
+    projectSessionGroups: projectSessions.groups ?? [],
     projects: unwrapRecords(projects.projects),
     projectStates: projectState.project_states ?? [],
     reports: unwrapRecords(reports.reports),
@@ -359,6 +404,7 @@ export function MissionControlView() {
 
   const status = useMemo(() => summarizeWorkspaceStatus(snapshot.workspaceStatus), [snapshot.workspaceStatus])
   const realProjects = useMemo(() => sortRealProjects(snapshot.projects.filter(isRealProject)), [snapshot.projects])
+  const unassignedGroup = useMemo(() => unassignedSessionGroup(snapshot.projectSessionGroups), [snapshot.projectSessionGroups])
 
   const supportingProjects = useMemo(
     () => snapshot.projects.filter(project => !isRealProject(project) || isSmokeProject(project)),
@@ -467,14 +513,18 @@ export function MissionControlView() {
                   onCopy={() => void copyPrompt(project)}
                   project={project}
                   report={state?.latest_report ?? state?.latest_jenny_report ?? latestReportForProject(project.project_id, snapshot.reports)}
+                  sessionGroup={sessionGroupForProject(project, snapshot.projectSessionGroups)}
                   state={state}
                   status={status}
+                  suggestedSessions={suggestedSessionsForProject(project.project_id, snapshot.projectSessionGroups)}
                 />
               )
             })
           )}
         </div>
       </section>
+
+      <UnassignedSessionsPanel group={unassignedGroup} projects={snapshot.projects} />
 
       {supportingProjects.length ? (
         <section className="mt-6 rounded-xl border border-dashed border-border/70 bg-muted/20 p-4 opacity-70">
@@ -601,24 +651,120 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
   )
 }
 
+function ProjectSessionSummary({
+  linkedCount,
+  recentSessions,
+  suggestedSessions
+}: {
+  linkedCount: number
+  recentSessions: MissionControlProjectSession[]
+  suggestedSessions: MissionControlProjectSession[]
+}) {
+  return (
+    <section aria-label="Project sessions" className="rounded-lg border border-border/70 bg-background/60 p-3 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-semibold text-foreground/80">Project sessions</span>
+        <span>{linkedCount} linked</span>
+      </div>
+      {recentSessions.length ? (
+        <div className="mt-2 grid gap-2">
+          {recentSessions.slice(0, 3).map(session => (
+            <SessionSummaryRow key={session.durable_session_id || session.session_id} session={session} />
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2">No linked sessions yet.</p>
+      )}
+      {suggestedSessions.length ? (
+        <div className="mt-3 rounded-md border border-dashed border-amber-500/40 bg-amber-500/5 p-2">
+          <div className="font-medium text-amber-800 dark:text-amber-200">Suggested sessions — display-only</div>
+          <p className="mt-1">Suggestions do not create links or become source-of-truth records.</p>
+          <div className="mt-2 grid gap-2">
+            {suggestedSessions.map(session => (
+              <SessionSummaryRow displayOnly key={session.durable_session_id || session.session_id} session={session} />
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function SessionSummaryRow({ displayOnly, session }: { displayOnly?: boolean; session: MissionControlProjectSession }) {
+  return (
+    <div className="rounded-md border border-border/60 bg-background/70 p-2">
+      <div className="font-medium text-foreground/90">{sessionTitle(session)}</div>
+      <div className="mt-0.5 text-[0.7rem] text-muted-foreground">{sessionMeta(session)}</div>
+      {displayOnly ? <div className="mt-1 text-[0.7rem] font-medium text-amber-700 dark:text-amber-200">Display-only suggestion</div> : null}
+    </div>
+  )
+}
+
+function UnassignedSessionsPanel({ group, projects }: { group: MissionControlProjectSessionGroup | null; projects: MissionControlProjectRecord[] }) {
+  const sessions = group?.sessions ?? []
+  const suggestionCount = group?.unassigned_suggestion_count ?? sessions.filter(session => session.suggested_project_id).length
+
+  return (
+    <section className="mt-6 rounded-xl border border-border/70 bg-background/40 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold">Unassigned / General sessions</h2>
+          <p className="text-xs text-muted-foreground">Recent sessions not linked to a Mission Control project yet.</p>
+        </div>
+        <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-800 dark:text-amber-200">
+          {sessions.length} recent · {suggestionCount} suggestions
+        </span>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">Suggested project badges are display-only. They do not create SessionProjectLinkRecord truth.</p>
+      {sessions.length ? (
+        <div className="mt-3 grid gap-2 md:grid-cols-2">
+          {sessions.slice(0, 6).map(session => (
+            <div className="rounded-lg border border-border/60 bg-background/60 p-3 text-xs" key={session.durable_session_id || session.session_id}>
+              <div className="font-medium text-foreground/90">{sessionTitle(session)}</div>
+              <div className="mt-1 text-muted-foreground">{sessionMeta(session)}</div>
+              <div className="mt-2">
+                {session.suggested_project_id ? (
+                  <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[0.68rem] font-medium text-blue-700 dark:text-blue-300">
+                    Suggested: {projectNameForId(session.suggested_project_id, projects)} · display-only
+                  </span>
+                ) : (
+                  <span className="text-[0.68rem] text-muted-foreground">No suggested project</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-lg border border-border/60 bg-background/60 p-3 text-sm text-muted-foreground">No unassigned sessions returned.</div>
+      )}
+    </section>
+  )
+}
+
 function ProjectCard({
   copied,
   lane,
   onCopy,
   project,
   report,
+  sessionGroup,
   state,
-  status
+  status,
+  suggestedSessions
 }: {
   copied: boolean
   lane: MissionControlLaneRequestRecord | null
   onCopy: () => void
   project: MissionControlProjectRecord
   report: MissionControlReportRecord | null
+  sessionGroup: MissionControlProjectSessionGroup | null
   state: MissionControlProjectState | null
   status: ReturnType<typeof summarizeWorkspaceStatus>
+  suggestedSessions: MissionControlProjectSession[]
 }) {
   const model = projectRenderModel(project, report, state)
+  const linkedSessionCount = state?.linked_session_count ?? sessionGroup?.linked_session_count ?? sessionGroup?.sessions.length ?? 0
+  const recentSessions = state?.recent_sessions?.length ? state.recent_sessions : (sessionGroup?.sessions ?? [])
   const risksBlockers = [listText(model.risks), listText(model.blockers)].filter(value => value !== 'None recorded').join(' · ') || 'None recorded'
   const prompt = buildMissionControlCopyPrompt({ project, report, state, status })
 
@@ -643,6 +789,7 @@ function ProjectCard({
       <Field label="missing state fields" value={listText(model.missingStateFields, 'None — report state is current')} />
       <Field label="next recommended lane" value={model.nextLane} />
       <Field label="source of truth" value={project.source_of_truth} />
+      <ProjectSessionSummary linkedCount={linkedSessionCount} recentSessions={recentSessions} suggestedSessions={suggestedSessions} />
       <div className="grid gap-2 rounded-lg border border-border/70 bg-background/60 p-3 text-xs text-muted-foreground sm:grid-cols-3">
         <span>send_to_jenny: disabled</span>
         <span>dispatch: disabled</span>

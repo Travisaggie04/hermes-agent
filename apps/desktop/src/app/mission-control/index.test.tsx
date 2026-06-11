@@ -7,6 +7,7 @@ const getMissionControlProjects = vi.fn()
 const getMissionControlLaneRequests = vi.fn()
 const getMissionControlReports = vi.fn()
 const getMissionControlProjectState = vi.fn()
+const getMissionControlProjectSessions = vi.fn()
 const createMissionControlReport = vi.fn()
 
 vi.mock('@/hermes', () => ({
@@ -15,7 +16,8 @@ vi.mock('@/hermes', () => ({
   getMissionControlProjects: () => getMissionControlProjects(),
   getMissionControlLaneRequests: () => getMissionControlLaneRequests(),
   getMissionControlReports: () => getMissionControlReports(),
-  getMissionControlProjectState: () => getMissionControlProjectState()
+  getMissionControlProjectState: () => getMissionControlProjectState(),
+  getMissionControlProjectSessions: () => getMissionControlProjectSessions()
 }))
 
 const realProjects = [
@@ -163,6 +165,21 @@ beforeEach(() => {
         has_real_report: true,
         latest_activity_at: '2026-06-11T10:00:00Z',
         latest_activity_source: 'report',
+        linked_session_count: 1,
+        recent_sessions: [
+          {
+            cwd: '/home/jenny/.hermes/hermes-runtime-session-links-573658a',
+            durable_session_id: 'root-linked-hermes',
+            last_active: 1781202705,
+            linked_project_id: 'project-hermes-mission-control',
+            profile: 'default',
+            session_id: 'session-linked-hermes',
+            source: 'discord',
+            suggested_project_id: '',
+            title: 'Mission Control linked session'
+          }
+        ],
+        unassigned_suggestion_count: 2,
         missing_state_fields: [],
         latest_lane_request: {
           lane_request_id: 'lane-1',
@@ -196,6 +213,68 @@ beforeEach(() => {
       }))
     ]
   })
+  getMissionControlProjectSessions.mockResolvedValue({
+    active_link_count: 1,
+    count: 6,
+    dispatch_enabled: false,
+    display_only: true,
+    execution_enabled: false,
+    groups: [
+      {
+        linked_session_count: 1,
+        name: 'Hermes / Mission Control',
+        project_id: 'project-hermes-mission-control',
+        sessions: [
+          {
+            cwd: '/home/jenny/.hermes/hermes-runtime-session-links-573658a',
+            durable_session_id: 'root-linked-hermes',
+            last_active: 1781202705,
+            linked_project_id: 'project-hermes-mission-control',
+            profile: 'default',
+            session_id: 'session-linked-hermes',
+            source: 'discord',
+            suggested_project_id: '',
+            title: 'Mission Control linked session'
+          }
+        ],
+        unassigned_suggestion_count: 0
+      },
+      {
+        linked_session_count: 0,
+        name: 'Unassigned / General',
+        project_id: 'unassigned-general',
+        sessions: [
+          {
+            cwd: '/home/jenny/.hermes/hermes-runtime-session-links-573658a',
+            durable_session_id: 'root-suggested-hermes',
+            last_active: 1781202600,
+            linked_project_id: '',
+            profile: 'default',
+            session_id: 'session-suggested-hermes',
+            source: 'discord',
+            suggested_project_id: 'project-hermes-mission-control',
+            title: 'Suggested Mission Control session'
+          },
+          {
+            cwd: '',
+            durable_session_id: 'root-general',
+            last_active: 1781202500,
+            linked_project_id: '',
+            profile: 'default',
+            session_id: 'session-general',
+            source: 'discord',
+            suggested_project_id: '',
+            title: 'General unassigned session'
+          }
+        ],
+        unassigned_suggestion_count: 1
+      }
+    ],
+    manual_copy_only: true,
+    send_to_jenny_enabled: false,
+    stored: false,
+    trusted_for_execution: false
+  })
 })
 
 afterEach(() => {
@@ -212,6 +291,7 @@ describe('MissionControlView', () => {
     expect(getMissionControlProjects).toHaveBeenCalledTimes(1)
     expect(getMissionControlLaneRequests).toHaveBeenCalledTimes(1)
     expect(getMissionControlReports).toHaveBeenCalledTimes(1)
+    expect(getMissionControlProjectSessions).toHaveBeenCalledTimes(1)
 
     expect(screen.getByText('Real project workspace')).toBeTruthy()
     expect(screen.getByText('5 of 5 real projects loaded')).toBeTruthy()
@@ -241,6 +321,24 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText('send_to_jenny: disabled').length).toBeGreaterThan(0)
     expect(screen.getAllByText('dispatch: disabled').length).toBeGreaterThan(0)
     expect(screen.getAllByText('execution: disabled').length).toBeGreaterThan(0)
+  })
+
+  it('renders linked, suggested, and unassigned sessions without creating source-of-truth links', async () => {
+    await renderMissionControl()
+
+    expect((await screen.findAllByText('Project sessions')).length).toBeGreaterThan(0)
+    expect(screen.getByText('1 linked')).toBeTruthy()
+    expect(screen.getByText('Mission Control linked session')).toBeTruthy()
+    expect(screen.getByText('Suggested sessions — display-only')).toBeTruthy()
+    expect(screen.getByText('Suggestions do not create links or become source-of-truth records.')).toBeTruthy()
+    expect(screen.getAllByText('Suggested Mission Control session').length).toBeGreaterThan(0)
+    expect(screen.getByText('Unassigned / General sessions')).toBeTruthy()
+    expect(screen.getByText('2 recent · 1 suggestions')).toBeTruthy()
+    expect(screen.getByText('General unassigned session')).toBeTruthy()
+    expect(screen.getByText('Suggested: Hermes / Mission Control · display-only')).toBeTruthy()
+    expect(screen.getByText('No suggested project')).toBeTruthy()
+
+    expect(createMissionControlReport).not.toHaveBeenCalled()
   })
 
   it('de-emphasizes smoke records outside the primary workspace', async () => {
@@ -372,6 +470,7 @@ describe('MissionControlView', () => {
       '/api/plugins/kanban/tasks',
       'session-send',
       'sendSession',
+      '/workspace/session-project-links/create',
       'localStorage',
       'sessionStorage',
       'setInterval',
