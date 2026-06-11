@@ -14994,13 +14994,20 @@ class GatewayRunner:
         git_dir = project_root / '.git'
 
         try:
-            from mission_control.live_runtime_mutation_guard import evaluate_runtime_mutation
+            from mission_control.live_runtime_mutation_guard import (
+                evaluate_runtime_mutation,
+                guard_error_decision,
+            )
 
-            decision = evaluate_runtime_mutation("update", cwd=project_root)
+            try:
+                decision = evaluate_runtime_mutation("update", cwd=project_root)
+            except Exception as exc:
+                logger.warning("Live runtime mutation guard failed for gateway update; blocking closed: %s", exc)
+                decision = guard_error_decision("update", cwd=project_root, error=exc)
         except Exception as exc:
-            logger.debug("Live runtime mutation guard skipped for gateway update: %s", exc)
-            decision = None
-        if decision is not None and not decision.allowed:
+            logger.warning("Live runtime mutation guard unavailable for gateway update; blocking closed: %s", exc)
+            return "BLOCKED: live_runtime_guard_error_blocked: refusing update because live runtime mutation guard is unavailable"
+        if not decision.allowed:
             return f"BLOCKED: {decision.reason}"
 
         if not git_dir.exists():

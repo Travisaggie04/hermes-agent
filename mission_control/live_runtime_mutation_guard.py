@@ -204,6 +204,39 @@ def detect_git_mutation_action(command: str) -> str | None:
     return None
 
 
+def guard_error_decision(
+    action: str,
+    *,
+    cwd: str | Path | None = None,
+    error: BaseException | None = None,
+) -> RuntimeMutationDecision:
+    """Return a fail-closed block when runtime protection state cannot be read.
+
+    Update/git-mutation surfaces are more dangerous than a false positive stop:
+    if the guard cannot evaluate accepted/rollback runtime state, do not let the
+    mutation proceed.
+    """
+    normalized_action = (action or "mutation").strip().lower()
+    try:
+        normalized_cwd = str(_normalize_path(cwd))
+    except Exception:
+        normalized_cwd = str(cwd) if cwd is not None else None
+    error_name = type(error).__name__ if error is not None else "unknown_error"
+    blocker = "live_runtime_guard_error_blocked"
+    return RuntimeMutationDecision(
+        allowed=False,
+        action=normalized_action,
+        blocker=blocker,
+        protected_kind="unknown",
+        cwd=normalized_cwd,
+        reason=(
+            f"{blocker}: refusing {normalized_action} because live runtime "
+            f"mutation guard could not verify accepted/rollback runtime state "
+            f"({error_name})"
+        ),
+    )
+
+
 def block_result(decision: RuntimeMutationDecision) -> dict[str, object]:
     return {
         "approved": False,

@@ -1259,13 +1259,28 @@ async def update_hermes():
         }
 
     try:
-        from mission_control.live_runtime_mutation_guard import evaluate_runtime_mutation
+        from mission_control.live_runtime_mutation_guard import (
+            evaluate_runtime_mutation,
+            guard_error_decision,
+        )
 
-        decision = evaluate_runtime_mutation("update", cwd=PROJECT_ROOT)
+        try:
+            decision = evaluate_runtime_mutation("update", cwd=PROJECT_ROOT)
+        except Exception as exc:
+            _log.warning("Live runtime mutation guard failed for dashboard update; blocking closed: %s", exc)
+            decision = guard_error_decision("update", cwd=PROJECT_ROOT, error=exc)
     except Exception as exc:
-        _log.debug("Live runtime mutation guard skipped for dashboard update: %s", exc)
-        decision = None
-    if decision is not None and not decision.allowed:
+        _log.warning("Live runtime mutation guard unavailable for dashboard update; blocking closed: %s", exc)
+        message = "BLOCKED: live_runtime_guard_error_blocked: refusing update because live runtime mutation guard is unavailable"
+        _record_completed_action("hermes-update", message, exit_code=2)
+        return {
+            "ok": False,
+            "pid": None,
+            "name": "hermes-update",
+            "error": "live_runtime_guard_error_blocked",
+            "message": message,
+        }
+    if not decision.allowed:
         message = f"BLOCKED: {decision.reason}"
         _record_completed_action("hermes-update", message, exit_code=2)
         return {

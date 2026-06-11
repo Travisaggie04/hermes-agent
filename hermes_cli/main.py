@@ -10131,10 +10131,19 @@ def cmd_update(args):
         sys.exit(1)
 
     try:
-        from mission_control.live_runtime_mutation_guard import assert_runtime_mutation_allowed
+        from mission_control.live_runtime_mutation_guard import (
+            assert_runtime_mutation_allowed,
+            guard_error_decision,
+        )
 
-        assert_runtime_mutation_allowed("update", cwd=PROJECT_ROOT)
-    except RuntimeError as exc:
+        try:
+            assert_runtime_mutation_allowed("update", cwd=PROJECT_ROOT)
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            decision = guard_error_decision("update", cwd=PROJECT_ROOT, error=exc)
+            raise RuntimeError(decision.reason) from exc
+    except Exception as exc:
         print(f"✗ {exc}")
         sys.exit(2)
 

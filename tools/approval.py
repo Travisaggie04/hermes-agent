@@ -1257,15 +1257,24 @@ def check_all_command_guards(command: str, env_type: str,
             block_result as _live_runtime_block_result,
             detect_git_mutation_action,
             evaluate_runtime_mutation,
+            guard_error_decision,
         )
 
         action = detect_git_mutation_action(command)
         if action:
-            live_runtime_decision = evaluate_runtime_mutation(action, cwd=os.fspath(cwd) if cwd is not None else None)
+            guard_cwd = os.fspath(cwd) if cwd is not None else None
+            try:
+                live_runtime_decision = evaluate_runtime_mutation(action, cwd=guard_cwd)
+            except Exception as exc:
+                logger.warning("Live runtime mutation guard failed; blocking closed: %s", exc)
+                live_runtime_decision = guard_error_decision(action, cwd=guard_cwd, error=exc)
             if not live_runtime_decision.allowed:
                 return _live_runtime_block_result(live_runtime_decision)
     except Exception as exc:
-        logger.debug("Live runtime mutation guard skipped: %s", exc)
+        logger.warning("Live runtime mutation guard unavailable; blocking closed: %s", exc)
+        return _tool_guard_block_result(
+            "live_runtime_guard_error_blocked: refusing git mutation because live runtime mutation guard is unavailable"
+        )
 
     safety_decision = None
     safety_message = None
