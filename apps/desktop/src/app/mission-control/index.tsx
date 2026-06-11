@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import {
   createMissionControlReport,
+  createMissionControlSessionProjectLink,
   getMissionControlLaneRequests,
   getMissionControlProjects,
   getMissionControlProjectSessions,
@@ -219,6 +220,49 @@ const emptyReportForm: ReportFormState = {
   tests: ''
 }
 
+type SessionLinkAction = 'link' | 'move' | 'suggested'
+
+interface SessionLinkDialogState {
+  action: SessionLinkAction
+  confirmed: boolean
+  currentProjectId: string
+  projectId: string
+  session: MissionControlProjectSession
+}
+
+function durableSessionId(session: MissionControlProjectSession): string {
+  return session.lineage_root_id || session.durable_session_id || session.session_id
+}
+
+function sessionLinkPayload(dialog: SessionLinkDialogState) {
+  const durable = durableSessionId(dialog.session)
+
+  return {
+    confidence: 'manual',
+    cwd_snapshot: dialog.session.cwd || undefined,
+    lineage_root_id: durable || undefined,
+    link_method: 'manual',
+    profile: dialog.session.profile || undefined,
+    project_id: dialog.projectId,
+    session_id: dialog.session.session_id,
+    source: dialog.session.source || undefined,
+    status: 'active',
+    title_snapshot: sessionTitle(dialog.session)
+  }
+}
+
+function projectOptionsForDialog(projects: MissionControlProjectRecord[], dialog: SessionLinkDialogState | null): MissionControlProjectRecord[] {
+  if (!dialog || dialog.action !== 'move') {
+    return projects
+  }
+
+  return projects.filter(project => project.project_id !== dialog.currentProjectId)
+}
+
+function projectForDialog(projects: MissionControlProjectRecord[], projectId: string): MissionControlProjectRecord | null {
+  return projects.find(project => project.project_id === projectId) ?? null
+}
+
 function projectRenderModel(
   project: MissionControlProjectRecord,
   report: MissionControlReportRecord | null,
@@ -369,6 +413,9 @@ export function MissionControlView() {
   const [reportForm, setReportForm] = useState<ReportFormState>(emptyReportForm)
   const [reportSaving, setReportSaving] = useState(false)
   const [reportMessage, setReportMessage] = useState('')
+  const [sessionLinkDialog, setSessionLinkDialog] = useState<SessionLinkDialogState | null>(null)
+  const [sessionLinkSaving, setSessionLinkSaving] = useState(false)
+  const [sessionLinkMessage, setSessionLinkMessage] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -455,6 +502,42 @@ export function MissionControlView() {
     }
   }
 
+  function openSessionLinkDialog(
+    action: SessionLinkAction,
+    session: MissionControlProjectSession,
+    projectId = '',
+    currentProjectId = ''
+  ) {
+    setSessionLinkMessage('')
+    setSessionLinkDialog({ action, confirmed: false, currentProjectId, projectId, session })
+  }
+
+  function updateSessionLinkDialog(next: Partial<Pick<SessionLinkDialogState, 'confirmed' | 'projectId'>>) {
+    setSessionLinkDialog(current => (current ? { ...current, ...next } : current))
+  }
+
+  async function saveSessionProjectLink() {
+    if (!sessionLinkDialog || !sessionLinkDialog.confirmed || !sessionLinkDialog.projectId) {
+      setSessionLinkMessage('Choose a project and confirm that one append-only record will be written.')
+
+      return
+    }
+
+    setSessionLinkSaving(true)
+    setSessionLinkMessage('')
+
+    try {
+      await createMissionControlSessionProjectLink(sessionLinkPayload(sessionLinkDialog))
+      setSessionLinkMessage('Session link record appended. Send to Jenny remains disabled.')
+      setSessionLinkDialog(null)
+      setSnapshot(await loadMissionControlSnapshot())
+    } catch (err) {
+      setSessionLinkMessage(String(err instanceof Error ? err.message : err))
+    } finally {
+      setSessionLinkSaving(false)
+    }
+  }
+
   return (
     <section className="flex h-full min-h-0 flex-col overflow-auto bg-(--ui-chat-surface-background) px-5 py-5 text-foreground">
       <header className="mb-5 flex flex-col gap-2 border-b border-border/60 pb-4">
@@ -510,7 +593,9 @@ export function MissionControlView() {
                   copied={copiedProjectId === project.project_id}
                   key={project.project_id}
                   lane={state?.latest_lane_request ?? latestLaneForProject(project.project_id, snapshot.laneRequests)}
+                  onConfirmSuggestedLink={session => openSessionLinkDialog('suggested', session, project.project_id)}
                   onCopy={() => void copyPrompt(project)}
+                  onMoveLink={session => openSessionLinkDialog('move', session, '', project.project_id)}
                   project={project}
                   report={state?.latest_report ?? state?.latest_jenny_report ?? latestReportForProject(project.project_id, snapshot.reports)}
                   sessionGroup={sessionGroupForProject(project, snapshot.projectSessionGroups)}
@@ -524,7 +609,21 @@ export function MissionControlView() {
         </div>
       </section>
 
-      <UnassignedSessionsPanel group={unassignedGroup} projects={snapshot.projects} />
+      <UnassignedSessionsPanel
+        group={unassignedGroup}
+        onLinkManual={session => openSessionLinkDialog('link', session, session.suggested_project_id || '')}
+        projects={realProjects}
+      />
+
+      <SessionLinkConfirmationDialog
+        dialog={sessionLinkDialog}
+        message={sessionLinkMessage}
+        onCancel={() => setSessionLinkDialog(null)}
+        onChange={updateSessionLinkDialog}
+        onSave={() => void saveSessionProjectLink()}
+        projects={realProjects}
+        saving={sessionLinkSaving}
+      />
 
       {supportingProjects.length ? (
         <section className="mt-6 rounded-xl border border-dashed border-border/70 bg-muted/20 p-4 opacity-70">
@@ -653,10 +752,14 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
 
 function ProjectSessionSummary({
   linkedCount,
+  onConfirmSuggestedLink,
+  onMoveLink,
   recentSessions,
   suggestedSessions
 }: {
   linkedCount: number
+  onConfirmSuggestedLink: (session: MissionControlProjectSession) => void
+  onMoveLink: (session: MissionControlProjectSession) => void
   recentSessions: MissionControlProjectSession[]
   suggestedSessions: MissionControlProjectSession[]
 }) {
@@ -669,7 +772,13 @@ function ProjectSessionSummary({
       {recentSessions.length ? (
         <div className="mt-2 grid gap-2">
           {recentSessions.slice(0, 3).map(session => (
-            <SessionSummaryRow key={session.durable_session_id || session.session_id} session={session} />
+            <SessionSummaryRow
+              actionLabel="Move link"
+              badge="Linked · source of truth"
+              key={session.durable_session_id || session.session_id}
+              onAction={() => onMoveLink(session)}
+              session={session}
+            />
           ))}
         </div>
       ) : (
@@ -681,7 +790,13 @@ function ProjectSessionSummary({
           <p className="mt-1">Suggestions do not create links or become source-of-truth records.</p>
           <div className="mt-2 grid gap-2">
             {suggestedSessions.map(session => (
-              <SessionSummaryRow displayOnly key={session.durable_session_id || session.session_id} session={session} />
+              <SessionSummaryRow
+                actionLabel="Review link"
+                badge="Display-only suggestion"
+                key={session.durable_session_id || session.session_id}
+                onAction={() => onConfirmSuggestedLink(session)}
+                session={session}
+              />
             ))}
           </div>
         </div>
@@ -690,17 +805,40 @@ function ProjectSessionSummary({
   )
 }
 
-function SessionSummaryRow({ displayOnly, session }: { displayOnly?: boolean; session: MissionControlProjectSession }) {
+function SessionSummaryRow({
+  actionLabel,
+  badge,
+  onAction,
+  session
+}: {
+  actionLabel?: string
+  badge?: string
+  onAction?: () => void
+  session: MissionControlProjectSession
+}) {
   return (
     <div className="rounded-md border border-border/60 bg-background/70 p-2">
       <div className="font-medium text-foreground/90">{sessionTitle(session)}</div>
       <div className="mt-0.5 text-[0.7rem] text-muted-foreground">{sessionMeta(session)}</div>
-      {displayOnly ? <div className="mt-1 text-[0.7rem] font-medium text-amber-700 dark:text-amber-200">Display-only suggestion</div> : null}
+      {badge ? <div className="mt-1 text-[0.7rem] font-medium text-amber-700 dark:text-amber-200">{badge}</div> : null}
+      {onAction && actionLabel ? (
+        <button className="mt-2 rounded-md border border-border/70 px-2 py-1 text-[0.7rem] font-medium text-foreground hover:bg-muted" onClick={onAction} type="button">
+          {actionLabel}
+        </button>
+      ) : null}
     </div>
   )
 }
 
-function UnassignedSessionsPanel({ group, projects }: { group: MissionControlProjectSessionGroup | null; projects: MissionControlProjectRecord[] }) {
+function UnassignedSessionsPanel({
+  group,
+  onLinkManual,
+  projects
+}: {
+  group: MissionControlProjectSessionGroup | null
+  onLinkManual: (session: MissionControlProjectSession) => void
+  projects: MissionControlProjectRecord[]
+}) {
   const sessions = group?.sessions ?? []
   const suggestionCount = group?.unassigned_suggestion_count ?? sessions.filter(session => session.suggested_project_id).length
 
@@ -722,7 +860,7 @@ function UnassignedSessionsPanel({ group, projects }: { group: MissionControlPro
             <div className="rounded-lg border border-border/60 bg-background/60 p-3 text-xs" key={session.durable_session_id || session.session_id}>
               <div className="font-medium text-foreground/90">{sessionTitle(session)}</div>
               <div className="mt-1 text-muted-foreground">{sessionMeta(session)}</div>
-              <div className="mt-2">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 {session.suggested_project_id ? (
                   <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[0.68rem] font-medium text-blue-700 dark:text-blue-300">
                     Suggested: {projectNameForId(session.suggested_project_id, projects)} · display-only
@@ -730,6 +868,9 @@ function UnassignedSessionsPanel({ group, projects }: { group: MissionControlPro
                 ) : (
                   <span className="text-[0.68rem] text-muted-foreground">No suggested project</span>
                 )}
+                <button className="rounded-md border border-border/70 px-2 py-1 text-[0.7rem] font-medium text-foreground hover:bg-muted" onClick={() => onLinkManual(session)} type="button">
+                  Link manually
+                </button>
               </div>
             </div>
           ))}
@@ -744,7 +885,9 @@ function UnassignedSessionsPanel({ group, projects }: { group: MissionControlPro
 function ProjectCard({
   copied,
   lane,
+  onConfirmSuggestedLink,
   onCopy,
+  onMoveLink,
   project,
   report,
   sessionGroup,
@@ -754,7 +897,9 @@ function ProjectCard({
 }: {
   copied: boolean
   lane: MissionControlLaneRequestRecord | null
+  onConfirmSuggestedLink: (session: MissionControlProjectSession) => void
   onCopy: () => void
+  onMoveLink: (session: MissionControlProjectSession) => void
   project: MissionControlProjectRecord
   report: MissionControlReportRecord | null
   sessionGroup: MissionControlProjectSessionGroup | null
@@ -789,7 +934,13 @@ function ProjectCard({
       <Field label="missing state fields" value={listText(model.missingStateFields, 'None — report state is current')} />
       <Field label="next recommended lane" value={model.nextLane} />
       <Field label="source of truth" value={project.source_of_truth} />
-      <ProjectSessionSummary linkedCount={linkedSessionCount} recentSessions={recentSessions} suggestedSessions={suggestedSessions} />
+      <ProjectSessionSummary
+        linkedCount={linkedSessionCount}
+        onConfirmSuggestedLink={onConfirmSuggestedLink}
+        onMoveLink={onMoveLink}
+        recentSessions={recentSessions}
+        suggestedSessions={suggestedSessions}
+      />
       <div className="grid gap-2 rounded-lg border border-border/70 bg-background/60 p-3 text-xs text-muted-foreground sm:grid-cols-3">
         <span>send_to_jenny: disabled</span>
         <span>dispatch: disabled</span>
@@ -807,6 +958,95 @@ function ProjectCard({
         </button>
       </div>
     </article>
+  )
+}
+
+function SessionLinkConfirmationDialog({
+  dialog,
+  message,
+  onCancel,
+  onChange,
+  onSave,
+  projects,
+  saving
+}: {
+  dialog: SessionLinkDialogState | null
+  message: string
+  onCancel: () => void
+  onChange: (next: Partial<Pick<SessionLinkDialogState, 'confirmed' | 'projectId'>>) => void
+  onSave: () => void
+  projects: MissionControlProjectRecord[]
+  saving: boolean
+}) {
+  if (!dialog) {
+    return message ? <p className="mt-3 text-sm text-muted-foreground">{message}</p> : null
+  }
+
+  const availableProjects = projectOptionsForDialog(projects, dialog)
+  const selectedProject = projectForDialog(projects, dialog.projectId)
+  const title = dialog.action === 'move' ? 'Move linked session' : dialog.action === 'suggested' ? 'Confirm suggested link' : 'Link session manually'
+  const buttonLabel = dialog.action === 'move' ? 'Append superseding link record' : dialog.action === 'suggested' ? 'Confirm suggested link' : 'Append manual link record'
+  const disabled = saving || !dialog.confirmed || !dialog.projectId || (dialog.action === 'move' && dialog.projectId === dialog.currentProjectId)
+
+  return (
+    <div aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog">
+      <section className="max-w-2xl rounded-xl border border-border bg-background p-5 shadow-xl">
+        <h2 className="text-base font-semibold">{title}</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Append a manual SessionProjectLinkRecord for <span className="font-medium text-foreground">{sessionTitle(dialog.session)}</span>
+          {selectedProject ? ` to ${selectedProject.name}` : ''}.
+        </p>
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+          <li>One append-only SessionProjectLinkRecord will be written.</li>
+          <li>This does not edit the session database.</li>
+          <li>This does not send work to Jenny.</li>
+          <li>This does not dispatch anything.</li>
+          <li>This does not enable routing.</li>
+          <li>Suggestions are display-only until confirmed.</li>
+          <li>Moving a link appends a newer record instead of changing old records.</li>
+        </ul>
+        <div className="mt-4 grid gap-3">
+          <label className="grid gap-1 text-xs font-medium">
+            Project
+            <select
+              className="rounded-md border border-border/80 bg-background px-3 py-2 text-sm"
+              onChange={event => onChange({ projectId: event.target.value })}
+              value={dialog.projectId}
+            >
+              <option value="">Choose one project</option>
+              {availableProjects.map(project => (
+                <option key={project.project_id} value={project.project_id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {dialog.session.suggested_project_id ? (
+            <p className="text-xs text-amber-700 dark:text-amber-200">
+              Suggested project: {projectNameForId(dialog.session.suggested_project_id, projects)} · display-only until confirmed.
+            </p>
+          ) : null}
+          <label className="flex items-start gap-2 text-xs text-muted-foreground">
+            <input checked={dialog.confirmed} onChange={event => onChange({ confirmed: event.target.checked })} type="checkbox" />
+            <span>I understand this appends one Mission Control record only.</span>
+          </label>
+        </div>
+        {message ? <p className="mt-3 text-sm text-muted-foreground">{message}</p> : null}
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <button className="rounded-md border border-border/80 px-3 py-2 text-sm font-medium hover:bg-muted" onClick={onCancel} type="button">
+            Cancel
+          </button>
+          <button
+            className="rounded-md border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60"
+            disabled={disabled}
+            onClick={onSave}
+            type="button"
+          >
+            {saving ? 'Appending record…' : buttonLabel}
+          </button>
+        </div>
+      </section>
+    </div>
   )
 }
 

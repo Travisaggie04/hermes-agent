@@ -239,6 +239,48 @@ export interface MissionControlProjectSessionGroup {
   unassigned_suggestion_count?: number
 }
 
+export interface MissionControlSessionProjectLinkRecord {
+  confidence?: string
+  cwd_snapshot?: string
+  durable_session_id?: string
+  lineage_root_id?: string
+  link_id: string
+  link_method?: string
+  linked_at?: string
+  linked_by?: string
+  metadata?: Record<string, unknown>
+  profile?: string
+  project_id: string
+  session_id: string
+  source?: string
+  status?: string
+  title_snapshot?: string
+}
+
+export interface MissionControlSessionProjectLinkCreatePayload {
+  confidence?: string
+  cwd_snapshot?: string
+  lineage_root_id?: string
+  link_method?: string
+  linked_by?: string
+  profile?: string
+  project_id: string
+  session_id: string
+  source?: string
+  status?: string
+  title_snapshot?: string
+}
+
+export interface MissionControlSessionProjectLinkCreateResponse {
+  dispatch_enabled?: boolean
+  manual_copy_only?: boolean
+  record_index?: number
+  record_type?: string
+  send_to_jenny_enabled?: boolean
+  session_project_link: MissionControlSessionProjectLinkRecord
+  stored?: boolean
+}
+
 export interface MissionControlProjectState {
   project_id: string
   name: string
@@ -365,6 +407,16 @@ export function createMissionControlReport(payload: MissionControlReportCreatePa
     body: payload,
     method: 'POST',
     path: `${MISSION_CONTROL_API}/workspace/reports/create`
+  })
+}
+
+export function createMissionControlSessionProjectLink(
+  payload: MissionControlSessionProjectLinkCreatePayload
+): Promise<MissionControlSessionProjectLinkCreateResponse> {
+  return window.hermesDesktop.api<MissionControlSessionProjectLinkCreateResponse>({
+    body: payload,
+    method: 'POST',
+    path: `${MISSION_CONTROL_API}/workspace/session-project-links/create`
   })
 }
 

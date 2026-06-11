@@ -9,9 +9,11 @@ const getMissionControlReports = vi.fn()
 const getMissionControlProjectState = vi.fn()
 const getMissionControlProjectSessions = vi.fn()
 const createMissionControlReport = vi.fn()
+const createMissionControlSessionProjectLink = vi.fn()
 
 vi.mock('@/hermes', () => ({
   createMissionControlReport: (payload: unknown) => createMissionControlReport(payload),
+  createMissionControlSessionProjectLink: (payload: unknown) => createMissionControlSessionProjectLink(payload),
   getMissionControlWorkspaceStatus: () => getMissionControlWorkspaceStatus(),
   getMissionControlProjects: () => getMissionControlProjects(),
   getMissionControlLaneRequests: () => getMissionControlLaneRequests(),
@@ -64,6 +66,22 @@ beforeEach(() => {
       summary: 'Manual report saved'
     },
     send_to_jenny_enabled: false,
+    stored: true
+  })
+  createMissionControlSessionProjectLink.mockResolvedValue({
+    dispatch_enabled: false,
+    manual_copy_only: true,
+    record_index: 38,
+    record_type: 'SessionProjectLinkRecord',
+    send_to_jenny_enabled: false,
+    session_project_link: {
+      durable_session_id: 'root-suggested-hermes',
+      link_id: 'session-project-link-test',
+      link_method: 'manual',
+      project_id: 'project-hermes-mission-control',
+      session_id: 'session-suggested-hermes',
+      status: 'active'
+    },
     stored: true
   })
   getMissionControlProjects.mockResolvedValue({
@@ -339,6 +357,100 @@ describe('MissionControlView', () => {
     expect(screen.getByText('No suggested project')).toBeTruthy()
 
     expect(createMissionControlReport).not.toHaveBeenCalled()
+    expect(createMissionControlSessionProjectLink).not.toHaveBeenCalled()
+  })
+
+  it('requires confirmation before suggested sessions write exactly one manual active link record', async () => {
+    await renderMissionControl()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Review link' }))
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.getAllByText('Confirm suggested link').length).toBeGreaterThan(0)
+    expect(screen.getByText('One append-only SessionProjectLinkRecord will be written.')).toBeTruthy()
+    expect(screen.getByText('This does not edit the session database.')).toBeTruthy()
+    expect(screen.getByText('This does not send work to Jenny.')).toBeTruthy()
+    expect(screen.getByText('This does not dispatch anything.')).toBeTruthy()
+    expect(screen.getByText('This does not enable routing.')).toBeTruthy()
+    expect(screen.getByText('Suggestions are display-only until confirmed.')).toBeTruthy()
+    expect(screen.getByText('Moving a link appends a newer record instead of changing old records.')).toBeTruthy()
+    expect(createMissionControlSessionProjectLink).not.toHaveBeenCalled()
+
+    const submit = screen.getByRole('button', { name: 'Confirm suggested link' })
+    expect(submit).toHaveProperty('disabled', true)
+    fireEvent.click(screen.getByLabelText('I understand this appends one Mission Control record only.'))
+    fireEvent.click(submit)
+
+    await waitFor(() => expect(createMissionControlSessionProjectLink).toHaveBeenCalledTimes(1))
+    expect(createMissionControlSessionProjectLink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        confidence: 'manual',
+        cwd_snapshot: '/home/jenny/.hermes/hermes-runtime-session-links-573658a',
+        lineage_root_id: 'root-suggested-hermes',
+        link_method: 'manual',
+        profile: 'default',
+        project_id: 'project-hermes-mission-control',
+        session_id: 'session-suggested-hermes',
+        source: 'discord',
+        status: 'active',
+        title_snapshot: 'Suggested Mission Control session'
+      })
+    )
+    expect(getMissionControlProjectSessions).toHaveBeenCalledTimes(2)
+  })
+
+  it('requires project selection and checkbox before manual unassigned links', async () => {
+    await renderMissionControl()
+
+    const manualButtons = await screen.findAllByRole('button', { name: 'Link manually' })
+    fireEvent.click(manualButtons[1])
+
+    const submit = screen.getByRole('button', { name: 'Append manual link record' })
+    expect(submit).toHaveProperty('disabled', true)
+    fireEvent.change(screen.getAllByLabelText('Project').at(-1)!, { target: { value: 'project-tool-tally' } })
+    expect(submit).toHaveProperty('disabled', true)
+    fireEvent.click(screen.getByLabelText('I understand this appends one Mission Control record only.'))
+    fireEvent.click(submit)
+
+    await waitFor(() => expect(createMissionControlSessionProjectLink).toHaveBeenCalledTimes(1))
+    expect(createMissionControlSessionProjectLink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        confidence: 'manual',
+        lineage_root_id: 'root-general',
+        link_method: 'manual',
+        project_id: 'project-tool-tally',
+        session_id: 'session-general',
+        status: 'active'
+      })
+    )
+  })
+
+  it('moves linked sessions by appending a newer active record for the same durable session id', async () => {
+    await renderMissionControl()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Move link' }))
+    fireEvent.change(screen.getAllByLabelText('Project').at(-1)!, { target: { value: 'project-tool-tally' } })
+    fireEvent.click(screen.getByLabelText('I understand this appends one Mission Control record only.'))
+    fireEvent.click(screen.getByRole('button', { name: 'Append superseding link record' }))
+
+    await waitFor(() => expect(createMissionControlSessionProjectLink).toHaveBeenCalledTimes(1))
+    expect(createMissionControlSessionProjectLink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        confidence: 'manual',
+        lineage_root_id: 'root-linked-hermes',
+        link_method: 'manual',
+        project_id: 'project-tool-tally',
+        session_id: 'session-linked-hermes',
+        status: 'active'
+      })
+    )
+  })
+
+  it('does not expose unlink, removal, bulk, or multi-select linking controls', async () => {
+    await renderMissionControl()
+
+    for (const label of [/unlink/i, /remove link/i, /link all/i, /confirm all/i, /bulk/i, /multi-select/i]) {
+      expect(screen.queryByRole('button', { name: label })).toBeNull()
+    }
   })
 
   it('de-emphasizes smoke records outside the primary workspace', async () => {
@@ -462,15 +574,18 @@ describe('MissionControlView', () => {
     const text = source.default as string
 
     expect(text).toContain('createMissionControlReport')
+    expect(text).toContain('createMissionControlSessionProjectLink')
 
     for (const forbidden of [
       '.post(',
       '/dispatch',
       '/execute',
       '/api/plugins/kanban/tasks',
+      'PATCH',
+      'DELETE',
+      '/api/sessions/',
       'session-send',
       'sendSession',
-      '/workspace/session-project-links/create',
       'localStorage',
       'sessionStorage',
       'setInterval',
