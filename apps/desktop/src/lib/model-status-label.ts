@@ -76,6 +76,22 @@ export function displayModelName(model: string): string {
   return modelDisplayParts(model).name
 }
 
+/** Provider-qualified picker/status label. Keeps aggregator-routed raw ids visible. */
+export function formatProviderModelLabel(providerName: string, providerSlug: string, model: string): string {
+  const provider = providerName.trim() || providerSlug.trim() || 'Unknown provider'
+  const slug = providerSlug.trim().toLowerCase()
+  const modelLabel = slug === 'openrouter' ? model.trim() || 'No model' : displayModelName(model)
+
+  return `${provider} · ${modelLabel}`
+}
+
+/** Extra text for providers whose model ids can resemble direct-provider rows. */
+export function providerModelPickerNotice(providerSlug: string): string {
+  return providerSlug.trim().toLowerCase() === 'openrouter'
+    ? 'OpenRouter aggregator — select only when you intentionally want OpenRouter billing/routing.'
+    : ''
+}
+
 /** Status bar trigger label — model name plus the live session state (effort/fast). */
 export function formatModelStatusLabel(
   model: string,

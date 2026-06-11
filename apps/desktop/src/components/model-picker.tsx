@@ -5,6 +5,7 @@ import type { ModelOptionProvider, ModelOptionsResponse, ModelPricing } from '@/
 
 import type { HermesGateway } from '../hermes'
 import { getGlobalModelOptions } from '../hermes'
+import { formatProviderModelLabel, providerModelPickerNotice } from '../lib/model-status-label'
 import { cn } from '../lib/utils'
 import { startManualOnboarding } from '../store/onboarding'
 
@@ -208,6 +209,7 @@ function ModelResults({
         }
 
         const unavailable = new Set(provider.unavailable_models ?? [])
+        const providerNotice = providerModelPickerNotice(provider.slug)
 
         return (
           <CommandGroup heading={<ProviderHeading provider={provider} />} key={provider.slug}>
@@ -215,6 +217,13 @@ function ModelResults({
               <div className="px-2 pb-2">
                 <InlineNotice className="px-2.5 py-1.5 text-xs" kind="warning">
                   {provider.warning}
+                </InlineNotice>
+              </div>
+            )}
+            {providerNotice && (
+              <div className="px-2 pb-2">
+                <InlineNotice className="px-2.5 py-1.5 text-xs" kind="warning">
+                  {providerNotice}
                 </InlineNotice>
               </div>
             )}
@@ -240,7 +249,14 @@ function ModelResults({
                   }}
                   value={`${provider.slug}:${model}`}
                 >
-                  <span className="min-w-0 flex-1 truncate">{model}</span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {formatProviderModelLabel(provider.name, provider.slug, model)}
+                  </span>
+                  {providerNotice && (
+                    <span className="shrink-0 rounded border border-amber-500/35 px-1.5 py-0.5 text-[0.62rem] uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                      OpenRouter
+                    </span>
+                  )}
                   {locked && <span className="shrink-0 text-[0.62rem] uppercase tracking-wide opacity-80">Pro</span>}
                   <ModelPrice isCurrent={isCurrent} price={price} />
                 </CommandItem>

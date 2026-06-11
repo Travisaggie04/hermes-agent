@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { coerceThinkingText } from './chat-runtime'
+import { coerceThinkingText, quickModelOptions } from './chat-runtime'
 
 describe('coerceThinkingText', () => {
   it('strips streaming status prefixes from thinking deltas', () => {
@@ -14,5 +14,34 @@ describe('coerceThinkingText', () => {
         "◉_◉ processing... I don't see any current rewritten thinking or next thinking to process. Could you provide the thinking content you'd like me to rewrite?"
       )
     ).toBe('')
+  })
+})
+
+describe('quickModelOptions', () => {
+  it('keeps OpenRouter visible while preserving explicit provider selection values', () => {
+    const options = quickModelOptions(
+      {
+        provider: 'openai-codex',
+        model: 'gpt-5.5',
+        providers: [
+          {
+            slug: 'openai-codex',
+            name: 'OpenAI Codex',
+            is_current: true,
+            models: ['gpt-5.5']
+          },
+          {
+            slug: 'openrouter',
+            name: 'OpenRouter',
+            models: ['openai/gpt-5.5']
+          }
+        ]
+      },
+      'openai-codex',
+      'gpt-5.5'
+    )
+
+    expect(options).toContainEqual({ provider: 'openai-codex', providerName: 'OpenAI Codex', model: 'gpt-5.5' })
+    expect(options).toContainEqual({ provider: 'openrouter', providerName: 'OpenRouter', model: 'openai/gpt-5.5' })
   })
 })

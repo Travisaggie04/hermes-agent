@@ -6,10 +6,14 @@ import { notifyError } from '@/store/notifications'
 import { $currentModel, $currentProvider, setCurrentModel, setCurrentProvider } from '@/store/session'
 import type { ModelOptionsResponse } from '@/types/hermes'
 
-interface ModelSelection {
+export interface ModelSelection {
   model: string
   persistGlobal: boolean
   provider: string
+}
+
+export function buildModelSwitchCommand(selection: ModelSelection): string {
+  return `/model ${selection.model} --provider ${selection.provider}${selection.persistGlobal ? ' --global' : ''}`
 }
 
 interface ModelControlsOptions {
@@ -68,7 +72,7 @@ export function useModelControls({ activeSessionId, queryClient, requestGateway 
         if (activeSessionId) {
           await requestGateway('slash.exec', {
             session_id: activeSessionId,
-            command: `/model ${selection.model} --provider ${selection.provider}${selection.persistGlobal ? ' --global' : ''}`
+            command: buildModelSwitchCommand(selection)
           })
 
           if (selection.persistGlobal) {

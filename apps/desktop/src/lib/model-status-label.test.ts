@@ -1,11 +1,29 @@
 import { describe, expect, it } from 'vitest'
 
-import { displayModelName, formatModelStatusLabel, reasoningEffortLabel } from './model-status-label'
+import {
+  displayModelName,
+  formatModelStatusLabel,
+  formatProviderModelLabel,
+  providerModelPickerNotice,
+  reasoningEffortLabel
+} from './model-status-label'
 
 describe('model-status-label', () => {
   it('formats display names consistently', () => {
     expect(displayModelName('anthropic/claude-opus-4.8-fast')).toBe('Opus 4.8')
     expect(displayModelName('openai/gpt-5.5')).toBe('GPT-5.5')
+  })
+
+  it('renders provider-qualified labels so OpenAI Codex and OpenRouter are distinct', () => {
+    expect(formatProviderModelLabel('OpenAI Codex', 'openai-codex', 'gpt-5.5')).toBe('OpenAI Codex · GPT-5.5')
+    expect(formatProviderModelLabel('OpenRouter', 'openrouter', 'openai/gpt-5.5')).toBe(
+      'OpenRouter · openai/gpt-5.5'
+    )
+  })
+
+  it('adds an explicit OpenRouter aggregator notice without warning direct OpenAI Codex rows', () => {
+    expect(providerModelPickerNotice('openrouter')).toContain('OpenRouter aggregator')
+    expect(providerModelPickerNotice('openai-codex')).toBe('')
   })
 
   it('maps reasoning effort to compact labels', () => {
