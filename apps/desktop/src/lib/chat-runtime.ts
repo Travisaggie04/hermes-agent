@@ -222,6 +222,7 @@ export function quickModelOptions(
 ): QuickModelOption[] {
   const seen = new Set<string>()
   const options: QuickModelOption[] = []
+  const providerNameBySlug = new Map((data?.providers ?? []).map(provider => [provider.slug, provider.name]))
 
   const providers = [...(data?.providers ?? [])].sort((a, b) => {
     if (a.slug === currentProvider) {
@@ -255,7 +256,7 @@ export function quickModelOptions(
   }
 
   if (currentProvider && currentModel) {
-    add(currentProvider, currentProvider, currentModel)
+    add(currentProvider, providerNameBySlug.get(currentProvider) ?? currentProvider, currentModel)
   }
 
   for (const provider of providers) {
