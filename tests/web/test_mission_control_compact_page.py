@@ -47,16 +47,40 @@ def test_prompt_copy_text_is_project_specific() -> None:
     assert "Copy next lane prompt" in src
 
 
+def test_compact_cards_show_project_state_freshness_and_artifacts() -> None:
+    src = page_source()
+    for expected in [
+        "Live report available",
+        "Seed only — needs first report",
+        "latestActivity",
+        "latestLane",
+        "artifact/report links",
+        "missing state",
+        "has_real_report",
+        "missing_state_fields",
+        "latest_activity_at",
+        "artifact_links",
+    ]:
+        assert expected in src
+
+
 def test_send_dispatch_disabled_and_no_post_session_wiring() -> None:
     src = page_source()
+    assert "Save Jenny report manually" in src
+    assert "WORKSPACE_REPORTS_CREATE_URL" in src
+    assert "method: \"POST\"" in src
     assert "Send to Jenny disabled" in src
     assert "Forbidden actions: no POST, session-send, dispatch" in src
     forbidden_runtime_fragments = [
         'fetchJSON<unknown>("/api/plugins/mission-control-governance/workspace/projects/create"',
-        "method: \"POST\"",
         "session-send",
         "sendToJenny(",
         "dispatchMissionControl",
+        "localStorage",
+        "sessionStorage",
+        "setInterval",
+        "setTimeout",
+        "new Worker",
     ]
     for fragment in forbidden_runtime_fragments:
         if fragment == "session-send":

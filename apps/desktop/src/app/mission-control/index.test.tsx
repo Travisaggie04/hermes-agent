@@ -7,8 +7,10 @@ const getMissionControlProjects = vi.fn()
 const getMissionControlLaneRequests = vi.fn()
 const getMissionControlReports = vi.fn()
 const getMissionControlProjectState = vi.fn()
+const createMissionControlReport = vi.fn()
 
 vi.mock('@/hermes', () => ({
+  createMissionControlReport: (payload: unknown) => createMissionControlReport(payload),
   getMissionControlWorkspaceStatus: () => getMissionControlWorkspaceStatus(),
   getMissionControlProjects: () => getMissionControlProjects(),
   getMissionControlLaneRequests: () => getMissionControlLaneRequests(),
@@ -50,6 +52,17 @@ beforeEach(() => {
     runtime_worktree_guard: { decision_state: 'pass' },
     safety: { dispatch_in_gateway: false, send_to_jenny_enabled: false },
     stale_context: { warnings: [] }
+  })
+  createMissionControlReport.mockResolvedValue({
+    dispatch_enabled: false,
+    manual_copy_only: true,
+    report: {
+      project_id: 'project-hermes-mission-control',
+      report_id: 'report-created',
+      summary: 'Manual report saved'
+    },
+    send_to_jenny_enabled: false,
+    stored: true
   })
   getMissionControlProjects.mockResolvedValue({
     count: 6,
@@ -146,6 +159,11 @@ beforeEach(() => {
         risks: ['dashboard overbuild'],
         blockers: ['none'],
         next_recommended_lane: 'Desktop read-only workspace v1',
+        artifact_links: ['reports/hermes/desktop-review.md'],
+        has_real_report: true,
+        latest_activity_at: '2026-06-11T10:00:00Z',
+        latest_activity_source: 'report',
+        missing_state_fields: [],
         latest_lane_request: {
           lane_request_id: 'lane-1',
           project_id: 'project-hermes-mission-control',
@@ -169,6 +187,9 @@ beforeEach(() => {
         current_goal: `${name} goal`,
         latest_report_summary: '',
         latest_result: '',
+        has_real_report: false,
+        missing_state_fields: ['latest_lane', 'latest_jenny_report', 'latest_result', 'risks_blockers', 'artifact_links'],
+        latest_activity_source: 'project',
         risks: [],
         blockers: [],
         next_recommended_lane: `${name} next lane`
@@ -196,7 +217,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('5 of 5 real projects loaded')).toBeTruthy()
 
     for (const [, name] of realProjects) {
-      expect(await screen.findByText(name)).toBeTruthy()
+      expect((await screen.findAllByText(name)).length).toBeGreaterThan(0)
       expect(screen.getAllByText('Primary project').length).toBeGreaterThanOrEqual(5)
     }
   })
@@ -205,8 +226,13 @@ describe('MissionControlView', () => {
     await renderMissionControl()
 
     expect(await screen.findByText('Jenny finished the desktop architecture review.')).toBeTruthy()
+    expect(screen.getByText('Manual Jenny report ingestion')).toBeTruthy()
+    expect(screen.getByText('Save Jenny report manually')).toBeTruthy()
     expect(screen.getByText('Use Mission Control backend with desktop frontend.')).toBeTruthy()
     expect(screen.getByText('dashboard overbuild · none')).toBeTruthy()
+    expect(screen.getByText('reports/hermes/desktop-review.md')).toBeTruthy()
+    expect(screen.getByText('Live report available')).toBeTruthy()
+    expect(screen.getByText('2026-06-11T10:00:00Z (report)')).toBeTruthy()
     expect(screen.getByText('Desktop read-only workspace v1')).toBeTruthy()
     expect(screen.getByText('Read-only status refresh (draft)')).toBeTruthy()
     expect(screen.getAllByText('No report yet').length).toBeGreaterThan(0)
@@ -309,13 +335,37 @@ describe('MissionControlView', () => {
     expect(waha).toContain('cross-contamination')
   })
 
-  it('keeps Mission Control view source free of POST, dispatch wiring, timers, storage, and workers', async () => {
+  it('saves manual reports through the append-only reports/create route only', async () => {
+    await renderMissionControl()
+
+    const projectSelect = await screen.findByLabelText('Project')
+    fireEvent.change(projectSelect, { target: { value: 'project-hermes-mission-control' } })
+    fireEvent.change(screen.getByLabelText('Jenny report summary'), { target: { value: 'Current Hermes report' } })
+    fireEvent.change(screen.getByLabelText('Latest result'), { target: { value: 'Desktop and mobile now read projected state.' } })
+    fireEvent.change(screen.getByLabelText('Risks/blockers — one per line'), { target: { value: 'proxy 9121 mismatch' } })
+    fireEvent.change(screen.getByLabelText('Artifact/report links — one per line'), { target: { value: 'reports/hermes/current.md' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Jenny report manually' }))
+
+    await waitFor(() => expect(createMissionControlReport).toHaveBeenCalledTimes(1))
+    expect(createMissionControlReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        artifact_links: ['reports/hermes/current.md'],
+        project_id: 'project-hermes-mission-control',
+        result: 'Desktop and mobile now read projected state.',
+        risks: ['proxy 9121 mismatch'],
+        summary: 'Current Hermes report'
+      })
+    )
+    expect(screen.getByText(/Send to Jenny is still disabled/i)).toBeTruthy()
+  })
+
+  it('keeps Mission Control view source free of disallowed POST, dispatch wiring, timers, storage, and workers', async () => {
     const source = await import('./index?raw')
     const text = source.default as string
 
+    expect(text).toContain('createMissionControlReport')
+
     for (const forbidden of [
-      "method: 'POST'",
-      'method: "POST"',
       '.post(',
       '/dispatch',
       '/execute',

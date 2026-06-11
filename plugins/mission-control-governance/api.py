@@ -562,6 +562,42 @@ def _seed_project_templates() -> dict[str, Any]:
     return {"created": created, "skipped": skipped}
 
 
+def _project_state_artifact_links(report: dict[str, Any]) -> list[str]:
+    metadata = report.get("metadata") if isinstance(report.get("metadata"), dict) else {}
+    raw_links = metadata.get("artifact_links") or metadata.get("artifacts") or []
+    if isinstance(raw_links, str):
+        raw_links = [raw_links]
+    links = [str(item).strip() for item in raw_links if str(item).strip()] if isinstance(raw_links, list) else []
+    if links:
+        return links
+
+    # Until artifact links are first-class on JennyReportRecord, expose useful
+    # report evidence as inert display-only link text. These are not dereferenced
+    # and do not grant execution capability.
+    return [str(item).strip() for item in report.get("changed_files", []) if str(item).strip()]
+
+
+def _project_state_missing_fields(
+    *,
+    lane: dict[str, Any],
+    report: dict[str, Any],
+    risks: list[str],
+    artifact_links: list[str],
+) -> list[str]:
+    missing: list[str] = []
+    if not lane:
+        missing.append("latest_lane")
+    if not report.get("summary"):
+        missing.append("latest_jenny_report")
+    if not report.get("result"):
+        missing.append("latest_result")
+    if not risks:
+        missing.append("risks_blockers")
+    if not artifact_links:
+        missing.append("artifact_links")
+    return missing
+
+
 def _project_state_projection(limit: int) -> list[dict[str, Any]]:
     projects = _latest_workspace_records(ProjectRecord, limit)
     lanes = _latest_workspace_records(LaneRequestRecord, limit)
@@ -590,7 +626,10 @@ def _project_state_projection(limit: int) -> list[dict[str, Any]]:
         lane = lane_item.get("record", {}) if lane_item else {}
         report = report_item.get("record", {}) if report_item else {}
         risks = report.get("risks") or []
-        last_updated = (
+        artifact_links = _project_state_artifact_links(report)
+        has_real_report = bool(report.get("summary") or report.get("result"))
+        latest_activity_source = "report" if has_real_report else "lane" if lane else "project"
+        latest_activity_at = (
             report.get("created_at")
             or lane.get("updated_at")
             or lane.get("created_at")
@@ -611,7 +650,17 @@ def _project_state_projection(limit: int) -> list[dict[str, Any]]:
             "latest_result": report.get("result", ""),
             "risks_blockers": risks,
             "next_recommended_lane": report.get("next_recommended_lane") or project.get("next_recommended_lane", ""),
-            "last_updated": last_updated,
+            "last_updated": latest_activity_at,
+            "latest_activity_at": latest_activity_at,
+            "latest_activity_source": latest_activity_source,
+            "has_real_report": has_real_report,
+            "missing_state_fields": _project_state_missing_fields(
+                lane=lane,
+                report=report,
+                risks=risks,
+                artifact_links=artifact_links,
+            ),
+            "artifact_links": artifact_links,
             "source_record_indexes": {
                 "project": item.get("record_index"),
                 "lane_request": lane_item.get("record_index") if lane_item else None,
@@ -700,6 +749,7 @@ def _build_jenny_report_record(payload: dict[str, Any]) -> JennyReportRecord:
             "manual_copy_only": True,
             "send_to_jenny_enabled": False,
             "dispatch_enabled": False,
+            "artifact_links": _workspace_list(payload.get("artifact_links")),
         },
     )
 

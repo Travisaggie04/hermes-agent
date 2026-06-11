@@ -7,6 +7,7 @@ const WORKSPACE_STATUS_URL = "/api/plugins/mission-control-governance/workspace-
 const WORKSPACE_PROJECTS_URL = "/api/plugins/mission-control-governance/workspace/projects";
 const WORKSPACE_LANE_REQUESTS_URL = "/api/plugins/mission-control-governance/workspace/lane-requests";
 const WORKSPACE_REPORTS_URL = "/api/plugins/mission-control-governance/workspace/reports";
+const WORKSPACE_REPORTS_CREATE_URL = "/api/plugins/mission-control-governance/workspace/reports/create";
 const WORKSPACE_PROJECT_STATE_URL = "/api/plugins/mission-control-governance/workspace/project-state";
 
 const REAL_PROJECT_IDS = [
@@ -63,6 +64,8 @@ interface LaneRequestRecord {
 
 interface ReportRecord {
   blockers?: string[];
+  changed_files?: string[];
+  metadata?: { artifact_links?: string[]; [key: string]: unknown };
   project_id?: string;
   result?: string;
   risks?: string[];
@@ -71,12 +74,18 @@ interface ReportRecord {
 }
 
 interface ProjectStateRecord {
+  artifact_links?: string[];
   blockers?: string[];
   current_goal?: string;
+  has_real_report?: boolean;
+  latest_activity_at?: string;
+  latest_activity_source?: string;
+  latest_jenny_report?: ReportRecord;
   latest_lane_objective?: string;
   latest_lane_title?: string;
   latest_report_summary?: string;
   latest_result?: string;
+  missing_state_fields?: string[];
   next_recommended_lane?: string;
   project_id?: string;
   risks?: string[];
@@ -101,15 +110,40 @@ interface CompactSnapshot {
 }
 
 interface ProjectViewModel {
+  artifactLinks: string;
   blockers: string;
   currentGoal: string;
+  freshness: string;
+  latestActivity: string;
+  latestLane: string;
   latestReport: string;
   latestResult: string;
+  missingFields: string;
   nextLane: string;
   project: ProjectRecord;
   risks: string;
   status: string;
 }
+
+interface ReportFormState {
+  artifactLinks: string;
+  changedFiles: string;
+  nextRecommendedLane: string;
+  projectId: string;
+  result: string;
+  risks: string;
+  summary: string;
+}
+
+const EMPTY_REPORT_FORM: ReportFormState = {
+  artifactLinks: "",
+  changedFiles: "",
+  nextRecommendedLane: "",
+  projectId: "",
+  result: "",
+  risks: "",
+  summary: "",
+};
 
 function unwrapRecords<T>(items: Array<WrappedRecord<T> | T> | undefined): T[] {
   if (!Array.isArray(items)) return [];
@@ -122,6 +156,17 @@ function text(value: string | undefined, fallback: string): string {
 
 function listText(values: string[] | undefined, fallback: string): string {
   return Array.isArray(values) && values.length ? values.filter(Boolean).join("; ") : fallback;
+}
+
+function lineList(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+function artifactText(state: ProjectStateRecord | undefined, report: ReportRecord | undefined): string {
+  return listText(state?.artifact_links ?? report?.metadata?.artifact_links ?? report?.changed_files, "No artifact/report links recorded");
 }
 
 function projectRank(project: ProjectRecord): number {
@@ -151,10 +196,15 @@ function viewModelForProject(snapshot: CompactSnapshot, project: ProjectRecord):
   const blockerValues = state?.blockers ?? report?.blockers;
 
   return {
+    artifactLinks: artifactText(state, report),
     blockers: listText(blockerValues, "No blockers recorded"),
     currentGoal: text(state?.current_goal ?? project.current_goal, "No current goal recorded"),
-    latestReport: text(state?.latest_report_summary ?? report?.summary ?? project.latest_report_summary, "No report yet"),
-    latestResult: text(state?.latest_result ?? report?.result ?? project.latest_result, "No result yet"),
+    freshness: state?.has_real_report ? "Live report available" : "Seed only — needs first report",
+    latestActivity: text(state?.latest_activity_at, "No activity time recorded"),
+    latestLane: text(state?.latest_lane_title ?? lane?.title, "No lane recorded"),
+    latestReport: text(state?.latest_report_summary || report?.summary || project.latest_report_summary, "No report yet"),
+    latestResult: text(state?.latest_result || report?.result || project.latest_result, "No result yet"),
+    missingFields: listText(state?.missing_state_fields, "None — report state is current"),
     nextLane: text(state?.next_recommended_lane ?? report?.next_recommended_lane ?? project.next_recommended_lane ?? lane?.title, "No recommended lane yet"),
     project,
     risks: listText(riskValues, "No risks recorded"),
@@ -213,6 +263,9 @@ export default function MissionControlCompactPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [copiedProjectId, setCopiedProjectId] = useState("");
+  const [reportForm, setReportForm] = useState<ReportFormState>(EMPTY_REPORT_FORM);
+  const [reportMessage, setReportMessage] = useState("");
+  const [savingReport, setSavingReport] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -247,6 +300,42 @@ export default function MissionControlCompactPage() {
     setCopiedProjectId(projectView.project.project_id);
   }
 
+  function updateReportField(field: keyof ReportFormState, value: string) {
+    setReportForm(current => ({ ...current, [field]: value }));
+  }
+
+  async function saveManualReport() {
+    if (!reportForm.projectId || !reportForm.summary.trim()) {
+      setReportMessage("Choose a project and enter a report summary before saving.");
+      return;
+    }
+    setSavingReport(true);
+    setReportMessage("");
+    try {
+      await fetchJSON(WORKSPACE_REPORTS_CREATE_URL, {
+        body: JSON.stringify({
+          artifact_links: lineList(reportForm.artifactLinks),
+          changed_files: lineList(reportForm.changedFiles),
+          next_recommended_lane: reportForm.nextRecommendedLane.trim() || undefined,
+          project_id: reportForm.projectId,
+          result: reportForm.result.trim() || undefined,
+          risks: lineList(reportForm.risks),
+          summary: reportForm.summary.trim(),
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const nextSnapshot = await loadCompactSnapshot();
+      setSnapshot(nextSnapshot);
+      setReportForm({ ...EMPTY_REPORT_FORM, projectId: reportForm.projectId });
+      setReportMessage("Jenny report saved manually. Send to Jenny remains disabled.");
+    } catch (err) {
+      setReportMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingReport(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-background px-3 py-4 text-foreground sm:px-5" data-testid="mission-control-compact-route">
       <header className="sticky top-0 z-10 -mx-3 border-b border-border/70 bg-background/95 px-3 pb-3 pt-1 backdrop-blur sm:-mx-5 sm:px-5">
@@ -266,6 +355,17 @@ export default function MissionControlCompactPage() {
       {error ? <p className="mt-4 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</p> : null}
 
       {snapshot ? <SafetyStrip status={snapshot.workspaceStatus} /> : null}
+
+      {snapshot ? (
+        <CompactReportIngestion
+          form={reportForm}
+          message={reportMessage}
+          onChange={updateReportField}
+          onSave={() => void saveManualReport()}
+          projects={realProjects}
+          saving={savingReport}
+        />
+      ) : null}
 
       <section className="mt-4 grid gap-3" aria-label="Five real Mission Control projects">
         {snapshot && realProjects.length !== 5 ? (
@@ -294,6 +394,59 @@ export default function MissionControlCompactPage() {
         </section>
       ) : null}
     </main>
+  );
+}
+
+function CompactReportIngestion({
+  form,
+  message,
+  onChange,
+  onSave,
+  projects,
+  saving,
+}: {
+  form: ReportFormState;
+  message: string;
+  onChange: (field: keyof ReportFormState, value: string) => void;
+  onSave: () => void;
+  projects: ProjectRecord[];
+  saving: boolean;
+}) {
+  return (
+    <section className="mt-4 rounded-2xl border border-border/70 bg-card p-3" aria-label="Manual Jenny report ingestion compact">
+      <h2 className="text-sm font-semibold">Save Jenny report manually</h2>
+      <p className="mt-1 text-[0.68rem] text-muted-foreground">Append-only reports/create only. Send to Jenny disabled; no dispatch or queue routing.</p>
+      <label className="mt-3 grid gap-1 text-xs font-medium">
+        Project
+        <select className="rounded-xl border border-border/80 bg-background px-3 py-2 text-sm" onChange={event => onChange("projectId", event.target.value)} value={form.projectId}>
+          <option value="">Choose a real project</option>
+          {projects.map(project => (
+            <option key={project.project_id} value={project.project_id}>
+              {project.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <CompactReportInput label="Report summary" onChange={value => onChange("summary", value)} value={form.summary} />
+      <CompactReportInput label="Latest result" onChange={value => onChange("result", value)} value={form.result} />
+      <CompactReportInput label="Risks/blockers — one per line" onChange={value => onChange("risks", value)} value={form.risks} />
+      <CompactReportInput label="Artifact/report links — one per line" onChange={value => onChange("artifactLinks", value)} value={form.artifactLinks} />
+      <CompactReportInput label="Changed files/evidence — one per line" onChange={value => onChange("changedFiles", value)} value={form.changedFiles} />
+      <CompactReportInput label="Next recommended lane" onChange={value => onChange("nextRecommendedLane", value)} value={form.nextRecommendedLane} />
+      <button className="mt-3 w-full rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onSave} type="button">
+        {saving ? "Saving report…" : "Save Jenny report manually"}
+      </button>
+      {message ? <p className="mt-2 text-xs text-muted-foreground">{message}</p> : null}
+    </section>
+  );
+}
+
+function CompactReportInput({ label, onChange, value }: { label: string; onChange: (value: string) => void; value: string }) {
+  return (
+    <label className="mt-3 grid gap-1 text-xs font-medium">
+      {label}
+      <textarea className="min-h-16 rounded-xl border border-border/80 bg-background px-3 py-2 text-sm" onChange={event => onChange(event.target.value)} value={value} />
+    </label>
   );
 }
 
@@ -332,9 +485,14 @@ function CompactProjectCard({ copied, onCopy, projectView }: { copied: boolean; 
         <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">compact</span>
       </div>
       <CompactField label="status" value={projectView.status} />
+      <CompactField label="freshness" value={projectView.freshness} />
+      <CompactField label="latest lane" value={projectView.latestLane} />
       <CompactField label="next recommended lane" value={projectView.nextLane} />
       <CompactField label="latest report/result" value={`${projectView.latestReport} / ${projectView.latestResult}`} />
       <CompactField label="risks/blockers" value={`${projectView.risks} / ${projectView.blockers}`} />
+      <CompactField label="last action time" value={projectView.latestActivity} />
+      <CompactField label="artifact/report links" value={projectView.artifactLinks} />
+      <CompactField label="missing state" value={projectView.missingFields} />
       <button className="mt-3 w-full rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted" onClick={onCopy} type="button">
         {copied ? "Prompt copied" : "Copy next lane prompt"}
       </button>

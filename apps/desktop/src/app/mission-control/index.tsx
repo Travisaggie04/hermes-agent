@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import {
+  createMissionControlReport,
   getMissionControlLaneRequests,
   getMissionControlProjects,
   getMissionControlProjectState,
@@ -64,6 +65,25 @@ function listText(values: unknown, fallback = 'None recorded'): string {
   return values.map(item => String(item)).filter(Boolean).join(', ') || fallback
 }
 
+function lineList(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+function reportArtifactLinks(report: MissionControlReportRecord | null, state: MissionControlProjectState | null): string[] {
+  return state?.artifact_links ?? report?.metadata?.artifact_links ?? report?.changed_files ?? []
+}
+
+function freshnessLabel(state: MissionControlProjectState | null): string {
+  if (state?.has_real_report) {
+    return 'Live report available'
+  }
+
+  return 'Seed only — needs first report'
+}
+
 function truncate(value: string, maxChars: number): string {
   if (value.length <= maxChars) {
     return value
@@ -121,11 +141,39 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
 }
 
 interface ProjectRenderModel {
+  artifactLinks: string[]
   blockers: unknown
+  latestActivityAt: string
+  latestActivitySource: string
   latestReportSummary: string
   latestResult: string
+  missingStateFields: string[]
   nextLane: string
   risks: unknown
+}
+
+interface ReportFormState {
+  projectId: string
+  laneRequestId: string
+  summary: string
+  result: string
+  risks: string
+  changedFiles: string
+  tests: string
+  artifactLinks: string
+  nextRecommendedLane: string
+}
+
+const emptyReportForm: ReportFormState = {
+  artifactLinks: '',
+  changedFiles: '',
+  laneRequestId: '',
+  nextRecommendedLane: '',
+  projectId: '',
+  result: '',
+  risks: '',
+  summary: '',
+  tests: ''
 }
 
 function projectRenderModel(
@@ -134,11 +182,15 @@ function projectRenderModel(
   state: MissionControlProjectState | null
 ): ProjectRenderModel {
   return {
+    artifactLinks: reportArtifactLinks(report, state),
     blockers: state?.blockers ?? report?.blockers,
-    latestReportSummary: text(state?.latest_report_summary ?? report?.summary, 'No report yet'),
-    latestResult: text(state?.latest_result ?? report?.result, 'No result yet'),
+    latestActivityAt: text(state?.latest_activity_at, 'No activity time recorded'),
+    latestActivitySource: text(state?.latest_activity_source, 'project'),
+    latestReportSummary: text(state?.latest_report_summary || report?.summary, 'No report yet'),
+    latestResult: text(state?.latest_result || report?.result, 'No result yet'),
+    missingStateFields: state?.missing_state_fields ?? [],
     nextLane: text(state?.next_recommended_lane ?? report?.next_recommended_lane ?? project.next_recommended_lane, 'No recommended lane yet'),
-    risks: state?.risks ?? report?.risks
+    risks: state?.risks ?? state?.risks_blockers ?? report?.risks
   }
 }
 
@@ -246,11 +298,32 @@ Send to Jenny remains disabled; paste manually only after review.`
   return truncate(prompt, MAX_COPY_PROMPT_CHARS)
 }
 
+async function loadMissionControlSnapshot(): Promise<MissionControlSnapshot> {
+  const [workspaceStatus, projects, laneRequests, reports, projectState] = await Promise.all([
+    getMissionControlWorkspaceStatus(),
+    getMissionControlProjects(),
+    getMissionControlLaneRequests(),
+    getMissionControlReports(),
+    getMissionControlProjectState()
+  ])
+
+  return {
+    laneRequests: unwrapRecords(laneRequests.lane_requests),
+    projects: unwrapRecords(projects.projects),
+    projectStates: projectState.project_states ?? [],
+    reports: unwrapRecords(reports.reports),
+    workspaceStatus
+  }
+}
+
 export function MissionControlView() {
   const [snapshot, setSnapshot] = useState<MissionControlSnapshot>(emptySnapshot)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [copiedProjectId, setCopiedProjectId] = useState('')
+  const [reportForm, setReportForm] = useState<ReportFormState>(emptyReportForm)
+  const [reportSaving, setReportSaving] = useState(false)
+  const [reportMessage, setReportMessage] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -259,26 +332,13 @@ export function MissionControlView() {
       try {
         setLoading(true)
         setError('')
-
-        const [workspaceStatus, projects, laneRequests, reports, projectState] = await Promise.all([
-          getMissionControlWorkspaceStatus(),
-          getMissionControlProjects(),
-          getMissionControlLaneRequests(),
-          getMissionControlReports(),
-          getMissionControlProjectState()
-        ])
+        const nextSnapshot = await loadMissionControlSnapshot()
 
         if (cancelled) {
           return
         }
 
-        setSnapshot({
-          laneRequests: unwrapRecords(laneRequests.lane_requests),
-          projects: unwrapRecords(projects.projects),
-          projectStates: projectState.project_states ?? [],
-          reports: unwrapRecords(reports.reports),
-          workspaceStatus
-        })
+        setSnapshot(nextSnapshot)
       } catch (err) {
         if (!cancelled) {
           setError(String(err instanceof Error ? err.message : err))
@@ -307,10 +367,46 @@ export function MissionControlView() {
 
   async function copyPrompt(project: MissionControlProjectRecord) {
     const state = stateForProject(project, snapshot.projectStates)
-    const report = state?.latest_report ?? latestReportForProject(project.project_id, snapshot.reports)
+    const report = state?.latest_report ?? state?.latest_jenny_report ?? latestReportForProject(project.project_id, snapshot.reports)
     const prompt = buildMissionControlCopyPrompt({ project, report, state, status })
     await navigator.clipboard?.writeText(prompt)
     setCopiedProjectId(project.project_id)
+  }
+
+  function updateReportField(field: keyof ReportFormState, value: string) {
+    setReportForm(current => ({ ...current, [field]: value }))
+  }
+
+  async function saveManualReport() {
+    if (!reportForm.projectId || !reportForm.summary.trim()) {
+      setReportMessage('Choose a project and enter a report summary before saving.')
+
+      return
+    }
+
+    setReportSaving(true)
+    setReportMessage('')
+
+    try {
+      await createMissionControlReport({
+        artifact_links: lineList(reportForm.artifactLinks),
+        changed_files: lineList(reportForm.changedFiles),
+        lane_request_id: reportForm.laneRequestId.trim() || undefined,
+        next_recommended_lane: reportForm.nextRecommendedLane.trim() || undefined,
+        project_id: reportForm.projectId,
+        result: reportForm.result.trim() || undefined,
+        risks: lineList(reportForm.risks),
+        summary: reportForm.summary.trim(),
+        tests: lineList(reportForm.tests)
+      })
+      setReportForm({ ...emptyReportForm, projectId: reportForm.projectId })
+      setReportMessage('Jenny report saved manually. Send to Jenny is still disabled.')
+      setSnapshot(await loadMissionControlSnapshot())
+    } catch (err) {
+      setReportMessage(String(err instanceof Error ? err.message : err))
+    } finally {
+      setReportSaving(false)
+    }
   }
 
   return (
@@ -337,6 +433,15 @@ export function MissionControlView() {
 
       <WorkspaceStatusPanel status={status} />
 
+      <ManualReportIngestion
+        form={reportForm}
+        message={reportMessage}
+        onChange={updateReportField}
+        onSave={() => void saveManualReport()}
+        projects={realProjects}
+        saving={reportSaving}
+      />
+
       <section className="mt-5">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
           <div>
@@ -361,7 +466,7 @@ export function MissionControlView() {
                   lane={state?.latest_lane_request ?? latestLaneForProject(project.project_id, snapshot.laneRequests)}
                   onCopy={() => void copyPrompt(project)}
                   project={project}
-                  report={state?.latest_report ?? latestReportForProject(project.project_id, snapshot.reports)}
+                  report={state?.latest_report ?? state?.latest_jenny_report ?? latestReportForProject(project.project_id, snapshot.reports)}
                   state={state}
                   status={status}
                 />
@@ -385,6 +490,101 @@ export function MissionControlView() {
         </section>
       ) : null}
     </section>
+  )
+}
+
+function ManualReportIngestion({
+  form,
+  message,
+  onChange,
+  onSave,
+  projects,
+  saving
+}: {
+  form: ReportFormState
+  message: string
+  onChange: (field: keyof ReportFormState, value: string) => void
+  onSave: () => void
+  projects: MissionControlProjectRecord[]
+  saving: boolean
+}) {
+  return (
+    <section aria-label="Manual Jenny report ingestion" className="mt-5 rounded-xl border border-border/70 bg-background/50 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold">Manual Jenny report ingestion</h2>
+          <p className="text-xs text-muted-foreground">
+            Append-only report save for real project state. Send to Jenny remains disabled; this does not dispatch work.
+          </p>
+        </div>
+        <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-xs text-blue-700 dark:text-blue-300">
+          POST allowed only: reports/create
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <label className="grid gap-1 text-xs font-medium">
+          Project
+          <select
+            className="rounded-md border border-border/80 bg-background px-3 py-2 text-sm"
+            onChange={event => onChange('projectId', event.target.value)}
+            value={form.projectId}
+          >
+            <option value="">Choose one of five real projects</option>
+            {projects.map(project => (
+              <option key={project.project_id} value={project.project_id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <ReportInput label="Optional lane request ID" onChange={value => onChange('laneRequestId', value)} value={form.laneRequestId} />
+        <ReportInput label="Jenny report summary" onChange={value => onChange('summary', value)} required value={form.summary} />
+        <ReportInput label="Latest result" onChange={value => onChange('result', value)} value={form.result} />
+        <ReportInput label="Risks/blockers — one per line" onChange={value => onChange('risks', value)} value={form.risks} />
+        <ReportInput label="Artifact/report links — one per line" onChange={value => onChange('artifactLinks', value)} value={form.artifactLinks} />
+        <ReportInput label="Changed files or evidence paths — one per line" onChange={value => onChange('changedFiles', value)} value={form.changedFiles} />
+        <ReportInput label="Tests/checks — one per line" onChange={value => onChange('tests', value)} value={form.tests} />
+        <ReportInput className="lg:col-span-2" label="Next recommended lane" onChange={value => onChange('nextRecommendedLane', value)} value={form.nextRecommendedLane} />
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button
+          className="rounded-md border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60"
+          disabled={saving}
+          onClick={onSave}
+          type="button"
+        >
+          {saving ? 'Saving report…' : 'Save Jenny report manually'}
+        </button>
+        <span className="text-xs text-muted-foreground">Manual-copy only · no session send · no queue mutation · no model routing</span>
+      </div>
+      {message ? <p className="mt-2 text-sm text-muted-foreground">{message}</p> : null}
+    </section>
+  )
+}
+
+function ReportInput({
+  className,
+  label,
+  onChange,
+  required,
+  value
+}: {
+  className?: string
+  label: string
+  onChange: (value: string) => void
+  required?: boolean
+  value: string
+}) {
+  return (
+    <label className={cn('grid gap-1 text-xs font-medium', className)}>
+      {label}
+      <textarea
+        className="min-h-20 rounded-md border border-border/80 bg-background px-3 py-2 text-sm"
+        onChange={event => onChange(event.target.value)}
+        required={required}
+        value={value}
+      />
+    </label>
   )
 }
 
@@ -433,11 +633,15 @@ function ProjectCard({
       </div>
       <Field label="status" value={state?.status ?? project.status} />
       <Field label="current goal" value={state?.current_goal ?? project.current_goal} />
+      <Field label="freshness" value={freshnessLabel(state)} />
+      <Field label="latest lane" value={lane ? `${lane.title}${lane.status ? ` (${lane.status})` : ''}${lane.objective ? ` — ${lane.objective}` : ''}` : 'No draft lane request recorded'} />
       <Field label="latest Jenny report summary" value={model.latestReportSummary} />
       <Field label="latest result" value={model.latestResult} />
       <Field label="risks/blockers" value={risksBlockers} />
+      <Field label="last action time" value={`${model.latestActivityAt} (${model.latestActivitySource})`} />
+      <Field label="artifact/report links" value={listText(model.artifactLinks, 'No artifact/report links recorded')} />
+      <Field label="missing state fields" value={listText(model.missingStateFields, 'None — report state is current')} />
       <Field label="next recommended lane" value={model.nextLane} />
-      <Field label="lane request draft" value={lane ? `${lane.title}${lane.status ? ` (${lane.status})` : ''}` : 'No draft lane request recorded'} />
       <Field label="source of truth" value={project.source_of_truth} />
       <div className="grid gap-2 rounded-lg border border-border/70 bg-background/60 p-3 text-xs text-muted-foreground sm:grid-cols-3">
         <span>send_to_jenny: disabled</span>
