@@ -26,6 +26,7 @@ from mission_control.records import (
     OperatingWorkspaceHandoffRecord,
     OperatorAction,
     ProjectRecord,
+    SessionProjectLinkRecord,
     StartGateCheck,
     TaskControlEnvelope,
     VerifierWorkflowEvidenceRecord,
@@ -246,6 +247,181 @@ def test_workspace_jenny_report_api_creates_lists_and_stays_inert(plugin_api, cl
     assert listed.status_code == 200
     assert listed.json()["count"] == 1
     assert listed.json()["reports"][0]["record"]["summary"] == "Jenny completed the read-only status refresh."
+
+
+def test_session_project_link_record_serializes_deserializes():
+    record = SessionProjectLinkRecord(
+        link_id="link-1",
+        project_id="project-hermes",
+        session_id="session-tip",
+        lineage_root_id="session-root",
+        profile="default",
+        source="discord",
+        title_snapshot="Mission Control status",
+        cwd_snapshot="/tmp/hermes",
+        linked_at="2026-06-12T00:00:00Z",
+        linked_by="Travis",
+        link_method="manual",
+        confidence="manual",
+        status="active",
+        metadata={"manual_copy_only": True},
+    )
+
+    payload = record.to_dict()
+    assert payload["session_id"] == "session-tip"
+    assert payload["lineage_root_id"] == "session-root"
+    assert record.durable_session_id == "session-root"
+
+    decoded = SessionProjectLinkRecord.from_dict(payload)
+    assert decoded == record
+    assert decoded.durable_session_id == "session-root"
+
+
+def test_workspace_session_project_link_api_and_projection_rules(plugin_api, client, monkeypatch):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(ProjectRecord(project_id="project-hermes", name="Hermes / Mission Control"))
+    store.append(ProjectRecord(project_id="project-tool-tally", name="Tool & Tally"))
+    monkeypatch.setattr(
+        plugin_api,
+        "_read_profile_sessions_for_project_links",
+        lambda limit: (
+            [
+                {
+                    "id": "session-tip",
+                    "_lineage_root_id": "session-root",
+                    "profile": "default",
+                    "source": "discord",
+                    "title": "Mission Control lane",
+                    "preview": "Hermes Mission Control work",
+                    "cwd": "/home/jenny/.hermes/runtime",
+                    "started_at": 1,
+                    "last_active": 10,
+                    "message_count": 5,
+                },
+                {
+                    "id": "session-tool",
+                    "profile": "no-call-estimateready",
+                    "source": "discord",
+                    "title": "Tool & Tally safety",
+                    "preview": "read-only status",
+                    "cwd": "",
+                    "started_at": 2,
+                    "last_active": 9,
+                    "message_count": 3,
+                },
+            ],
+            [{"profile": "old-profile", "error": "no such column: s.archived"}],
+        ),
+    )
+
+    create = client.post(
+        "/api/plugins/mission-control-governance/workspace/session-project-links/create",
+        json={
+            "project_id": "project-hermes",
+            "session_id": "session-tip",
+            "lineage_root_id": "session-root",
+            "profile": "default",
+            "source": "discord",
+            "title": "Mission Control lane",
+        },
+    )
+
+    assert create.status_code == 200
+    payload = create.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["manual_copy_only"] is True
+    assert payload["send_to_jenny_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["stored"] is True
+    assert payload["record_type"] == "SessionProjectLinkRecord"
+    assert payload["session_project_link"]["durable_session_id"] == "session-root"
+    assert payload["session_project_link"]["metadata"]["auto_inferred"] is False
+
+    links = client.get("/api/plugins/mission-control-governance/workspace/session-project-links")
+    assert links.status_code == 200
+    assert links.json()["count"] == 1
+
+    grouped = client.get("/api/plugins/mission-control-governance/workspace/project-sessions")
+    assert grouped.status_code == 200
+    grouped_payload = grouped.json()
+    assert grouped_payload["stored"] is False
+    assert grouped_payload["send_to_jenny_enabled"] is False
+    assert grouped_payload["dispatch_enabled"] is False
+    assert grouped_payload["errors"] == [{"profile": "old-profile", "error": "no such column: s.archived"}]
+    groups = {item["project_id"]: item for item in grouped_payload["groups"]}
+    assert groups["project-hermes"]["linked_session_count"] == 1
+    linked = groups["project-hermes"]["sessions"][0]
+    assert linked["session_id"] == "session-tip"
+    assert linked["durable_session_id"] == "session-root"
+    assert linked["linked_project_id"] == "project-hermes"
+
+    unassigned = groups["unassigned-general"]
+    assert len(unassigned["sessions"]) == 1
+    assert unassigned["sessions"][0]["session_id"] == "session-tool"
+    assert unassigned["sessions"][0]["suggested_project_id"] == "project-tool-tally"
+    assert unassigned["sessions"][0]["linked_project_id"] == ""
+    assert unassigned["unassigned_suggestion_count"] == 1
+
+    state = client.get("/api/plugins/mission-control-governance/workspace/project-state")
+    assert state.status_code == 200
+    states = {item["project_id"]: item for item in state.json()["project_states"]}
+    assert states["project-hermes"]["linked_session_count"] == 1
+    assert states["project-hermes"]["recent_sessions"][0]["session_id"] == "session-tip"
+    assert states["project-tool-tally"]["linked_session_count"] == 0
+
+
+def test_session_project_link_latest_status_wins_and_removed_excluded(plugin_api, client, monkeypatch):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(ProjectRecord(project_id="project-hermes", name="Hermes / Mission Control"))
+    store.append(ProjectRecord(project_id="project-tool-tally", name="Tool & Tally"))
+    store.append(
+        SessionProjectLinkRecord(
+            link_id="old-link",
+            project_id="project-hermes",
+            session_id="session-tip",
+            lineage_root_id="session-root",
+            status="active",
+            linked_at="2026-06-12T00:00:00Z",
+        )
+    )
+    store.append(
+        SessionProjectLinkRecord(
+            link_id="new-link",
+            project_id="project-tool-tally",
+            session_id="session-tip",
+            lineage_root_id="session-root",
+            status="removed",
+            linked_at="2026-06-12T00:01:00Z",
+        )
+    )
+    monkeypatch.setattr(
+        plugin_api,
+        "_read_profile_sessions_for_project_links",
+        lambda limit: ([{"id": "session-tip", "_lineage_root_id": "session-root", "title": "Hermes", "started_at": 1, "last_active": 2}], []),
+    )
+
+    grouped = client.get("/api/plugins/mission-control-governance/workspace/project-sessions")
+    assert grouped.status_code == 200
+    groups = {item["project_id"]: item for item in grouped.json()["groups"]}
+    assert groups["project-hermes"]["linked_session_count"] == 0
+    assert groups["project-tool-tally"]["linked_session_count"] == 0
+    assert groups["unassigned-general"]["sessions"][0]["durable_session_id"] == "session-root"
+
+    store.append(
+        SessionProjectLinkRecord(
+            link_id="latest-link",
+            project_id="project-tool-tally",
+            session_id="session-tip",
+            lineage_root_id="session-root",
+            status="active",
+            linked_at="2026-06-12T00:02:00Z",
+        )
+    )
+    grouped = client.get("/api/plugins/mission-control-governance/workspace/project-sessions")
+    groups = {item["project_id"]: item for item in grouped.json()["groups"]}
+    assert groups["project-tool-tally"]["linked_session_count"] == 1
+    assert groups["project-tool-tally"]["sessions"][0]["link_record"]["link_id"] == "latest-link"
 
 
 def test_workspace_project_state_projection_is_read_only_and_derived(plugin_api, client):
@@ -1101,6 +1277,9 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/lane-requests/create": {"POST"},
         "/workspace/reports": {"GET"},
         "/workspace/reports/create": {"POST"},
+        "/workspace/session-project-links": {"GET"},
+        "/workspace/session-project-links/create": {"POST"},
+        "/workspace/project-sessions": {"GET"},
         "/workspace/project-state": {"GET"},
         "/records": {"GET"},
         "/schema": {"GET"},
@@ -1128,6 +1307,8 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/project-templates",
         "/workspace/lane-requests",
         "/workspace/reports",
+        "/workspace/session-project-links",
+        "/workspace/project-sessions",
         "/workspace/project-state",
         "/records",
         "/schema",

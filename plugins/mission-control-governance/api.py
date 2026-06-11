@@ -49,6 +49,7 @@ from mission_control.records import (
     OperatingWorkspaceHandoffRecord,
     OperatorAction,
     ProjectRecord,
+    SessionProjectLinkRecord,
     StartGateCheck,
     TaskControlEnvelope,
     VerifierWorkflowEvidenceRecord,
@@ -475,6 +476,12 @@ def _jenny_report_payload(record: JennyReportRecord) -> dict[str, Any]:
     return record.to_dict()
 
 
+def _session_project_link_payload(record: SessionProjectLinkRecord) -> dict[str, Any]:
+    payload = record.to_dict()
+    payload["durable_session_id"] = record.durable_session_id
+    return payload
+
+
 def _workspace_record_payload(record: Any) -> dict[str, Any]:
     if isinstance(record, ProjectRecord):
         return _project_payload(record)
@@ -482,6 +489,8 @@ def _workspace_record_payload(record: Any) -> dict[str, Any]:
         return _lane_request_payload(record)
     if isinstance(record, JennyReportRecord):
         return _jenny_report_payload(record)
+    if isinstance(record, SessionProjectLinkRecord):
+        return _session_project_link_payload(record)
     return _record_payload(record)
 
 
@@ -602,6 +611,11 @@ def _project_state_projection(limit: int) -> list[dict[str, Any]]:
     projects = _latest_workspace_records(ProjectRecord, limit)
     lanes = _latest_workspace_records(LaneRequestRecord, limit)
     reports = _latest_workspace_records(JennyReportRecord, limit)
+    project_session_summary = _project_sessions_projection(limit)
+    session_group_by_project = {
+        group.get("project_id", ""): group
+        for group in project_session_summary.get("groups", [])
+    }
 
     latest_lane_by_project: dict[str, dict[str, Any]] = {}
     for item in lanes:
@@ -637,6 +651,8 @@ def _project_state_projection(limit: int) -> list[dict[str, Any]]:
             or project.get("created_at")
             or ""
         )
+        session_group = session_group_by_project.get(project_id, {})
+        recent_sessions = session_group.get("sessions", [])[:3]
         states.append({
             "project_id": project_id,
             "name": project.get("name", project_id),
@@ -661,6 +677,9 @@ def _project_state_projection(limit: int) -> list[dict[str, Any]]:
                 artifact_links=artifact_links,
             ),
             "artifact_links": artifact_links,
+            "linked_session_count": session_group.get("linked_session_count", 0),
+            "recent_sessions": recent_sessions,
+            "unassigned_suggestion_count": session_group.get("unassigned_suggestion_count", 0),
             "source_record_indexes": {
                 "project": item.get("record_index"),
                 "lane_request": lane_item.get("record_index") if lane_item else None,
@@ -668,6 +687,206 @@ def _project_state_projection(limit: int) -> list[dict[str, Any]]:
             },
         })
     return states
+
+
+def _session_durable_id(session: dict[str, Any]) -> str:
+    return str(session.get("_lineage_root_id") or session.get("lineage_root_id") or session.get("id") or "")
+
+
+def _session_title(session: dict[str, Any]) -> str:
+    return str(session.get("title") or session.get("preview") or session.get("id") or "").strip()
+
+
+def _build_session_project_link_record(payload: dict[str, Any]) -> SessionProjectLinkRecord:
+    project_id = _workspace_text(payload.get("project_id"), max_chars=120)
+    session_id = _workspace_text(payload.get("session_id"), max_chars=160)
+    if not project_id:
+        raise HTTPException(status_code=422, detail="project_id is required")
+    if not session_id:
+        raise HTTPException(status_code=422, detail="session_id is required")
+    status = _workspace_text(payload.get("status"), max_chars=40) or "active"
+    if status not in {"active", "removed", "superseded"}:
+        raise HTTPException(status_code=422, detail="status must be active, removed, or superseded")
+    link_method = _workspace_text(payload.get("link_method"), max_chars=40) or "manual"
+    if link_method not in {"manual", "suggested", "seeded"}:
+        raise HTTPException(status_code=422, detail="link_method must be manual, suggested, or seeded")
+    now = _utc_now()
+    return SessionProjectLinkRecord(
+        link_id=_workspace_text(payload.get("link_id"), max_chars=120) or f"session-project-link-{uuid.uuid4().hex[:12]}",
+        project_id=project_id,
+        session_id=session_id,
+        lineage_root_id=_workspace_text(payload.get("lineage_root_id") or payload.get("_lineage_root_id"), max_chars=160),
+        profile=_workspace_text(payload.get("profile"), max_chars=80),
+        source=_workspace_text(payload.get("source"), max_chars=80),
+        title_snapshot=_workspace_text(payload.get("title_snapshot") or payload.get("title"), max_chars=240),
+        cwd_snapshot=_workspace_text(payload.get("cwd_snapshot") or payload.get("cwd"), max_chars=240),
+        linked_at=_workspace_text(payload.get("linked_at"), max_chars=80) or now,
+        linked_by=_workspace_text(payload.get("linked_by"), max_chars=120) or "manual-operator",
+        link_method=link_method,
+        confidence=_workspace_text(payload.get("confidence"), max_chars=80) or "manual",
+        status=status,
+        metadata={
+            "source": "mission_control_session_project_link_backend_v1",
+            "manual_copy_only": True,
+            "send_to_jenny_enabled": False,
+            "dispatch_enabled": False,
+            "auto_inferred": False,
+        },
+    )
+
+
+def _active_session_project_links(limit: int) -> dict[str, dict[str, Any]]:
+    latest_by_durable: dict[str, dict[str, Any]] = {}
+    links = _latest_workspace_records(SessionProjectLinkRecord, limit)
+    for item in reversed(links):
+        record = item.get("record", {})
+        durable = str(record.get("durable_session_id") or record.get("lineage_root_id") or record.get("session_id") or "")
+        if not durable or durable in latest_by_durable:
+            continue
+        latest_by_durable[durable] = item
+    return {
+        durable: item
+        for durable, item in latest_by_durable.items()
+        if item.get("record", {}).get("status", "active") == "active"
+    }
+
+
+def _session_projection_payload(session: dict[str, Any], *, link: dict[str, Any] | None = None, suggested_project_id: str = "") -> dict[str, Any]:
+    return {
+        "session_id": session.get("id", ""),
+        "durable_session_id": _session_durable_id(session),
+        "lineage_root_id": session.get("_lineage_root_id") or session.get("lineage_root_id") or "",
+        "profile": session.get("profile") or "default",
+        "is_default_profile": bool(session.get("is_default_profile")),
+        "source": session.get("source") or "",
+        "title": session.get("title") or "",
+        "preview": session.get("preview") or "",
+        "cwd": session.get("cwd") or "",
+        "started_at": session.get("started_at"),
+        "last_active": session.get("last_active") or session.get("started_at"),
+        "message_count": session.get("message_count") or 0,
+        "tool_call_count": session.get("tool_call_count") or 0,
+        "linked_project_id": (link or {}).get("project_id", ""),
+        "link_record": link or {},
+        "suggested_project_id": suggested_project_id,
+    }
+
+
+def _suggest_project_id_for_session(session: dict[str, Any]) -> str:
+    profile = str(session.get("profile") or "").lower()
+    cwd = str(session.get("cwd") or "").lower()
+    title = str(session.get("title") or "").lower()
+    preview = str(session.get("preview") or "").lower()
+    haystack = " ".join([profile, cwd, title, preview])
+    if profile == "wahainspection" or "waha" in haystack or "es sider" in haystack:
+        return "project-waha-work"
+    if profile == "no-call-estimateready" or "tool & tally" in haystack or "tool-tally" in haystack or "estimateready" in haystack:
+        return "project-tool-tally"
+    if "shorts" in haystack or "reels" in haystack or "queue" in haystack:
+        return "project-shorts-video"
+    if "long-form" in haystack or "longform" in haystack or "moho" in haystack or "hyperframes" in haystack:
+        return "project-long-form-video"
+    if profile in {"default", "hermes-ops"} and ("mission control" in haystack or "hermes" in haystack or ".hermes" in cwd):
+        return "project-hermes-mission-control"
+    return ""
+
+
+def _read_profile_sessions_for_project_links(limit: int) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    sessions: list[dict[str, Any]] = []
+    errors: list[dict[str, str]] = []
+    try:
+        from hermes_state import SessionDB
+        from hermes_cli import profiles as profiles_mod
+    except Exception as exc:
+        return [], [{"profile": "all", "error": str(exc)}]
+    try:
+        targets = [(info.name, info.path) for info in profiles_mod.list_profiles()]
+    except Exception as exc:
+        errors.append({"profile": "all", "error": str(exc)})
+        targets = [("default", profiles_mod.get_profile_dir("default"))]
+    if not targets:
+        targets = [("default", profiles_mod.get_profile_dir("default"))]
+    per_profile = min(max(limit, 1), 100)
+    for profile_name, home in targets:
+        db_path = Path(home) / "state.db"
+        if not db_path.exists():
+            continue
+        try:
+            db = SessionDB(db_path=db_path, read_only=True)
+        except Exception as exc:
+            errors.append({"profile": profile_name, "error": str(exc)})
+            continue
+        try:
+            rows = db.list_sessions_rich(
+                limit=per_profile,
+                offset=0,
+                min_message_count=1,
+                include_archived=False,
+                archived_only=False,
+                order_by_last_active=True,
+            )
+        except Exception as exc:
+            # Older profile DBs may not have newer session columns such as
+            # archived. Treat those as non-fatal for Mission Control grouping:
+            # default/current profile sessions should still render.
+            errors.append({"profile": profile_name, "error": str(exc)})
+            continue
+        finally:
+            db.close()
+        for row in rows:
+            row["profile"] = profile_name
+            row["is_default_profile"] = profile_name == "default"
+            sessions.append(row)
+    sessions.sort(key=lambda item: item.get("last_active") or item.get("started_at") or 0, reverse=True)
+    return sessions[:limit], errors
+
+
+def _project_sessions_projection(limit: int) -> dict[str, Any]:
+    projects = _latest_workspace_records(ProjectRecord, limit)
+    project_ids = [item.get("record", {}).get("project_id", "") for item in projects]
+    active_links = _active_session_project_links(limit)
+    sessions, errors = _read_profile_sessions_for_project_links(limit)
+    groups = [
+        {
+            "project_id": item.get("record", {}).get("project_id", ""),
+            "name": item.get("record", {}).get("name", ""),
+            "sessions": [],
+            "linked_session_count": 0,
+            "unassigned_suggestion_count": 0,
+        }
+        for item in projects
+    ]
+    by_project = {group["project_id"]: group for group in groups}
+    unassigned = {
+        "project_id": "unassigned-general",
+        "name": "Unassigned / General",
+        "sessions": [],
+        "linked_session_count": 0,
+        "unassigned_suggestion_count": 0,
+    }
+    for session in sessions:
+        durable = _session_durable_id(session)
+        link_item = active_links.get(durable)
+        link = link_item.get("record", {}) if link_item else None
+        if link and link.get("project_id") in by_project:
+            payload = _session_projection_payload(session, link=link)
+            by_project[link["project_id"]]["sessions"].append(payload)
+            continue
+        suggested = _suggest_project_id_for_session(session)
+        payload = _session_projection_payload(session, suggested_project_id=suggested if suggested in project_ids else "")
+        unassigned["sessions"].append(payload)
+        if payload["suggested_project_id"]:
+            unassigned["unassigned_suggestion_count"] += 1
+    for group in groups:
+        group["linked_session_count"] = len(group["sessions"])
+        group["sessions"] = group["sessions"][:5]
+    unassigned["sessions"] = unassigned["sessions"][:10]
+    return {
+        "groups": groups + [unassigned],
+        "errors": errors,
+        "session_count": len(sessions),
+        "active_link_count": len(active_links),
+    }
 
 
 def _build_project_record(payload: dict[str, Any]) -> ProjectRecord:
@@ -2064,6 +2283,65 @@ async def workspace_lane_request_create(request: Request) -> dict[str, Any]:
         "record_index": index,
         "record_type": record.record_type,
         "lane_request": _lane_request_payload(record),
+    }
+
+
+@router.get("/workspace/session-project-links")
+async def workspace_session_project_links(
+    project_id: str | None = Query(default=None),
+    limit: str | None = Query(default=None),
+) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    safe_project_id = _workspace_text(project_id, max_chars=120) if project_id else ""
+    records = _latest_workspace_records(SessionProjectLinkRecord, applied_limit)
+    if safe_project_id:
+        records = [item for item in records if item.get("record", {}).get("project_id") == safe_project_id]
+    return {
+        **INERT_FLAGS,
+        "display_only": True,
+        "manual_copy_only": True,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "project_id": safe_project_id,
+        "count": len(records),
+        "session_project_links": records,
+    }
+
+
+@router.post("/workspace/session-project-links/create")
+async def workspace_session_project_link_create(request: Request) -> dict[str, Any]:
+    payload = await _read_workspace_json_body(request)
+    record = _build_session_project_link_record(payload)
+    index = JsonlRecordStore(record_store_path()).append(record)
+    return {
+        **INERT_FLAGS,
+        "stored": True,
+        "display_only": True,
+        "manual_copy_only": True,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "record_index": index,
+        "record_type": record.record_type,
+        "session_project_link": _session_project_link_payload(record),
+    }
+
+
+@router.get("/workspace/project-sessions")
+async def workspace_project_sessions(limit: str | None = Query(default=None)) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    projection = _project_sessions_projection(applied_limit)
+    return {
+        **INERT_FLAGS,
+        "display_only": True,
+        "manual_copy_only": True,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "stored": False,
+        "count": len(projection["groups"]),
+        "session_count": projection["session_count"],
+        "active_link_count": projection["active_link_count"],
+        "groups": projection["groups"],
+        "errors": projection["errors"],
     }
 
 

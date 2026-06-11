@@ -963,6 +963,70 @@ class OperatorAction:
 
 
 @dataclass(frozen=True)
+class SessionProjectLinkRecord:
+    link_id: str
+    project_id: str
+    session_id: str
+    lineage_root_id: str = ""
+    profile: str = ""
+    source: str = ""
+    title_snapshot: str = ""
+    cwd_snapshot: str = ""
+    linked_at: str = ""
+    linked_by: str = ""
+    link_method: str = "manual"
+    confidence: str = "manual"
+    status: str = "active"
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "SessionProjectLinkRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    @property
+    def durable_session_id(self) -> str:
+        return self.lineage_root_id or self.session_id
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "link_id": self.link_id,
+            "project_id": self.project_id,
+            "session_id": self.session_id,
+            "lineage_root_id": self.lineage_root_id,
+            "profile": self.profile,
+            "source": self.source,
+            "title_snapshot": self.title_snapshot,
+            "cwd_snapshot": self.cwd_snapshot,
+            "linked_at": self.linked_at,
+            "linked_by": self.linked_by,
+            "link_method": self.link_method,
+            "confidence": self.confidence,
+            "status": self.status,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SessionProjectLinkRecord:
+        return cls(
+            link_id=_required(data, "link_id"),
+            project_id=_required(data, "project_id"),
+            session_id=_required(data, "session_id"),
+            lineage_root_id=data.get("lineage_root_id", ""),
+            profile=data.get("profile", ""),
+            source=data.get("source", ""),
+            title_snapshot=data.get("title_snapshot", ""),
+            cwd_snapshot=data.get("cwd_snapshot", ""),
+            linked_at=data.get("linked_at", ""),
+            linked_by=data.get("linked_by", ""),
+            link_method=data.get("link_method", "manual"),
+            confidence=data.get("confidence", "manual"),
+            status=data.get("status", "active"),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
 class MissionBrief:
     mission_id: str
     title: str
@@ -1266,6 +1330,7 @@ RECORD_TYPES = {
         ProjectRecord,
         LaneRequestRecord,
         JennyReportRecord,
+        SessionProjectLinkRecord,
         MissionBrief,
         OperatingWorkspaceHandoffRecord,
         OperatorAction,
