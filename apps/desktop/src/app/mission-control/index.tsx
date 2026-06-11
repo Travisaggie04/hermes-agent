@@ -142,6 +142,69 @@ function projectRenderModel(
   }
 }
 
+interface ProjectLaneTemplate {
+  allowed: string
+  forbidden: string
+  objective: string
+  preflight: string
+  report: string
+  stop: string
+}
+
+const PROJECT_LANE_TEMPLATES: Record<string, ProjectLaneTemplate> = {
+  'project-hermes-mission-control': {
+    allowed: 'Read APIs, inspect Desktop/backend state, edit scoped Desktop source/tests only when implementation is explicitly approved.',
+    forbidden: 'No deploy, restart, runtime switch, records/config mutation, dispatch, queue/model routing, enforcement, hidden workers, or secrets.',
+    objective: 'Improve Mission Control as the primary Desktop workspace while keeping backend source-of-truth and manual-copy controls.',
+    preflight: 'Confirm accepted runtime/head, Runtime Worktree Guard=pass, dispatch=false, active_lane_count=0, stale_warnings=[].',
+    report: 'preflight, changed files, UI/source proof, tests, PR/status, no-forbidden-mutation confirmation.',
+    stop: 'Stop if live runtime drifts, guard fails, dispatch enables, stale warnings appear, or a deploy/restart would be needed.'
+  },
+  'project-long-form-video': {
+    allowed: 'Plan/review adult animated/vector explainer pipeline, toolchain proofs, scripts, QA criteria, and manual next-lane packets.',
+    forbidden: 'No posting, paid API render, avatar-first pivot, generic static-card fallback, long unattended render, or public/customer action.',
+    objective: 'Advance the long-form adult animated explainer lane with reusable character/prop workflow and evidence-backed watchability.',
+    preflight: 'Check current concept/toolchain status, cost/risk gates, review artifacts, and whether a small proof is safer than long production.',
+    report: 'objective, source/toolchain checks, recommended proof, risks/costs, review package path if any, next decision needed.',
+    stop: 'Stop if paid spend, public publishing, account linking, or a long render is required without fresh approval.'
+  },
+  'project-shorts-video': {
+    allowed: 'Plan short-form topics/hooks, review proof packages, improve prompts/QA, and prepare manual production packets.',
+    forbidden: 'No posting, paid API spend, account changes, fake evidence framing, avatar fallback, or unreviewed batch publishing.',
+    objective: 'Improve Shorts/Signal Room style output with strong hooks, readable typography, motion quality, and platform-safe packaging.',
+    preflight: 'Check channel/status lock, latest proof quality, topic fit, cost/credit exposure, and no public-action gate is crossed.',
+    report: 'hook/topic, proof status, QA notes, risks, exact next production lane, approval needed before posting/spend.',
+    stop: 'Stop if posting, paid rendering, credential/account mutation, or unbounded batch work is needed.'
+  },
+  'project-tool-tally': {
+    allowed: 'Inspect staging/public pages, draft careful PRs, validate read-only customer-facing copy, and prepare gated launch/hardening packets.',
+    forbidden: 'No payments, paid-order mutation, launch, customer delivery, outreach, public intake changes, or production deploy without approval.',
+    objective: 'Move Tool & Tally forward safely while preserving launch gates, payment safety, and evidence-first customer-facing quality.',
+    preflight: 'Confirm environment, changed-file scope, no live/payment/outreach path, order watchdog unaffected, and customer-facing copy is sanitized.',
+    report: 'preflight, files/URLs checked, risk/payment/outreach gates, tests or browser QA, PR/status, next approval gate.',
+    stop: 'Stop if payment/order data, public launch, customer contact, deploy, or credential change becomes necessary.'
+  },
+  'project-waha-work': {
+    allowed: 'Prepare owner-side Waha inspection packets, review technical docs, and keep work isolated to Waha profile/context.',
+    forbidden: 'No cross-profile memory bleed, no business/social/Family Hub contamination, no unapproved numbers as final, no public/customer action.',
+    objective: 'Support Waha owner-side inspection engineering with isolated, evidence-based technical review and clear management-safe outputs.',
+    preflight: 'Confirm Waha profile/thread/context, document scope, source standards, assumptions, and review-only status before analysis.',
+    report: 'scope, documents/standards used, findings, R/Y/G or technical notes, assumptions, exact Travis review questions.',
+    stop: 'Stop if context belongs outside Waha, source docs are missing, numbers need approval, or cross-contamination risk appears.'
+  }
+}
+
+function templateForProject(project: MissionControlProjectRecord): ProjectLaneTemplate {
+  return PROJECT_LANE_TEMPLATES[project.project_id] ?? {
+    allowed: 'Read current project state and prepare a manual next-lane packet only.',
+    forbidden: 'No dispatch, deploy, restart, records/config mutation, public/customer action, payments, or secrets.',
+    objective: `Prepare the next safe lane for ${project.name}.`,
+    preflight: 'Confirm source-of-truth state, guard status, dispatch=false, active_lane_count=0, and stale_warnings=[].',
+    report: 'preflight, recommended lane, blockers, verification, no-forbidden-mutation confirmation.',
+    stop: 'Stop if the task requires mutation or approval outside the current manual-copy lane.'
+  }
+}
+
 export function buildMissionControlCopyPrompt({
   project,
   status,
@@ -154,26 +217,31 @@ export function buildMissionControlCopyPrompt({
   status: ReturnType<typeof summarizeWorkspaceStatus>
 }): string {
   const model = projectRenderModel(project, report, state)
+  const template = templateForProject(project)
+  const risksBlockers = [listText(model.risks), listText(model.blockers)].filter(value => value !== 'None recorded').join(' · ') || 'None recorded'
+  const noHistory = model.latestReportSummary === 'No report yet' && model.latestResult === 'No result yet'
+  const historyFallback = noHistory ? 'No prior report/result exists; start by verifying current state before acting.' : ''
 
-  const prompt = `MISSION CONTROL PROJECT LANE — MANUAL COPY ONLY
+  const prompt = `PROJECT NEXT LANE — MANUAL COPY ONLY
 
 Project: ${project.name}
-Status: ${text(state?.status ?? project.status)}
+Objective: ${template.objective}
 Current goal: ${text(state?.current_goal ?? project.current_goal)}
-Latest report summary: ${model.latestReportSummary}
+Status: ${text(state?.status ?? project.status)}
+Latest report: ${model.latestReportSummary}
 Latest result: ${model.latestResult}
-Risks/blockers: ${[listText(model.risks), listText(model.blockers)].filter(value => value !== 'None recorded').join(' · ') || 'None recorded'}
-Next recommended lane: ${model.nextLane}
+${historyFallback ? `Fallback: ${historyFallback}
+` : ''}Risks/blockers: ${risksBlockers}
+Next lane: ${model.nextLane}
 
-Safety status:
-- Runtime Worktree Guard: ${status.guard}
-- dispatch_in_gateway: ${yesNo(status.dispatch)}
-- active_lane_count: ${status.activeLaneCount}
-- stale_warnings: ${status.staleWarnings.length ? status.staleWarnings.join(', ') : 'none'}
+Allowed actions: ${template.allowed}
+Forbidden actions: ${template.forbidden}
+Preflight checks: ${template.preflight}
+Stop conditions: ${template.stop}
+Expected report format: ${template.report}
 
-Mode: read-only/manual-copy planning packet unless Travis explicitly approves a narrower implementation lane.
-Forbidden: dispatch, queue/Kanban/Waha/model routing, enforcement, hidden workers, deploy, restart, runtime switch, records/config mutation, public/customer actions, payments, or secrets.
-Expected report: preflight, actions taken, verification, blockers, and no-forbidden-mutation confirmation.`
+Safety: guard=${status.guard}; dispatch=${yesNo(status.dispatch)}; active_lane_count=${status.activeLaneCount}; stale_warnings=${status.staleWarnings.length ? status.staleWarnings.join(', ') : 'none'}.
+Send to Jenny remains disabled; paste manually only after review.`
 
   return truncate(prompt, MAX_COPY_PROMPT_CHARS)
 }
@@ -377,14 +445,14 @@ function ProjectCard({
         <span>execution: disabled</span>
       </div>
       <div className="rounded-lg border border-dashed border-border/80 p-3 text-xs text-muted-foreground">
-        <div className="mb-2 font-medium text-foreground/80">Copy prompt preview ({prompt.length}/{MAX_COPY_PROMPT_CHARS})</div>
+        <div className="mb-2 font-medium text-foreground/80">Next lane prompt preview ({prompt.length}/{MAX_COPY_PROMPT_CHARS})</div>
         <p className="line-clamp-4 whitespace-pre-wrap">{prompt}</p>
         <button
           className="mt-3 rounded-md border border-border/80 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
           onClick={onCopy}
           type="button"
         >
-          {copied ? 'Prompt copied' : 'Copy prompt'}
+          {copied ? 'Prompt copied' : 'Copy next lane prompt'}
         </button>
       </div>
     </article>

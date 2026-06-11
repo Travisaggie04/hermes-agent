@@ -228,16 +228,85 @@ describe('MissionControlView', () => {
   it('copies a bounded manual prompt without enabling send or dispatch', async () => {
     await renderMissionControl()
 
-    const buttons = await screen.findAllByRole('button', { name: 'Copy prompt' })
+    const buttons = await screen.findAllByRole('button', { name: 'Copy next lane prompt' })
     fireEvent.click(buttons[0])
 
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1))
     const prompt = vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]
     expect(prompt.length).toBeLessThanOrEqual(2000)
-    expect(prompt).toContain('MISSION CONTROL PROJECT LANE')
+    expect(prompt).toContain('PROJECT NEXT LANE')
     expect(prompt).toContain('MANUAL COPY ONLY')
-    expect(prompt).toContain('Forbidden: dispatch')
+    expect(prompt).toContain('Forbidden actions:')
+    expect(prompt).toContain('Send to Jenny remains disabled')
     expect(screen.getAllByText(/Send to Jenny disabled/i).length).toBeGreaterThan(0)
+  })
+
+  it('builds distinct project-specific next-lane prompts for all five real projects', async () => {
+    const { buildMissionControlCopyPrompt, summarizeWorkspaceStatus } = await import('./index')
+    const status = summarizeWorkspaceStatus(await getMissionControlWorkspaceStatus())
+
+    const prompts = realProjects.map(([project_id, name]) =>
+      buildMissionControlCopyPrompt({
+        project: {
+          project_id,
+          name,
+          status: `${name} status`,
+          current_goal: `${name} goal`,
+          next_recommended_lane: `${name} next lane`,
+          source_of_truth: 'Mission Control records'
+        },
+        report: null,
+        state: null,
+        status
+      })
+    )
+
+    expect(new Set(prompts).size).toBe(5)
+
+    for (const prompt of prompts) {
+      expect(prompt.length).toBeLessThanOrEqual(2000)
+      expect(prompt).toContain('Allowed actions:')
+      expect(prompt).toContain('Forbidden actions:')
+      expect(prompt).toContain('Preflight checks:')
+      expect(prompt).toContain('Stop conditions:')
+      expect(prompt).toContain('Expected report format:')
+      expect(prompt).toContain('No prior report/result exists')
+    }
+  })
+
+  it('keeps project-specific restrictions in the generated lane packets', async () => {
+    const { buildMissionControlCopyPrompt, summarizeWorkspaceStatus } = await import('./index')
+    const status = summarizeWorkspaceStatus(await getMissionControlWorkspaceStatus())
+
+    const promptFor = (project_id: string, name: string) =>
+      buildMissionControlCopyPrompt({
+        project: {
+          project_id,
+          name,
+          status: `${name} status`,
+          current_goal: `${name} goal`,
+          next_recommended_lane: `${name} next lane`,
+          source_of_truth: 'Mission Control records'
+        },
+        report: null,
+        state: null,
+        status
+      })
+
+    const longForm = promptFor('project-long-form-video', 'Long-form Video')
+    expect(longForm).toContain('adult animated explainer')
+    expect(longForm).toContain('reusable character/prop workflow')
+    expect(longForm).not.toContain('Improve Mission Control as the primary Desktop workspace')
+
+    const toolTally = promptFor('project-tool-tally', 'Tool & Tally')
+    expect(toolTally).toContain('No payments')
+    expect(toolTally).toContain('outreach')
+    expect(toolTally).toContain('public launch')
+
+    const waha = promptFor('project-waha-work', 'Waha Work')
+    expect(waha).toContain('Waha profile/context')
+    expect(waha).toContain('No cross-profile memory bleed')
+    expect(waha).toContain('cross-contamination')
   })
 
   it('keeps Mission Control view source free of POST, dispatch wiring, timers, storage, and workers', async () => {
