@@ -388,6 +388,7 @@ describe('MissionControlView', () => {
 
     expect(screen.getByText('Real project workspace')).toBeTruthy()
     expect(screen.getByText('Project Rooms')).toBeTruthy()
+    expect(screen.getByText('Project Kanban')).toBeTruthy()
     expect(screen.getByText('Project Room: Hermes / Mission Control')).toBeTruthy()
     expect(screen.getByText('5 of 5 real projects loaded')).toBeTruthy()
 
@@ -397,10 +398,35 @@ describe('MissionControlView', () => {
     }
   })
 
+  it('renders a read-only project kanban lifecycle without queue mutation controls', async () => {
+    await renderMissionControl()
+
+    expect(await screen.findByText('Project Kanban')).toBeTruthy()
+    for (const expected of [
+      'Intake',
+      'Needs Clarification',
+      'Challenge Review',
+      'Lane Draft',
+      'Awaiting Approval',
+      'Active',
+      'Evidence Review',
+      'Accepted',
+      'Blocked / Rollback'
+    ]) {
+      expect(screen.getByText(expected)).toBeTruthy()
+    }
+
+    expect(screen.getByText(/Dragging is disabled/)).toBeTruthy()
+    expect(screen.getByText(/read-only board/)).toBeTruthy()
+    expect(screen.getAllByText(/no queue mutation/).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: /move card/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /start work/i })).toBeNull()
+  })
+
   it('shows real project state, fallback empty-state copy, and disabled safety flags', async () => {
     await renderMissionControl()
 
-    expect(await screen.findByText('Jenny finished the desktop architecture review.')).toBeTruthy()
+    expect((await screen.findAllByText('Jenny finished the desktop architecture review.')).length).toBeGreaterThan(0)
     expect(screen.getByText('Manual Jenny report ingestion')).toBeTruthy()
     expect(screen.getByText('Save Jenny report manually')).toBeTruthy()
     expect(screen.getByText('Use Mission Control backend with desktop frontend.')).toBeTruthy()
@@ -408,7 +434,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('reports/hermes/desktop-review.md')).toBeTruthy()
     expect(screen.getByText('Live report available')).toBeTruthy()
     expect(screen.getByText('2026-06-11T10:00:00Z (report)')).toBeTruthy()
-    expect(screen.getByText('Desktop read-only workspace v1')).toBeTruthy()
+    expect(screen.getAllByText('Desktop read-only workspace v1').length).toBeGreaterThan(0)
     expect(screen.getByText('Read-only status refresh (draft)')).toBeTruthy()
     expect(screen.getAllByText('No report yet').length).toBeGreaterThan(0)
     expect(screen.getAllByText('No result yet').length).toBeGreaterThan(0)
@@ -561,7 +587,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Ask Jenny / Propose Work')).toBeTruthy()
     expect(screen.getByText('Phone-safe packet')).toBeTruthy()
     expect(screen.getByText('Project Sessions')).toBeTruthy()
-    expect(screen.getByText('Lane draft ok')).toBeTruthy()
+    expect(screen.getAllByText('Lane draft ok').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Use a bounded read-only workspace usability lane/).length).toBeGreaterThan(0)
 
     fireEvent.change(screen.getByPlaceholderText('One bounded project request...'), {

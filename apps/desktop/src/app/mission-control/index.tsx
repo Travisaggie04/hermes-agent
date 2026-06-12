@@ -218,6 +218,45 @@ interface ProjectRenderModel {
   risks: unknown
 }
 
+type ProjectKanbanColumnId =
+  | 'intake'
+  | 'needs-clarification'
+  | 'challenge-review'
+  | 'lane-draft'
+  | 'awaiting-approval'
+  | 'active'
+  | 'evidence-review'
+  | 'accepted'
+  | 'blocked-rollback'
+
+interface ProjectKanbanColumn {
+  description: string
+  id: ProjectKanbanColumnId
+  title: string
+}
+
+interface ProjectKanbanCard {
+  columnId: ProjectKanbanColumnId
+  detail: string
+  lane: MissionControlLaneRequestRecord | null
+  nextLane: string
+  project: MissionControlProjectRecord
+  readiness: ReturnType<typeof projectReadinessLabel>
+  report: MissionControlReportRecord | null
+}
+
+const PROJECT_KANBAN_COLUMNS: ProjectKanbanColumn[] = [
+  { id: 'intake', title: 'Intake', description: 'Needs a project brief or source-of-truth anchor.' },
+  { id: 'needs-clarification', title: 'Needs Clarification', description: 'Jenny should question scope, risks, or requested approach.' },
+  { id: 'challenge-review', title: 'Challenge Review', description: 'Waiting for the challenge gate before lane drafting.' },
+  { id: 'lane-draft', title: 'Lane Draft', description: 'Clear challenge review exists; draft a bounded lane.' },
+  { id: 'awaiting-approval', title: 'Awaiting Approval', description: 'Drafted or approval-needed work must wait on Travis.' },
+  { id: 'active', title: 'Active', description: 'Approved work in progress; watch evidence and stop conditions.' },
+  { id: 'evidence-review', title: 'Evidence Review', description: 'Jenny reported results; verify files, checks, and risks.' },
+  { id: 'accepted', title: 'Accepted', description: 'Accepted result or completed lane with recorded evidence.' },
+  { id: 'blocked-rollback', title: 'Blocked / Rollback', description: 'Unsafe, wrong-approach, blocked, or rollback-aware work.' }
+]
+
 interface ReportFormState {
   projectId: string
   laneRequestId: string
@@ -440,6 +479,98 @@ function laneDraftBlockMessage(review: MissionControlChallengeReviewRecord | nul
   }
 
   return null
+}
+
+function normalizedText(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.map(item => String(item)).join(' ').toLowerCase()
+  }
+
+  return String(value ?? '').toLowerCase()
+}
+
+function hasBlockingSignal(model: ProjectRenderModel, review: MissionControlChallengeReviewRecord | null): boolean {
+  const reviewState = review?.decision_state ?? ''
+  if (reviewState === 'unsafe' || reviewState === 'wrong_approach_likely') {
+    return true
+  }
+
+  const combined = `${normalizedText(model.blockers)} ${normalizedText(model.risks)}`
+  return /\b(blocked|blocker|rollback|unsafe|wrong approach)\b/.test(combined) && !/\b(no blockers?|none)\b/.test(combined)
+}
+
+function projectKanbanColumnFor({
+  brief,
+  lane,
+  model,
+  report,
+  review,
+  state
+}: {
+  brief: MissionControlProjectBriefRecord | null
+  lane: MissionControlLaneRequestRecord | null
+  model: ProjectRenderModel
+  report: MissionControlReportRecord | null
+  review: MissionControlChallengeReviewRecord | null
+  state: MissionControlProjectState | null
+}): ProjectKanbanColumnId {
+  if (hasBlockingSignal(model, review)) {
+    return 'blocked-rollback'
+  }
+  if (!brief) {
+    return 'intake'
+  }
+  if (!review) {
+    return 'challenge-review'
+  }
+  if (review.decision_state === 'needs_spec_first') {
+    return 'needs-clarification'
+  }
+  if (review.decision_state === 'needs_approval') {
+    return 'awaiting-approval'
+  }
+  if (review.decision_state !== 'clear_and_safe') {
+    return 'needs-clarification'
+  }
+  if (!lane) {
+    return 'lane-draft'
+  }
+
+  const laneStatus = (lane.status ?? '').toLowerCase()
+  if (laneStatus === 'accepted' || laneStatus === 'completed' || laneStatus === 'complete') {
+    return 'accepted'
+  }
+  if (laneStatus === 'active' || laneStatus === 'approved' || laneStatus === 'running') {
+    return 'active'
+  }
+  if (state?.has_real_report || report) {
+    return 'evidence-review'
+  }
+  if (laneStatus === 'draft' || laneStatus === 'pending' || laneStatus === 'proposed' || laneStatus === '') {
+    return 'awaiting-approval'
+  }
+
+  return 'lane-draft'
+}
+
+function projectKanbanCardFor(project: MissionControlProjectRecord, snapshot: MissionControlSnapshot): ProjectKanbanCard {
+  const state = stateForProject(project, snapshot.projectStates)
+  const brief = latestForProject(project.project_id, snapshot.projectBriefs)
+  const review = latestForProject(project.project_id, snapshot.challengeReviews)
+  const lane = state?.latest_lane_request ?? latestLaneForProject(project.project_id, snapshot.laneRequests)
+  const report = state?.latest_report ?? state?.latest_jenny_report ?? latestReportForProject(project.project_id, snapshot.reports)
+  const model = projectRenderModel(project, report, state)
+  const readiness = projectReadinessLabel(brief, review)
+
+  return {
+    columnId: projectKanbanColumnFor({ brief, lane, model, report, review, state }),
+    detail: readiness.detail,
+    lane,
+    nextLane: model.nextLane,
+    project,
+    readiness,
+    report
+  }
 }
 
 function buildPhoneSafeProjectPacket({
@@ -782,6 +913,8 @@ export function MissionControlView() {
         />
       ) : null}
 
+      <ProjectKanbanBoard cards={realProjects.map(project => projectKanbanCardFor(project, snapshot))} />
+
       <ManualReportIngestion
         form={reportForm}
         message={reportMessage}
@@ -994,6 +1127,78 @@ function ProjectRoomsWorkspace({
         </div>
       </div>
     </section>
+  )
+}
+
+function ProjectKanbanBoard({ cards }: { cards: ProjectKanbanCard[] }) {
+  const cardsByColumn = new Map<ProjectKanbanColumnId, ProjectKanbanCard[]>()
+  for (const column of PROJECT_KANBAN_COLUMNS) {
+    cardsByColumn.set(column.id, [])
+  }
+  for (const card of cards) {
+    cardsByColumn.get(card.columnId)?.push(card)
+  }
+
+  return (
+    <section aria-label="Project Kanban" className="mt-5 rounded-xl border border-border/70 bg-background/50 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold">Project Kanban</h2>
+          <p className="text-xs text-muted-foreground">
+            Record-backed work lifecycle. Dragging is disabled; movement comes from briefs, challenge reviews, lane drafts, approvals, and reports.
+          </p>
+        </div>
+        <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-800 dark:text-amber-200">
+          read-only board / no queue mutation
+        </span>
+      </div>
+
+      <div className="mt-4 overflow-x-auto pb-2">
+        <div className="grid min-w-[1320px] grid-cols-9 gap-3">
+          {PROJECT_KANBAN_COLUMNS.map(column => {
+            const columnCards = cardsByColumn.get(column.id) ?? []
+
+            return (
+              <section className="rounded-lg border border-border/70 bg-background/60 p-2" key={column.id}>
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-xs font-semibold">{column.title}</h3>
+                  <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.68rem] text-muted-foreground">{columnCards.length}</span>
+                </div>
+                <p className="mt-1 min-h-9 text-[0.68rem] leading-snug text-muted-foreground">{column.description}</p>
+                <div className="mt-2 grid gap-2">
+                  {columnCards.length ? (
+                    columnCards.map(card => <ProjectKanbanCardView card={card} key={card.project.project_id} />)
+                  ) : (
+                    <p className="rounded-md border border-dashed border-border/70 p-2 text-[0.68rem] text-muted-foreground">No project cards.</p>
+                  )}
+                </div>
+              </section>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function ProjectKanbanCardView({ card }: { card: ProjectKanbanCard }) {
+  return (
+    <article className="rounded-md border border-border/70 bg-background/80 p-2 text-xs shadow-sm">
+      <div className="font-semibold leading-snug text-foreground/90">{card.project.name}</div>
+      <div className="mt-1 rounded-full border border-border/60 px-2 py-0.5 text-[0.68rem] text-muted-foreground">{card.readiness.label}</div>
+      <p className="mt-2 line-clamp-3 text-[0.7rem] leading-snug text-muted-foreground">{card.detail}</p>
+      <div className="mt-2 grid gap-1 text-[0.68rem] text-muted-foreground">
+        <div>
+          <span className="font-medium text-foreground/70">Lane:</span> {card.lane?.title ?? 'No lane draft'}
+        </div>
+        <div>
+          <span className="font-medium text-foreground/70">Next:</span> {card.nextLane}
+        </div>
+        <div>
+          <span className="font-medium text-foreground/70">Report:</span> {card.report?.summary ?? 'No report yet'}
+        </div>
+      </div>
+    </article>
   )
 }
 

@@ -153,6 +153,7 @@ interface ProjectViewModel {
   freshness: string;
   latestActivity: string;
   latestLane: string;
+  latestLaneRequest?: LaneRequestRecord;
   latestReport: string;
   latestResult: string;
   missingFields: string;
@@ -166,6 +167,35 @@ interface ProjectViewModel {
   risks: string;
   status: string;
 }
+
+type ProjectKanbanColumnId =
+  | "intake"
+  | "needs-clarification"
+  | "challenge-review"
+  | "lane-draft"
+  | "awaiting-approval"
+  | "active"
+  | "evidence-review"
+  | "accepted"
+  | "blocked-rollback";
+
+interface ProjectKanbanColumn {
+  description: string;
+  id: ProjectKanbanColumnId;
+  title: string;
+}
+
+const PROJECT_KANBAN_COLUMNS: ProjectKanbanColumn[] = [
+  { id: "intake", title: "Intake", description: "Needs a project brief or source-of-truth anchor." },
+  { id: "needs-clarification", title: "Needs Clarification", description: "Jenny should question the request or approach." },
+  { id: "challenge-review", title: "Challenge Review", description: "Waiting for Jenny's challenge gate." },
+  { id: "lane-draft", title: "Lane Draft", description: "Clear challenge exists; draft the bounded lane." },
+  { id: "awaiting-approval", title: "Awaiting Approval", description: "Drafted or approval-needed work waits on Travis." },
+  { id: "active", title: "Active", description: "Approved work in progress; watch stop conditions." },
+  { id: "evidence-review", title: "Evidence Review", description: "Review report, files, checks, and risks." },
+  { id: "accepted", title: "Accepted", description: "Accepted result or completed lane." },
+  { id: "blocked-rollback", title: "Blocked / Rollback", description: "Unsafe, blocked, or rollback-aware work." },
+];
 
 interface ReportFormState {
   artifactLinks: string;
@@ -265,6 +295,55 @@ function laneDraftBlockMessage(review: ChallengeReviewRecord | undefined): strin
   return null;
 }
 
+function hasBlockingSignal(projectView: ProjectViewModel): boolean {
+  const decision = projectView.challengeReview?.decision_state ?? "";
+  if (decision === "unsafe" || decision === "wrong_approach_likely") {
+    return true;
+  }
+  const combined = `${projectView.risks} ${projectView.blockers}`.toLowerCase();
+  return /\b(blocked|blocker|rollback|unsafe|wrong approach)\b/.test(combined) && !/\b(no blockers?|none)\b/.test(combined);
+}
+
+function projectKanbanColumnFor(projectView: ProjectViewModel): ProjectKanbanColumnId {
+  if (hasBlockingSignal(projectView)) {
+    return "blocked-rollback";
+  }
+  if (!projectView.projectBrief) {
+    return "intake";
+  }
+  if (!projectView.challengeReview) {
+    return "challenge-review";
+  }
+  if (projectView.challengeReview.decision_state === "needs_spec_first") {
+    return "needs-clarification";
+  }
+  if (projectView.challengeReview.decision_state === "needs_approval") {
+    return "awaiting-approval";
+  }
+  if (projectView.challengeReview.decision_state !== "clear_and_safe") {
+    return "needs-clarification";
+  }
+  if (!projectView.latestLaneRequest) {
+    return "lane-draft";
+  }
+
+  const laneStatus = (projectView.latestLaneRequest.status ?? "").toLowerCase();
+  if (laneStatus === "accepted" || laneStatus === "completed" || laneStatus === "complete") {
+    return "accepted";
+  }
+  if (laneStatus === "active" || laneStatus === "approved" || laneStatus === "running") {
+    return "active";
+  }
+  if (projectView.projectState?.has_real_report || projectView.latestReport !== "No report yet") {
+    return "evidence-review";
+  }
+  if (laneStatus === "draft" || laneStatus === "pending" || laneStatus === "proposed" || laneStatus === "") {
+    return "awaiting-approval";
+  }
+
+  return "lane-draft";
+}
+
 function viewModelForProject(snapshot: CompactSnapshot, project: ProjectRecord): ProjectViewModel {
   const state = latestForProject(project.project_id, snapshot.projectStates);
   const report = latestForProject(project.project_id, snapshot.reports);
@@ -282,6 +361,7 @@ function viewModelForProject(snapshot: CompactSnapshot, project: ProjectRecord):
     freshness: state?.has_real_report ? "Live report available" : "Seed only — needs first report",
     latestActivity: text(state?.latest_activity_at, "No activity time recorded"),
     latestLane: text(state?.latest_lane_title ?? lane?.title, "No lane recorded"),
+    latestLaneRequest: lane,
     latestReport: text(state?.latest_report_summary || report?.summary || project.latest_report_summary, "No report yet"),
     latestResult: text(state?.latest_result || report?.result || project.latest_result, "No result yet"),
     missingFields: listText(state?.missing_state_fields, "None — report state is current"),
@@ -591,6 +671,10 @@ export default function MissionControlCompactPage() {
       ) : null}
 
       {snapshot ? (
+        <CompactProjectKanban projectViews={realProjects.map(project => viewModelForProject(snapshot, project))} />
+      ) : null}
+
+      {snapshot ? (
         <CompactReportIngestion
           form={reportForm}
           message={reportMessage}
@@ -759,6 +843,53 @@ function CompactProjectRoom({
           </div>
         </div>
       </article>
+    </section>
+  );
+}
+
+function CompactProjectKanban({ projectViews }: { projectViews: ProjectViewModel[] }) {
+  return (
+    <section className="mt-4 rounded-2xl border border-border/70 bg-card p-3" aria-label="Project Kanban">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold">Project Kanban</h2>
+          <p className="mt-1 text-[0.68rem] text-muted-foreground">
+            Record-backed lifecycle. Dragging disabled; cards move only when briefs, challenge reviews, lane drafts, approvals, or reports change.
+          </p>
+        </div>
+        <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[0.65rem] font-semibold text-amber-700 dark:text-amber-300">
+          read-only board
+        </span>
+      </div>
+
+      <div className="mt-3 grid gap-2">
+        {PROJECT_KANBAN_COLUMNS.map(column => {
+          const cards = projectViews.filter(projectView => projectKanbanColumnFor(projectView) === column.id);
+          return (
+            <section className="rounded-xl border border-border/70 bg-background p-2" key={column.id}>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-semibold">{column.title}</h3>
+                <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{cards.length}</span>
+              </div>
+              <p className="mt-1 text-[0.65rem] leading-snug text-muted-foreground">{column.description}</p>
+              <div className="mt-2 grid gap-2">
+                {cards.length ? (
+                  cards.map(projectView => (
+                    <article className="rounded-lg border border-border/60 bg-card/70 p-2 text-xs" key={projectView.project.project_id}>
+                      <div className="font-semibold leading-tight">{projectView.project.name}</div>
+                      <div className="mt-1 text-[0.68rem] text-muted-foreground">{projectView.readinessLabel}</div>
+                      <div className="mt-2 text-[0.68rem] leading-snug text-muted-foreground">Lane: {projectView.latestLane}</div>
+                      <div className="mt-1 text-[0.68rem] leading-snug text-muted-foreground">Next: {projectView.nextLane}</div>
+                    </article>
+                  ))
+                ) : (
+                  <p className="rounded-lg border border-dashed border-border/70 p-2 text-[0.68rem] text-muted-foreground">No project cards.</p>
+                )}
+              </div>
+            </section>
+          );
+        })}
+      </div>
     </section>
   );
 }

@@ -74,6 +74,35 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         assert expected in src
 
 
+def test_compact_route_has_read_only_project_kanban_lifecycle() -> None:
+    src = page_source()
+    for expected in [
+        "Project Kanban",
+        "PROJECT_KANBAN_COLUMNS",
+        "projectKanbanColumnFor",
+        "Record-backed lifecycle",
+        "Dragging disabled",
+        "read-only board",
+        "Intake",
+        "Needs Clarification",
+        "Challenge Review",
+        "Lane Draft",
+        "Awaiting Approval",
+        "Active",
+        "Evidence Review",
+        "Accepted",
+        "Blocked / Rollback",
+    ]:
+        assert expected in src
+    for forbidden in [
+        "moveKanbanCard",
+        "startKanbanWork",
+        "kanban/dispatch",
+        "POST /kanban",
+    ]:
+        assert forbidden not in src
+
+
 def test_compact_lane_draft_requires_latest_clear_challenge_review() -> None:
     src = page_source()
     for expected in [
