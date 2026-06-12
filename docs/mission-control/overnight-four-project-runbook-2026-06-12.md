@@ -291,3 +291,12 @@ Recommended next setup task:
 
 - Locate the authoritative project paths for Shorts, Long-form, and Tool &
   Tally before attempting deeper audits.
+
+Follow-up completed:
+
+- `docs/mission-control/four-project-authority-inventory-2026-06-12.md`
+  records the first authoritative path inventory and links each project to its
+  safest next lane packet.
+- `docs/mission-control/overnight-audit-findings-2026-06-12.md` records the
+  first read-only findings from the Shorts queue, Long-form proof history, and
+  Tool & Tally recovery state.

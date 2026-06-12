@@ -24,6 +24,21 @@ goal is to find a format and pipeline that can make money.
 - Instagram
 - TikTok, pending future developer approval recovery
 
+## Authoritative Paths
+
+- Implementation repo: `/home/jenny/wt/agentic-video-channel-factory`
+- Strategy/ops notes: `/home/jenny/ai-ops-brain/social-video/signal-room`
+- Review packages: `/home/jenny/wt/agentic-video-channel-factory/review-packages`
+- Queue/runtime state: `/home/jenny/wt/agentic-video-channel-factory/runtime`
+
+Observed evidence:
+
+- The implementation repo was `main...origin/main [ahead 32]` with untracked
+  `runtime/` when checked read-only.
+- Lane A is the only approved short-form production pipeline.
+- Facebook queue growth is paused in the current social automation docs.
+- TikTok remains disabled pending approval recovery.
+
 ## Tonight's Lane
 
 Read-only planning and audit lane.
@@ -50,4 +65,5 @@ Forbidden tonight:
 
 ## First Recommended Work
 
-Produce a read-only pipeline audit plan and a 25-video concept queue strategy.
+Run `projects/shorts-video/lanes/read-only-audit-2026-06-12.md` and return a
+read-only pipeline audit plus a 25-video concept queue strategy.

@@ -22,6 +22,24 @@ was live before, but checkout is currently turned off.
 - Checkout readiness.
 - Outreach workflow recovery.
 
+## Authoritative Paths
+
+- Recovery worktree: `/home/jenny/wt/tooltally-restore-operating-capability-20260606`
+- Business OS notes: `/home/jenny/ai-ops-brain/business/tool-tally-review-packages`
+- Historical/generated state:
+  `/home/jenny/ai-ops-brain/quarantine/tooltally-generated-state-20260530`
+- Dirty inventory quarantine:
+  `/home/jenny/ai-ops-brain/quarantine/tooltally-dirty-inventories`
+
+Observed evidence:
+
+- The recovery worktree had existing modified files and local operation
+  artifacts when checked read-only.
+- Last restore status kept checkout disabled, customer delivery blocked, and
+  outreach in no-send mode.
+- Report dry-run was blocked by missing `weasyprint` and paid-order artifact
+  naming mismatch.
+
 ## Tonight's Lane
 
 Read-only recovery planning lane.
@@ -48,5 +66,6 @@ Forbidden tonight:
 
 ## First Recommended Work
 
-Run a read-only recovery audit and define safety gates for report generation,
-checkout, and outreach before any live reactivation.
+Run `projects/tool-tally/lanes/read-only-recovery-audit-2026-06-12.md` and
+define safety gates for report generation, checkout, and outreach before any
+live reactivation.
