@@ -70,3 +70,7 @@ Use `docs/mission-control/video-production-decision-memo-2026-06-12.md` as the
 current decision memo. It recommends choosing one 10-15 second adult animated
 Signal Room mechanism proof first, with a faceless mechanism explainer as the
 fallback if local rigging blocks.
+
+Use `docs/mission-control/long-form-proof-plan-2026-06-12.md` as the concrete
+proof lane. It defines pass/fail criteria for the 10-15 second proof and keeps
+full episode production, publishing, scheduling, and hidden automation disabled.
