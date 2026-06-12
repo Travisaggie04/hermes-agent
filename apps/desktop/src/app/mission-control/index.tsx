@@ -681,6 +681,21 @@ export function MissionControlView() {
   const [projectRoomMessage, setProjectRoomMessage] = useState('')
   const [projectRoomSaving, setProjectRoomSaving] = useState(false)
 
+  async function refreshMissionControlSnapshot(message = '') {
+    setProjectRoomSaving(true)
+    setError('')
+    try {
+      setSnapshot(await loadMissionControlSnapshot())
+      if (message) {
+        setProjectRoomMessage(message)
+      }
+    } catch (err) {
+      setError(String(err instanceof Error ? err.message : err))
+    } finally {
+      setProjectRoomSaving(false)
+    }
+  }
+
   useEffect(() => {
     let cancelled = false
 
@@ -949,6 +964,7 @@ export function MissionControlView() {
           message={projectRoomMessage}
           onCopyPacket={() => void copyProjectRoomPacket(selectedProject)}
           onQueueBridge={() => void queueJennyBridgeRequest(selectedProject)}
+          onRefreshBridge={() => void refreshMissionControlSnapshot('Refreshed bridge inbox/outbox.')}
           onRequestChange={setProjectRequest}
           onSaveChallenge={() => void saveChallengeDraft(selectedProject)}
           onSaveLane={() => void saveReadOnlyLaneDraft(selectedProject)}
@@ -1056,6 +1072,7 @@ function ProjectRoomsWorkspace({
   message,
   onCopyPacket,
   onQueueBridge,
+  onRefreshBridge,
   onRequestChange,
   onSaveChallenge,
   onSaveLane,
@@ -1075,6 +1092,7 @@ function ProjectRoomsWorkspace({
   message: string
   onCopyPacket: () => void
   onQueueBridge: () => void
+  onRefreshBridge: () => void
   onRequestChange: (value: string) => void
   onSaveChallenge: () => void
   onSaveLane: () => void
@@ -1090,6 +1108,7 @@ function ProjectRoomsWorkspace({
 }) {
   const readiness = projectReadinessLabel(brief, review)
   const sessions = state?.recent_sessions?.length ? state.recent_sessions : (sessionGroup?.sessions ?? [])
+  const repliedRequestIds = new Set(bridgeResponses.map(response => response.request_id).filter(Boolean))
 
   return (
     <section aria-label="Project Rooms" className="mt-5 grid gap-4 rounded-xl border border-border/70 bg-background/50 p-4 xl:grid-cols-[18rem_1fr]">
@@ -1144,12 +1163,15 @@ function ProjectRoomsWorkspace({
           />
         </label>
 
-        <div className="mt-3 grid gap-2 md:grid-cols-4">
+        <div className="mt-3 grid gap-2 md:grid-cols-5">
           <button className="rounded-md border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onCopyPacket} type="button">
             Copy phone-safe packet
           </button>
           <button className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={saving} onClick={onQueueBridge} type="button">
             Queue for Jenny bridge
+          </button>
+          <button className="rounded-md border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onRefreshBridge} type="button">
+            Refresh bridge
           </button>
           <button className="rounded-md border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onSaveChallenge} type="button">
             Save challenge draft
@@ -1169,12 +1191,14 @@ function ProjectRoomsWorkspace({
               </span>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Outbound records are ready for a Jenny poller or relay. Direct session send remains disabled.
+              Outbound records are ready for Jenny bridge polling. Use refresh to check for inbox replies. Direct session send remains disabled.
             </p>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <BridgeList empty="No queued bridge messages." items={bridgeRequests} renderItem={request => (
                 <>
-                  <div className="font-medium text-foreground/90">{request.status ?? 'queued'} / {request.target_agent ?? 'jenny'}</div>
+                  <div className="font-medium text-foreground/90">
+                    {request.bridge_state ?? (request.request_id && repliedRequestIds.has(request.request_id) ? 'replied' : request.status ?? 'queued')} / {request.target_agent ?? 'jenny'}
+                  </div>
                   <div className="mt-1 line-clamp-3 text-muted-foreground">{request.message}</div>
                 </>
               )} title="Outbound to Jenny" />

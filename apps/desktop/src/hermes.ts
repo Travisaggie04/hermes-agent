@@ -379,6 +379,8 @@ export interface MissionControlJennyBridgeRequestRecord {
   target_agent?: string
   message: string
   status?: string
+  bridge_state?: string
+  has_response?: boolean
   ack_key?: string
   created_at?: string
   metadata?: Record<string, unknown>
