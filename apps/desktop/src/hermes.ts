@@ -398,6 +398,41 @@ export interface MissionControlJennyBridgeResponseRecord {
   metadata?: Record<string, unknown>
 }
 
+export interface MissionControlJennyBridgePollerStatusRecord {
+  status_id: string
+  poller_id?: string
+  mode?: string
+  status?: string
+  pending_count?: number
+  handled_request_id?: string
+  handled_response_id?: string
+  last_error?: string
+  runtime_path?: string
+  head?: string
+  operator?: string
+  created_at?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface MissionControlJennyBridgePollerStatusResponse {
+  count?: number
+  dispatch_enabled?: boolean
+  execution_enabled?: boolean
+  last_error?: string
+  last_poll_at?: string
+  last_response_at?: string
+  last_response_request_id?: string
+  last_status?: string
+  manual_start_only?: boolean
+  pending_count?: number
+  send_to_jenny_enabled?: boolean
+  session_send_enabled?: boolean
+  status_records?: Array<MissionControlRecordEnvelope<MissionControlJennyBridgePollerStatusRecord>>
+  stored?: boolean
+  timer_enabled?: boolean
+  worker_enabled?: boolean
+}
+
 export interface MissionControlJennyBridgeRequestCreatePayload {
   ack_key?: string
   dedupe_key?: string
@@ -615,6 +650,12 @@ export function createMissionControlJennyBridgeRequest(
 
 export function getMissionControlJennyBridgeInbox(): Promise<MissionControlJennyBridgeInboxResponse> {
   return window.hermesDesktop.api<MissionControlJennyBridgeInboxResponse>({ path: `${MISSION_CONTROL_API}/workspace/jenny-bridge/inbox` })
+}
+
+export function getMissionControlJennyBridgePollerStatus(): Promise<MissionControlJennyBridgePollerStatusResponse> {
+  return window.hermesDesktop.api<MissionControlJennyBridgePollerStatusResponse>({
+    path: `${MISSION_CONTROL_API}/workspace/jenny-bridge/poller-status`
+  })
 }
 
 export function createMissionControlJennyBridgeResponse(

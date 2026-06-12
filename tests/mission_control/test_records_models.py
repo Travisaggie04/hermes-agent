@@ -10,6 +10,7 @@ from mission_control.records.models import (
     GoalContract,
     JennyBridgeMessageRequestRecord,
     JennyBridgeMessageResponseRecord,
+    JennyBridgePollerStatusRecord,
     JennyReportRecord,
     LaneRequestRecord,
     MissionBrief,
@@ -196,6 +197,42 @@ def test_jenny_bridge_message_response_record_round_trips_inbound_fields():
     assert data["message"] == "Safe to proceed with a read-only lane."
     assert JennyBridgeMessageResponseRecord.from_dict(data) == record
     assert RECORD_TYPES["JennyBridgeMessageResponseRecord"] is JennyBridgeMessageResponseRecord
+
+
+def test_jenny_bridge_poller_status_record_round_trips_manual_status_fields():
+    record = JennyBridgePollerStatusRecord(
+        status_id="bridge-status-1",
+        poller_id="manual-jenny-bridge-relay",
+        mode="manual",
+        status="response_appended",
+        pending_count=1,
+        handled_request_id="bridge-request-1",
+        handled_response_id="bridge-response-1",
+        last_error="",
+        runtime_path="/home/jenny/.hermes/runtime",
+        head="abc123",
+        operator="jenny",
+        created_at="2026-06-12T15:22:00Z",
+        metadata={
+            "manual_start_only": True,
+            "dispatch_enabled": False,
+            "session_send_enabled": False,
+            "worker_enabled": False,
+            "timer_enabled": False,
+        },
+    )
+
+    data = record.to_dict()
+
+    assert data["status"] == "response_appended"
+    assert data["pending_count"] == 1
+    assert data["metadata"]["manual_start_only"] is True
+    assert data["metadata"]["dispatch_enabled"] is False
+    assert data["metadata"]["session_send_enabled"] is False
+    assert data["metadata"]["worker_enabled"] is False
+    assert data["metadata"]["timer_enabled"] is False
+    assert JennyBridgePollerStatusRecord.from_dict(data) == record
+    assert RECORD_TYPES["JennyBridgePollerStatusRecord"] is JennyBridgePollerStatusRecord
 
 
 def test_mission_brief_round_trips_nested_records_to_plain_dicts():

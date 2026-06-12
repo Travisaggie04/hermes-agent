@@ -8,6 +8,7 @@ const getMissionControlProjectBriefs = vi.fn()
 const getMissionControlChallengeReviews = vi.fn()
 const getMissionControlJennyBridgeInbox = vi.fn()
 const getMissionControlJennyBridgeOutbox = vi.fn()
+const getMissionControlJennyBridgePollerStatus = vi.fn()
 const getMissionControlLaneRequests = vi.fn()
 const getMissionControlReports = vi.fn()
 const getMissionControlProjectState = vi.fn()
@@ -27,6 +28,7 @@ vi.mock('@/hermes', () => ({
   getMissionControlChallengeReviews: () => getMissionControlChallengeReviews(),
   getMissionControlJennyBridgeInbox: () => getMissionControlJennyBridgeInbox(),
   getMissionControlJennyBridgeOutbox: () => getMissionControlJennyBridgeOutbox(),
+  getMissionControlJennyBridgePollerStatus: () => getMissionControlJennyBridgePollerStatus(),
   getMissionControlWorkspaceStatus: () => getMissionControlWorkspaceStatus(),
   getMissionControlProjectBriefs: () => getMissionControlProjectBriefs(),
   getMissionControlProjects: () => getMissionControlProjects(),
@@ -423,6 +425,25 @@ beforeEach(() => {
     ],
     send_to_jenny_enabled: false
   })
+  getMissionControlJennyBridgePollerStatus.mockResolvedValue({
+    count: 1,
+    dispatch_enabled: false,
+    display_only: true,
+    execution_enabled: false,
+    last_error: '',
+    last_poll_at: '2026-06-12T15:22:00Z',
+    last_response_at: '2026-06-12T15:23:00Z',
+    last_response_request_id: 'bridge-request-1',
+    last_status: 'response_appended',
+    manual_start_only: true,
+    pending_count: 0,
+    send_to_jenny_enabled: false,
+    session_send_enabled: false,
+    status_records: [],
+    stored: false,
+    timer_enabled: false,
+    worker_enabled: false
+  })
 })
 
 afterEach(() => {
@@ -444,10 +465,14 @@ describe('MissionControlView', () => {
     expect(getMissionControlProjectSessions).toHaveBeenCalledTimes(1)
     expect(getMissionControlJennyBridgeOutbox).toHaveBeenCalledTimes(1)
     expect(getMissionControlJennyBridgeInbox).toHaveBeenCalledTimes(1)
+    expect(getMissionControlJennyBridgePollerStatus).toHaveBeenCalledTimes(1)
 
     expect(screen.getByText('Real project workspace')).toBeTruthy()
     expect(screen.getByText('Project Rooms')).toBeTruthy()
     expect(screen.getByText('Jenny bridge')).toBeTruthy()
+    expect(screen.getByText('manual-start only')).toBeTruthy()
+    expect(screen.getByText('response_appended')).toBeTruthy()
+    expect(screen.getByText('worker disabled / timer disabled')).toBeTruthy()
     expect(screen.getByText('Outbound to Jenny')).toBeTruthy()
     expect(screen.getByText('Jenny replies')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Refresh bridge' })).toBeTruthy()
