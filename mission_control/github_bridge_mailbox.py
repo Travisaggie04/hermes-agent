@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import subprocess
 import sys
 import time
@@ -24,6 +25,10 @@ from mission_control.records import GitHubBridgeMailboxStatusRecord, GitHubBridg
 
 
 GITHUB_BRIDGE_MARKER = "<!-- hermes-github-bridge -->"
+DEFAULT_GITHUB_BRIDGE_REPO = "Travisaggie04/hermes-agent"
+DEFAULT_GITHUB_BRIDGE_ISSUE = 79
+DEFAULT_NOTIFY_SSH_TARGET = "jenny@100.115.125.111"
+DEFAULT_NOTIFY_REMOTE_RUNTIME = "/home/jenny/.hermes/hermes-runtime-github-bridge-mailbox-944411a"
 PENDING_STATUSES = {"queued", "retry_requested"}
 REPLIED_STATUSES = {"replied", "closed"}
 DEFAULT_LIMIT = 25
@@ -248,8 +253,12 @@ def append_status(
     return index, record
 
 
-def existing_request_ids(path: Path | None = None) -> set[str]:
-    return {record.request_id for record in _store(path).read_all(GitHubBridgeMessageRecord)}
+def existing_request_ids(path: Path | None = None, *, repo: str = "", issue_number: int = 0) -> set[str]:
+    return {
+        record.request_id
+        for record in _store(path).read_all(GitHubBridgeMessageRecord)
+        if (not repo or record.github_repo == repo) and (not issue_number or record.github_issue_number == int(issue_number))
+    }
 
 
 def response_request_ids(path: Path | None = None, *, repo: str = "", issue_number: int = 0) -> set[str]:
@@ -514,11 +523,247 @@ def _run_gh_api(args: list[str]) -> Any:
     return json.loads(result.stdout or "null")
 
 
+def _run_ssh(args: list[str]) -> str:
+    # Manual foreground operator path only. Does not start a daemon, timer, or worker.
+    result = subprocess.run(args, check=True, capture_output=True, text=True)
+    return result.stdout
+
+
 def poll_github_issue(*, repo: str, issue_number: int, path: Path | None = None, operator: str = "manual") -> dict[str, Any]:
     comments = _run_gh_api([f"repos/{repo}/issues/{issue_number}/comments", "--paginate"])
     if not isinstance(comments, list):
         raise ValueError("GitHub comments response must be a list")
     return poll_comments(comments, repo=repo, issue_number=issue_number, path=path, operator=operator)
+
+
+def append_message(
+    *,
+    request_id: str,
+    project_id: str,
+    from_agent: str,
+    to_agent: str,
+    status: str,
+    message: str,
+    repo: str,
+    issue_number: int,
+    created_at: str = "",
+    github_comment_id: int | str = "",
+    path: Path | None = None,
+) -> tuple[int, GitHubBridgeMessageRecord]:
+    clean = _message_payload(
+        request_id=request_id,
+        project_id=project_id,
+        from_agent=from_agent,
+        to_agent=to_agent,
+        status=status,
+        message=message,
+        created_at=created_at,
+    )
+    record = GitHubBridgeMessageRecord(
+        **clean,
+        github_repo=repo,
+        github_issue_number=int(issue_number),
+        github_comment_id=str(github_comment_id or ""),
+        metadata={**INERT_METADATA, "source": "github_issue_comment_bridge_manual_send"},
+    )
+    index = _store(path).append(record)
+    return index, record
+
+
+def post_github_message(
+    *,
+    request_id: str,
+    project_id: str,
+    message: str,
+    repo: str = DEFAULT_GITHUB_BRIDGE_REPO,
+    issue_number: int = DEFAULT_GITHUB_BRIDGE_ISSUE,
+    from_agent: str = "codex",
+    to_agent: str = "jenny",
+    status: str = "queued",
+    path: Path | None = None,
+    operator: str = "manual",
+) -> dict[str, Any]:
+    clean = _message_payload(
+        request_id=request_id,
+        project_id=project_id,
+        from_agent=from_agent,
+        to_agent=to_agent,
+        status=status,
+        message=message,
+    )
+    if clean["request_id"] in existing_request_ids(path, repo=repo, issue_number=issue_number):
+        status_index, status_record = append_status(
+            status="skipped_duplicate",
+            repo=repo,
+            issue_number=issue_number,
+            handled_request_id=clean["request_id"],
+            pending_count=len(list_pending_messages(path=path, repo=repo, issue_number=issue_number)),
+            operator=operator,
+            path=path,
+        )
+        return {
+            "record_index": status_index,
+            "record_type": "GitHubBridgeMailboxStatusRecord",
+            "message": None,
+            "status": status_record.to_dict(),
+        }
+    body = bridge_comment_body(clean)
+    posted = _run_gh_api([f"repos/{repo}/issues/{issue_number}/comments", "-f", f"body={body}"])
+    comment_id = str(posted.get("id") or "") if isinstance(posted, dict) else ""
+    index, record = append_message(
+        **clean,
+        repo=repo,
+        issue_number=issue_number,
+        github_comment_id=comment_id,
+        path=path,
+    )
+    _status_index, status_record = append_status(
+        status="message_posted",
+        repo=repo,
+        issue_number=issue_number,
+        pending_count=len(list_pending_messages(path=path, repo=repo, issue_number=issue_number)),
+        new_message_count=1,
+        handled_request_id=record.request_id,
+        operator=operator,
+        path=path,
+    )
+    return {
+        "record_index": index,
+        "record_type": record.record_type,
+        "message": record.to_dict(),
+        "status": status_record.to_dict(),
+    }
+
+
+def remote_poll_bridge_over_ssh(
+    *,
+    repo: str = DEFAULT_GITHUB_BRIDGE_REPO,
+    issue_number: int = DEFAULT_GITHUB_BRIDGE_ISSUE,
+    ssh_target: str = DEFAULT_NOTIFY_SSH_TARGET,
+    remote_runtime: str = DEFAULT_NOTIFY_REMOTE_RUNTIME,
+    ssh_known_hosts: Path | None = None,
+    operator: str = "manual",
+) -> dict[str, Any]:
+    ssh_target = _bounded_text(ssh_target, max_chars=200)
+    remote_runtime = _bounded_text(remote_runtime, max_chars=300)
+    if not ssh_target:
+        raise ValueError("ssh_target is required")
+    if not remote_runtime:
+        raise ValueError("remote_runtime is required")
+    remote_command = " ".join(
+        [
+            "cd",
+            shlex.quote(remote_runtime),
+            "&&",
+            "python3",
+            "-m",
+            "mission_control.github_bridge_mailbox",
+            "poll",
+            "--repo",
+            shlex.quote(repo),
+            "--issue",
+            shlex.quote(str(int(issue_number))),
+            "--operator",
+            shlex.quote(operator),
+        ]
+    )
+    ssh_args = [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=8",
+        "-o",
+        "ServerAliveInterval=10",
+        "-o",
+        "ServerAliveCountMax=2",
+    ]
+    if ssh_known_hosts is not None:
+        ssh_args.extend(["-o", f"UserKnownHostsFile={ssh_known_hosts}"])
+    ssh_args.extend([ssh_target, remote_command])
+    stdout = _run_ssh(ssh_args)
+    try:
+        remote_payload = json.loads(stdout)
+    except json.JSONDecodeError:
+        remote_payload = {"raw_stdout": stdout}
+    return {
+        **_inert_response_flags(),
+        "ssh_target": ssh_target,
+        "remote_runtime": remote_runtime,
+        "repo": repo,
+        "issue_number": int(issue_number),
+        "remote_poll": remote_payload,
+    }
+
+
+def notify_jenny_now(
+    *,
+    request_id: str,
+    project_id: str,
+    message: str,
+    repo: str = DEFAULT_GITHUB_BRIDGE_REPO,
+    issue_number: int = DEFAULT_GITHUB_BRIDGE_ISSUE,
+    from_agent: str = "codex",
+    to_agent: str = "jenny",
+    status: str = "queued",
+    ssh_target: str = DEFAULT_NOTIFY_SSH_TARGET,
+    remote_runtime: str = DEFAULT_NOTIFY_REMOTE_RUNTIME,
+    ssh_known_hosts: Path | None = None,
+    path: Path | None = None,
+    operator: str = "manual",
+) -> dict[str, Any]:
+    message_result = post_github_message(
+        request_id=request_id,
+        project_id=project_id,
+        from_agent=from_agent,
+        to_agent=to_agent,
+        status=status,
+        message=message,
+        repo=repo,
+        issue_number=issue_number,
+        path=path,
+        operator=operator,
+    )
+    poll_result = remote_poll_bridge_over_ssh(
+        repo=repo,
+        issue_number=issue_number,
+        ssh_target=ssh_target,
+        remote_runtime=remote_runtime,
+        ssh_known_hosts=ssh_known_hosts,
+        operator=operator,
+    )
+    return {
+        **_inert_response_flags(),
+        "message_result": message_result,
+        "remote_poll_result": poll_result,
+    }
+
+
+def github_bridge_latest(
+    *,
+    path: Path | None = None,
+    repo: str = DEFAULT_GITHUB_BRIDGE_REPO,
+    issue_number: int = DEFAULT_GITHUB_BRIDGE_ISSUE,
+    limit: int = DEFAULT_LIMIT,
+) -> dict[str, Any]:
+    status = github_bridge_status(path=path, repo=repo, issue_number=issue_number, limit=limit)
+    messages = [
+        {"record_index": index, "record_type": record.record_type, "record": record.to_dict()}
+        for index, record in _store(path).read_latest(GitHubBridgeMessageRecord, limit=max(1, limit))
+        if (not repo or record.github_repo == repo) and (not issue_number or record.github_issue_number == int(issue_number))
+    ]
+    return {
+        **_inert_response_flags(),
+        "repo": repo,
+        "issue_number": int(issue_number),
+        "pending_count": status["pending_count"],
+        "last_status": status["last_status"],
+        "last_poll_at": status["last_poll_at"],
+        "last_response_request_id": status["last_response_request_id"],
+        "last_error": status["last_error"],
+        "pending_messages": status["pending_messages"],
+        "recent_messages": messages,
+    }
 
 
 def _load_watch_comments_batch(comments_json_dir: Path, iteration: int) -> list[dict[str, Any]]:
@@ -657,24 +902,55 @@ def main(argv: list[str] | None = None) -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     poll_parser = subparsers.add_parser("poll", help="Manually poll a GitHub bridge issue")
-    poll_parser.add_argument("--repo", required=True)
-    poll_parser.add_argument("--issue", type=int, required=True)
+    poll_parser.add_argument("--repo", default=DEFAULT_GITHUB_BRIDGE_REPO)
+    poll_parser.add_argument("--issue", type=int, default=DEFAULT_GITHUB_BRIDGE_ISSUE)
     poll_parser.add_argument("--operator", default="manual")
     poll_parser.add_argument("--comments-json", type=Path, default=None, help="Test/offline comments JSON file")
 
     pending_parser = subparsers.add_parser("pending", help="List pending Codex-to-Jenny messages from local records")
-    pending_parser.add_argument("--repo", default="")
-    pending_parser.add_argument("--issue", type=int, default=0)
+    pending_parser.add_argument("--repo", default=DEFAULT_GITHUB_BRIDGE_REPO)
+    pending_parser.add_argument("--issue", type=int, default=DEFAULT_GITHUB_BRIDGE_ISSUE)
     pending_parser.add_argument("--json", action="store_true")
 
     status_parser = subparsers.add_parser("status", help="Print GitHub bridge mailbox status")
-    status_parser.add_argument("--repo", default="")
-    status_parser.add_argument("--issue", type=int, default=0)
+    status_parser.add_argument("--repo", default=DEFAULT_GITHUB_BRIDGE_REPO)
+    status_parser.add_argument("--issue", type=int, default=DEFAULT_GITHUB_BRIDGE_ISSUE)
     status_parser.add_argument("--json", action="store_true")
 
+    latest_parser = subparsers.add_parser("latest", help="Print concise local bridge mailbox summary")
+    latest_parser.add_argument("--repo", default=DEFAULT_GITHUB_BRIDGE_REPO)
+    latest_parser.add_argument("--issue", type=int, default=DEFAULT_GITHUB_BRIDGE_ISSUE)
+    latest_parser.add_argument("--limit", type=int, default=10)
+    latest_parser.add_argument("--json", action="store_true")
+
+    send_parser = subparsers.add_parser("send", help="Post one bounded bridge message to GitHub")
+    send_parser.add_argument("--repo", default=DEFAULT_GITHUB_BRIDGE_REPO)
+    send_parser.add_argument("--issue", type=int, default=DEFAULT_GITHUB_BRIDGE_ISSUE)
+    send_parser.add_argument("--request-id", required=True)
+    send_parser.add_argument("--project-id", required=True)
+    send_parser.add_argument("--from-agent", default="codex")
+    send_parser.add_argument("--to-agent", default="jenny")
+    send_parser.add_argument("--status", default="queued")
+    send_parser.add_argument("--message", required=True)
+    send_parser.add_argument("--operator", default="manual")
+
+    notify_parser = subparsers.add_parser("notify-jenny-now", help="Post one bridge message and trigger one remote Jenny poll over SSH")
+    notify_parser.add_argument("--repo", default=DEFAULT_GITHUB_BRIDGE_REPO)
+    notify_parser.add_argument("--issue", type=int, default=DEFAULT_GITHUB_BRIDGE_ISSUE)
+    notify_parser.add_argument("--request-id", required=True)
+    notify_parser.add_argument("--project-id", required=True)
+    notify_parser.add_argument("--from-agent", default="codex")
+    notify_parser.add_argument("--to-agent", default="jenny")
+    notify_parser.add_argument("--status", default="queued")
+    notify_parser.add_argument("--message", required=True)
+    notify_parser.add_argument("--ssh-target", default=DEFAULT_NOTIFY_SSH_TARGET)
+    notify_parser.add_argument("--remote-runtime", default=DEFAULT_NOTIFY_REMOTE_RUNTIME)
+    notify_parser.add_argument("--ssh-known-hosts", type=Path, default=None)
+    notify_parser.add_argument("--operator", default="manual")
+
     respond_parser = subparsers.add_parser("respond", help="Respond to exactly one request through GitHub comments")
-    respond_parser.add_argument("--repo", required=True)
-    respond_parser.add_argument("--issue", type=int, required=True)
+    respond_parser.add_argument("--repo", default=DEFAULT_GITHUB_BRIDGE_REPO)
+    respond_parser.add_argument("--issue", type=int, default=DEFAULT_GITHUB_BRIDGE_ISSUE)
     respond_parser.add_argument("--request-id", required=True)
     respond_parser.add_argument("--project-id", required=True)
     respond_parser.add_argument("--message", required=True)
@@ -682,8 +958,8 @@ def main(argv: list[str] | None = None) -> int:
     respond_parser.add_argument("--dry-run", action="store_true", help="Append local response record without posting GitHub comment")
 
     watch_parser = subparsers.add_parser("watch", help="Foreground-only watch of a GitHub bridge issue")
-    watch_parser.add_argument("--repo", required=True)
-    watch_parser.add_argument("--issue", type=int, required=True)
+    watch_parser.add_argument("--repo", default=DEFAULT_GITHUB_BRIDGE_REPO)
+    watch_parser.add_argument("--issue", type=int, default=DEFAULT_GITHUB_BRIDGE_ISSUE)
     watch_parser.add_argument("--interval-seconds", type=int, default=3)
     watch_parser.add_argument("--to-agent", default="jenny")
     watch_parser.add_argument("--operator", default="manual")
@@ -706,6 +982,52 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "status":
         print(json.dumps(github_bridge_status(path=args.records, repo=args.repo, issue_number=args.issue), indent=2, sort_keys=True))
+        return 0
+    if args.command == "latest":
+        payload = github_bridge_latest(path=args.records, repo=args.repo, issue_number=args.issue, limit=max(1, args.limit))
+        if args.json:
+            print(json.dumps(payload, indent=2, sort_keys=True))
+        else:
+            print(f"github bridge {payload['repo']}#{payload['issue_number']}")
+            print(f"status={payload['last_status']} pending={payload['pending_count']} last_response={payload['last_response_request_id'] or 'none'}")
+            if payload["last_error"]:
+                print(f"last_error={payload['last_error']}")
+            for item in payload["pending_messages"]:
+                record = item["record"]
+                print(f"pending {record['request_id']} {record['project_id']} from={record['from_agent']}: {record['message']}")
+        return 0
+    if args.command == "send":
+        payload = post_github_message(
+            request_id=args.request_id,
+            project_id=args.project_id,
+            from_agent=args.from_agent,
+            to_agent=args.to_agent,
+            status=args.status,
+            message=args.message,
+            repo=args.repo,
+            issue_number=args.issue,
+            path=args.records,
+            operator=args.operator,
+        )
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    if args.command == "notify-jenny-now":
+        payload = notify_jenny_now(
+            request_id=args.request_id,
+            project_id=args.project_id,
+            from_agent=args.from_agent,
+            to_agent=args.to_agent,
+            status=args.status,
+            message=args.message,
+            repo=args.repo,
+            issue_number=args.issue,
+            ssh_target=args.ssh_target,
+            remote_runtime=args.remote_runtime,
+            ssh_known_hosts=args.ssh_known_hosts,
+            path=args.records,
+            operator=args.operator,
+        )
+        print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
     if args.command == "respond":
         if args.dry_run:
