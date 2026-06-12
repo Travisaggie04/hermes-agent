@@ -72,3 +72,8 @@ Use `docs/mission-control/video-production-decision-memo-2026-06-12.md` as the
 current toolchain and policy decision memo. It recommends a Shorts-first quality
 engine, not raw volume, because platform monetization policy rewards original,
 non-repetitive content.
+
+Use `docs/mission-control/shorts-queue-reconciliation-plan-2026-06-12.md` as
+the current queue recovery plan. It keeps posting, scheduling, platform API
+sends, TikTok changes, and queue mutation disabled while explaining the current
+missing-slot mismatch and drafting the next 25-video slate.
