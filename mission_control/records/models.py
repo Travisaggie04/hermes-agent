@@ -360,6 +360,302 @@ class JennyReportRecord:
 
 
 @dataclass(frozen=True)
+class ApprovalRecord:
+    approval_id: str
+    project_id: str = ""
+    session_id: str = ""
+    lane_request_id: str = ""
+    run_id: str = ""
+    action_class: str = ""
+    approval_scope: str = ""
+    approved_actions: tuple[str, ...] = ()
+    forbidden_actions: tuple[str, ...] = ()
+    status: str = "proposed"
+    approval_mode: str = "one_time"
+    approved_by: str = ""
+    approval_source: str = ""
+    approval_text: str = ""
+    created_at: str = ""
+    approved_at: str = ""
+    expires_at: str | None = None
+    consumed_at: str = ""
+    baseline_runtime_path: str = ""
+    baseline_head: str = ""
+    packet_hash: str = ""
+    scope_fingerprint: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "ApprovalRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "approved_actions", tuple(str(item) for item in _tuple(self.approved_actions)))
+        object.__setattr__(self, "forbidden_actions", tuple(str(item) for item in _tuple(self.forbidden_actions)))
+        object.__setattr__(self, "approval_mode", self.approval_mode or "one_time")
+        object.__setattr__(self, "expires_at", str(self.expires_at).strip() if self.expires_at else None)
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "approval_id": self.approval_id,
+            "project_id": self.project_id,
+            "session_id": self.session_id,
+            "lane_request_id": self.lane_request_id,
+            "run_id": self.run_id,
+            "action_class": self.action_class,
+            "approval_scope": self.approval_scope,
+            "approved_actions": list(self.approved_actions),
+            "forbidden_actions": list(self.forbidden_actions),
+            "status": self.status,
+            "approval_mode": self.approval_mode,
+            "approved_by": self.approved_by,
+            "approval_source": self.approval_source,
+            "approval_text": self.approval_text,
+            "created_at": self.created_at,
+            "approved_at": self.approved_at,
+            "expires_at": self.expires_at,
+            "consumed_at": self.consumed_at,
+            "baseline_runtime_path": self.baseline_runtime_path,
+            "baseline_head": self.baseline_head,
+            "packet_hash": self.packet_hash,
+            "scope_fingerprint": self.scope_fingerprint,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ApprovalRecord:
+        return cls(
+            approval_id=_required(data, "approval_id"),
+            project_id=data.get("project_id", ""),
+            session_id=data.get("session_id", ""),
+            lane_request_id=data.get("lane_request_id", ""),
+            run_id=data.get("run_id", ""),
+            action_class=data.get("action_class", ""),
+            approval_scope=data.get("approval_scope", ""),
+            approved_actions=data.get("approved_actions") or (),
+            forbidden_actions=data.get("forbidden_actions") or (),
+            status=data.get("status", "proposed"),
+            approval_mode=data.get("approval_mode", "one_time"),
+            approved_by=data.get("approved_by", ""),
+            approval_source=data.get("approval_source", ""),
+            approval_text=data.get("approval_text", ""),
+            created_at=data.get("created_at", ""),
+            approved_at=data.get("approved_at", ""),
+            expires_at=data.get("expires_at"),
+            consumed_at=data.get("consumed_at", ""),
+            baseline_runtime_path=data.get("baseline_runtime_path", ""),
+            baseline_head=data.get("baseline_head", ""),
+            packet_hash=data.get("packet_hash", ""),
+            scope_fingerprint=data.get("scope_fingerprint", ""),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
+class RunRecord:
+    run_id: str
+    project_id: str
+    lane_request_id: str = ""
+    approval_id: str = ""
+    lane_type: str = ""
+    title: str = ""
+    objective: str = ""
+    status: str = "requested"
+    execution_mode: str = "manual_copy"
+    allowed_actions: tuple[str, ...] = ()
+    forbidden_actions: tuple[str, ...] = ()
+    stop_conditions: tuple[str, ...] = ()
+    baseline_runtime_path: str = ""
+    baseline_head: str = ""
+    runtime_guard_state: str = ""
+    dispatch_state: bool = False
+    active_lane_count_at_start: int = 0
+    agent_identity: str = ""
+    session_id: str = ""
+    source: str = ""
+    started_at: str = ""
+    stopped_at: str = ""
+    stop_reason: str = ""
+    safety_gate_status: str = ""
+    safety_gate_reasons: tuple[str, ...] = ()
+    report_ids: tuple[str, ...] = ()
+    result_record_ids: tuple[str, ...] = ()
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "RunRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "execution_mode", self.execution_mode or "manual_copy")
+        object.__setattr__(self, "allowed_actions", tuple(str(item) for item in _tuple(self.allowed_actions)))
+        object.__setattr__(self, "forbidden_actions", tuple(str(item) for item in _tuple(self.forbidden_actions)))
+        object.__setattr__(self, "stop_conditions", tuple(str(item) for item in _tuple(self.stop_conditions)))
+        object.__setattr__(self, "dispatch_state", self.dispatch_state is True)
+        object.__setattr__(self, "active_lane_count_at_start", _bounded_handoff_int(self.active_lane_count_at_start, default=0))
+        object.__setattr__(self, "safety_gate_reasons", tuple(str(item) for item in _tuple(self.safety_gate_reasons)))
+        object.__setattr__(self, "report_ids", tuple(str(item) for item in _tuple(self.report_ids)))
+        object.__setattr__(self, "result_record_ids", tuple(str(item) for item in _tuple(self.result_record_ids)))
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "run_id": self.run_id,
+            "project_id": self.project_id,
+            "lane_request_id": self.lane_request_id,
+            "approval_id": self.approval_id,
+            "lane_type": self.lane_type,
+            "title": self.title,
+            "objective": self.objective,
+            "status": self.status,
+            "execution_mode": self.execution_mode,
+            "allowed_actions": list(self.allowed_actions),
+            "forbidden_actions": list(self.forbidden_actions),
+            "stop_conditions": list(self.stop_conditions),
+            "baseline_runtime_path": self.baseline_runtime_path,
+            "baseline_head": self.baseline_head,
+            "runtime_guard_state": self.runtime_guard_state,
+            "dispatch_state": self.dispatch_state,
+            "active_lane_count_at_start": self.active_lane_count_at_start,
+            "agent_identity": self.agent_identity,
+            "session_id": self.session_id,
+            "source": self.source,
+            "started_at": self.started_at,
+            "stopped_at": self.stopped_at,
+            "stop_reason": self.stop_reason,
+            "safety_gate_status": self.safety_gate_status,
+            "safety_gate_reasons": list(self.safety_gate_reasons),
+            "report_ids": list(self.report_ids),
+            "result_record_ids": list(self.result_record_ids),
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> RunRecord:
+        return cls(
+            run_id=_required(data, "run_id"),
+            project_id=_required(data, "project_id"),
+            lane_request_id=data.get("lane_request_id", ""),
+            approval_id=data.get("approval_id", ""),
+            lane_type=data.get("lane_type", ""),
+            title=data.get("title", ""),
+            objective=data.get("objective", ""),
+            status=data.get("status", "requested"),
+            execution_mode=data.get("execution_mode", "manual_copy"),
+            allowed_actions=data.get("allowed_actions") or (),
+            forbidden_actions=data.get("forbidden_actions") or (),
+            stop_conditions=data.get("stop_conditions") or (),
+            baseline_runtime_path=data.get("baseline_runtime_path", ""),
+            baseline_head=data.get("baseline_head", ""),
+            runtime_guard_state=data.get("runtime_guard_state", ""),
+            dispatch_state=data.get("dispatch_state") is True,
+            active_lane_count_at_start=data.get("active_lane_count_at_start", 0),
+            agent_identity=data.get("agent_identity", ""),
+            session_id=data.get("session_id", ""),
+            source=data.get("source", ""),
+            started_at=data.get("started_at", ""),
+            stopped_at=data.get("stopped_at", ""),
+            stop_reason=data.get("stop_reason", ""),
+            safety_gate_status=data.get("safety_gate_status", ""),
+            safety_gate_reasons=data.get("safety_gate_reasons") or (),
+            report_ids=data.get("report_ids") or (),
+            result_record_ids=data.get("result_record_ids") or (),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
+class ReportRecord:
+    report_id: str
+    run_id: str = ""
+    approval_id: str = ""
+    project_id: str = ""
+    lane_request_id: str = ""
+    status: str = "received"
+    report_kind: str = "jenny_result"
+    summary: str = ""
+    result: str = ""
+    risks: tuple[str, ...] = ()
+    blockers: tuple[str, ...] = ()
+    changed_files: tuple[str, ...] = ()
+    tests: tuple[str, ...] = ()
+    next_recommended_lane: str = ""
+    evidence_refs: tuple[str, ...] = ()
+    artifact_refs: tuple[str, ...] = ()
+    submitted_by: str = ""
+    submitted_from: str = ""
+    created_at: str = ""
+    reviewed_at: str = ""
+    reviewed_by: str = ""
+    redaction_status: str = "operator_supplied_redacted"
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "ReportRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "risks", tuple(str(item) for item in _tuple(self.risks)))
+        object.__setattr__(self, "blockers", tuple(str(item) for item in _tuple(self.blockers)))
+        object.__setattr__(self, "changed_files", tuple(str(item) for item in _tuple(self.changed_files)))
+        object.__setattr__(self, "tests", tuple(str(item) for item in _tuple(self.tests)))
+        object.__setattr__(self, "evidence_refs", tuple(str(item) for item in _tuple(self.evidence_refs)))
+        object.__setattr__(self, "artifact_refs", tuple(str(item) for item in _tuple(self.artifact_refs)))
+        object.__setattr__(self, "redaction_status", self.redaction_status or "operator_supplied_redacted")
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "report_id": self.report_id,
+            "run_id": self.run_id,
+            "approval_id": self.approval_id,
+            "project_id": self.project_id,
+            "lane_request_id": self.lane_request_id,
+            "status": self.status,
+            "report_kind": self.report_kind,
+            "summary": self.summary,
+            "result": self.result,
+            "risks": list(self.risks),
+            "blockers": list(self.blockers),
+            "changed_files": list(self.changed_files),
+            "tests": list(self.tests),
+            "next_recommended_lane": self.next_recommended_lane,
+            "evidence_refs": list(self.evidence_refs),
+            "artifact_refs": list(self.artifact_refs),
+            "submitted_by": self.submitted_by,
+            "submitted_from": self.submitted_from,
+            "created_at": self.created_at,
+            "reviewed_at": self.reviewed_at,
+            "reviewed_by": self.reviewed_by,
+            "redaction_status": self.redaction_status,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ReportRecord:
+        return cls(
+            report_id=_required(data, "report_id"),
+            run_id=data.get("run_id", ""),
+            approval_id=data.get("approval_id", ""),
+            project_id=data.get("project_id", ""),
+            lane_request_id=data.get("lane_request_id", ""),
+            status=data.get("status", "received"),
+            report_kind=data.get("report_kind", "jenny_result"),
+            summary=data.get("summary", ""),
+            result=data.get("result", ""),
+            risks=data.get("risks") or (),
+            blockers=data.get("blockers") or (),
+            changed_files=data.get("changed_files") or (),
+            tests=data.get("tests") or (),
+            next_recommended_lane=data.get("next_recommended_lane", ""),
+            evidence_refs=data.get("evidence_refs") or (),
+            artifact_refs=data.get("artifact_refs") or (),
+            submitted_by=data.get("submitted_by", ""),
+            submitted_from=data.get("submitted_from", ""),
+            created_at=data.get("created_at", ""),
+            reviewed_at=data.get("reviewed_at", ""),
+            reviewed_by=data.get("reviewed_by", ""),
+            redaction_status=data.get("redaction_status", "operator_supplied_redacted"),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
 class TaskControlEnvelope:
     envelope_id: str = ""
     active_lane: str = ""
@@ -1322,6 +1618,7 @@ RECORD_TYPES = {
     cls.record_type: cls
     for cls in (
         AcceptedBaselineRecord,
+        ApprovalRecord,
         ApprovalSlice,
         PrMergeApprovalRecord,
         ArtifactRef,
@@ -1330,6 +1627,8 @@ RECORD_TYPES = {
         ProjectRecord,
         LaneRequestRecord,
         JennyReportRecord,
+        ReportRecord,
+        RunRecord,
         SessionProjectLinkRecord,
         MissionBrief,
         OperatingWorkspaceHandoffRecord,

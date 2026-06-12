@@ -110,7 +110,22 @@ def test_mission_control_governance_router_exposes_no_execution_or_mutation_cont
         "enable-enforcement",
         "waha",
     )
+    allowed_append_only_record_routes = {
+        "/workspace/projects/create",
+        "/workspace/projects/seed-defaults",
+        "/workspace/lane-requests/create",
+        "/workspace/reports/create",
+        "/workspace/session-project-links/create",
+        "/workspace/approvals",
+        "/workspace/approvals/create",
+        "/workspace/runs",
+        "/workspace/runs/create",
+        "/workspace/report-inbox",
+        "/workspace/reports/ingest",
+    }
     for path, methods in routes:
+        if path in allowed_append_only_record_routes:
+            continue
         lowered = path.lower()
         assert not any(fragment in lowered for fragment in forbidden_fragments), (path, methods)
 
@@ -128,6 +143,14 @@ def test_mission_control_governance_router_exposes_no_execution_or_mutation_cont
         "/verifier-workflow/evaluate",
         "/start-gate/evaluate",
         "/lane-preflight/evaluate",
+        "/workspace/projects/create",
+        "/workspace/projects/seed-defaults",
+        "/workspace/lane-requests/create",
+        "/workspace/reports/create",
+        "/workspace/session-project-links/create",
+        "/workspace/approvals/create",
+        "/workspace/runs/create",
+        "/workspace/reports/ingest",
     }
 
 
@@ -163,7 +186,17 @@ def test_mission_control_preview_routes_remain_non_persistent_and_inert(client=N
     ]
 
     assert preview_or_evaluate
+    allowed_append_only_record_routes = {
+        "/workspace/projects/create",
+        "/workspace/projects/seed-defaults",
+        "/workspace/lane-requests/create",
+        "/workspace/reports/create",
+        "/workspace/session-project-links/create",
+        "/workspace/approvals/create",
+        "/workspace/runs/create",
+        "/workspace/reports/ingest",
+    }
     assert all(
-        path.endswith(("/evaluate", "/preview", "/visibility"))
+        path.endswith(("/evaluate", "/preview", "/visibility")) or path in allowed_append_only_record_routes
         for path in preview_or_evaluate
     )

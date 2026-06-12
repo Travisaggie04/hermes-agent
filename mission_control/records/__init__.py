@@ -2,6 +2,7 @@
 
 from mission_control.records.models import (
     AcceptedBaselineRecord,
+    ApprovalRecord,
     ApprovalSlice,
     ArtifactRef,
     EvidenceCard,
@@ -11,6 +12,8 @@ from mission_control.records.models import (
     MissionBrief,
     OperatingWorkspaceHandoffRecord,
     ProjectRecord,
+    ReportRecord,
+    RunRecord,
     SessionProjectLinkRecord,
     OperatorAction,
     PrMergeApprovalRecord,
@@ -22,6 +25,7 @@ from mission_control.records.store import JsonlRecordStore
 
 __all__ = [
     "AcceptedBaselineRecord",
+    "ApprovalRecord",
     "ApprovalSlice",
     "ArtifactRef",
     "EvidenceCard",
@@ -33,6 +37,8 @@ __all__ = [
     "OperatingWorkspaceHandoffRecord",
     "OperatorAction",
     "ProjectRecord",
+    "ReportRecord",
+    "RunRecord",
     "SessionProjectLinkRecord",
     "PrMergeApprovalRecord",
     "StartGateCheck",
