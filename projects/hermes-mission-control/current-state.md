@@ -28,6 +28,17 @@ Mission Control should provide:
 - Bridge communication between Codex and Jenny.
 - Clear separation between planning, review, deploy, and live-action lanes.
 
+## Authoritative Paths
+
+- Local Codex working repo:
+  `C:\Users\Travis\Documents\Codex\2026-06-12\how-do-we-connect-you-to\work\hermes-agent`
+- Accepted-live branch: `accepted-live/approval-safety-5ad8906`
+- Live dashboard runtime observed before this context update:
+  `/home/jenny/.hermes/hermes-runtime-github-bridge-mailbox-944411a`
+- Live gateway runtime observed before this context update:
+  `/home/jenny/.hermes/hermes-runtime-control-plane-af1eafe`
+- GitHub bridge mailbox transport: PR #79 conversation thread.
+
 ## Tonight's Lane
 
 Primary build lane.
@@ -50,5 +61,5 @@ Forbidden without explicit approval:
 
 ## First Recommended Work
 
-Review and finish the manual GitHub bridge operator path, then choose the next
-narrow Mission Control UI or bridge-hardening PR.
+Build the next narrow Mission Control UI or bridge-hardening PR after preserving
+the four-project authority inventory and lane packets.

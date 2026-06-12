@@ -25,6 +25,20 @@ on agentic feasibility, quality, monetization potential, and repeatability.
 - Educational videos.
 - Business or finance/news content.
 
+## Authoritative Paths
+
+- Shared implementation repo: `/home/jenny/wt/agentic-video-channel-factory`
+- Long-form notes: `/home/jenny/ai-ops-brain/social-video/the-signal-room/long-form`
+- Historical worktrees: `/home/jenny/wt/signal-room-longform-*`
+- Historical review packages:
+  `/home/jenny/wt/agentic-video-channel-factory/review-packages/signal-room-longform-*`
+
+Observed evidence:
+
+- The current pipeline registry says long-form is separate and not completed.
+- Long-form must get its own quality lock, metadata contract, queue ledger,
+  backlog rules, and scheduler before any automation.
+
 ## Tonight's Lane
 
 Read-only planning, research, and proof-design lane.
@@ -48,5 +62,6 @@ Forbidden tonight:
 
 ## First Recommended Work
 
-Produce a toolchain and format decision memo that ranks options by feasibility,
-quality, monetization, and automation risk.
+Run `projects/long-form-video/lanes/read-only-decision-memo-2026-06-12.md` and
+return a toolchain and format decision memo ranked by feasibility, quality,
+monetization, and automation risk.
