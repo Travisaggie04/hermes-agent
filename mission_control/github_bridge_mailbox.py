@@ -523,8 +523,23 @@ def _run_gh_api(args: list[str]) -> Any:
     return json.loads(result.stdout or "null")
 
 
+def _run_gh_api_json_lines(args: list[str]) -> list[dict[str, Any]]:
+    # gh 2.45 supports --paginate and --jq, but not --slurp.
+    result = subprocess.run(["gh", "api", *args], check=True, capture_output=True, text=True)
+    comments: list[dict[str, Any]] = []
+    for line in result.stdout.splitlines():
+        raw = line.strip()
+        if not raw:
+            continue
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            raise ValueError("GitHub comments response line must be an object")
+        comments.append(parsed)
+    return comments
+
+
 def _github_issue_comments_args(repo: str, issue_number: int) -> list[str]:
-    return [f"repos/{repo}/issues/{issue_number}/comments", "--paginate", "--slurp"]
+    return [f"repos/{repo}/issues/{issue_number}/comments?per_page=100", "--paginate", "--jq", ".[]"]
 
 
 def _normalize_github_comments_response(response: Any) -> list[dict[str, Any]]:
@@ -544,7 +559,7 @@ def _run_ssh(args: list[str]) -> str:
 
 
 def poll_github_issue(*, repo: str, issue_number: int, path: Path | None = None, operator: str = "manual") -> dict[str, Any]:
-    comments = _normalize_github_comments_response(_run_gh_api(_github_issue_comments_args(repo, issue_number)))
+    comments = _run_gh_api_json_lines(_github_issue_comments_args(repo, issue_number))
     return poll_comments(comments, repo=repo, issue_number=issue_number, path=path, operator=operator)
 
 
@@ -815,7 +830,7 @@ def watch_github_issue(
         while max_iterations is None or iterations < max_iterations:
             iterations += 1
             try:
-                raw_comments = fetch_comments() if fetch_comments is not None else _run_gh_api(_github_issue_comments_args(repo, issue_number))
+                raw_comments = fetch_comments() if fetch_comments is not None else _run_gh_api_json_lines(_github_issue_comments_args(repo, issue_number))
                 comments = _normalize_github_comments_response(raw_comments)
                 result = poll_comments(
                     comments,
