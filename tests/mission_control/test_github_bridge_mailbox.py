@@ -15,6 +15,7 @@ from mission_control.github_bridge_mailbox import (
     post_github_message,
     post_github_response,
     poll_comments,
+    poll_github_issue,
     response_comment_body,
     watch_github_issue,
 )
@@ -78,6 +79,27 @@ def test_poll_comments_appends_new_messages_and_status_without_duplicates(tmp_pa
     assert statuses[-1].metadata["manual_start_only"] is True
     assert statuses[-1].metadata["dispatch_enabled"] is False
     assert statuses[-1].metadata["worker_enabled"] is False
+
+
+def test_poll_github_issue_slurps_paginated_comment_pages(tmp_path: Path, monkeypatch):
+    records = tmp_path / "records.jsonl"
+    gh_calls: list[list[str]] = []
+
+    def fake_run_gh_api(args: list[str]):
+        gh_calls.append(args)
+        return [
+            [_comment(101, _body(request_id="req-page-1"))],
+            [_comment(102, _body(request_id="req-page-2"))],
+        ]
+
+    monkeypatch.setattr("mission_control.github_bridge_mailbox._run_gh_api", fake_run_gh_api)
+
+    result = poll_github_issue(repo="Travisaggie04/hermes-agent", issue_number=79, path=records)
+
+    messages = JsonlRecordStore(records).read_all(GitHubBridgeMessageRecord)
+    assert result["new_message_count"] == 2
+    assert [message.request_id for message in messages] == ["req-page-1", "req-page-2"]
+    assert gh_calls == [["repos/Travisaggie04/hermes-agent/issues/79/comments", "--paginate", "--slurp"]]
 
 
 def test_poll_comments_dedupes_new_request_comments_by_request_id(tmp_path: Path):
@@ -430,6 +452,38 @@ def test_watch_github_issue_foreground_loop_prints_new_pending_and_stops(tmp_pat
     assert slept == [2, 2]
     assert statuses[0].mode == "watch_foreground"
     assert statuses[-1].metadata["worker_enabled"] is False
+
+
+def test_watch_github_issue_slurps_paginated_comment_pages(tmp_path: Path, monkeypatch):
+    records = tmp_path / "records.jsonl"
+    gh_calls: list[list[str]] = []
+    printed: list[str] = []
+
+    def fake_run_gh_api(args: list[str]):
+        gh_calls.append(args)
+        return [
+            [_comment(301, _body(request_id="req-watch-page-1", message="Page one."))],
+            [_comment(302, _body(request_id="req-watch-page-2", message="Page two."))],
+        ]
+
+    monkeypatch.setattr("mission_control.github_bridge_mailbox._run_gh_api", fake_run_gh_api)
+
+    result = watch_github_issue(
+        repo="Travisaggie04/hermes-agent",
+        issue_number=79,
+        interval_seconds=2,
+        max_iterations=1,
+        path=records,
+        sleep_fn=lambda _seconds: None,
+        print_fn=printed.append,
+    )
+
+    messages = JsonlRecordStore(records).read_all(GitHubBridgeMessageRecord)
+    assert result["new_message_count"] == 2
+    assert [message.request_id for message in messages] == ["req-watch-page-1", "req-watch-page-2"]
+    assert any("req-watch-page-1" in line for line in printed)
+    assert any("req-watch-page-2" in line for line in printed)
+    assert gh_calls == [["repos/Travisaggie04/hermes-agent/issues/79/comments", "--paginate", "--slurp"]]
 
 
 def test_watch_main_supports_bounded_offline_comments_json_dir(tmp_path: Path, capsys):
