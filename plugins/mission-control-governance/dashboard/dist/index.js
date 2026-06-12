@@ -23,6 +23,10 @@
   const RECORDS_URL = "/api/plugins/mission-control-governance/records?limit=25";
   const WORKSPACE_PROJECTS_URL = "/api/plugins/mission-control-governance/workspace/projects";
   const WORKSPACE_PROJECT_CREATE_URL = "/api/plugins/mission-control-governance/workspace/projects/create";
+  const WORKSPACE_PROJECT_BRIEFS_URL = "/api/plugins/mission-control-governance/workspace/project-briefs";
+  const WORKSPACE_PROJECT_BRIEF_CREATE_URL = "/api/plugins/mission-control-governance/workspace/project-briefs/create";
+  const WORKSPACE_CHALLENGE_REVIEWS_URL = "/api/plugins/mission-control-governance/workspace/challenge-reviews";
+  const WORKSPACE_CHALLENGE_REVIEW_CREATE_URL = "/api/plugins/mission-control-governance/workspace/challenge-reviews/create";
   const WORKSPACE_LANE_REQUESTS_URL = "/api/plugins/mission-control-governance/workspace/lane-requests";
   const WORKSPACE_LANE_REQUEST_CREATE_URL = "/api/plugins/mission-control-governance/workspace/lane-requests/create";
   const WORKSPACE_REPORTS_URL = "/api/plugins/mission-control-governance/workspace/reports";
@@ -303,7 +307,7 @@
     },
   ];
 
-  function makeProjectWorkspacePrompt(project, workspaceStatus, laneDraft) {
+  function makeProjectWorkspacePrompt(project, workspaceStatus, laneDraft, projectBrief, challengeReview) {
     const accepted = workspaceStatus.accepted_baseline || {};
     const lane = workspaceStatus.lane || {};
     const safety = workspaceStatus.safety || {};
@@ -348,6 +352,19 @@
       "- next_recommended_lane=" + valueText(project.next_recommended_lane, "unknown"),
       "- mistakes_guards=" + valueText(project.mistakes_guards, "none"),
       "",
+      "Project brief:",
+      "- outcome=" + valueText(projectBrief && projectBrief.outcome, "missing"),
+      "- success_criteria=" + valueText(projectBrief && projectBrief.success_criteria, "missing"),
+      "- constraints=" + valueText(projectBrief && projectBrief.constraints, "missing"),
+      "- approval_rules=" + valueText(projectBrief && projectBrief.approval_rules, "missing"),
+      "",
+      "Challenge review:",
+      "- decision_state=" + valueText(challengeReview && challengeReview.decision_state, "missing"),
+      "- recommended_path=" + valueText(challengeReview && challengeReview.recommended_path, "missing"),
+      "- concerns=" + valueText(challengeReview && challengeReview.concerns, "none"),
+      "- questions=" + valueText(challengeReview && challengeReview.questions, "none"),
+      "- required_approvals=" + valueText(challengeReview && challengeReview.required_approvals, "none"),
+      "",
       "Accepted baseline:",
       "- runtime=" + valueText(accepted.runtime_path, "unknown"),
       "- head=" + valueText(accepted.head, "unknown"),
@@ -371,16 +388,120 @@
     return item && item.record ? item.record : null;
   }
 
+  function projectBriefFromRecord(item) {
+    return item && item.record ? item.record : null;
+  }
+
+  function challengeReviewFromRecord(item) {
+    return item && item.record ? item.record : null;
+  }
+
+  function latestForProject(items, projectId) {
+    const filtered = (items || []).filter(function (item) {
+      return item && item.project_id === projectId;
+    });
+    return filtered.length ? filtered[0] : null;
+  }
+
+  function challengeNeedsDecision(review) {
+    if (!review || !review.decision_state) return true;
+    return [
+      "clarify_first",
+      "needs_spec_first",
+      "split_into_lanes",
+      "wrong_approach_likely",
+      "unsafe",
+      "needs_approval",
+    ].indexOf(review.decision_state) !== -1;
+  }
+
+  function projectReadiness(project, brief, review) {
+    if (!brief) {
+      return {
+        label: "Needs brief",
+        detail: "Create a project brief before drafting work.",
+        tone: "blocked",
+      };
+    }
+    if (!review) {
+      return {
+        label: "Needs challenge",
+        detail: "Run the challenge gate before creating a lane draft.",
+        tone: "blocked",
+      };
+    }
+    if (review.decision_state === "clear_and_safe") {
+      return {
+        label: "Lane draft ok",
+        detail: "Latest challenge review cleared a bounded lane draft.",
+        tone: "ready",
+      };
+    }
+    if (review.decision_state === "needs_approval") {
+      return {
+        label: "Needs approval",
+        detail: "You need to decide before Jenny can proceed safely.",
+        tone: "attention",
+      };
+    }
+    if (review.decision_state === "unsafe" || review.decision_state === "wrong_approach_likely") {
+      return {
+        label: "Challenge blocked",
+        detail: "Jenny should push back and recommend a safer path.",
+        tone: "blocked",
+      };
+    }
+    return {
+      label: "Spec first",
+      detail: "Clarify or split the work before a lane draft.",
+      tone: "attention",
+    };
+  }
+
+  function DecisionQueue(props) {
+    const projects = props.projects || [];
+    const briefs = props.projectBriefs || [];
+    const reviews = props.challengeReviews || [];
+    const rows = projects.map(function (project) {
+      const projectId = project.project_id || project.name;
+      const brief = latestForProject(briefs, projectId);
+      const review = latestForProject(reviews, projectId);
+      const readiness = projectReadiness(project, brief, review);
+      return Object.assign({}, readiness, {
+        project: project,
+        brief: brief,
+        review: review,
+      });
+    }).filter(function (row) {
+      return row.tone !== "ready" || challengeNeedsDecision(row.review);
+    });
+    return h("div", { className: "mcg-decision-queue" },
+      h("div", { className: "mcg-workspace-section-title" }, "Phone Decision Queue"),
+      h("p", { className: "mcg-muted" }, "Use this from laptop or phone to see which project needs a brief, challenge review, approval, or safer path before Jenny proceeds."),
+      rows.length ? rows.map(function (row) {
+        return h("div", { className: "mcg-decision-row mcg-decision-" + row.tone, key: row.project.project_id || row.project.name },
+          h("div", null,
+            h("strong", null, row.project.name),
+            h("span", null, row.detail)
+          ),
+          h("span", { className: "mcg-badge" }, row.label)
+        );
+      }) : h("p", { className: "mcg-muted" }, "No project decisions are waiting.")
+    );
+  }
+
   function ProjectWorkspaceCard(props) {
     const project = props.project;
+    const readiness = props.readiness || {};
     return h("div", { className: "mcg-project-card" },
       h("div", { className: "mcg-project-card-head" },
         h("div", { className: "mcg-workspace-section-title" }, project.name),
-        h("span", { className: "mcg-badge" }, project.project_id ? "Durable" : "Seed")
+        h("span", { className: "mcg-badge" }, readiness.label || (project.project_id ? "Durable" : "Seed"))
       ),
       h(WorkspaceField, { label: "status", value: project.status }),
       h(WorkspaceField, { label: "current goal", value: project.current_goal }),
       h(WorkspaceField, { label: "next recommended lane", value: project.next_recommended_lane }),
+      readiness.detail ? h("p", { className: "mcg-muted" }, readiness.detail) : null,
       h("div", { className: "mcg-project-actions" },
         h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: function () { props.onOpen(project); }, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") props.onOpen(project); } }, "Open Project"),
         h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: function () { props.onCopy(makeProjectWorkspacePrompt(project, props.workspaceStatus || {})); }, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") props.onCopy(makeProjectWorkspacePrompt(project, props.workspaceStatus || {})); } }, "Copy prompt")
@@ -413,6 +534,141 @@
         h("textarea", { className: "mcg-handoff-textarea", rows: 3, value: objective, placeholder: "Inspect current project state and recommend the next safe lane.", onChange: function (event) { setObjective(event.target.value); } })
       ),
       h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: submitDraft, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") submitDraft(); } }, "Save lane request draft")
+    );
+  }
+
+  function ProjectBriefIntakeForm(props) {
+    const useState = hooks.useState;
+    const outcomeState = useState("");
+    const successState = useState("");
+    const constraintsState = useState("");
+    const forbiddenState = useState("dispatch\nsession-send\nruntime switch\npublic/customer action without approval");
+    const approvalState = useState("deploy, restart, or runtime switch requires explicit approval\npublic posting requires explicit approval");
+    const outcome = outcomeState[0];
+    const setOutcome = outcomeState[1];
+    const success = successState[0];
+    const setSuccess = successState[1];
+    const constraints = constraintsState[0];
+    const setConstraints = constraintsState[1];
+    const forbidden = forbiddenState[0];
+    const setForbidden = forbiddenState[1];
+    const approval = approvalState[0];
+    const setApproval = approvalState[1];
+    function submitBrief() {
+      props.onCreate({
+        outcome: outcome,
+        success_criteria: listFromText(success),
+        constraints: listFromText(constraints),
+        forbidden_actions: listFromText(forbidden),
+        approval_rules: listFromText(approval),
+      });
+      setOutcome("");
+      setSuccess("");
+      setConstraints("");
+    }
+    return h("div", { className: "mcg-project-intake-form" },
+      h("div", { className: "mcg-workspace-section-title" }, "Project Brief Intake"),
+      h("p", { className: "mcg-muted" }, "Append-only setup record. This makes Jenny clarify the outcome, boundaries, approvals, and source of truth before bigger work starts."),
+      h("label", { className: "mcg-handoff-field" },
+        h("span", { className: "mcg-start-label" }, "Outcome"),
+        h("textarea", { className: "mcg-handoff-textarea", rows: 3, value: outcome, placeholder: "What should be true when this project is working?", onChange: function (event) { setOutcome(event.target.value); } })
+      ),
+      h("label", { className: "mcg-handoff-field" },
+        h("span", { className: "mcg-start-label" }, "Success criteria"),
+        h("textarea", { className: "mcg-handoff-textarea", rows: 3, value: success, placeholder: "One per line", onChange: function (event) { setSuccess(event.target.value); } })
+      ),
+      h("label", { className: "mcg-handoff-field" },
+        h("span", { className: "mcg-start-label" }, "Constraints"),
+        h("textarea", { className: "mcg-handoff-textarea", rows: 3, value: constraints, placeholder: "One per line", onChange: function (event) { setConstraints(event.target.value); } })
+      ),
+      h("label", { className: "mcg-handoff-field" },
+        h("span", { className: "mcg-start-label" }, "Forbidden actions"),
+        h("textarea", { className: "mcg-handoff-textarea", rows: 4, value: forbidden, onChange: function (event) { setForbidden(event.target.value); } })
+      ),
+      h("label", { className: "mcg-handoff-field" },
+        h("span", { className: "mcg-start-label" }, "Approval rules"),
+        h("textarea", { className: "mcg-handoff-textarea", rows: 3, value: approval, onChange: function (event) { setApproval(event.target.value); } })
+      ),
+      h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: submitBrief, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") submitBrief(); } }, "Save project brief")
+    );
+  }
+
+  function ChallengeReviewGateForm(props) {
+    const useState = hooks.useState;
+    const summaryState = useState("");
+    const decisionState = useState("needs_spec_first");
+    const pathState = useState("");
+    const concernsState = useState("");
+    const questionsState = useState("");
+    const approvalsState = useState("");
+    const laneTitleState = useState("");
+    const summary = summaryState[0];
+    const setSummary = summaryState[1];
+    const decision = decisionState[0];
+    const setDecision = decisionState[1];
+    const path = pathState[0];
+    const setPath = pathState[1];
+    const concerns = concernsState[0];
+    const setConcerns = concernsState[1];
+    const questions = questionsState[0];
+    const setQuestions = questionsState[1];
+    const approvals = approvalsState[0];
+    const setApprovals = approvalsState[1];
+    const laneTitle = laneTitleState[0];
+    const setLaneTitle = laneTitleState[1];
+    function submitReview() {
+      props.onCreate({
+        request_summary: summary,
+        decision_state: decision,
+        recommended_path: path,
+        concerns: listFromText(concerns),
+        questions: listFromText(questions),
+        required_approvals: listFromText(approvals),
+        suggested_lane_title: laneTitle,
+      });
+      setSummary("");
+      setPath("");
+      setConcerns("");
+      setQuestions("");
+      setApprovals("");
+      setLaneTitle("");
+    }
+    return h("div", { className: "mcg-challenge-gate-form" },
+      h("div", { className: "mcg-workspace-section-title" }, "Jenny Challenge Gate"),
+      h("p", { className: "mcg-muted" }, "Use this before a lane draft when your request may be vague, too broad, unsafe, or the wrong approach. Append-only; no execution permission is granted."),
+      h("label", { className: "mcg-handoff-field" },
+        h("span", { className: "mcg-start-label" }, "Request summary"),
+        h("textarea", { className: "mcg-handoff-textarea", rows: 3, value: summary, placeholder: "What Travis is asking Jenny to do", onChange: function (event) { setSummary(event.target.value); } })
+      ),
+      h("label", { className: "mcg-handoff-field" },
+        h("span", { className: "mcg-start-label" }, "Decision"),
+        h("select", { className: "mcg-handoff-input", value: decision, onChange: function (event) { setDecision(event.target.value); } },
+          ["needs_spec_first", "clarify_first", "split_into_lanes", "wrong_approach_likely", "unsafe", "needs_approval", "clear_and_safe"].map(function (item) {
+            return h("option", { key: item, value: item }, item);
+          })
+        )
+      ),
+      h("label", { className: "mcg-handoff-field" },
+        h("span", { className: "mcg-start-label" }, "Recommended path"),
+        h("textarea", { className: "mcg-handoff-textarea", rows: 3, value: path, placeholder: "What Jenny recommends instead", onChange: function (event) { setPath(event.target.value); } })
+      ),
+      h("label", { className: "mcg-handoff-field" },
+        h("span", { className: "mcg-start-label" }, "Concerns"),
+        h("textarea", { className: "mcg-handoff-textarea", rows: 3, value: concerns, placeholder: "One per line", onChange: function (event) { setConcerns(event.target.value); } })
+      ),
+      h("label", { className: "mcg-handoff-field" },
+        h("span", { className: "mcg-start-label" }, "Questions"),
+        h("textarea", { className: "mcg-handoff-textarea", rows: 3, value: questions, placeholder: "One per line", onChange: function (event) { setQuestions(event.target.value); } })
+      ),
+      h("label", { className: "mcg-handoff-field" },
+        h("span", { className: "mcg-start-label" }, "Required approvals"),
+        h("textarea", { className: "mcg-handoff-textarea", rows: 3, value: approvals, placeholder: "One per line", onChange: function (event) { setApprovals(event.target.value); } })
+      ),
+      h("label", { className: "mcg-handoff-field" },
+        h("span", { className: "mcg-start-label" }, "Suggested lane title"),
+        h("input", { className: "mcg-handoff-input", value: laneTitle, placeholder: "Optional bounded lane", onChange: function (event) { setLaneTitle(event.target.value); } })
+      ),
+      h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: submitReview, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") submitReview(); } }, "Save challenge review")
     );
   }
 
@@ -495,7 +751,7 @@
     const copyState = useState("");
     const copyMessage = copyState[0];
     const setCopyMessage = copyState[1];
-    const recordsState = useState({ loading: true, projects: [], laneRequests: [], reports: [], projectStates: [], error: "" });
+    const recordsState = useState({ loading: true, projects: [], projectBriefs: [], challengeReviews: [], laneRequests: [], reports: [], projectStates: [], error: "" });
     const records = recordsState[0];
     const setRecords = recordsState[1];
     const selectedState = useState(null);
@@ -505,6 +761,8 @@
     function refreshWorkspaceRecords() {
       Promise.all([
         getJSON(WORKSPACE_PROJECTS_URL),
+        getJSON(WORKSPACE_PROJECT_BRIEFS_URL),
+        getJSON(WORKSPACE_CHALLENGE_REVIEWS_URL),
         getJSON(WORKSPACE_LANE_REQUESTS_URL),
         getJSON(WORKSPACE_REPORTS_URL),
         getJSON(WORKSPACE_PROJECT_STATE_URL),
@@ -512,13 +770,15 @@
         setRecords({
           loading: false,
           projects: (result[0] && result[0].projects) || [],
-          laneRequests: (result[1] && result[1].lane_requests) || [],
-          reports: (result[2] && result[2].reports) || [],
-          projectStates: (result[3] && result[3].project_states) || [],
+          projectBriefs: (result[1] && result[1].project_briefs) || [],
+          challengeReviews: (result[2] && result[2].challenge_reviews) || [],
+          laneRequests: (result[3] && result[3].lane_requests) || [],
+          reports: (result[4] && result[4].reports) || [],
+          projectStates: (result[5] && result[5].project_states) || [],
           error: "",
         });
       }).catch(function (err) {
-        setRecords({ loading: false, projects: [], laneRequests: [], reports: [], projectStates: [], error: String(err && err.message ? err.message : err) });
+        setRecords({ loading: false, projects: [], projectBriefs: [], challengeReviews: [], laneRequests: [], reports: [], projectStates: [], error: String(err && err.message ? err.message : err) });
       });
     }
 
@@ -538,9 +798,19 @@
 
     function createLaneRequest(draft) {
       if (!selectedProject) return;
-      const prompt = makeProjectWorkspacePrompt(selectedProject, props.workspaceStatus || {}, draft);
+      const selectedId = selectedProject.project_id || selectedProject.name;
+      const latestReview = latestForProject(records.challengeReviews.map(challengeReviewFromRecord).filter(Boolean), selectedId);
+      if (!latestReview) {
+        setCopyMessage("Create a Jenny challenge review before saving a lane request draft.");
+        return;
+      }
+      if (latestReview.decision_state !== "clear_and_safe") {
+        setCopyMessage("Latest challenge review is " + latestReview.decision_state + ". Resolve that before saving a lane request draft.");
+        return;
+      }
+      const prompt = makeProjectWorkspacePrompt(selectedProject, props.workspaceStatus || {}, draft, selectedProjectBrief, selectedChallengeReview);
       postJSON(WORKSPACE_LANE_REQUEST_CREATE_URL, {
-        project_id: selectedProject.project_id || selectedProject.name,
+        project_id: selectedId,
         title: draft.title || selectedProject.next_recommended_lane,
         objective: draft.objective || selectedProject.current_goal,
         mode: "read-only/manual-copy",
@@ -554,6 +824,48 @@
         refreshWorkspaceRecords();
       }).catch(function (err) {
         setCopyMessage("Lane request was not saved: " + String(err && err.message ? err.message : err));
+      });
+    }
+
+    function createProjectBrief(brief) {
+      if (!selectedProject) return;
+      postJSON(WORKSPACE_PROJECT_BRIEF_CREATE_URL, {
+        "project_id": selectedProject.project_id || selectedProject.name,
+        "name": selectedProject.name,
+        outcome: brief.outcome,
+        audience: "Travis",
+        source_of_truth: selectedProject.source_of_truth || "Mission Control records",
+        success_criteria: brief.success_criteria,
+        constraints: brief.constraints,
+        forbidden_actions: brief.forbidden_actions,
+        approval_rules: brief.approval_rules,
+        status: "active",
+      }).then(function () {
+        setCopyMessage("Saved project brief. Challenge gate is still required before lane draft.");
+        refreshWorkspaceRecords();
+      }).catch(function (err) {
+        setCopyMessage("Project brief was not saved: " + String(err && err.message ? err.message : err));
+      });
+    }
+
+    function createChallengeReview(review) {
+      if (!selectedProject) return;
+      postJSON(WORKSPACE_CHALLENGE_REVIEW_CREATE_URL, {
+        project_id: selectedProject.project_id || selectedProject.name,
+        request_summary: review.request_summary,
+        decision_state: review.decision_state,
+        recommended_path: review.recommended_path,
+        concerns: review.concerns,
+        questions: review.questions,
+        required_spec_updates: review.required_spec_updates || [],
+        required_approvals: review.required_approvals,
+        suggested_lane_title: review.suggested_lane_title,
+        reviewed_by: "mission-control",
+      }).then(function () {
+        setCopyMessage("Saved Jenny challenge review. It remains display-only and does not start work.");
+        refreshWorkspaceRecords();
+      }).catch(function (err) {
+        setCopyMessage("Challenge review was not saved: " + String(err && err.message ? err.message : err));
       });
     }
 
@@ -579,6 +891,11 @@
     const durableProjects = records.projects.map(projectFromRecord).filter(Boolean);
     const projectCards = durableProjects.length ? durableProjects : PROJECT_WORKSPACE_CARDS;
     const selectedId = selectedProject ? (selectedProject.project_id || selectedProject.name) : "";
+    const projectBriefs = records.projectBriefs.map(projectBriefFromRecord).filter(Boolean);
+    const challengeReviews = records.challengeReviews.map(challengeReviewFromRecord).filter(Boolean);
+    const selectedProjectBrief = latestForProject(projectBriefs, selectedId);
+    const selectedChallengeReview = latestForProject(challengeReviews, selectedId);
+    const selectedReadiness = selectedProject ? projectReadiness(selectedProject, selectedProjectBrief, selectedChallengeReview) : null;
     const projectLaneRequests = records.laneRequests.map(laneRequestFromRecord).filter(function (lane) { return lane && lane.project_id === selectedId; });
     const projectReports = records.reports.map(reportFromRecord).filter(function (report) { return report && report.project_id === selectedId; });
     const selectedProjectState = records.projectStates.filter(function (state) { return state && state.project_id === selectedId; })[0] || null;
@@ -596,11 +913,16 @@
         h("p", { className: "mcg-muted" }, "Send to Jenny — disabled. No dispatch, queue, Waha, model routing, enforcement, automatic session send, storage, timers, or hidden workers."),
         records.error ? h("p", { className: "mcg-handoff-stop" }, records.error) : null,
         copyMessage ? h("p", { className: "mcg-muted" }, copyMessage) : null,
+        h(DecisionQueue, { projects: projectCards, projectBriefs: projectBriefs, challengeReviews: challengeReviews }),
         h("div", { className: "mcg-project-grid" },
           projectCards.map(function (project) {
+            const projectId = project.project_id || project.name;
+            const brief = latestForProject(projectBriefs, projectId);
+            const review = latestForProject(challengeReviews, projectId);
             return h(ProjectWorkspaceCard, {
               key: project.project_id || project.name,
               project: project,
+              readiness: projectReadiness(project, brief, review),
               workspaceStatus: props.workspaceStatus || {},
               onOpen: setSelectedProject,
               onCopy: copyProjectPrompt,
@@ -610,13 +932,44 @@
         selectedProject ? h("div", { className: "mcg-project-detail-workspace" },
           h("div", { className: "mcg-project-card-head" },
             h("div", { className: "mcg-workspace-section-title" }, "Open Project: " + selectedProject.name),
-            h("span", { className: "mcg-badge" }, "Send to Jenny disabled")
+            h("span", { className: "mcg-badge" }, selectedReadiness ? selectedReadiness.label : "Send to Jenny disabled")
           ),
+          selectedReadiness ? h("p", { className: selectedReadiness.tone === "ready" ? "mcg-muted" : "mcg-handoff-warning" }, selectedReadiness.detail) : null,
           selectedProjectState ? h(ProjectStateProjection, { state: selectedProjectState }) : null,
+          h("div", { className: "mcg-project-intake-grid" },
+            h("div", { className: "mcg-project-intake-status" },
+              h("div", { className: "mcg-workspace-section-title" }, "Latest Project Brief"),
+              selectedProjectBrief
+                ? h("div", null,
+                  h(WorkspaceField, { label: "outcome", value: selectedProjectBrief.outcome }),
+                  h(WorkspaceField, { label: "success criteria", value: selectedProjectBrief.success_criteria }),
+                  h(WorkspaceField, { label: "constraints", value: selectedProjectBrief.constraints }),
+                  h(WorkspaceField, { label: "approval rules", value: selectedProjectBrief.approval_rules }),
+                  h(WorkspaceField, { label: "context pack", value: selectedProjectBrief.context_pack_path, fallback: "None" })
+                )
+                : h("p", { className: "mcg-muted" }, "No project brief saved yet.")
+            ),
+            h("div", { className: "mcg-project-intake-status" },
+              h("div", { className: "mcg-workspace-section-title" }, "Latest Challenge Review"),
+              selectedChallengeReview
+                ? h("div", null,
+                  h(WorkspaceField, { label: "decision", value: selectedChallengeReview.decision_state }),
+                  h(WorkspaceField, { label: "request", value: selectedChallengeReview.request_summary }),
+                  h(WorkspaceField, { label: "recommended path", value: selectedChallengeReview.recommended_path }),
+                  h(WorkspaceField, { label: "concerns", value: selectedChallengeReview.concerns }),
+                  h(WorkspaceField, { label: "questions", value: selectedChallengeReview.questions }),
+                  h(WorkspaceField, { label: "required approvals", value: selectedChallengeReview.required_approvals }),
+                  h(WorkspaceField, { label: "suggested lane", value: selectedChallengeReview.suggested_lane_title })
+                )
+                : h("p", { className: "mcg-muted" }, "No challenge review saved yet.")
+            )
+          ),
           h(WorkspaceField, { label: "current goal", value: selectedProject.current_goal }),
           h(WorkspaceField, { label: "last report summary", value: selectedProject.last_report_summary }),
           h(WorkspaceField, { label: "next recommended lane", value: selectedProject.next_recommended_lane }),
           h(WorkspaceField, { label: "mistakes/guards", value: selectedProject.mistakes_guards }),
+          h(ProjectBriefIntakeForm, { onCreate: createProjectBrief }),
+          h(ChallengeReviewGateForm, { onCreate: createChallengeReview }),
           h(LaneRequestDraftForm, { onCreate: createLaneRequest }),
           h("div", { className: "mcg-project-lane-list" },
             h("div", { className: "mcg-workspace-section-title" }, "Saved lane request drafts"),
