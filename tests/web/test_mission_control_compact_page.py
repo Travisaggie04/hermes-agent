@@ -114,6 +114,37 @@ def test_compact_route_has_read_only_project_kanban_lifecycle() -> None:
         assert forbidden not in src
 
 
+def test_compact_route_has_display_only_tonight_active_lanes() -> None:
+    src = page_source()
+    for expected in [
+        "Tonight / Active Lanes",
+        "Tonight active lanes compact",
+        "Four-project overnight board",
+        "Display-only; no dispatch, queue mutation, worker, or timer",
+        "TONIGHT_PROJECT_IDS",
+        "compactActiveLaneStage",
+        "next safe lane",
+        "latest evidence",
+    ]:
+        assert expected in src
+
+    section_start = src.index("function CompactActiveLanes")
+    section_end = src.index("function CompactProjectRoom", section_start)
+    active_lanes_src = src[section_start:section_end]
+    for forbidden in [
+        "fetchJSON(",
+        "method: \"POST\"",
+        "setInterval",
+        "setTimeout",
+        "Worker(",
+        "dispatch",
+    ]:
+        if forbidden == "dispatch":
+            assert "no dispatch" in active_lanes_src
+        else:
+            assert forbidden not in active_lanes_src
+
+
 def test_compact_lane_draft_requires_latest_clear_challenge_review() -> None:
     src = page_source()
     for expected in [

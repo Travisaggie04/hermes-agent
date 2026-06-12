@@ -35,6 +35,13 @@ const REAL_PROJECT_NAMES = [
   "Waha Work",
 ] as const;
 
+const TONIGHT_PROJECT_IDS = [
+  "project-hermes-mission-control",
+  "project-shorts-video",
+  "project-long-form-video",
+  "project-tool-tally",
+];
+
 const PROJECT_LANE_GUIDANCE: Record<string, string> = {
   "project-hermes-mission-control":
     "Mission Control workspace validation or a narrow Desktop/dashboard PR. Keep manual-copy/display-only unless Travis approves execution.",
@@ -765,6 +772,13 @@ export default function MissionControlCompactPage() {
 
       {snapshot ? <SafetyStrip status={snapshot.workspaceStatus} /> : null}
 
+      {snapshot ? (
+        <CompactActiveLanes
+          projectViews={realProjects.filter(project => TONIGHT_PROJECT_IDS.includes(project.project_id)).map(project => viewModelForProject(snapshot, project))}
+          status={snapshot.workspaceStatus}
+        />
+      ) : null}
+
       {selectedProjectView ? (
         <CompactProjectRoom
           busy={roomBusy}
@@ -832,6 +846,55 @@ export default function MissionControlCompactPage() {
         </section>
       ) : null}
     </main>
+  );
+}
+
+function compactActiveLaneStage(projectView: ProjectViewModel): string {
+  if (!projectView.projectBrief) {
+    return "needs brief";
+  }
+  if (!projectView.challengeReview) {
+    return "needs challenge";
+  }
+  if (projectView.challengeReview.decision_state !== "clear_and_safe") {
+    return `challenge: ${projectView.challengeReview.decision_state ?? "unknown"}`;
+  }
+  if (!projectView.latestLaneRequest) {
+    return "ready for lane draft";
+  }
+  return projectView.latestLaneRequest.status ? `${projectView.latestLaneRequest.status} lane` : "lane drafted";
+}
+
+function CompactActiveLanes({ projectViews, status }: { projectViews: ProjectViewModel[]; status: WorkspaceStatus }) {
+  return (
+    <section className="mt-4 rounded-2xl border border-border/70 bg-card p-3" aria-label="Tonight active lanes compact">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold">Tonight / Active Lanes</h2>
+          <p className="mt-1 text-[0.68rem] text-muted-foreground">Four-project overnight board. Display-only; no dispatch, queue mutation, worker, or timer.</p>
+        </div>
+        <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[0.65rem] font-semibold text-sky-700 dark:text-sky-300">
+          display-only
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2">
+        {projectViews.map(projectView => (
+          <article className="rounded-xl border border-border/70 bg-background p-2 text-xs" key={projectView.project.project_id}>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 className="font-semibold leading-tight">{projectView.project.name}</h3>
+                <p className="mt-1 text-[0.68rem] text-muted-foreground">{projectView.status}</p>
+              </div>
+              <span className="shrink-0 rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{compactActiveLaneStage(projectView)}</span>
+            </div>
+            <CompactField label="next safe lane" value={projectView.nextLane} />
+            <CompactField label="latest evidence" value={projectView.latestReport} />
+            <CompactField label="readiness" value={projectView.readinessDetail} />
+          </article>
+        ))}
+      </div>
+      <p className="mt-3 text-[0.68rem] text-muted-foreground">Safety status: {safetySummary(status)}</p>
+    </section>
   );
 }
 

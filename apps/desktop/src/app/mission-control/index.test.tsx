@@ -496,6 +496,10 @@ describe('MissionControlView', () => {
     expect(getMissionControlGitHubBridgeStatus).toHaveBeenCalledTimes(1)
 
     expect(screen.getByText('Real project workspace')).toBeTruthy()
+    expect(screen.getByText('Tonight / Active Lanes')).toBeTruthy()
+    expect(screen.getByText('Four-project overnight control board. Display-only; lane state is derived from briefs, challenge reviews, lane drafts, and reports.')).toBeTruthy()
+    expect(screen.getByText('display-only / no dispatch')).toBeTruthy()
+    expect(screen.getAllByText('next safe lane').length).toBeGreaterThan(0)
     expect(screen.getByText('Project Rooms')).toBeTruthy()
     expect(screen.getByText('Jenny bridge')).toBeTruthy()
     expect(screen.getAllByText('manual-start only').length).toBeGreaterThanOrEqual(2)
@@ -541,6 +545,20 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText(/no queue mutation/).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /move card/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /start work/i })).toBeNull()
+  })
+
+  it('renders tonight active lanes as a display-only four-project control board', async () => {
+    await renderMissionControl()
+
+    const panel = await screen.findByRole('region', { name: 'Tonight active lanes' })
+    expect(panel.textContent).toContain('Hermes / Mission Control')
+    expect(panel.textContent).toContain('Shorts Video')
+    expect(panel.textContent).toContain('Long-form Video')
+    expect(panel.textContent).toContain('Tool & Tally')
+    expect(panel.textContent).not.toContain('Waha Work')
+    expect(panel.textContent).toContain('Display-only')
+    expect(panel.textContent).toContain('Active lane count: 0')
+    expect(panel.querySelectorAll('button')).toHaveLength(0)
   })
 
   it('shows real project state, fallback empty-state copy, and disabled safety flags', async () => {
