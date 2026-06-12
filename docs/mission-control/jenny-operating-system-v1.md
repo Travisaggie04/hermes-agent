@@ -11,6 +11,25 @@ taker. She should challenge bad direction, require project setup before major
 work, preserve rollback awareness, and report what happened in a form Mission
 Control can compare against the approved lane.
 
+## Primary Workspace
+
+Mission Control is the intended operating workspace for Travis on laptop and
+phone. Discord is a legacy/fallback transport, not the source of truth.
+
+The workspace should make concurrent project work visible without blending
+contexts. For each project it should show the current brief, latest challenge
+review, lane drafts, Jenny reports, and any decision Travis needs to make before
+work can safely continue.
+
+Phone usage must prefer compact decisions over long prompts:
+
+- what project needs attention
+- whether Jenny is blocked, needs approval, or is clear to draft a lane
+- the safest recommended next step
+- whether any action would touch dispatch, Waha, posting, payments, deploys,
+  restarts, workers, timers, model routing, queues, secrets, or customer/public
+  surfaces
+
 ## Authority Order
 
 1. Mission Control records: accepted baseline, project brief, challenge review,

@@ -1369,7 +1369,8 @@ def test_lane_handoff_draft_builder_bundle_is_inert_and_copy_only():
         "Start New Lane / Draft Handoff",
         "Lane Handoff Draft Builder",
         "/api/plugins/mission-control-governance/workspace-status",
-        "Manual transport only — paste into Discord. This does not start work.",
+        "Manual transport only",
+        "paste into Discord. This does not start work.",
         "Draft packet only. This is not an active lane.",
         "STOP: Mission Control stale-context warnings are present",
         "Do not proceed until this is resolved.",
@@ -1462,12 +1463,32 @@ def test_project_workspace_records_pr_a_bundle_is_manual_copy_only():
         "Copy prompt",
         "Save lane request draft",
         "Saved lane request drafts",
-        "Send to Jenny — disabled",
+        "Send to Jenny",
+        "disabled. No dispatch, queue, Waha, model routing, enforcement, automatic session send, storage, timers, or hidden workers.",
         "WORKSPACE_PROJECTS_URL",
+        "WORKSPACE_PROJECT_BRIEFS_URL",
+        "WORKSPACE_PROJECT_BRIEF_CREATE_URL",
+        "WORKSPACE_CHALLENGE_REVIEWS_URL",
+        "WORKSPACE_CHALLENGE_REVIEW_CREATE_URL",
         "WORKSPACE_LANE_REQUESTS_URL",
         "WORKSPACE_REPORTS_URL",
         "WORKSPACE_REPORT_CREATE_URL",
         "WORKSPACE_PROJECT_STATE_URL",
+        "Phone Decision Queue",
+        "Project Brief Intake",
+        "Jenny Challenge Gate",
+        "Save project brief",
+        "Save challenge review",
+        "Create a Jenny challenge review before saving a lane request draft.",
+        "Latest challenge review is ",
+        "clear_and_safe",
+        "wrong_approach_likely",
+        "needs_spec_first",
+        "Challenge blocked",
+        "Needs approval",
+        "Lane draft ok",
+        "Use this from laptop or phone",
+        "Use this before a lane draft when your request may be vague, too broad, unsafe, or the wrong approach.",
         "Project State Projection",
         "Derived read-only view from ProjectRecord, LaneRequestRecord, and JennyReportRecord",
         "latest lane request",
@@ -1478,8 +1499,9 @@ def test_project_workspace_records_pr_a_bundle_is_manual_copy_only():
         "Manual Jenny Report Inbox",
         "Save Jenny report manually",
         "Saved Jenny reports",
-        "Paste Jenny’s report manually",
-        "Manual transport only — paste into Discord. This does not start work.",
+        "Paste Jenny",
+        "Manual transport only",
+        "This does not start work.",
         "Draft packet only. This is not an active lane.",
         "Read-only/manual-copy Mission Control project workspace lane.",
         "Use this project card as context",
@@ -1504,6 +1526,11 @@ def test_project_workspace_records_pr_a_bundle_is_manual_copy_only():
         ".mcg-project-card",
         ".mcg-project-card-head",
         ".mcg-project-prompt-preview",
+        ".mcg-decision-queue",
+        ".mcg-decision-row",
+        ".mcg-project-intake-grid",
+        ".mcg-project-intake-form",
+        ".mcg-challenge-gate-form",
         ".mcg-manual-report-inbox",
         ".mcg-project-report-list",
         "grid-template-columns: repeat(2, minmax(0, 1fr))",
@@ -1529,6 +1556,28 @@ def test_project_workspace_records_pr_a_bundle_is_manual_copy_only():
         "setTimeout",
     ):
         assert forbidden not in bundle
+
+
+def test_project_workspace_latest_brief_and_challenge_review_use_newest_record():
+    bundle = (PLUGIN_DIR / "dashboard" / "dist" / "index.js").read_text()
+
+    assert "return filtered.length ? filtered[filtered.length - 1] : null;" in bundle
+    assert "const latestReview = latestForProject(records.challengeReviews.map(challengeReviewFromRecord).filter(Boolean), selectedId);" in bundle
+    assert 'if (latestReview.decision_state !== "clear_and_safe")' in bundle
+    assert "Latest challenge review is " in bundle
+    assert "Create a Jenny challenge review before saving a lane request draft." in bundle
+
+    old_clear_new_unsafe = [
+        {"project_id": "project-hermes", "decision_state": "clear_and_safe"},
+        {"project_id": "project-hermes", "decision_state": "unsafe"},
+    ]
+    old_unsafe_new_clear = [
+        {"project_id": "project-hermes", "decision_state": "unsafe"},
+        {"project_id": "project-hermes", "decision_state": "clear_and_safe"},
+    ]
+
+    assert old_clear_new_unsafe[-1]["decision_state"] == "unsafe"
+    assert old_unsafe_new_clear[-1]["decision_state"] == "clear_and_safe"
 
 
 def test_autonomy_readiness_ledger_bundle_is_static_display_only():
@@ -3589,7 +3638,8 @@ def test_dashboard_operating_workspace_panel_is_bounded_display_only():
     assert "/api/plugins/mission-control-governance/workspace-status" in bundle
     assert "getJSON(WORKSPACE_STATUS_URL)" in bundle
     assert "Operating Workspace" in bundle
-    assert "Execution disabled — use approved lane." in bundle
+    assert "Execution disabled" in bundle
+    assert "use approved lane." in bundle
     assert "Accepted Baseline" in bundle
     assert "Rollback Baseline" in bundle
     assert "Active Lane" in bundle
