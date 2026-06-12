@@ -65,6 +65,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Save challenge draft",
         "Save read-only lane draft",
         "Queue for Jenny bridge",
+        "Refresh bridge",
         "Jenny bridge",
         "Record-backed outbox/inbox for Jenny relay",
         "WORKSPACE_JENNY_BRIDGE_OUTBOX_URL",

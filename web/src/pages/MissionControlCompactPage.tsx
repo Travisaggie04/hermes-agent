@@ -103,6 +103,8 @@ interface ReportRecord {
 
 interface JennyBridgeRequestRecord {
   ack_key?: string;
+  bridge_state?: string;
+  has_response?: boolean;
   message: string;
   project_id?: string;
   request_id?: string;
@@ -583,6 +585,19 @@ export default function MissionControlCompactPage() {
     setSnapshot(nextSnapshot);
   }
 
+  async function refreshBridge() {
+    setRoomBusy(true);
+    setRoomMessage("");
+    try {
+      await refreshSnapshot();
+      setRoomMessage("Refreshed bridge inbox/outbox.");
+    } catch (err) {
+      setRoomMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRoomBusy(false);
+    }
+  }
+
   async function saveChallengeDraft(projectView: ProjectViewModel) {
     if (!projectRequest.trim()) {
       setRoomMessage("Write one bounded request before saving a challenge draft.");
@@ -714,6 +729,7 @@ export default function MissionControlCompactPage() {
           bridgeResponses={snapshot?.jennyBridgeResponses.filter(response => response.project_id === selectedProjectView.project.project_id) ?? []}
           onCopyPacket={() => void copyPhoneSafePacket(selectedProjectView)}
           onQueueBridge={() => void queueJennyBridgeMessage(selectedProjectView)}
+          onRefreshBridge={() => void refreshBridge()}
           onRequestChange={setProjectRequest}
           onSaveChallenge={() => void saveChallengeDraft(selectedProjectView)}
           onSaveLane={() => void saveReadOnlyLaneDraft(selectedProjectView)}
@@ -780,6 +796,7 @@ function CompactProjectRoom({
   message,
   onCopyPacket,
   onQueueBridge,
+  onRefreshBridge,
   onRequestChange,
   onSaveChallenge,
   onSaveLane,
@@ -795,6 +812,7 @@ function CompactProjectRoom({
   message: string;
   onCopyPacket: () => void;
   onQueueBridge: () => void;
+  onRefreshBridge: () => void;
   onRequestChange: (value: string) => void;
   onSaveChallenge: () => void;
   onSaveLane: () => void;
@@ -807,6 +825,7 @@ function CompactProjectRoom({
   const sessions = selectedProjectView.projectState?.recent_sessions ?? [];
   const review = selectedProjectView.challengeReview;
   const brief = selectedProjectView.projectBrief;
+  const repliedRequestIds = new Set(bridgeResponses.map(response => response.request_id).filter(Boolean));
   return (
     <section className="mt-4 grid gap-3 lg:grid-cols-[minmax(12rem,18rem)_1fr]" aria-label="Project Rooms">
       <div className="rounded-2xl border border-border/70 bg-card p-3">
@@ -865,12 +884,15 @@ function CompactProjectRoom({
           />
         </label>
 
-        <div className="mt-3 grid gap-2 sm:grid-cols-4">
+        <div className="mt-3 grid gap-2 sm:grid-cols-5">
           <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onCopyPacket} type="button">
             Copy phone-safe packet
           </button>
           <button className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={busy} onClick={onQueueBridge} type="button">
             Queue for Jenny bridge
+          </button>
+          <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onRefreshBridge} type="button">
+            Refresh bridge
           </button>
           <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onSaveChallenge} type="button">
             Save challenge draft
@@ -886,9 +908,14 @@ function CompactProjectRoom({
             <h3 className="text-sm font-semibold">Jenny bridge</h3>
             <span className="rounded-full border border-emerald-500/30 px-2 py-0.5 text-[0.65rem] text-emerald-700 dark:text-emerald-300">no dispatch</span>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">Record-backed outbox/inbox for Jenny relay. Direct send remains disabled.</p>
+          <p className="mt-2 text-xs text-muted-foreground">Record-backed outbox/inbox for Jenny relay. Use refresh to check replies. Direct send remains disabled.</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <CompactBridgeList title="Outbound" empty="No queued messages." items={bridgeRequests} renderItem={item => `${item.status ?? "queued"} / ${item.message}`} />
+            <CompactBridgeList
+              title="Outbound"
+              empty="No queued messages."
+              items={bridgeRequests}
+              renderItem={item => `${item.bridge_state ?? (item.request_id && repliedRequestIds.has(item.request_id) ? "replied" : item.status ?? "queued")} / ${item.message}`}
+            />
             <CompactBridgeList title="Replies" empty="No replies yet." items={bridgeResponses} renderItem={item => `${item.responder ?? "jenny"} / ${item.message}`} />
           </div>
         </div>

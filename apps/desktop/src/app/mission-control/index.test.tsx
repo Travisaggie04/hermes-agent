@@ -450,6 +450,8 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Jenny bridge')).toBeTruthy()
     expect(screen.getByText('Outbound to Jenny')).toBeTruthy()
     expect(screen.getByText('Jenny replies')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Refresh bridge' })).toBeTruthy()
+    expect(screen.getByText(/replied \/ jenny/)).toBeTruthy()
     expect(screen.getByText('Project Kanban')).toBeTruthy()
     expect(screen.getByText('Project Room: Hermes / Mission Control')).toBeTruthy()
     expect(screen.getByText('5 of 5 real projects loaded')).toBeTruthy()

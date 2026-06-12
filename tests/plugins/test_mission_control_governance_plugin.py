@@ -395,6 +395,22 @@ def test_workspace_jenny_bridge_api_creates_lists_and_stays_inert(plugin_api, cl
     assert listed.json()["dispatch_enabled"] is False
     assert listed.json()["count"] == 1
     assert listed.json()["requests"][0]["record"]["request_id"] == "bridge-request-1"
+    assert listed.json()["requests"][0]["record"]["bridge_state"] == "queued"
+    assert listed.json()["requests"][0]["has_response"] is False
+
+    pending = client.get("/api/plugins/mission-control-governance/workspace/jenny-bridge/pending?project_id=project-hermes")
+    assert pending.status_code == 200
+    pending_payload = pending.json()
+    assert pending_payload["manual_copy_only"] is False
+    assert pending_payload["send_to_jenny_enabled"] is False
+    assert pending_payload["dispatch_enabled"] is False
+    assert pending_payload["relay_ready"] is True
+    assert pending_payload["poller_required"] is True
+    assert pending_payload["count"] == 1
+    assert pending_payload["requests"][0]["record"]["request_id"] == "bridge-request-1"
+    assert "Mission Control Jenny bridge relay packet" in pending_payload["relay_packet"]
+    assert "bridge-request-1" in pending_payload["relay_packet"]
+    assert "POST /workspace/jenny-bridge/inbox/create" in pending_payload["relay_packet"]
 
     inbound = client.post(
         "/api/plugins/mission-control-governance/workspace/jenny-bridge/inbox/create",
@@ -433,6 +449,26 @@ def test_workspace_jenny_bridge_api_creates_lists_and_stays_inert(plugin_api, cl
     assert inbox.json()["dispatch_enabled"] is False
     assert inbox.json()["count"] == 1
     assert inbox.json()["responses"][0]["record"]["response_id"] == "bridge-response-1"
+
+    answered_outbox = client.get(
+        "/api/plugins/mission-control-governance/workspace/jenny-bridge/outbox?project_id=project-hermes"
+    )
+    assert answered_outbox.status_code == 200
+    assert answered_outbox.json()["requests"][0]["record"]["bridge_state"] == "replied"
+    assert answered_outbox.json()["requests"][0]["has_response"] is True
+
+    queued_after_response = client.get(
+        "/api/plugins/mission-control-governance/workspace/jenny-bridge/outbox?project_id=project-hermes&status=queued"
+    )
+    assert queued_after_response.status_code == 200
+    assert queued_after_response.json()["count"] == 0
+
+    pending_after_response = client.get(
+        "/api/plugins/mission-control-governance/workspace/jenny-bridge/pending?project_id=project-hermes"
+    )
+    assert pending_after_response.status_code == 200
+    assert pending_after_response.json()["count"] == 0
+    assert "No pending bridge requests." in pending_after_response.json()["relay_packet"]
 
 
 def _assert_inert_workspace_payload(payload):
@@ -1804,6 +1840,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/reports": {"GET"},
         "/workspace/reports/create": {"POST"},
         "/workspace/jenny-bridge/outbox": {"GET"},
+        "/workspace/jenny-bridge/pending": {"GET"},
         "/workspace/jenny-bridge/outbox/create": {"POST"},
         "/workspace/jenny-bridge/inbox": {"GET"},
         "/workspace/jenny-bridge/inbox/create": {"POST"},
