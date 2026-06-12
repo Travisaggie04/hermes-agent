@@ -9,6 +9,7 @@ const getMissionControlChallengeReviews = vi.fn()
 const getMissionControlJennyBridgeInbox = vi.fn()
 const getMissionControlJennyBridgeOutbox = vi.fn()
 const getMissionControlJennyBridgePollerStatus = vi.fn()
+const getMissionControlGitHubBridgeStatus = vi.fn()
 const getMissionControlLaneRequests = vi.fn()
 const getMissionControlReports = vi.fn()
 const getMissionControlProjectState = vi.fn()
@@ -29,6 +30,7 @@ vi.mock('@/hermes', () => ({
   getMissionControlJennyBridgeInbox: () => getMissionControlJennyBridgeInbox(),
   getMissionControlJennyBridgeOutbox: () => getMissionControlJennyBridgeOutbox(),
   getMissionControlJennyBridgePollerStatus: () => getMissionControlJennyBridgePollerStatus(),
+  getMissionControlGitHubBridgeStatus: () => getMissionControlGitHubBridgeStatus(),
   getMissionControlWorkspaceStatus: () => getMissionControlWorkspaceStatus(),
   getMissionControlProjectBriefs: () => getMissionControlProjectBriefs(),
   getMissionControlProjects: () => getMissionControlProjects(),
@@ -444,6 +446,31 @@ beforeEach(() => {
     timer_enabled: false,
     worker_enabled: false
   })
+  getMissionControlGitHubBridgeStatus.mockResolvedValue({
+    count: 1,
+    daemon_enabled: false,
+    discord_automation_enabled: false,
+    dispatch_enabled: false,
+    display_only: true,
+    execution_enabled: false,
+    last_error: '',
+    last_poll_at: '2026-06-13T01:00:00Z',
+    last_response_at: '2026-06-13T01:05:00Z',
+    last_response_request_id: 'github-bridge-request-1',
+    last_status: 'poll_completed',
+    manual_start_only: true,
+    mode: 'watch_foreground',
+    foreground_watch_supported: true,
+    foreground_watch_running: true,
+    model_routing_enabled: false,
+    pending_count: 1,
+    send_to_jenny_enabled: false,
+    session_send_enabled: false,
+    status_records: [],
+    stored: false,
+    timer_enabled: false,
+    worker_enabled: false
+  })
 })
 
 afterEach(() => {
@@ -466,13 +493,17 @@ describe('MissionControlView', () => {
     expect(getMissionControlJennyBridgeOutbox).toHaveBeenCalledTimes(1)
     expect(getMissionControlJennyBridgeInbox).toHaveBeenCalledTimes(1)
     expect(getMissionControlJennyBridgePollerStatus).toHaveBeenCalledTimes(1)
+    expect(getMissionControlGitHubBridgeStatus).toHaveBeenCalledTimes(1)
 
     expect(screen.getByText('Real project workspace')).toBeTruthy()
     expect(screen.getByText('Project Rooms')).toBeTruthy()
     expect(screen.getByText('Jenny bridge')).toBeTruthy()
-    expect(screen.getByText('manual-start only')).toBeTruthy()
+    expect(screen.getAllByText('manual-start only').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('response_appended')).toBeTruthy()
+    expect(screen.getByText('GitHub mailbox')).toBeTruthy()
+    expect(screen.getAllByText('1').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('worker disabled / timer disabled')).toBeTruthy()
+    expect(screen.getByText('daemon disabled / worker disabled / timer disabled')).toBeTruthy()
     expect(screen.getByText('Outbound to Jenny')).toBeTruthy()
     expect(screen.getByText('Jenny replies')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Refresh bridge' })).toBeTruthy()

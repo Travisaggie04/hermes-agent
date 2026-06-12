@@ -7,6 +7,7 @@ import {
   createMissionControlReport,
   createMissionControlSessionProjectLink,
   getMissionControlChallengeReviews,
+  getMissionControlGitHubBridgeStatus,
   getMissionControlJennyBridgeInbox,
   getMissionControlJennyBridgeOutbox,
   getMissionControlJennyBridgePollerStatus,
@@ -18,6 +19,7 @@ import {
   getMissionControlReports,
   getMissionControlWorkspaceStatus,
   type MissionControlChallengeReviewRecord,
+  type MissionControlGitHubBridgeStatusResponse,
   type MissionControlJennyBridgePollerStatusResponse,
   type MissionControlJennyBridgeRequestRecord,
   type MissionControlJennyBridgeResponseRecord,
@@ -37,6 +39,7 @@ interface MissionControlSnapshot {
   jennyBridgeRequests: MissionControlJennyBridgeRequestRecord[]
   jennyBridgeResponses: MissionControlJennyBridgeResponseRecord[]
   jennyBridgePollerStatus: MissionControlJennyBridgePollerStatusResponse
+  githubBridgeStatus: MissionControlGitHubBridgeStatusResponse
   laneRequests: MissionControlLaneRequestRecord[]
   projectBriefs: MissionControlProjectBriefRecord[]
   projectSessionGroups: MissionControlProjectSessionGroup[]
@@ -51,6 +54,7 @@ const emptySnapshot: MissionControlSnapshot = {
   jennyBridgeRequests: [],
   jennyBridgeResponses: [],
   jennyBridgePollerStatus: {},
+  githubBridgeStatus: {},
   laneRequests: [],
   projectBriefs: [],
   projectSessionGroups: [],
@@ -642,7 +646,8 @@ async function loadMissionControlSnapshot(): Promise<MissionControlSnapshot> {
     projectSessions,
     jennyBridgeOutbox,
     jennyBridgeInbox,
-    jennyBridgePollerStatus
+    jennyBridgePollerStatus,
+    githubBridgeStatus
   ] = await Promise.all([
     getMissionControlWorkspaceStatus(),
     getMissionControlProjects(),
@@ -654,7 +659,8 @@ async function loadMissionControlSnapshot(): Promise<MissionControlSnapshot> {
     getMissionControlProjectSessions(),
     getMissionControlJennyBridgeOutbox(),
     getMissionControlJennyBridgeInbox(),
-    getMissionControlJennyBridgePollerStatus()
+    getMissionControlJennyBridgePollerStatus(),
+    getMissionControlGitHubBridgeStatus()
   ])
 
   return {
@@ -662,6 +668,7 @@ async function loadMissionControlSnapshot(): Promise<MissionControlSnapshot> {
     jennyBridgeRequests: unwrapRecords(jennyBridgeOutbox.requests),
     jennyBridgeResponses: unwrapRecords(jennyBridgeInbox.responses),
     jennyBridgePollerStatus,
+    githubBridgeStatus,
     laneRequests: unwrapRecords(laneRequests.lane_requests),
     projectBriefs: unwrapRecords(projectBriefs.project_briefs),
     projectSessionGroups: projectSessions.groups ?? [],
@@ -969,6 +976,7 @@ export function MissionControlView() {
           bridgeResponses={snapshot.jennyBridgeResponses.filter(response => response.project_id === selectedProject.project_id)}
           bridgeStatus={snapshot.jennyBridgePollerStatus}
           brief={latestForProject(selectedProject.project_id, snapshot.projectBriefs)}
+          githubBridgeStatus={snapshot.githubBridgeStatus}
           message={projectRoomMessage}
           onCopyPacket={() => void copyProjectRoomPacket(selectedProject)}
           onQueueBridge={() => void queueJennyBridgeRequest(selectedProject)}
@@ -1078,6 +1086,7 @@ function ProjectRoomsWorkspace({
   bridgeRequests,
   bridgeResponses,
   bridgeStatus,
+  githubBridgeStatus,
   message,
   onCopyPacket,
   onQueueBridge,
@@ -1099,6 +1108,7 @@ function ProjectRoomsWorkspace({
   bridgeRequests: MissionControlJennyBridgeRequestRecord[]
   bridgeResponses: MissionControlJennyBridgeResponseRecord[]
   bridgeStatus: MissionControlJennyBridgePollerStatusResponse
+  githubBridgeStatus: MissionControlGitHubBridgeStatusResponse
   message: string
   onCopyPacket: () => void
   onQueueBridge: () => void
@@ -1210,6 +1220,15 @@ function ProjectRoomsWorkspace({
               <Field label="last response" value={bridgeStatus.last_response_request_id || bridgeStatus.last_response_at || 'none'} />
               <Field label="last error" value={bridgeStatus.last_error || 'none'} />
               <Field label="worker/timer" value={`worker ${bridgeStatus.worker_enabled ? 'enabled' : 'disabled'} / timer ${bridgeStatus.timer_enabled ? 'enabled' : 'disabled'}`} />
+            </div>
+            <div className="mt-3 grid gap-2 rounded-md border border-sky-500/20 bg-sky-500/5 p-2 text-xs md:grid-cols-2">
+              <Field label="GitHub mailbox" value={githubBridgeStatus.manual_start_only === false ? 'disabled' : 'manual-start only'} />
+              <Field label="GitHub mode" value={githubBridgeStatus.mode || 'manual'} />
+              <Field label="GitHub pending" value={String(githubBridgeStatus.pending_count ?? 0)} />
+              <Field label="GitHub last poll" value={githubBridgeStatus.last_poll_at || githubBridgeStatus.last_status || 'not polled'} />
+              <Field label="GitHub last response" value={githubBridgeStatus.last_response_request_id || githubBridgeStatus.last_response_at || 'none'} />
+              <Field label="GitHub last error" value={githubBridgeStatus.last_error || 'none'} />
+              <Field label="daemon/worker/timer" value={`daemon ${githubBridgeStatus.daemon_enabled ? 'enabled' : 'disabled'} / worker ${githubBridgeStatus.worker_enabled ? 'enabled' : 'disabled'} / timer ${githubBridgeStatus.timer_enabled ? 'enabled' : 'disabled'}`} />
             </div>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <BridgeList empty="No queued bridge messages." items={bridgeRequests} renderItem={request => (

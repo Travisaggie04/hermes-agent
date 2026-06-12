@@ -21,6 +21,8 @@ from mission_control.records import (
     ChallengeReviewRecord,
     EvidenceCard,
     GoalContract,
+    GitHubBridgeMailboxStatusRecord,
+    GitHubBridgeMessageRecord,
     JsonlRecordStore,
     JennyBridgeMessageRequestRecord,
     JennyBridgeMessageResponseRecord,
@@ -519,6 +521,60 @@ def test_workspace_jenny_bridge_poller_status_is_read_only(plugin_api, client):
     assert payload["last_status"] == "error"
     assert payload["last_error"] == "operator stopped before responding"
     assert payload["status_records"][0]["record"]["status_id"] == "bridge-status-1"
+    assert len(store.read_all()) == before
+
+
+def test_workspace_github_bridge_status_is_read_only_and_manual_only(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(
+        GitHubBridgeMessageRecord(
+            request_id="github-req-open",
+            project_id="project-hermes",
+            from_agent="codex",
+            to_agent="jenny",
+            status="queued",
+            message="Please review from Codex.",
+            created_at="2026-06-13T00:00:00Z",
+            github_repo="Travisaggie04/hermes-agent",
+            github_issue_number=79,
+            github_comment_id="101",
+        )
+    )
+    store.append(
+        GitHubBridgeMailboxStatusRecord(
+            status_id="github-status-1",
+            repo="Travisaggie04/hermes-agent",
+            issue_number=79,
+            mode="watch_foreground",
+            status="watch_poll_completed",
+            pending_count=1,
+            new_message_count=1,
+            created_at="2026-06-13T00:01:00Z",
+            metadata={"manual_start_only": True, "worker_enabled": False, "timer_enabled": False},
+        )
+    )
+
+    before = len(store.read_all())
+    response = client.get("/api/plugins/mission-control-governance/workspace/github-bridge/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stored"] is False
+    assert payload["display_only"] is True
+    assert payload["manual_start_only"] is True
+    assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["worker_enabled"] is False
+    assert payload["timer_enabled"] is False
+    assert payload["daemon_enabled"] is False
+    assert payload["discord_automation_enabled"] is False
+    assert payload["model_routing_enabled"] is False
+    assert payload["pending_count"] == 1
+    assert payload["mode"] == "watch_foreground"
+    assert payload["foreground_watch_supported"] is True
+    assert payload["foreground_watch_running"] is True
+    assert payload["last_status"] == "watch_poll_completed"
+    assert payload["pending_messages"][0]["record"]["request_id"] == "github-req-open"
     assert len(store.read_all()) == before
 
 
@@ -1893,6 +1949,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/jenny-bridge/outbox": {"GET"},
         "/workspace/jenny-bridge/pending": {"GET"},
         "/workspace/jenny-bridge/poller-status": {"GET"},
+        "/workspace/github-bridge/status": {"GET"},
         "/workspace/jenny-bridge/outbox/create": {"POST"},
         "/workspace/jenny-bridge/inbox": {"GET"},
         "/workspace/jenny-bridge/inbox/create": {"POST"},

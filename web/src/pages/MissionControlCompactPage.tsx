@@ -16,6 +16,7 @@ const WORKSPACE_JENNY_BRIDGE_OUTBOX_URL = "/api/plugins/mission-control-governan
 const WORKSPACE_JENNY_BRIDGE_OUTBOX_CREATE_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/outbox/create";
 const WORKSPACE_JENNY_BRIDGE_INBOX_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/inbox";
 const WORKSPACE_JENNY_BRIDGE_POLLER_STATUS_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/poller-status";
+const WORKSPACE_GITHUB_BRIDGE_STATUS_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/status";
 const WORKSPACE_PROJECT_STATE_URL = "/api/plugins/mission-control-governance/workspace/project-state";
 
 const REAL_PROJECT_IDS = [
@@ -137,6 +138,27 @@ interface JennyBridgePollerStatus {
   worker_enabled?: boolean;
 }
 
+interface GitHubBridgeStatus {
+  daemon_enabled?: boolean;
+  discord_automation_enabled?: boolean;
+  dispatch_enabled?: boolean;
+  execution_enabled?: boolean;
+  last_error?: string;
+  last_poll_at?: string;
+  last_response_at?: string;
+  last_response_request_id?: string;
+  last_status?: string;
+  manual_start_only?: boolean;
+  mode?: string;
+  foreground_watch_supported?: boolean;
+  foreground_watch_running?: boolean;
+  model_routing_enabled?: boolean;
+  pending_count?: number;
+  session_send_enabled?: boolean;
+  timer_enabled?: boolean;
+  worker_enabled?: boolean;
+}
+
 interface ProjectStateRecord {
   artifact_links?: string[];
   blockers?: string[];
@@ -180,6 +202,7 @@ interface CompactSnapshot {
   jennyBridgeRequests: JennyBridgeRequestRecord[];
   jennyBridgeResponses: JennyBridgeResponseRecord[];
   jennyBridgePollerStatus: JennyBridgePollerStatus;
+  githubBridgeStatus: GitHubBridgeStatus;
   laneRequests: LaneRequestRecord[];
   projectBriefs: ProjectBriefRecord[];
   projectStates: ProjectStateRecord[];
@@ -482,7 +505,7 @@ function buildPhoneSafeProjectPacket(projectView: ProjectViewModel, requestText:
 }
 
 async function loadCompactSnapshot(): Promise<CompactSnapshot> {
-  const [workspaceStatus, projects, projectBriefs, challengeReviews, laneRequests, reports, projectState, jennyBridgeOutbox, jennyBridgeInbox, jennyBridgePollerStatus] = await Promise.all([
+  const [workspaceStatus, projects, projectBriefs, challengeReviews, laneRequests, reports, projectState, jennyBridgeOutbox, jennyBridgeInbox, jennyBridgePollerStatus, githubBridgeStatus] = await Promise.all([
     fetchJSON<WorkspaceStatus>(WORKSPACE_STATUS_URL),
     fetchJSON<{ projects?: Array<WrappedRecord<ProjectRecord> | ProjectRecord> }>(WORKSPACE_PROJECTS_URL),
     fetchJSON<{ project_briefs?: Array<WrappedRecord<ProjectBriefRecord> | ProjectBriefRecord> }>(WORKSPACE_PROJECT_BRIEFS_URL),
@@ -493,6 +516,7 @@ async function loadCompactSnapshot(): Promise<CompactSnapshot> {
     fetchJSON<{ requests?: Array<WrappedRecord<JennyBridgeRequestRecord> | JennyBridgeRequestRecord> }>(WORKSPACE_JENNY_BRIDGE_OUTBOX_URL),
     fetchJSON<{ responses?: Array<WrappedRecord<JennyBridgeResponseRecord> | JennyBridgeResponseRecord> }>(WORKSPACE_JENNY_BRIDGE_INBOX_URL),
     fetchJSON<JennyBridgePollerStatus>(WORKSPACE_JENNY_BRIDGE_POLLER_STATUS_URL),
+    fetchJSON<GitHubBridgeStatus>(WORKSPACE_GITHUB_BRIDGE_STATUS_URL),
   ]);
 
   return {
@@ -500,6 +524,7 @@ async function loadCompactSnapshot(): Promise<CompactSnapshot> {
     jennyBridgeRequests: unwrapRecords(jennyBridgeOutbox.requests),
     jennyBridgeResponses: unwrapRecords(jennyBridgeInbox.responses),
     jennyBridgePollerStatus,
+    githubBridgeStatus,
     laneRequests: unwrapRecords(laneRequests.lane_requests),
     projectBriefs: unwrapRecords(projectBriefs.project_briefs),
     projectStates: projectState.project_states ?? [],
@@ -747,6 +772,7 @@ export default function MissionControlCompactPage() {
           bridgeRequests={snapshot?.jennyBridgeRequests.filter(request => request.project_id === selectedProjectView.project.project_id) ?? []}
           bridgeResponses={snapshot?.jennyBridgeResponses.filter(response => response.project_id === selectedProjectView.project.project_id) ?? []}
           bridgeStatus={snapshot?.jennyBridgePollerStatus ?? {}}
+          githubBridgeStatus={snapshot?.githubBridgeStatus ?? {}}
           onCopyPacket={() => void copyPhoneSafePacket(selectedProjectView)}
           onQueueBridge={() => void queueJennyBridgeMessage(selectedProjectView)}
           onRefreshBridge={() => void refreshBridge()}
@@ -814,6 +840,7 @@ function CompactProjectRoom({
   bridgeRequests,
   bridgeResponses,
   bridgeStatus,
+  githubBridgeStatus,
   message,
   onCopyPacket,
   onQueueBridge,
@@ -831,6 +858,7 @@ function CompactProjectRoom({
   bridgeRequests: JennyBridgeRequestRecord[];
   bridgeResponses: JennyBridgeResponseRecord[];
   bridgeStatus: JennyBridgePollerStatus;
+  githubBridgeStatus: GitHubBridgeStatus;
   message: string;
   onCopyPacket: () => void;
   onQueueBridge: () => void;
@@ -938,6 +966,15 @@ function CompactProjectRoom({
             <CompactField label="last response" value={bridgeStatus.last_response_request_id || bridgeStatus.last_response_at || "none"} />
             <CompactField label="last error" value={bridgeStatus.last_error || "none"} />
             <CompactField label="worker/timer" value={`worker ${bridgeStatus.worker_enabled ? "enabled" : "disabled"} / timer ${bridgeStatus.timer_enabled ? "enabled" : "disabled"}`} />
+          </div>
+          <div className="mt-3 grid gap-2 rounded-lg border border-sky-500/20 bg-sky-500/5 p-2 text-xs sm:grid-cols-2">
+            <CompactField label="GitHub mailbox" value={githubBridgeStatus.manual_start_only === false ? "disabled" : "manual-start only"} />
+            <CompactField label="GitHub mode" value={githubBridgeStatus.mode || "manual"} />
+            <CompactField label="GitHub pending" value={String(githubBridgeStatus.pending_count ?? 0)} />
+            <CompactField label="GitHub last poll" value={githubBridgeStatus.last_poll_at || githubBridgeStatus.last_status || "not polled"} />
+            <CompactField label="GitHub last response" value={githubBridgeStatus.last_response_request_id || githubBridgeStatus.last_response_at || "none"} />
+            <CompactField label="GitHub last error" value={githubBridgeStatus.last_error || "none"} />
+            <CompactField label="daemon/worker/timer" value={`daemon ${githubBridgeStatus.daemon_enabled ? "enabled" : "disabled"} / worker ${githubBridgeStatus.worker_enabled ? "enabled" : "disabled"} / timer ${githubBridgeStatus.timer_enabled ? "enabled" : "disabled"}`} />
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             <CompactBridgeList
