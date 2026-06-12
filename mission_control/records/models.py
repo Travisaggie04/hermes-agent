@@ -491,6 +491,99 @@ class JennyReportRecord:
 
 
 @dataclass(frozen=True)
+class JennyBridgeMessageRequestRecord:
+    request_id: str
+    project_id: str
+    message: str
+    lane_request_id: str = ""
+    sender: str = "travis"
+    target_agent: str = "jenny"
+    status: str = "queued"
+    ack_key: str = ""
+    created_at: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "JennyBridgeMessageRequestRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "request_id": self.request_id,
+            "project_id": self.project_id,
+            "lane_request_id": self.lane_request_id,
+            "sender": self.sender,
+            "target_agent": self.target_agent,
+            "message": self.message,
+            "status": self.status,
+            "ack_key": self.ack_key,
+            "created_at": self.created_at,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> JennyBridgeMessageRequestRecord:
+        return cls(
+            request_id=_required(data, "request_id"),
+            project_id=_required(data, "project_id"),
+            lane_request_id=data.get("lane_request_id", ""),
+            sender=data.get("sender", "travis"),
+            target_agent=data.get("target_agent", "jenny"),
+            message=_required(data, "message"),
+            status=data.get("status", "queued"),
+            ack_key=data.get("ack_key", ""),
+            created_at=data.get("created_at", ""),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
+class JennyBridgeMessageResponseRecord:
+    response_id: str
+    request_id: str
+    project_id: str
+    message: str
+    lane_request_id: str = ""
+    responder: str = "jenny"
+    status: str = "received"
+    created_at: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "JennyBridgeMessageResponseRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "response_id": self.response_id,
+            "request_id": self.request_id,
+            "project_id": self.project_id,
+            "lane_request_id": self.lane_request_id,
+            "responder": self.responder,
+            "message": self.message,
+            "status": self.status,
+            "created_at": self.created_at,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> JennyBridgeMessageResponseRecord:
+        return cls(
+            response_id=_required(data, "response_id"),
+            request_id=_required(data, "request_id"),
+            project_id=_required(data, "project_id"),
+            lane_request_id=data.get("lane_request_id", ""),
+            responder=data.get("responder", "jenny"),
+            message=_required(data, "message"),
+            status=data.get("status", "received"),
+            created_at=data.get("created_at", ""),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
 class ApprovalRecord:
     approval_id: str
     project_id: str = ""
@@ -1760,6 +1853,8 @@ RECORD_TYPES = {
         ProjectBriefRecord,
         LaneRequestRecord,
         JennyReportRecord,
+        JennyBridgeMessageRequestRecord,
+        JennyBridgeMessageResponseRecord,
         ReportRecord,
         RunRecord,
         SessionProjectLinkRecord,

@@ -22,6 +22,8 @@ from mission_control.records import (
     EvidenceCard,
     GoalContract,
     JsonlRecordStore,
+    JennyBridgeMessageRequestRecord,
+    JennyBridgeMessageResponseRecord,
     JennyReportRecord,
     LaneRequestRecord,
     MissionBrief,
@@ -351,6 +353,86 @@ def test_workspace_jenny_report_api_creates_lists_and_stays_inert(plugin_api, cl
     assert listed.status_code == 200
     assert listed.json()["count"] == 1
     assert listed.json()["reports"][0]["record"]["summary"] == "Jenny completed the read-only status refresh."
+
+
+def test_workspace_jenny_bridge_api_creates_lists_and_stays_inert(plugin_api, client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/jenny-bridge/outbox/create",
+        json={
+            "request_id": "bridge-request-1",
+            "project_id": "project-hermes",
+            "lane_request_id": "lane-request-1",
+            "sender": "codex",
+            "target_agent": "jenny",
+            "message": "Please review PR #75 and report whether it is safe to mark ready.",
+            "ack_key": "pr75-review",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["manual_copy_only"] is False
+    assert payload["send_to_jenny_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["stored"] is True
+    assert payload["record_type"] == "JennyBridgeMessageRequestRecord"
+    assert payload["request"]["project_id"] == "project-hermes"
+    assert payload["request"]["status"] == "queued"
+    assert payload["request"]["metadata"]["requires_external_jenny_poller"] is True
+
+    requests = JsonlRecordStore(plugin_api.record_store_path()).read_all(JennyBridgeMessageRequestRecord)
+    assert len(requests) == 1
+    assert requests[0].message == "Please review PR #75 and report whether it is safe to mark ready."
+
+    listed = client.get(
+        "/api/plugins/mission-control-governance/workspace/jenny-bridge/outbox?project_id=project-hermes&status=queued"
+    )
+    assert listed.status_code == 200
+    assert listed.json()["manual_copy_only"] is False
+    assert listed.json()["send_to_jenny_enabled"] is False
+    assert listed.json()["dispatch_enabled"] is False
+    assert listed.json()["count"] == 1
+    assert listed.json()["requests"][0]["record"]["request_id"] == "bridge-request-1"
+
+    inbound = client.post(
+        "/api/plugins/mission-control-governance/workspace/jenny-bridge/inbox/create",
+        json={
+            "response_id": "bridge-response-1",
+            "request_id": "bridge-request-1",
+            "project_id": "project-hermes",
+            "lane_request_id": "lane-request-1",
+            "responder": "jenny",
+            "message": "Safe to mark ready. No runtime behavior changed.",
+        },
+    )
+
+    assert inbound.status_code == 200
+    inbound_payload = inbound.json()
+    assert inbound_payload["trusted_for_execution"] is False
+    assert inbound_payload["execution_enabled"] is False
+    assert inbound_payload["manual_copy_only"] is False
+    assert inbound_payload["send_to_jenny_enabled"] is False
+    assert inbound_payload["dispatch_enabled"] is False
+    assert inbound_payload["stored"] is True
+    assert inbound_payload["record_type"] == "JennyBridgeMessageResponseRecord"
+    assert inbound_payload["response"]["request_id"] == "bridge-request-1"
+    assert inbound_payload["response"]["metadata"]["external_jenny_response"] is True
+
+    responses = JsonlRecordStore(plugin_api.record_store_path()).read_all(JennyBridgeMessageResponseRecord)
+    assert len(responses) == 1
+    assert responses[0].message == "Safe to mark ready. No runtime behavior changed."
+
+    inbox = client.get(
+        "/api/plugins/mission-control-governance/workspace/jenny-bridge/inbox?project_id=project-hermes&request_id=bridge-request-1"
+    )
+    assert inbox.status_code == 200
+    assert inbox.json()["manual_copy_only"] is False
+    assert inbox.json()["send_to_jenny_enabled"] is False
+    assert inbox.json()["dispatch_enabled"] is False
+    assert inbox.json()["count"] == 1
+    assert inbox.json()["responses"][0]["record"]["response_id"] == "bridge-response-1"
 
 
 def _assert_inert_workspace_payload(payload):
@@ -1721,6 +1803,10 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/lane-requests/create": {"POST"},
         "/workspace/reports": {"GET"},
         "/workspace/reports/create": {"POST"},
+        "/workspace/jenny-bridge/outbox": {"GET"},
+        "/workspace/jenny-bridge/outbox/create": {"POST"},
+        "/workspace/jenny-bridge/inbox": {"GET"},
+        "/workspace/jenny-bridge/inbox/create": {"POST"},
         "/workspace/approvals": {"GET"},
         "/workspace/approvals/create": {"POST"},
         "/workspace/runs": {"GET"},

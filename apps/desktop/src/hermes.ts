@@ -371,6 +371,85 @@ export interface MissionControlReportCreateResponse {
   stored?: boolean
 }
 
+export interface MissionControlJennyBridgeRequestRecord {
+  request_id: string
+  project_id: string
+  lane_request_id?: string
+  sender?: string
+  target_agent?: string
+  message: string
+  status?: string
+  ack_key?: string
+  created_at?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface MissionControlJennyBridgeResponseRecord {
+  response_id: string
+  request_id: string
+  project_id: string
+  lane_request_id?: string
+  responder?: string
+  message: string
+  status?: string
+  created_at?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface MissionControlJennyBridgeRequestCreatePayload {
+  ack_key?: string
+  dedupe_key?: string
+  lane_request_id?: string
+  message: string
+  project_id: string
+  sender?: string
+  target_agent?: string
+}
+
+export interface MissionControlJennyBridgeResponseCreatePayload {
+  lane_request_id?: string
+  message: string
+  project_id: string
+  request_id: string
+  responder?: string
+}
+
+export interface MissionControlJennyBridgeOutboxResponse {
+  count: number
+  dispatch_enabled?: boolean
+  manual_copy_only?: boolean
+  requests: Array<MissionControlRecordEnvelope<MissionControlJennyBridgeRequestRecord>>
+  send_to_jenny_enabled?: boolean
+}
+
+export interface MissionControlJennyBridgeInboxResponse {
+  count: number
+  dispatch_enabled?: boolean
+  manual_copy_only?: boolean
+  responses: Array<MissionControlRecordEnvelope<MissionControlJennyBridgeResponseRecord>>
+  send_to_jenny_enabled?: boolean
+}
+
+export interface MissionControlJennyBridgeRequestCreateResponse {
+  dispatch_enabled?: boolean
+  manual_copy_only?: boolean
+  record_index?: number
+  record_type?: string
+  request: MissionControlJennyBridgeRequestRecord
+  send_to_jenny_enabled?: boolean
+  stored?: boolean
+}
+
+export interface MissionControlJennyBridgeResponseCreateResponse {
+  dispatch_enabled?: boolean
+  manual_copy_only?: boolean
+  record_index?: number
+  record_type?: string
+  response: MissionControlJennyBridgeResponseRecord
+  send_to_jenny_enabled?: boolean
+  stored?: boolean
+}
+
 export interface MissionControlWorkspaceStatus {
   accepted_baseline?: { head?: string; runtime_path?: string }
   lane?: { active_lane_count?: number; max_active_lane?: number }
@@ -515,6 +594,34 @@ export function createMissionControlReport(payload: MissionControlReportCreatePa
     body: payload,
     method: 'POST',
     path: `${MISSION_CONTROL_API}/workspace/reports/create`
+  })
+}
+
+export function getMissionControlJennyBridgeOutbox(): Promise<MissionControlJennyBridgeOutboxResponse> {
+  return window.hermesDesktop.api<MissionControlJennyBridgeOutboxResponse>({ path: `${MISSION_CONTROL_API}/workspace/jenny-bridge/outbox` })
+}
+
+export function createMissionControlJennyBridgeRequest(
+  payload: MissionControlJennyBridgeRequestCreatePayload
+): Promise<MissionControlJennyBridgeRequestCreateResponse> {
+  return window.hermesDesktop.api<MissionControlJennyBridgeRequestCreateResponse>({
+    body: payload,
+    method: 'POST',
+    path: `${MISSION_CONTROL_API}/workspace/jenny-bridge/outbox/create`
+  })
+}
+
+export function getMissionControlJennyBridgeInbox(): Promise<MissionControlJennyBridgeInboxResponse> {
+  return window.hermesDesktop.api<MissionControlJennyBridgeInboxResponse>({ path: `${MISSION_CONTROL_API}/workspace/jenny-bridge/inbox` })
+}
+
+export function createMissionControlJennyBridgeResponse(
+  payload: MissionControlJennyBridgeResponseCreatePayload
+): Promise<MissionControlJennyBridgeResponseCreateResponse> {
+  return window.hermesDesktop.api<MissionControlJennyBridgeResponseCreateResponse>({
+    body: payload,
+    method: 'POST',
+    path: `${MISSION_CONTROL_API}/workspace/jenny-bridge/inbox/create`
   })
 }
 

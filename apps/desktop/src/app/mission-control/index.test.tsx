@@ -6,21 +6,27 @@ const getMissionControlWorkspaceStatus = vi.fn()
 const getMissionControlProjects = vi.fn()
 const getMissionControlProjectBriefs = vi.fn()
 const getMissionControlChallengeReviews = vi.fn()
+const getMissionControlJennyBridgeInbox = vi.fn()
+const getMissionControlJennyBridgeOutbox = vi.fn()
 const getMissionControlLaneRequests = vi.fn()
 const getMissionControlReports = vi.fn()
 const getMissionControlProjectState = vi.fn()
 const getMissionControlProjectSessions = vi.fn()
 const createMissionControlChallengeReview = vi.fn()
+const createMissionControlJennyBridgeRequest = vi.fn()
 const createMissionControlLaneRequest = vi.fn()
 const createMissionControlReport = vi.fn()
 const createMissionControlSessionProjectLink = vi.fn()
 
 vi.mock('@/hermes', () => ({
   createMissionControlChallengeReview: (payload: unknown) => createMissionControlChallengeReview(payload),
+  createMissionControlJennyBridgeRequest: (payload: unknown) => createMissionControlJennyBridgeRequest(payload),
   createMissionControlLaneRequest: (payload: unknown) => createMissionControlLaneRequest(payload),
   createMissionControlReport: (payload: unknown) => createMissionControlReport(payload),
   createMissionControlSessionProjectLink: (payload: unknown) => createMissionControlSessionProjectLink(payload),
   getMissionControlChallengeReviews: () => getMissionControlChallengeReviews(),
+  getMissionControlJennyBridgeInbox: () => getMissionControlJennyBridgeInbox(),
+  getMissionControlJennyBridgeOutbox: () => getMissionControlJennyBridgeOutbox(),
   getMissionControlWorkspaceStatus: () => getMissionControlWorkspaceStatus(),
   getMissionControlProjectBriefs: () => getMissionControlProjectBriefs(),
   getMissionControlProjects: () => getMissionControlProjects(),
@@ -98,6 +104,20 @@ beforeEach(() => {
     },
     manual_copy_only: true,
     record_type: 'LaneRequestRecord',
+    send_to_jenny_enabled: false,
+    stored: true
+  })
+  createMissionControlJennyBridgeRequest.mockResolvedValue({
+    dispatch_enabled: false,
+    manual_copy_only: false,
+    record_type: 'JennyBridgeMessageRequestRecord',
+    request: {
+      message: 'Project room request packet',
+      project_id: 'project-hermes-mission-control',
+      request_id: 'bridge-request-created',
+      status: 'queued',
+      target_agent: 'jenny'
+    },
     send_to_jenny_enabled: false,
     stored: true
   })
@@ -366,6 +386,43 @@ beforeEach(() => {
     stored: false,
     trusted_for_execution: false
   })
+  getMissionControlJennyBridgeOutbox.mockResolvedValue({
+    count: 1,
+    dispatch_enabled: false,
+    manual_copy_only: false,
+    requests: [
+      {
+        record: {
+          message: 'Review PR #75 and report readiness.',
+          project_id: 'project-hermes-mission-control',
+          request_id: 'bridge-request-1',
+          status: 'queued',
+          target_agent: 'jenny'
+        },
+        record_type: 'JennyBridgeMessageRequestRecord'
+      }
+    ],
+    send_to_jenny_enabled: false
+  })
+  getMissionControlJennyBridgeInbox.mockResolvedValue({
+    count: 1,
+    dispatch_enabled: false,
+    manual_copy_only: false,
+    responses: [
+      {
+        record: {
+          message: 'Safe to mark ready.',
+          project_id: 'project-hermes-mission-control',
+          request_id: 'bridge-request-1',
+          responder: 'jenny',
+          response_id: 'bridge-response-1',
+          status: 'received'
+        },
+        record_type: 'JennyBridgeMessageResponseRecord'
+      }
+    ],
+    send_to_jenny_enabled: false
+  })
 })
 
 afterEach(() => {
@@ -385,9 +442,14 @@ describe('MissionControlView', () => {
     expect(getMissionControlLaneRequests).toHaveBeenCalledTimes(1)
     expect(getMissionControlReports).toHaveBeenCalledTimes(1)
     expect(getMissionControlProjectSessions).toHaveBeenCalledTimes(1)
+    expect(getMissionControlJennyBridgeOutbox).toHaveBeenCalledTimes(1)
+    expect(getMissionControlJennyBridgeInbox).toHaveBeenCalledTimes(1)
 
     expect(screen.getByText('Real project workspace')).toBeTruthy()
     expect(screen.getByText('Project Rooms')).toBeTruthy()
+    expect(screen.getByText('Jenny bridge')).toBeTruthy()
+    expect(screen.getByText('Outbound to Jenny')).toBeTruthy()
+    expect(screen.getByText('Jenny replies')).toBeTruthy()
     expect(screen.getByText('Project Kanban')).toBeTruthy()
     expect(screen.getByText('Project Room: Hermes / Mission Control')).toBeTruthy()
     expect(screen.getByText('5 of 5 real projects loaded')).toBeTruthy()
@@ -596,6 +658,17 @@ describe('MissionControlView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Copy phone-safe packet' }))
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1))
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Project room request:')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Queue for Jenny bridge' }))
+    await waitFor(() => expect(createMissionControlJennyBridgeRequest).toHaveBeenCalledTimes(1))
+    expect(createMissionControlJennyBridgeRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Project room request:'),
+        project_id: 'project-hermes-mission-control',
+        sender: 'codex',
+        target_agent: 'jenny'
+      })
+    )
 
     fireEvent.click(screen.getByRole('button', { name: 'Save challenge draft' }))
     await waitFor(() => expect(createMissionControlChallengeReview).toHaveBeenCalledTimes(1))

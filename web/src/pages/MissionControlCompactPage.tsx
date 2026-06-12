@@ -12,6 +12,9 @@ const WORKSPACE_LANE_REQUESTS_URL = "/api/plugins/mission-control-governance/wor
 const WORKSPACE_LANE_REQUESTS_CREATE_URL = "/api/plugins/mission-control-governance/workspace/lane-requests/create";
 const WORKSPACE_REPORTS_URL = "/api/plugins/mission-control-governance/workspace/reports";
 const WORKSPACE_REPORTS_CREATE_URL = "/api/plugins/mission-control-governance/workspace/reports/create";
+const WORKSPACE_JENNY_BRIDGE_OUTBOX_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/outbox";
+const WORKSPACE_JENNY_BRIDGE_OUTBOX_CREATE_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/outbox/create";
+const WORKSPACE_JENNY_BRIDGE_INBOX_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/inbox";
 const WORKSPACE_PROJECT_STATE_URL = "/api/plugins/mission-control-governance/workspace/project-state";
 
 const REAL_PROJECT_IDS = [
@@ -98,6 +101,24 @@ interface ReportRecord {
   next_recommended_lane?: string;
 }
 
+interface JennyBridgeRequestRecord {
+  ack_key?: string;
+  message: string;
+  project_id?: string;
+  request_id?: string;
+  status?: string;
+  target_agent?: string;
+}
+
+interface JennyBridgeResponseRecord {
+  message: string;
+  project_id?: string;
+  request_id?: string;
+  responder?: string;
+  response_id?: string;
+  status?: string;
+}
+
 interface ProjectStateRecord {
   artifact_links?: string[];
   blockers?: string[];
@@ -138,6 +159,8 @@ interface WorkspaceStatus {
 
 interface CompactSnapshot {
   challengeReviews: ChallengeReviewRecord[];
+  jennyBridgeRequests: JennyBridgeRequestRecord[];
+  jennyBridgeResponses: JennyBridgeResponseRecord[];
   laneRequests: LaneRequestRecord[];
   projectBriefs: ProjectBriefRecord[];
   projectStates: ProjectStateRecord[];
@@ -440,7 +463,7 @@ function buildPhoneSafeProjectPacket(projectView: ProjectViewModel, requestText:
 }
 
 async function loadCompactSnapshot(): Promise<CompactSnapshot> {
-  const [workspaceStatus, projects, projectBriefs, challengeReviews, laneRequests, reports, projectState] = await Promise.all([
+  const [workspaceStatus, projects, projectBriefs, challengeReviews, laneRequests, reports, projectState, jennyBridgeOutbox, jennyBridgeInbox] = await Promise.all([
     fetchJSON<WorkspaceStatus>(WORKSPACE_STATUS_URL),
     fetchJSON<{ projects?: Array<WrappedRecord<ProjectRecord> | ProjectRecord> }>(WORKSPACE_PROJECTS_URL),
     fetchJSON<{ project_briefs?: Array<WrappedRecord<ProjectBriefRecord> | ProjectBriefRecord> }>(WORKSPACE_PROJECT_BRIEFS_URL),
@@ -448,10 +471,14 @@ async function loadCompactSnapshot(): Promise<CompactSnapshot> {
     fetchJSON<{ lane_requests?: Array<WrappedRecord<LaneRequestRecord> | LaneRequestRecord> }>(WORKSPACE_LANE_REQUESTS_URL),
     fetchJSON<{ reports?: Array<WrappedRecord<ReportRecord> | ReportRecord> }>(WORKSPACE_REPORTS_URL),
     fetchJSON<{ project_states?: ProjectStateRecord[] }>(WORKSPACE_PROJECT_STATE_URL),
+    fetchJSON<{ requests?: Array<WrappedRecord<JennyBridgeRequestRecord> | JennyBridgeRequestRecord> }>(WORKSPACE_JENNY_BRIDGE_OUTBOX_URL),
+    fetchJSON<{ responses?: Array<WrappedRecord<JennyBridgeResponseRecord> | JennyBridgeResponseRecord> }>(WORKSPACE_JENNY_BRIDGE_INBOX_URL),
   ]);
 
   return {
     challengeReviews: unwrapRecords(challengeReviews.challenge_reviews),
+    jennyBridgeRequests: unwrapRecords(jennyBridgeOutbox.requests),
+    jennyBridgeResponses: unwrapRecords(jennyBridgeInbox.responses),
     laneRequests: unwrapRecords(laneRequests.lane_requests),
     projectBriefs: unwrapRecords(projectBriefs.project_briefs),
     projectStates: projectState.project_states ?? [],
@@ -521,6 +548,34 @@ export default function MissionControlCompactPage() {
     }
     await navigator.clipboard.writeText(packet);
     setRoomMessage("Copied phone-safe project packet.");
+  }
+
+  async function queueJennyBridgeMessage(projectView: ProjectViewModel) {
+    if (!projectRequest.trim()) {
+      setRoomMessage("Write one bounded request before queuing a Jenny bridge message.");
+      return;
+    }
+    setRoomBusy(true);
+    setRoomMessage("");
+    try {
+      await fetchJSON(WORKSPACE_JENNY_BRIDGE_OUTBOX_CREATE_URL, {
+        body: JSON.stringify({
+          ack_key: `${projectView.project.project_id}:${Date.now()}`,
+          message: buildPhoneSafeProjectPacket(projectView, projectRequest, snapshot?.workspaceStatus ?? {}),
+          project_id: projectView.project.project_id,
+          sender: "codex",
+          target_agent: "jenny",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      await refreshSnapshot();
+      setRoomMessage("Queued outbound Jenny bridge message. It is append-only and still requires Jenny polling/relay.");
+    } catch (err) {
+      setRoomMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRoomBusy(false);
+    }
   }
 
   async function refreshSnapshot() {
@@ -655,7 +710,10 @@ export default function MissionControlCompactPage() {
         <CompactProjectRoom
           busy={roomBusy}
           message={roomMessage}
+          bridgeRequests={snapshot?.jennyBridgeRequests.filter(request => request.project_id === selectedProjectView.project.project_id) ?? []}
+          bridgeResponses={snapshot?.jennyBridgeResponses.filter(response => response.project_id === selectedProjectView.project.project_id) ?? []}
           onCopyPacket={() => void copyPhoneSafePacket(selectedProjectView)}
+          onQueueBridge={() => void queueJennyBridgeMessage(selectedProjectView)}
           onRequestChange={setProjectRequest}
           onSaveChallenge={() => void saveChallengeDraft(selectedProjectView)}
           onSaveLane={() => void saveReadOnlyLaneDraft(selectedProjectView)}
@@ -717,8 +775,11 @@ export default function MissionControlCompactPage() {
 
 function CompactProjectRoom({
   busy,
+  bridgeRequests,
+  bridgeResponses,
   message,
   onCopyPacket,
+  onQueueBridge,
   onRequestChange,
   onSaveChallenge,
   onSaveLane,
@@ -729,8 +790,11 @@ function CompactProjectRoom({
   selectedProjectView,
 }: {
   busy: boolean;
+  bridgeRequests: JennyBridgeRequestRecord[];
+  bridgeResponses: JennyBridgeResponseRecord[];
   message: string;
   onCopyPacket: () => void;
+  onQueueBridge: () => void;
   onRequestChange: (value: string) => void;
   onSaveChallenge: () => void;
   onSaveLane: () => void;
@@ -801,9 +865,12 @@ function CompactProjectRoom({
           />
         </label>
 
-        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <div className="mt-3 grid gap-2 sm:grid-cols-4">
           <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onCopyPacket} type="button">
             Copy phone-safe packet
+          </button>
+          <button className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={busy} onClick={onQueueBridge} type="button">
+            Queue for Jenny bridge
           </button>
           <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onSaveChallenge} type="button">
             Save challenge draft
@@ -813,6 +880,18 @@ function CompactProjectRoom({
           </button>
         </div>
         {message ? <p className="mt-2 text-xs text-muted-foreground">{message}</p> : null}
+
+        <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold">Jenny bridge</h3>
+            <span className="rounded-full border border-emerald-500/30 px-2 py-0.5 text-[0.65rem] text-emerald-700 dark:text-emerald-300">no dispatch</span>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">Record-backed outbox/inbox for Jenny relay. Direct send remains disabled.</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <CompactBridgeList title="Outbound" empty="No queued messages." items={bridgeRequests} renderItem={item => `${item.status ?? "queued"} / ${item.message}`} />
+            <CompactBridgeList title="Replies" empty="No replies yet." items={bridgeResponses} renderItem={item => `${item.responder ?? "jenny"} / ${item.message}`} />
+          </div>
+        </div>
 
         <div className="mt-4 rounded-xl border border-border/70 bg-background p-3">
           <div className="flex items-center justify-between gap-2">
@@ -843,6 +922,38 @@ function CompactProjectRoom({
           </div>
         </div>
       </article>
+    </section>
+  );
+}
+
+function CompactBridgeList<T>({
+  empty,
+  items,
+  renderItem,
+  title,
+}: {
+  empty: string;
+  items: T[];
+  renderItem: (item: T) => string;
+  title: string;
+}) {
+  return (
+    <section className="rounded-lg border border-border/70 bg-background/70 p-2 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="font-semibold">{title}</h4>
+        <span className="text-muted-foreground">{items.length}</span>
+      </div>
+      <div className="mt-2 grid gap-2">
+        {items.length ? (
+          items.slice(-2).reverse().map((item, index) => (
+            <p className="line-clamp-3 rounded-md border border-border/60 bg-background p-2 text-muted-foreground" key={index}>
+              {renderItem(item)}
+            </p>
+          ))
+        ) : (
+          <p className="text-muted-foreground">{empty}</p>
+        )}
+      </div>
     </section>
   );
 }

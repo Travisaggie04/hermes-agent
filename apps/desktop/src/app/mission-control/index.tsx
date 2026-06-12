@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 
 import {
   createMissionControlChallengeReview,
+  createMissionControlJennyBridgeRequest,
   createMissionControlLaneRequest,
   createMissionControlReport,
   createMissionControlSessionProjectLink,
   getMissionControlChallengeReviews,
+  getMissionControlJennyBridgeInbox,
+  getMissionControlJennyBridgeOutbox,
   getMissionControlLaneRequests,
   getMissionControlProjectBriefs,
   getMissionControlProjects,
@@ -14,6 +17,8 @@ import {
   getMissionControlReports,
   getMissionControlWorkspaceStatus,
   type MissionControlChallengeReviewRecord,
+  type MissionControlJennyBridgeRequestRecord,
+  type MissionControlJennyBridgeResponseRecord,
   type MissionControlLaneRequestRecord,
   type MissionControlProjectBriefRecord,
   type MissionControlProjectRecord,
@@ -27,6 +32,8 @@ import { cn } from '@/lib/utils'
 
 interface MissionControlSnapshot {
   challengeReviews: MissionControlChallengeReviewRecord[]
+  jennyBridgeRequests: MissionControlJennyBridgeRequestRecord[]
+  jennyBridgeResponses: MissionControlJennyBridgeResponseRecord[]
   laneRequests: MissionControlLaneRequestRecord[]
   projectBriefs: MissionControlProjectBriefRecord[]
   projectSessionGroups: MissionControlProjectSessionGroup[]
@@ -38,6 +45,8 @@ interface MissionControlSnapshot {
 
 const emptySnapshot: MissionControlSnapshot = {
   challengeReviews: [],
+  jennyBridgeRequests: [],
+  jennyBridgeResponses: [],
   laneRequests: [],
   projectBriefs: [],
   projectSessionGroups: [],
@@ -618,7 +627,18 @@ Return: preflight, recommendation, risks, next lane, safety confirmation.`
 }
 
 async function loadMissionControlSnapshot(): Promise<MissionControlSnapshot> {
-  const [workspaceStatus, projects, projectBriefs, challengeReviews, laneRequests, reports, projectState, projectSessions] = await Promise.all([
+  const [
+    workspaceStatus,
+    projects,
+    projectBriefs,
+    challengeReviews,
+    laneRequests,
+    reports,
+    projectState,
+    projectSessions,
+    jennyBridgeOutbox,
+    jennyBridgeInbox
+  ] = await Promise.all([
     getMissionControlWorkspaceStatus(),
     getMissionControlProjects(),
     getMissionControlProjectBriefs(),
@@ -626,11 +646,15 @@ async function loadMissionControlSnapshot(): Promise<MissionControlSnapshot> {
     getMissionControlLaneRequests(),
     getMissionControlReports(),
     getMissionControlProjectState(),
-    getMissionControlProjectSessions()
+    getMissionControlProjectSessions(),
+    getMissionControlJennyBridgeOutbox(),
+    getMissionControlJennyBridgeInbox()
   ])
 
   return {
     challengeReviews: unwrapRecords(challengeReviews.challenge_reviews),
+    jennyBridgeRequests: unwrapRecords(jennyBridgeOutbox.requests),
+    jennyBridgeResponses: unwrapRecords(jennyBridgeInbox.responses),
     laneRequests: unwrapRecords(laneRequests.lane_requests),
     projectBriefs: unwrapRecords(projectBriefs.project_briefs),
     projectSessionGroups: projectSessions.groups ?? [],
@@ -724,6 +748,33 @@ export function MissionControlView() {
   async function copyProjectRoomPacket(project: MissionControlProjectRecord) {
     await navigator.clipboard?.writeText(packetForProject(project))
     setProjectRoomMessage('Copied phone-safe project packet.')
+  }
+
+  async function queueJennyBridgeRequest(project: MissionControlProjectRecord) {
+    if (!projectRequest.trim()) {
+      setProjectRoomMessage('Write one bounded request before queuing a Jenny bridge message.')
+
+      return
+    }
+
+    setProjectRoomSaving(true)
+    setProjectRoomMessage('')
+
+    try {
+      await createMissionControlJennyBridgeRequest({
+        ack_key: `${project.project_id}:${Date.now()}`,
+        message: packetForProject(project),
+        project_id: project.project_id,
+        sender: 'codex',
+        target_agent: 'jenny'
+      })
+      setSnapshot(await loadMissionControlSnapshot())
+      setProjectRoomMessage('Queued outbound Jenny bridge message. It is append-only and still requires Jenny polling/relay.')
+    } catch (err) {
+      setProjectRoomMessage(String(err instanceof Error ? err.message : err))
+    } finally {
+      setProjectRoomSaving(false)
+    }
   }
 
   async function saveChallengeDraft(project: MissionControlProjectRecord) {
@@ -892,9 +943,12 @@ export function MissionControlView() {
 
       {selectedProject ? (
         <ProjectRoomsWorkspace
+          bridgeRequests={snapshot.jennyBridgeRequests.filter(request => request.project_id === selectedProject.project_id)}
+          bridgeResponses={snapshot.jennyBridgeResponses.filter(response => response.project_id === selectedProject.project_id)}
           brief={latestForProject(selectedProject.project_id, snapshot.projectBriefs)}
           message={projectRoomMessage}
           onCopyPacket={() => void copyProjectRoomPacket(selectedProject)}
+          onQueueBridge={() => void queueJennyBridgeRequest(selectedProject)}
           onRequestChange={setProjectRequest}
           onSaveChallenge={() => void saveChallengeDraft(selectedProject)}
           onSaveLane={() => void saveReadOnlyLaneDraft(selectedProject)}
@@ -997,8 +1051,11 @@ export function MissionControlView() {
 
 function ProjectRoomsWorkspace({
   brief,
+  bridgeRequests,
+  bridgeResponses,
   message,
   onCopyPacket,
+  onQueueBridge,
   onRequestChange,
   onSaveChallenge,
   onSaveLane,
@@ -1013,8 +1070,11 @@ function ProjectRoomsWorkspace({
   state
 }: {
   brief: MissionControlProjectBriefRecord | null
+  bridgeRequests: MissionControlJennyBridgeRequestRecord[]
+  bridgeResponses: MissionControlJennyBridgeResponseRecord[]
   message: string
   onCopyPacket: () => void
+  onQueueBridge: () => void
   onRequestChange: (value: string) => void
   onSaveChallenge: () => void
   onSaveLane: () => void
@@ -1084,9 +1144,12 @@ function ProjectRoomsWorkspace({
           />
         </label>
 
-        <div className="mt-3 grid gap-2 md:grid-cols-3">
+        <div className="mt-3 grid gap-2 md:grid-cols-4">
           <button className="rounded-md border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onCopyPacket} type="button">
             Copy phone-safe packet
+          </button>
+          <button className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={saving} onClick={onQueueBridge} type="button">
+            Queue for Jenny bridge
           </button>
           <button className="rounded-md border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onSaveChallenge} type="button">
             Save challenge draft
@@ -1098,6 +1161,32 @@ function ProjectRoomsWorkspace({
         {message ? <p className="mt-2 text-sm text-muted-foreground">{message}</p> : null}
 
         <div className="mt-4 grid gap-3 xl:grid-cols-2">
+          <section className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">Jenny bridge</h3>
+              <span className="rounded-full border border-emerald-500/30 px-2 py-0.5 text-xs text-emerald-700 dark:text-emerald-300">
+                record-backed / no dispatch
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Outbound records are ready for a Jenny poller or relay. Direct session send remains disabled.
+            </p>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <BridgeList empty="No queued bridge messages." items={bridgeRequests} renderItem={request => (
+                <>
+                  <div className="font-medium text-foreground/90">{request.status ?? 'queued'} / {request.target_agent ?? 'jenny'}</div>
+                  <div className="mt-1 line-clamp-3 text-muted-foreground">{request.message}</div>
+                </>
+              )} title="Outbound to Jenny" />
+              <BridgeList empty="No bridge replies yet." items={bridgeResponses} renderItem={response => (
+                <>
+                  <div className="font-medium text-foreground/90">{response.responder ?? 'jenny'} / {response.status ?? 'received'}</div>
+                  <div className="mt-1 line-clamp-3 text-muted-foreground">{response.message}</div>
+                </>
+              )} title="Jenny replies" />
+            </div>
+          </section>
+
           <section className="rounded-lg border border-border/70 bg-background/60 p-3">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-sm font-semibold">Phone-safe packet</h3>
@@ -1125,6 +1214,38 @@ function ProjectRoomsWorkspace({
             </div>
           </section>
         </div>
+      </div>
+    </section>
+  )
+}
+
+function BridgeList<T>({
+  empty,
+  items,
+  renderItem,
+  title
+}: {
+  empty: string
+  items: T[]
+  renderItem: (item: T) => ReactNode
+  title: string
+}) {
+  return (
+    <section className="rounded-md border border-border/70 bg-background/60 p-2 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="font-semibold text-foreground/90">{title}</h4>
+        <span className="text-muted-foreground">{items.length}</span>
+      </div>
+      <div className="mt-2 grid gap-2">
+        {items.length ? (
+          items.slice(-3).reverse().map((item, index) => (
+            <div className="rounded-md border border-border/60 bg-background/70 p-2" key={index}>
+              {renderItem(item)}
+            </div>
+          ))
+        ) : (
+          <p className="text-muted-foreground">{empty}</p>
+        )}
       </div>
     </section>
   )

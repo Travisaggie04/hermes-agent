@@ -8,6 +8,8 @@ from mission_control.records.models import (
     ChallengeReviewRecord,
     EvidenceCard,
     GoalContract,
+    JennyBridgeMessageRequestRecord,
+    JennyBridgeMessageResponseRecord,
     JennyReportRecord,
     LaneRequestRecord,
     MissionBrief,
@@ -151,6 +153,49 @@ def test_jenny_report_record_round_trips_manual_report_fields():
     assert JennyReportRecord.from_dict(data) == record
     assert isinstance(JennyReportRecord.from_dict(data).changed_files, tuple)
     assert RECORD_TYPES["JennyReportRecord"] is JennyReportRecord
+
+
+def test_jenny_bridge_message_request_record_round_trips_outbound_fields():
+    record = JennyBridgeMessageRequestRecord(
+        request_id="bridge-request-1",
+        project_id="project-hermes",
+        lane_request_id="lane-request-1",
+        sender="travis",
+        target_agent="jenny",
+        message="Please review this lane.",
+        status="queued",
+        ack_key="bridge-request-1",
+        created_at="2026-06-12T15:20:00Z",
+        metadata={"dispatch_enabled": False},
+    )
+
+    data = record.to_dict()
+
+    assert data["message"] == "Please review this lane."
+    assert data["status"] == "queued"
+    assert JennyBridgeMessageRequestRecord.from_dict(data) == record
+    assert RECORD_TYPES["JennyBridgeMessageRequestRecord"] is JennyBridgeMessageRequestRecord
+
+
+def test_jenny_bridge_message_response_record_round_trips_inbound_fields():
+    record = JennyBridgeMessageResponseRecord(
+        response_id="bridge-response-1",
+        request_id="bridge-request-1",
+        project_id="project-hermes",
+        lane_request_id="lane-request-1",
+        responder="jenny",
+        message="Safe to proceed with a read-only lane.",
+        status="received",
+        created_at="2026-06-12T15:21:00Z",
+        metadata={"external_jenny_response": True},
+    )
+
+    data = record.to_dict()
+
+    assert data["request_id"] == "bridge-request-1"
+    assert data["message"] == "Safe to proceed with a read-only lane."
+    assert JennyBridgeMessageResponseRecord.from_dict(data) == record
+    assert RECORD_TYPES["JennyBridgeMessageResponseRecord"] is JennyBridgeMessageResponseRecord
 
 
 def test_mission_brief_round_trips_nested_records_to_plain_dicts():

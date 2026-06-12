@@ -45,6 +45,8 @@ from mission_control.records import (
     ChallengeReviewRecord,
     EvidenceCard,
     GoalContract,
+    JennyBridgeMessageRequestRecord,
+    JennyBridgeMessageResponseRecord,
     JsonlRecordStore,
     JennyReportRecord,
     LaneRequestRecord,
@@ -545,6 +547,14 @@ def _jenny_report_payload(record: JennyReportRecord) -> dict[str, Any]:
     return record.to_dict()
 
 
+def _jenny_bridge_request_payload(record: JennyBridgeMessageRequestRecord) -> dict[str, Any]:
+    return record.to_dict()
+
+
+def _jenny_bridge_response_payload(record: JennyBridgeMessageResponseRecord) -> dict[str, Any]:
+    return record.to_dict()
+
+
 def _session_project_link_payload(record: SessionProjectLinkRecord) -> dict[str, Any]:
     payload = record.to_dict()
     payload["durable_session_id"] = record.durable_session_id
@@ -558,6 +568,10 @@ def _workspace_record_payload(record: Any) -> dict[str, Any]:
         return _lane_request_payload(record)
     if isinstance(record, JennyReportRecord):
         return _jenny_report_payload(record)
+    if isinstance(record, JennyBridgeMessageRequestRecord):
+        return _jenny_bridge_request_payload(record)
+    if isinstance(record, JennyBridgeMessageResponseRecord):
+        return _jenny_bridge_response_payload(record)
     if isinstance(record, (ApprovalRecord, ReportRecord, RunRecord)):
         return record.to_dict()
     if isinstance(record, SessionProjectLinkRecord):
@@ -1117,6 +1131,71 @@ def _build_jenny_report_record(payload: dict[str, Any]) -> JennyReportRecord:
             "send_to_jenny_enabled": False,
             "dispatch_enabled": False,
             "artifact_links": _workspace_list(payload.get("artifact_links")),
+        },
+    )
+
+
+def _build_jenny_bridge_request_record(payload: dict[str, Any]) -> JennyBridgeMessageRequestRecord:
+    project_id = _workspace_text(payload.get("project_id"), max_chars=120)
+    message = _workspace_text(payload.get("message"), max_chars=MAX_WORKSPACE_PROMPT_CHARS)
+    if not project_id:
+        raise HTTPException(status_code=422, detail="project_id is required")
+    if not message:
+        raise HTTPException(status_code=422, detail="message is required")
+    now = _utc_now()
+    request_id = _workspace_text(payload.get("request_id"), max_chars=120) or f"jenny-bridge-request-{uuid.uuid4().hex[:12]}"
+    return JennyBridgeMessageRequestRecord(
+        request_id=request_id,
+        project_id=project_id,
+        lane_request_id=_workspace_text(payload.get("lane_request_id"), max_chars=120),
+        sender=_workspace_text(payload.get("sender"), max_chars=80) or "travis",
+        target_agent=_workspace_text(payload.get("target_agent"), max_chars=80) or "jenny",
+        message=message,
+        status=_workspace_text(payload.get("status"), max_chars=80) or "queued",
+        ack_key=_workspace_text(payload.get("ack_key"), max_chars=160),
+        created_at=now,
+        metadata={
+            "source": "mission_control_jenny_bridge_v1",
+            "bridge_direction": "outbound",
+            "manual_copy_only": False,
+            "send_to_jenny_enabled": False,
+            "dispatch_enabled": False,
+            "execution_enabled": False,
+            "requires_external_jenny_poller": True,
+            "dedupe_key": _workspace_text(payload.get("dedupe_key"), max_chars=160),
+        },
+    )
+
+
+def _build_jenny_bridge_response_record(payload: dict[str, Any]) -> JennyBridgeMessageResponseRecord:
+    request_id = _workspace_text(payload.get("request_id"), max_chars=120)
+    project_id = _workspace_text(payload.get("project_id"), max_chars=120)
+    message = _workspace_text(payload.get("message"), max_chars=MAX_WORKSPACE_PROMPT_CHARS)
+    if not request_id:
+        raise HTTPException(status_code=422, detail="request_id is required")
+    if not project_id:
+        raise HTTPException(status_code=422, detail="project_id is required")
+    if not message:
+        raise HTTPException(status_code=422, detail="message is required")
+    now = _utc_now()
+    response_id = _workspace_text(payload.get("response_id"), max_chars=120) or f"jenny-bridge-response-{uuid.uuid4().hex[:12]}"
+    return JennyBridgeMessageResponseRecord(
+        response_id=response_id,
+        request_id=request_id,
+        project_id=project_id,
+        lane_request_id=_workspace_text(payload.get("lane_request_id"), max_chars=120),
+        responder=_workspace_text(payload.get("responder"), max_chars=80) or "jenny",
+        message=message,
+        status=_workspace_text(payload.get("status"), max_chars=80) or "received",
+        created_at=now,
+        metadata={
+            "source": "mission_control_jenny_bridge_v1",
+            "bridge_direction": "inbound",
+            "manual_copy_only": False,
+            "send_to_jenny_enabled": False,
+            "dispatch_enabled": False,
+            "execution_enabled": False,
+            "external_jenny_response": True,
         },
     )
 
@@ -2795,6 +2874,98 @@ async def workspace_jenny_report_create(request: Request) -> dict[str, Any]:
         "record_index": index,
         "record_type": record.record_type,
         "report": _jenny_report_payload(record),
+    }
+
+
+@router.get("/workspace/jenny-bridge/outbox")
+async def workspace_jenny_bridge_outbox(
+    project_id: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    limit: str | None = Query(default=None),
+) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    safe_project_id = _workspace_text(project_id, max_chars=120) if project_id else ""
+    safe_status = _workspace_text(status, max_chars=80) if status else ""
+    requests = _latest_workspace_records(JennyBridgeMessageRequestRecord, applied_limit)
+    if safe_project_id:
+        requests = [item for item in requests if item.get("record", {}).get("project_id") == safe_project_id]
+    if safe_status:
+        requests = [item for item in requests if item.get("record", {}).get("status") == safe_status]
+    return {
+        **INERT_FLAGS,
+        "stored": False,
+        "display_only": True,
+        "manual_copy_only": False,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "project_id": safe_project_id,
+        "status": safe_status,
+        "count": len(requests),
+        "requests": requests,
+    }
+
+
+@router.post("/workspace/jenny-bridge/outbox/create")
+async def workspace_jenny_bridge_outbox_create(request: Request) -> dict[str, Any]:
+    payload = await _read_workspace_json_body(request)
+    record = _build_jenny_bridge_request_record(payload)
+    index = JsonlRecordStore(record_store_path()).append(record)
+    return {
+        **INERT_FLAGS,
+        "stored": True,
+        "display_only": True,
+        "manual_copy_only": False,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "record_index": index,
+        "record_type": record.record_type,
+        "request": _jenny_bridge_request_payload(record),
+    }
+
+
+@router.get("/workspace/jenny-bridge/inbox")
+async def workspace_jenny_bridge_inbox(
+    project_id: str | None = Query(default=None),
+    request_id: str | None = Query(default=None),
+    limit: str | None = Query(default=None),
+) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    safe_project_id = _workspace_text(project_id, max_chars=120) if project_id else ""
+    safe_request_id = _workspace_text(request_id, max_chars=120) if request_id else ""
+    responses = _latest_workspace_records(JennyBridgeMessageResponseRecord, applied_limit)
+    if safe_project_id:
+        responses = [item for item in responses if item.get("record", {}).get("project_id") == safe_project_id]
+    if safe_request_id:
+        responses = [item for item in responses if item.get("record", {}).get("request_id") == safe_request_id]
+    return {
+        **INERT_FLAGS,
+        "stored": False,
+        "display_only": True,
+        "manual_copy_only": False,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "project_id": safe_project_id,
+        "request_id": safe_request_id,
+        "count": len(responses),
+        "responses": responses,
+    }
+
+
+@router.post("/workspace/jenny-bridge/inbox/create")
+async def workspace_jenny_bridge_inbox_create(request: Request) -> dict[str, Any]:
+    payload = await _read_workspace_json_body(request)
+    record = _build_jenny_bridge_response_record(payload)
+    index = JsonlRecordStore(record_store_path()).append(record)
+    return {
+        **INERT_FLAGS,
+        "stored": True,
+        "display_only": True,
+        "manual_copy_only": False,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "record_index": index,
+        "record_type": record.record_type,
+        "response": _jenny_bridge_response_payload(record),
     }
 
 
