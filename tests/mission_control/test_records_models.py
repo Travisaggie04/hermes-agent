@@ -8,6 +8,8 @@ from mission_control.records.models import (
     ChallengeReviewRecord,
     EvidenceCard,
     GoalContract,
+    GitHubBridgeMailboxStatusRecord,
+    GitHubBridgeMessageRecord,
     JennyBridgeMessageRequestRecord,
     JennyBridgeMessageResponseRecord,
     JennyBridgePollerStatusRecord,
@@ -233,6 +235,39 @@ def test_jenny_bridge_poller_status_record_round_trips_manual_status_fields():
     assert data["metadata"]["timer_enabled"] is False
     assert JennyBridgePollerStatusRecord.from_dict(data) == record
     assert RECORD_TYPES["JennyBridgePollerStatusRecord"] is JennyBridgePollerStatusRecord
+
+
+def test_github_bridge_message_and_status_records_round_trip_manual_mailbox_fields():
+    message = GitHubBridgeMessageRecord(
+        request_id="github-bridge-request-1",
+        project_id="project-hermes",
+        from_agent="codex",
+        to_agent="jenny",
+        status="queued",
+        message="Please review this from GitHub.",
+        created_at="2026-06-13T00:00:00Z",
+        github_repo="Travisaggie04/hermes-agent",
+        github_issue_number=79,
+        github_comment_id="12345",
+        metadata={"manual_start_only": True, "dispatch_enabled": False},
+    )
+    status = GitHubBridgeMailboxStatusRecord(
+        status_id="github-bridge-status-1",
+        bridge_id="manual-github-issue-mailbox",
+        repo="Travisaggie04/hermes-agent",
+        issue_number=79,
+        status="poll_completed",
+        pending_count=1,
+        new_message_count=1,
+        handled_request_id="github-bridge-request-1",
+        created_at="2026-06-13T00:01:00Z",
+        metadata={"manual_start_only": True, "worker_enabled": False, "timer_enabled": False},
+    )
+
+    assert GitHubBridgeMessageRecord.from_dict(message.to_dict()) == message
+    assert GitHubBridgeMailboxStatusRecord.from_dict(status.to_dict()) == status
+    assert RECORD_TYPES["GitHubBridgeMessageRecord"] is GitHubBridgeMessageRecord
+    assert RECORD_TYPES["GitHubBridgeMailboxStatusRecord"] is GitHubBridgeMailboxStatusRecord
 
 
 def test_mission_brief_round_trips_nested_records_to_plain_dicts():

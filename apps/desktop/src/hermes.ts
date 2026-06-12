@@ -433,6 +433,65 @@ export interface MissionControlJennyBridgePollerStatusResponse {
   worker_enabled?: boolean
 }
 
+export interface MissionControlGitHubBridgeMessageRecord {
+  request_id: string
+  project_id: string
+  from_agent: string
+  to_agent: string
+  status: string
+  message: string
+  created_at?: string
+  github_repo?: string
+  github_issue_number?: number
+  github_comment_id?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface MissionControlGitHubBridgeMailboxStatusRecord {
+  status_id: string
+  bridge_id?: string
+  repo?: string
+  issue_number?: number
+  mode?: string
+  status?: string
+  pending_count?: number
+  new_message_count?: number
+  handled_request_id?: string
+  handled_response_id?: string
+  last_error?: string
+  runtime_path?: string
+  head?: string
+  operator?: string
+  created_at?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface MissionControlGitHubBridgeStatusResponse {
+  count?: number
+  daemon_enabled?: boolean
+  discord_automation_enabled?: boolean
+  dispatch_enabled?: boolean
+  execution_enabled?: boolean
+  last_error?: string
+  last_poll_at?: string
+  last_response_at?: string
+  last_response_request_id?: string
+  last_status?: string
+  manual_start_only?: boolean
+  mode?: string
+  foreground_watch_supported?: boolean
+  foreground_watch_running?: boolean
+  model_routing_enabled?: boolean
+  pending_count?: number
+  pending_messages?: Array<MissionControlRecordEnvelope<MissionControlGitHubBridgeMessageRecord>>
+  send_to_jenny_enabled?: boolean
+  session_send_enabled?: boolean
+  status_records?: Array<MissionControlRecordEnvelope<MissionControlGitHubBridgeMailboxStatusRecord>>
+  stored?: boolean
+  timer_enabled?: boolean
+  worker_enabled?: boolean
+}
+
 export interface MissionControlJennyBridgeRequestCreatePayload {
   ack_key?: string
   dedupe_key?: string
@@ -655,6 +714,12 @@ export function getMissionControlJennyBridgeInbox(): Promise<MissionControlJenny
 export function getMissionControlJennyBridgePollerStatus(): Promise<MissionControlJennyBridgePollerStatusResponse> {
   return window.hermesDesktop.api<MissionControlJennyBridgePollerStatusResponse>({
     path: `${MISSION_CONTROL_API}/workspace/jenny-bridge/poller-status`
+  })
+}
+
+export function getMissionControlGitHubBridgeStatus(): Promise<MissionControlGitHubBridgeStatusResponse> {
+  return window.hermesDesktop.api<MissionControlGitHubBridgeStatusResponse>({
+    path: `${MISSION_CONTROL_API}/workspace/github-bridge/status`
   })
 }
 

@@ -641,6 +641,127 @@ class JennyBridgePollerStatusRecord:
 
 
 @dataclass(frozen=True)
+class GitHubBridgeMessageRecord:
+    request_id: str
+    project_id: str
+    from_agent: str
+    to_agent: str
+    status: str
+    message: str
+    created_at: str
+    github_repo: str = ""
+    github_issue_number: int = 0
+    github_comment_id: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "GitHubBridgeMessageRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "github_issue_number", int(self.github_issue_number or 0))
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "request_id": self.request_id,
+            "project_id": self.project_id,
+            "from_agent": self.from_agent,
+            "to_agent": self.to_agent,
+            "status": self.status,
+            "message": self.message,
+            "created_at": self.created_at,
+            "github_repo": self.github_repo,
+            "github_issue_number": self.github_issue_number,
+            "github_comment_id": self.github_comment_id,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> GitHubBridgeMessageRecord:
+        return cls(
+            request_id=_required(data, "request_id"),
+            project_id=_required(data, "project_id"),
+            from_agent=_required(data, "from_agent"),
+            to_agent=_required(data, "to_agent"),
+            status=data.get("status", "queued"),
+            message=_required(data, "message"),
+            created_at=data.get("created_at", ""),
+            github_repo=data.get("github_repo", ""),
+            github_issue_number=data.get("github_issue_number", 0),
+            github_comment_id=data.get("github_comment_id", ""),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
+class GitHubBridgeMailboxStatusRecord:
+    status_id: str
+    bridge_id: str = "manual-github-issue-mailbox"
+    repo: str = ""
+    issue_number: int = 0
+    mode: str = "manual"
+    status: str = "idle"
+    pending_count: int = 0
+    new_message_count: int = 0
+    handled_request_id: str = ""
+    handled_response_id: str = ""
+    last_error: str = ""
+    runtime_path: str = ""
+    head: str = ""
+    operator: str = "manual"
+    created_at: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "GitHubBridgeMailboxStatusRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "issue_number", int(self.issue_number or 0))
+        object.__setattr__(self, "pending_count", int(self.pending_count or 0))
+        object.__setattr__(self, "new_message_count", int(self.new_message_count or 0))
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status_id": self.status_id,
+            "bridge_id": self.bridge_id,
+            "repo": self.repo,
+            "issue_number": self.issue_number,
+            "mode": self.mode,
+            "status": self.status,
+            "pending_count": self.pending_count,
+            "new_message_count": self.new_message_count,
+            "handled_request_id": self.handled_request_id,
+            "handled_response_id": self.handled_response_id,
+            "last_error": self.last_error,
+            "runtime_path": self.runtime_path,
+            "head": self.head,
+            "operator": self.operator,
+            "created_at": self.created_at,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> GitHubBridgeMailboxStatusRecord:
+        return cls(
+            status_id=_required(data, "status_id"),
+            bridge_id=data.get("bridge_id", "manual-github-issue-mailbox"),
+            repo=data.get("repo", ""),
+            issue_number=data.get("issue_number", 0),
+            mode=data.get("mode", "manual"),
+            status=data.get("status", "idle"),
+            pending_count=data.get("pending_count", 0),
+            new_message_count=data.get("new_message_count", 0),
+            handled_request_id=data.get("handled_request_id", ""),
+            handled_response_id=data.get("handled_response_id", ""),
+            last_error=data.get("last_error", ""),
+            runtime_path=data.get("runtime_path", ""),
+            head=data.get("head", ""),
+            operator=data.get("operator", "manual"),
+            created_at=data.get("created_at", ""),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
 class ApprovalRecord:
     approval_id: str
     project_id: str = ""
@@ -1910,6 +2031,8 @@ RECORD_TYPES = {
         ProjectBriefRecord,
         LaneRequestRecord,
         JennyReportRecord,
+        GitHubBridgeMailboxStatusRecord,
+        GitHubBridgeMessageRecord,
         JennyBridgeMessageRequestRecord,
         JennyBridgeMessageResponseRecord,
         JennyBridgePollerStatusRecord,

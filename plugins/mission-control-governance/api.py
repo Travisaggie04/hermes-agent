@@ -45,6 +45,8 @@ from mission_control.records import (
     ChallengeReviewRecord,
     EvidenceCard,
     GoalContract,
+    GitHubBridgeMailboxStatusRecord,
+    GitHubBridgeMessageRecord,
     JennyBridgeMessageRequestRecord,
     JennyBridgeMessageResponseRecord,
     JennyBridgePollerStatusRecord,
@@ -698,6 +700,56 @@ def _jenny_bridge_poller_status_projection(limit: int = DEFAULT_RECORDS_LIMIT) -
         "last_response_at": latest_response.get("created_at", ""),
         "last_response_request_id": latest_response.get("request_id", ""),
         "last_error": latest_status.get("last_error", ""),
+        "status_records": statuses,
+    }
+
+
+def _github_bridge_mailbox_status_projection(limit: int = DEFAULT_RECORDS_LIMIT) -> dict[str, Any]:
+    messages = _latest_workspace_records(GitHubBridgeMessageRecord, limit)
+    statuses = _latest_workspace_records(GitHubBridgeMailboxStatusRecord, limit)
+    response_request_ids = {
+        item.get("record", {}).get("request_id", "")
+        for item in messages
+        if item.get("record", {}).get("status") in {"replied", "closed"}
+        or item.get("record", {}).get("from_agent") == "jenny"
+    }
+    pending = [
+        item
+        for item in messages
+        if item.get("record", {}).get("status") in {"queued", "retry_requested"}
+        and item.get("record", {}).get("to_agent") == "jenny"
+        and item.get("record", {}).get("request_id") not in response_request_ids
+    ]
+    responses = [
+        item
+        for item in messages
+        if item.get("record", {}).get("status") in {"replied", "closed"}
+        or item.get("record", {}).get("from_agent") == "jenny"
+    ]
+    latest_status = statuses[-1]["record"] if statuses else {}
+    latest_response = responses[-1]["record"] if responses else {}
+    return {
+        "manual_start_only": True,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "execution_enabled": False,
+        "worker_enabled": False,
+        "timer_enabled": False,
+        "daemon_enabled": False,
+        "discord_automation_enabled": False,
+        "model_routing_enabled": False,
+        "stored": False,
+        "count": len(statuses),
+        "pending_count": len(pending),
+        "mode": latest_status.get("mode", "manual"),
+        "foreground_watch_supported": True,
+        "foreground_watch_running": latest_status.get("status", "").startswith("watch_") and latest_status.get("status") != "watch_stopped",
+        "last_poll_at": latest_status.get("created_at", ""),
+        "last_status": latest_status.get("status", "idle"),
+        "last_response_at": latest_response.get("created_at", ""),
+        "last_response_request_id": latest_response.get("request_id", ""),
+        "last_error": latest_status.get("last_error", ""),
+        "pending_messages": pending,
         "status_records": statuses,
     }
 
@@ -3048,6 +3100,22 @@ async def workspace_jenny_bridge_pending(
 async def workspace_jenny_bridge_poller_status(limit: str | None = Query(default=None)) -> dict[str, Any]:
     applied_limit = _safe_records_limit(limit)
     projection = _jenny_bridge_poller_status_projection(applied_limit)
+    return {
+        **INERT_FLAGS,
+        "stored": False,
+        "display_only": True,
+        "manual_start_only": True,
+        "manual_copy_only": False,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        **projection,
+    }
+
+
+@router.get("/workspace/github-bridge/status")
+async def workspace_github_bridge_status(limit: str | None = Query(default=None)) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    projection = _github_bridge_mailbox_status_projection(applied_limit)
     return {
         **INERT_FLAGS,
         "stored": False,
