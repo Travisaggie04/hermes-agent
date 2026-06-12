@@ -18,6 +18,7 @@ from mission_control.records import (
     ApprovalRecord,
     ApprovalSlice,
     ArtifactRef,
+    ChallengeReviewRecord,
     EvidenceCard,
     GoalContract,
     JsonlRecordStore,
@@ -26,6 +27,7 @@ from mission_control.records import (
     MissionBrief,
     OperatingWorkspaceHandoffRecord,
     OperatorAction,
+    ProjectBriefRecord,
     ProjectRecord,
     ReportRecord,
     RunRecord,
@@ -164,6 +166,105 @@ def test_workspace_project_template_seed_creates_defaults_and_skips_duplicates(p
     state_payload = state.json()
     assert state_payload["stored"] is False
     assert state_payload["count"] == 5
+
+
+def test_workspace_project_brief_api_creates_lists_and_stays_inert(plugin_api, client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/project-briefs/create",
+        json={
+            "project_id": "project-hermes-mission-control",
+            "name": "Hermes / Mission Control",
+            "outcome": "Make Jenny reliable before increasing autonomy.",
+            "audience": "Travis",
+            "source_of_truth": "Mission Control records",
+            "success_criteria": ["workspace-status agrees", "challenge gate exists"],
+            "constraints": ["manual-copy only until send path is reviewed"],
+            "forbidden_actions": ["dispatch", "session-send", "runtime switch"],
+            "approval_rules": ["deploy requires explicit approval"],
+            "context_pack_path": "context-packs/mission-control-current.md",
+            "status": "active",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["manual_copy_only"] is True
+    assert payload["send_to_jenny_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["stored"] is True
+    assert payload["record_type"] == "ProjectBriefRecord"
+    assert payload["project_brief"]["project_id"] == "project-hermes-mission-control"
+
+    records = JsonlRecordStore(plugin_api.record_store_path()).read_all(ProjectBriefRecord)
+    assert len(records) == 1
+    assert records[0].status == "active"
+    assert records[0].forbidden_actions == ("dispatch", "session-send", "runtime switch")
+
+    listed = client.get(
+        "/api/plugins/mission-control-governance/workspace/project-briefs?project_id=project-hermes-mission-control"
+    )
+    assert listed.status_code == 200
+    listed_payload = listed.json()
+    assert listed_payload["count"] == 1
+    assert listed_payload["project_briefs"][0]["record_type"] == "ProjectBriefRecord"
+
+
+def test_workspace_challenge_review_api_creates_lists_and_challenges_bad_direction(plugin_api, client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/challenge-reviews/create",
+        json={
+            "project_id": "project-shorts-video",
+            "request_summary": "Make Jenny post automatically every day.",
+            "decision_state": "wrong_approach_likely",
+            "recommended_path": "Start with scheduled drafts, then approval-gated posting.",
+            "concerns": ["automation before observability", "public posting needs approval"],
+            "questions": ["Which platform is highest priority?"],
+            "required_spec_updates": ["add platform failure policy"],
+            "required_approvals": ["public posting approval"],
+            "suggested_lane_title": "Read-only scheduler readiness audit",
+            "reviewed_by": "jenny",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["manual_copy_only"] is True
+    assert payload["send_to_jenny_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["stored"] is True
+    assert payload["record_type"] == "ChallengeReviewRecord"
+    assert payload["challenge_review"]["decision_state"] == "wrong_approach_likely"
+    assert payload["challenge_review"]["recommended_path"] == "Start with scheduled drafts, then approval-gated posting."
+
+    records = JsonlRecordStore(plugin_api.record_store_path()).read_all(ChallengeReviewRecord)
+    assert len(records) == 1
+    assert records[0].concerns == ("automation before observability", "public posting needs approval")
+
+    listed = client.get(
+        "/api/plugins/mission-control-governance/workspace/challenge-reviews?project_id=project-shorts-video"
+    )
+    assert listed.status_code == 200
+    listed_payload = listed.json()
+    assert listed_payload["count"] == 1
+    assert listed_payload["challenge_reviews"][0]["record"]["decision_state"] == "wrong_approach_likely"
+
+
+def test_workspace_project_intake_rejects_invalid_challenge_state(client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/challenge-reviews/create",
+        json={
+            "project_id": "project-hermes-mission-control",
+            "request_summary": "Do a vague unsafe thing.",
+            "decision_state": "just_do_it",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "status must be one of" in response.json()["detail"]
 
 
 def test_workspace_lane_request_api_creates_lists_and_stays_inert(plugin_api, client):
@@ -333,6 +434,8 @@ def test_control_plane_records_round_trip_and_register():
     assert RECORD_TYPES["ApprovalRecord"] is ApprovalRecord
     assert RECORD_TYPES["RunRecord"] is RunRecord
     assert RECORD_TYPES["ReportRecord"] is ReportRecord
+    assert RECORD_TYPES["ProjectBriefRecord"] is ProjectBriefRecord
+    assert RECORD_TYPES["ChallengeReviewRecord"] is ChallengeReviewRecord
 
 
 def test_control_plane_get_endpoints_empty_are_inert(client):
@@ -1538,8 +1641,12 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/operator-actions": {"GET"},
         "/workspace/projects": {"GET"},
         "/workspace/projects/create": {"POST"},
+        "/workspace/project-briefs": {"GET"},
+        "/workspace/project-briefs/create": {"POST"},
         "/workspace/project-templates": {"GET"},
         "/workspace/projects/seed-defaults": {"POST"},
+        "/workspace/challenge-reviews": {"GET"},
+        "/workspace/challenge-reviews/create": {"POST"},
         "/workspace/lane-requests": {"GET"},
         "/workspace/lane-requests/create": {"POST"},
         "/workspace/reports": {"GET"},
@@ -1577,7 +1684,9 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/evidence-cards",
         "/operator-actions",
         "/workspace/projects",
+        "/workspace/project-briefs",
         "/workspace/project-templates",
+        "/workspace/challenge-reviews",
         "/workspace/lane-requests",
         "/workspace/reports",
         "/workspace/approvals",
@@ -3866,6 +3975,46 @@ def test_workspace_status_get_uses_latest_accepted_baseline_record_without_mutat
     assert payload["display_only"] is True
     assert payload["dry_run_only"] is True
     assert payload["enforces_runtime"] is False
+    assert payload["record_store"]["status"] == "ok"
+    assert payload["control_plane_records"]["active_run_count"] == 0
+
+
+def test_workspace_status_get_uses_record_sourced_active_runs_not_static_lane(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(
+        AcceptedBaselineRecord(
+            baseline_id="accepted-pr69-control-plane-af1eafe",
+            runtime_path="/home/jenny/.hermes/hermes-runtime-control-plane-af1eafe",
+            head="af1eafe23eb25eabd92496e0ea04db39e099acdf",
+            rollback_runtime_path="/home/jenny/.hermes/hermes-runtime-manual-session-link-ui-d7d1e0d",
+            rollback_head="d7d1e0d758a64783f4de435f06450be218e8a2bf",
+            dispatch_in_gateway=False,
+            active_kanban=0,
+            max_active_lane=1,
+        )
+    )
+    store.append(
+        RunRecord(
+            run_id="run-1",
+            project_id="project-hermes-mission-control",
+            lane_type="read_only_inspection",
+            title="Read-only status reconciliation",
+            status="running",
+            execution_mode="manual_copy",
+            baseline_head="af1eafe23eb25eabd92496e0ea04db39e099acdf",
+        )
+    )
+
+    response = client.get("/api/plugins/mission-control-governance/workspace-status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["accepted_baseline_source"] == "record"
+    assert payload["accepted_baseline"]["head"] == "af1eafe23eb25eabd92496e0ea04db39e099acdf"
+    assert payload["lane"]["active_lane"] == "Read-only status reconciliation"
+    assert payload["lane"]["active_lane_count"] == 1
+    assert payload["activity"]["active_runs"] == 1
+    assert payload["control_plane_records"]["latest_active_run_id"] == "run-1"
 
 
 def test_workspace_status_preview_accepts_accepted_baseline_source_but_remains_unstored(client):

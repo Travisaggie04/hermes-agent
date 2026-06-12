@@ -31,7 +31,8 @@ from mission_control.verifier_workflow import (
     evaluate_verifier_workflow,
     get_verifier_workflow_policy,
 )
-from mission_control.workspace_status import build_workspace_status, default_workspace_status_input
+from mission_control.workspace_status import build_workspace_status
+from mission_control.workspace_status_records import build_workspace_status_from_records
 from mission_control.lane_preflight import run_lane_start_preflight
 from mission_control.records.errors import RecordStoreError
 from mission_control.records.models import RECORD_TYPES
@@ -41,6 +42,7 @@ from mission_control.records import (
     AcceptedBaselineRecord,
     ApprovalRecord,
     ApprovalSlice,
+    ChallengeReviewRecord,
     EvidenceCard,
     GoalContract,
     JsonlRecordStore,
@@ -49,6 +51,7 @@ from mission_control.records import (
     MissionBrief,
     OperatingWorkspaceHandoffRecord,
     OperatorAction,
+    ProjectBriefRecord,
     ProjectRecord,
     ReportRecord,
     RunRecord,
@@ -121,6 +124,17 @@ CONTROL_PLANE_INERT_FLAGS = {
 APPROVAL_STATUSES = {"proposed", "approved", "rejected", "expired", "consumed", "cancelled"}
 RUN_STATUSES = {"requested", "preflight_passed", "running", "stopping", "stopped", "completed", "failed", "cancelled", "blocked"}
 REPORT_STATUSES = {"received", "needs_review", "accepted", "rejected", "superseded"}
+PROJECT_BRIEF_STATUSES = {"draft", "active", "superseded", "archived"}
+CHALLENGE_REVIEW_STATUSES = {"draft", "accepted", "superseded"}
+CHALLENGE_DECISION_STATES = {
+    "clear_and_safe",
+    "clarify_first",
+    "needs_spec_first",
+    "split_into_lanes",
+    "wrong_approach_likely",
+    "unsafe",
+    "needs_approval",
+}
 SAFE_APPROVAL_ACTION_CLASSES = {"read_only_lane", "read_only_design", "read_only_inspection", "pr_creation"}
 DANGEROUS_APPROVAL_ACTION_CLASSES = {
     "merge",
@@ -964,6 +978,83 @@ def _build_project_record(payload: dict[str, Any]) -> ProjectRecord:
         created_at=now,
         updated_at=now,
         metadata={"source": "mission_control_project_workspace_pr_a"},
+    )
+
+
+def _build_project_brief_record(payload: dict[str, Any]) -> ProjectBriefRecord:
+    project_id = _workspace_text(payload.get("project_id"), max_chars=120)
+    name = _workspace_text(payload.get("name"), max_chars=120)
+    outcome = _workspace_text(payload.get("outcome"), max_chars=MAX_WORKSPACE_PROMPT_CHARS)
+    if not project_id:
+        raise HTTPException(status_code=422, detail="project_id is required")
+    if not name:
+        raise HTTPException(status_code=422, detail="project brief name is required")
+    if not outcome:
+        raise HTTPException(status_code=422, detail="project outcome is required")
+    now = _utc_now()
+    brief_id = _workspace_text(payload.get("brief_id"), max_chars=120) or f"project-brief-{uuid.uuid4().hex[:12]}"
+    status = _normalized_control_plane_status(payload.get("status"), PROJECT_BRIEF_STATUSES, "draft")
+    return ProjectBriefRecord(
+        brief_id=brief_id,
+        project_id=project_id,
+        name=name,
+        outcome=outcome,
+        audience=_workspace_text(payload.get("audience")),
+        source_of_truth=_workspace_text(payload.get("source_of_truth"), max_chars=240),
+        success_criteria=_workspace_list(payload.get("success_criteria")),
+        constraints=_workspace_list(payload.get("constraints")),
+        forbidden_actions=_workspace_list(payload.get("forbidden_actions")),
+        approval_rules=_workspace_list(payload.get("approval_rules")),
+        context_pack_path=_workspace_text(payload.get("context_pack_path"), max_chars=240),
+        status=status,
+        created_at=now,
+        updated_at=now,
+        metadata={
+            "source": "mission_control_project_intake_v1",
+            "manual_copy_only": True,
+            "send_to_jenny_enabled": False,
+            "dispatch_enabled": False,
+            "challenge_gate_required": True,
+        },
+    )
+
+
+def _build_challenge_review_record(payload: dict[str, Any]) -> ChallengeReviewRecord:
+    project_id = _workspace_text(payload.get("project_id"), max_chars=120)
+    request_summary = _workspace_text(payload.get("request_summary"), max_chars=MAX_WORKSPACE_PROMPT_CHARS)
+    if not project_id:
+        raise HTTPException(status_code=422, detail="project_id is required")
+    if not request_summary:
+        raise HTTPException(status_code=422, detail="request_summary is required")
+    decision_state = _normalized_control_plane_status(
+        payload.get("decision_state"),
+        CHALLENGE_DECISION_STATES,
+        "needs_spec_first",
+    )
+    now = _utc_now()
+    review_id = _workspace_text(payload.get("review_id"), max_chars=120) or f"challenge-review-{uuid.uuid4().hex[:12]}"
+    status = _normalized_control_plane_status(payload.get("status"), CHALLENGE_REVIEW_STATUSES, "draft")
+    return ChallengeReviewRecord(
+        review_id=review_id,
+        project_id=project_id,
+        request_summary=request_summary,
+        decision_state=decision_state,
+        recommended_path=_workspace_text(payload.get("recommended_path"), max_chars=MAX_WORKSPACE_PROMPT_CHARS),
+        concerns=_workspace_list(payload.get("concerns")),
+        questions=_workspace_list(payload.get("questions")),
+        required_spec_updates=_workspace_list(payload.get("required_spec_updates")),
+        required_approvals=_workspace_list(payload.get("required_approvals")),
+        suggested_lane_title=_workspace_text(payload.get("suggested_lane_title"), max_chars=180),
+        status=status,
+        created_at=now,
+        reviewed_by=_workspace_text(payload.get("reviewed_by"), max_chars=80),
+        metadata={
+            "source": "mission_control_challenge_gate_v1",
+            "manual_copy_only": True,
+            "send_to_jenny_enabled": False,
+            "dispatch_enabled": False,
+            "can_start_lane": decision_state == "clear_and_safe",
+        },
     )
 
 
@@ -2194,14 +2285,7 @@ async def pr_merge_verifier_gate() -> dict[str, Any]:
 
 @router.get("/workspace-status")
 async def workspace_status() -> dict[str, Any]:
-    payload = default_workspace_status_input()
-    latest_baseline = _latest_accepted_baseline_payload()
-    if latest_baseline:
-        payload["accepted_baseline_record"] = latest_baseline
-    latest_handoff = _latest_handoff_payload()
-    if latest_handoff:
-        payload["latest_handoff"] = latest_handoff
-    status = build_workspace_status(payload)
+    status = build_workspace_status_from_records(records_path=record_store_path())
     return {
         **INERT_FLAGS,
         "enforcement_enabled": False,
@@ -2471,6 +2555,86 @@ async def workspace_project_create(request: Request) -> dict[str, Any]:
         "record_index": index,
         "record_type": record.record_type,
         "project": _project_payload(record),
+    }
+
+
+@router.get("/workspace/project-briefs")
+async def workspace_project_briefs(
+    project_id: str | None = Query(default=None),
+    limit: str | None = Query(default=None),
+) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    project_filter = _workspace_text(project_id, max_chars=120) if project_id else ""
+    records = _latest_workspace_records(ProjectBriefRecord, applied_limit)
+    if project_filter:
+        records = [item for item in records if item.get("record", {}).get("project_id") == project_filter]
+    return {
+        **INERT_FLAGS,
+        "display_only": True,
+        "manual_copy_only": True,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "project_id": project_filter,
+        "count": len(records),
+        "project_briefs": records,
+    }
+
+
+@router.post("/workspace/project-briefs/create")
+async def workspace_project_brief_create(request: Request) -> dict[str, Any]:
+    payload = await _read_workspace_json_body(request)
+    record = _build_project_brief_record(payload)
+    index = JsonlRecordStore(record_store_path()).append(record)
+    return {
+        **INERT_FLAGS,
+        "stored": True,
+        "display_only": True,
+        "manual_copy_only": True,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "record_index": index,
+        "record_type": record.record_type,
+        "project_brief": _record_payload(record),
+    }
+
+
+@router.get("/workspace/challenge-reviews")
+async def workspace_challenge_reviews(
+    project_id: str | None = Query(default=None),
+    limit: str | None = Query(default=None),
+) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    project_filter = _workspace_text(project_id, max_chars=120) if project_id else ""
+    records = _latest_workspace_records(ChallengeReviewRecord, applied_limit)
+    if project_filter:
+        records = [item for item in records if item.get("record", {}).get("project_id") == project_filter]
+    return {
+        **INERT_FLAGS,
+        "display_only": True,
+        "manual_copy_only": True,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "project_id": project_filter,
+        "count": len(records),
+        "challenge_reviews": records,
+    }
+
+
+@router.post("/workspace/challenge-reviews/create")
+async def workspace_challenge_review_create(request: Request) -> dict[str, Any]:
+    payload = await _read_workspace_json_body(request)
+    record = _build_challenge_review_record(payload)
+    index = JsonlRecordStore(record_store_path()).append(record)
+    return {
+        **INERT_FLAGS,
+        "stored": True,
+        "display_only": True,
+        "manual_copy_only": True,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "record_index": index,
+        "record_type": record.record_type,
+        "challenge_review": _record_payload(record),
     }
 
 

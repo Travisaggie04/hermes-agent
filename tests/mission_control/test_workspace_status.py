@@ -71,6 +71,7 @@ def test_workspace_status_returns_inert_display_only_flags_and_baselines():
     assert status["enforces_runtime"] is False
     assert status["accepted_baseline"]["head"] == "775f49352189fdec3169f59e3378b6744da2bdda"
     assert status["rollback_baseline"]["clean"] is True
+    assert status["lane"]["active_lane_count"] == 1
     assert status["lane"]["max_active_lane"] == 1
     assert status["lane"]["lane_status"] == "within_limit"
     assert status["safety"]["dispatch_in_gateway"] is False
@@ -390,9 +391,11 @@ def test_workspace_status_uses_handoff_source_when_no_accepted_record_exists():
 
 
 def test_workspace_status_static_fallback_warns_when_no_record_or_handoff_source():
-    status = build_workspace_status(_baseline_payload())
+    status = build_workspace_status(default_workspace_status_input())
 
     assert status["accepted_baseline_source"] == "static_fallback"
+    assert status["lane"]["active_lane"] == ""
+    assert status["lane"]["active_lane_count"] == 0
     assert "accepted_baseline_source_missing" in status["stale_context"]["warnings"]
 
 

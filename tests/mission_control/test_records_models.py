@@ -5,6 +5,7 @@ import pytest
 from mission_control.records.models import (
     ApprovalSlice,
     ArtifactRef,
+    ChallengeReviewRecord,
     EvidenceCard,
     GoalContract,
     JennyReportRecord,
@@ -13,6 +14,7 @@ from mission_control.records.models import (
     AcceptedBaselineRecord,
     OperatingWorkspaceHandoffRecord,
     OperatorAction,
+    ProjectBriefRecord,
     ProjectRecord,
     RECORD_TYPES,
     StartGateCheck,
@@ -42,6 +44,61 @@ def test_project_record_round_trips_workspace_fields():
     assert data["metadata"] == {"source": "unit-test"}
     assert ProjectRecord.from_dict(data) == record
     assert RECORD_TYPES["ProjectRecord"] is ProjectRecord
+
+
+def test_project_brief_record_round_trips_project_intake_fields():
+    record = ProjectBriefRecord(
+        brief_id="brief-1",
+        project_id="project-hermes",
+        name="Hermes / Mission Control",
+        outcome="Make Jenny reliable before autonomy.",
+        audience="Travis",
+        source_of_truth="Mission Control records",
+        success_criteria=("status agrees", "challenge gate exists"),
+        constraints=("manual-copy only",),
+        forbidden_actions=("dispatch", "session-send"),
+        approval_rules=("deploy requires explicit approval",),
+        context_pack_path="context-packs/mission-control-current.md",
+        status="active",
+        created_at="2026-06-12T10:00:00Z",
+        updated_at="2026-06-12T10:01:00Z",
+        metadata={"challenge_gate_required": True},
+    )
+
+    data = record.to_dict()
+
+    assert data["success_criteria"] == ["status agrees", "challenge gate exists"]
+    assert data["forbidden_actions"] == ["dispatch", "session-send"]
+    assert ProjectBriefRecord.from_dict(data) == record
+    assert isinstance(ProjectBriefRecord.from_dict(data).approval_rules, tuple)
+    assert RECORD_TYPES["ProjectBriefRecord"] is ProjectBriefRecord
+
+
+def test_challenge_review_record_round_trips_judgment_fields():
+    record = ChallengeReviewRecord(
+        review_id="review-1",
+        project_id="project-hermes",
+        request_summary="Make Jenny post automatically every day.",
+        decision_state="wrong_approach_likely",
+        recommended_path="Start with scheduled drafts and approval-gated posting.",
+        concerns=("automation before observability",),
+        questions=("Which platform fails first?",),
+        required_spec_updates=("add posting failure policy",),
+        required_approvals=("public posting approval",),
+        suggested_lane_title="Read-only scheduler readiness audit",
+        status="draft",
+        created_at="2026-06-12T10:00:00Z",
+        reviewed_by="jenny",
+        metadata={"manual_copy_only": True},
+    )
+
+    data = record.to_dict()
+
+    assert data["decision_state"] == "wrong_approach_likely"
+    assert data["concerns"] == ["automation before observability"]
+    assert ChallengeReviewRecord.from_dict(data) == record
+    assert isinstance(ChallengeReviewRecord.from_dict(data).questions, tuple)
+    assert RECORD_TYPES["ChallengeReviewRecord"] is ChallengeReviewRecord
 
 
 def test_lane_request_record_round_trips_manual_copy_fields():

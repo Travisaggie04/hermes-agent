@@ -242,6 +242,137 @@ class ProjectRecord:
 
 
 @dataclass(frozen=True)
+class ProjectBriefRecord:
+    brief_id: str
+    project_id: str
+    name: str
+    outcome: str = ""
+    audience: str = ""
+    source_of_truth: str = ""
+    success_criteria: tuple[str, ...] = ()
+    constraints: tuple[str, ...] = ()
+    forbidden_actions: tuple[str, ...] = ()
+    approval_rules: tuple[str, ...] = ()
+    context_pack_path: str = ""
+    status: str = "draft"
+    created_at: str = ""
+    updated_at: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "ProjectBriefRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "success_criteria", tuple(str(item) for item in _tuple(self.success_criteria)))
+        object.__setattr__(self, "constraints", tuple(str(item) for item in _tuple(self.constraints)))
+        object.__setattr__(self, "forbidden_actions", tuple(str(item) for item in _tuple(self.forbidden_actions)))
+        object.__setattr__(self, "approval_rules", tuple(str(item) for item in _tuple(self.approval_rules)))
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "brief_id": self.brief_id,
+            "project_id": self.project_id,
+            "name": self.name,
+            "outcome": self.outcome,
+            "audience": self.audience,
+            "source_of_truth": self.source_of_truth,
+            "success_criteria": list(self.success_criteria),
+            "constraints": list(self.constraints),
+            "forbidden_actions": list(self.forbidden_actions),
+            "approval_rules": list(self.approval_rules),
+            "context_pack_path": self.context_pack_path,
+            "status": self.status,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ProjectBriefRecord:
+        return cls(
+            brief_id=_required(data, "brief_id"),
+            project_id=_required(data, "project_id"),
+            name=_required(data, "name"),
+            outcome=data.get("outcome", ""),
+            audience=data.get("audience", ""),
+            source_of_truth=data.get("source_of_truth", ""),
+            success_criteria=data.get("success_criteria") or (),
+            constraints=data.get("constraints") or (),
+            forbidden_actions=data.get("forbidden_actions") or (),
+            approval_rules=data.get("approval_rules") or (),
+            context_pack_path=data.get("context_pack_path", ""),
+            status=data.get("status", "draft"),
+            created_at=data.get("created_at", ""),
+            updated_at=data.get("updated_at", ""),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
+class ChallengeReviewRecord:
+    review_id: str
+    project_id: str
+    request_summary: str
+    decision_state: str = "needs_spec_first"
+    recommended_path: str = ""
+    concerns: tuple[str, ...] = ()
+    questions: tuple[str, ...] = ()
+    required_spec_updates: tuple[str, ...] = ()
+    required_approvals: tuple[str, ...] = ()
+    suggested_lane_title: str = ""
+    status: str = "draft"
+    created_at: str = ""
+    reviewed_by: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "ChallengeReviewRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "concerns", tuple(str(item) for item in _tuple(self.concerns)))
+        object.__setattr__(self, "questions", tuple(str(item) for item in _tuple(self.questions)))
+        object.__setattr__(self, "required_spec_updates", tuple(str(item) for item in _tuple(self.required_spec_updates)))
+        object.__setattr__(self, "required_approvals", tuple(str(item) for item in _tuple(self.required_approvals)))
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "review_id": self.review_id,
+            "project_id": self.project_id,
+            "request_summary": self.request_summary,
+            "decision_state": self.decision_state,
+            "recommended_path": self.recommended_path,
+            "concerns": list(self.concerns),
+            "questions": list(self.questions),
+            "required_spec_updates": list(self.required_spec_updates),
+            "required_approvals": list(self.required_approvals),
+            "suggested_lane_title": self.suggested_lane_title,
+            "status": self.status,
+            "created_at": self.created_at,
+            "reviewed_by": self.reviewed_by,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ChallengeReviewRecord:
+        return cls(
+            review_id=_required(data, "review_id"),
+            project_id=_required(data, "project_id"),
+            request_summary=_required(data, "request_summary"),
+            decision_state=data.get("decision_state", "needs_spec_first"),
+            recommended_path=data.get("recommended_path", ""),
+            concerns=data.get("concerns") or (),
+            questions=data.get("questions") or (),
+            required_spec_updates=data.get("required_spec_updates") or (),
+            required_approvals=data.get("required_approvals") or (),
+            suggested_lane_title=data.get("suggested_lane_title", ""),
+            status=data.get("status", "draft"),
+            created_at=data.get("created_at", ""),
+            reviewed_by=data.get("reviewed_by", ""),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
 class LaneRequestRecord:
     lane_request_id: str
     project_id: str
@@ -1622,9 +1753,11 @@ RECORD_TYPES = {
         ApprovalSlice,
         PrMergeApprovalRecord,
         ArtifactRef,
+        ChallengeReviewRecord,
         EvidenceCard,
         GoalContract,
         ProjectRecord,
+        ProjectBriefRecord,
         LaneRequestRecord,
         JennyReportRecord,
         ReportRecord,
