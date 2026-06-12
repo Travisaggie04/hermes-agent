@@ -30,6 +30,25 @@ Phone usage must prefer compact decisions over long prompts:
   restarts, workers, timers, model routing, queues, secrets, or customer/public
   surfaces
 
+## Project Rooms
+
+Each project should have a project-only room. The room is the primary place for
+Travis to interact with Jenny for that project.
+
+Project Rooms v1 remains manual-copy and record-only. It should provide:
+
+- a selected project context that does not blend with other projects
+- recent linked sessions for that project
+- latest project brief and challenge review
+- a request composer for "ask Jenny / propose work"
+- phone-safe prompt packets under Discord paste limits while Discord remains
+  fallback transport
+- explicit record actions for challenge drafts, lane drafts, and manual Jenny
+  reports
+
+The composer must not imply direct execution. It creates records and packets
+only until a separately reviewed send path exists.
+
 ## Authority Order
 
 1. Mission Control records: accepted baseline, project brief, challenge review,

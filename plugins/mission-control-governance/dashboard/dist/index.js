@@ -148,6 +148,12 @@
     return String(value);
   }
 
+  function compactText(value, maxChars) {
+    const text = valueText(value, "").replace(/\s+/g, " ").trim();
+    if (!text || text.length <= maxChars) return text;
+    return text.slice(0, Math.max(0, maxChars - 3)).trim() + "...";
+  }
+
   function shortHead(value) {
     const text = valueText(value, "Unknown");
     return text.length > 12 ? text.slice(0, 12) : text;
@@ -376,6 +382,40 @@
     ].join("\n").trim();
   }
 
+  function makePhoneSafeProjectPrompt(project, requestText, projectBrief, challengeReview, readiness) {
+    const request = compactText(requestText, 420) || "<write the request>";
+    const outcome = compactText(projectBrief && projectBrief.outcome, 220) || "missing project brief";
+    const decision = compactText(challengeReview && challengeReview.decision_state, 60) || "missing";
+    const path = compactText(challengeReview && challengeReview.recommended_path, 240) || "challenge review required before lane draft";
+    const guard = compactText(project && project.mistakes_guards, 220) || "manual-copy only; no live action";
+    const readinessLabel = readiness && readiness.label ? readiness.label : "unknown";
+    const prompt = [
+      "Project room request:",
+      project.name,
+      "",
+      "Request:",
+      request,
+      "",
+      "Current brief:",
+      outcome,
+      "",
+      "Challenge state:",
+      decision + " / " + path,
+      "",
+      "Readiness:",
+      readinessLabel,
+      "",
+      "Guards:",
+      guard,
+      "",
+      "Allowed: read approved context, report status, recommend next safe lane.",
+      "Forbidden: no send path, live mutation, Waha, queue, model, social, payment, worker, timer, deploy, restart, runtime switch, config/state, or secrets unless separately approved.",
+      "",
+      "Return: preflight, recommendation, risks, next lane, safety confirmation.",
+    ].join("\n").trim();
+    return prompt.length <= 1900 ? prompt : prompt.slice(0, 1897).trim() + "...";
+  }
+
   function projectFromRecord(item) {
     return item && item.record ? item.record : null;
   }
@@ -534,6 +574,102 @@
         h("textarea", { className: "mcg-handoff-textarea", rows: 3, value: objective, placeholder: "Inspect current project state and recommend the next safe lane.", onChange: function (event) { setObjective(event.target.value); } })
       ),
       h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: submitDraft, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") submitDraft(); } }, "Save lane request draft")
+    );
+  }
+
+  function ProjectRoomSessions(props) {
+    const state = props.state || {};
+    const sessions = Array.isArray(state.recent_sessions) ? state.recent_sessions : [];
+    return h("div", { className: "mcg-project-room-section" },
+      h("div", { className: "mcg-workspace-section-title" }, "Project Sessions"),
+      h("p", { className: "mcg-muted" }, "Linked sessions stay scoped to this project. Suggestions remain display-only until a link record is created."),
+      sessions.length ? sessions.map(function (session, index) {
+        return h("div", { className: "mcg-compact-row", key: session.session_id || index },
+          h("strong", null, session.title || session.session_id || "Linked session"),
+          h("span", null, [session.profile, session.source, session.cwd_snapshot].filter(Boolean).join(" / ") || "session context"),
+          h("span", null, "link: " + valueText(session.linked_project_id || state.project_id, "none"))
+        );
+      }) : h("p", { className: "mcg-muted" }, "No linked sessions for this project yet.")
+    );
+  }
+
+  function ProjectRoomComposer(props) {
+    const useState = hooks.useState;
+    const requestState = useState("");
+    const requestText = requestState[0];
+    const setRequestText = requestState[1];
+    const localState = useState("");
+    const localMessage = localState[0];
+    const setLocalMessage = localState[1];
+    const project = props.project;
+    const prompt = makePhoneSafeProjectPrompt(
+      project,
+      requestText,
+      props.projectBrief,
+      props.challengeReview,
+      props.readiness
+    );
+    function copyPrompt() {
+      if (!navigator.clipboard || !navigator.clipboard.writeText) {
+        setLocalMessage("Clipboard unavailable. Copy the phone-safe packet manually.");
+        props.onPrompt("Phone-safe packet is ready for manual copy.");
+        return;
+      }
+      navigator.clipboard.writeText(prompt).then(function () {
+        setLocalMessage("Copied phone-safe project packet.");
+        props.onPrompt("Copied phone-safe project packet.");
+      }).catch(function () {
+        setLocalMessage("Clipboard failed. Copy the phone-safe packet manually.");
+        props.onPrompt("Phone-safe packet is ready for manual copy.");
+      });
+    }
+    function saveChallengeDraft() {
+      if (!requestText.trim()) {
+        setLocalMessage("Write a request before saving a challenge draft.");
+        return;
+      }
+      props.onCreateChallengeReview({
+        request_summary: requestText,
+        decision_state: "needs_spec_first",
+        recommended_path: "Clarify the request, update the project brief if needed, then draft a bounded read-only lane.",
+        concerns: ["request entered from project room requires Jenny challenge review"],
+        questions: ["What outcome should this project request produce?"],
+        required_approvals: ["explicit approval before any send path or live action"],
+        suggested_lane_title: compactText(requestText, 90) || "Read-only project room request",
+      });
+      setLocalMessage("Saved challenge draft for this project room.");
+    }
+    function saveLaneDraft() {
+      if (!requestText.trim()) {
+        setLocalMessage("Write a request before saving a lane draft.");
+        return;
+      }
+      props.onCreateLaneRequest({
+        title: compactText((props.challengeReview && props.challengeReview.suggested_lane_title) || requestText, 120) || "Read-only project room request",
+        objective: requestText,
+      });
+      setLocalMessage("Attempted to save lane draft. The newest challenge review gate still applies.");
+    }
+    return h("div", { className: "mcg-project-room-composer" },
+      h("div", { className: "mcg-workspace-section-title" }, "Ask Jenny / Propose Work"),
+      h("p", { className: "mcg-muted" }, "Project-room composer. First version creates safe records and phone-safe packets only; no direct send path."),
+      h("label", { className: "mcg-handoff-field" },
+        h("span", { className: "mcg-start-label" }, "Request"),
+        h("textarea", { className: "mcg-handoff-textarea", rows: 4, value: requestText, placeholder: "Ask for one bounded thing in this project...", onChange: function (event) { setRequestText(event.target.value); } })
+      ),
+      h("div", { className: "mcg-project-room-actions" },
+        h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: copyPrompt, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") copyPrompt(); } }, "Copy phone-safe packet"),
+        h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: saveChallengeDraft, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") saveChallengeDraft(); } }, "Save challenge draft"),
+        h("span", { className: "mcg-copy-control", role: "link", tabIndex: 0, onClick: saveLaneDraft, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") saveLaneDraft(); } }, "Save read-only lane draft")
+      ),
+      h("div", { className: "mcg-project-room-packet" },
+        h("div", { className: "mcg-project-room-packet-head" },
+          h("span", { className: "mcg-start-label" }, "Phone-safe packet"),
+          h("span", { className: "mcg-badge" }, String(prompt.length) + " / 1900")
+        ),
+        h("pre", null, prompt)
+      ),
+      localMessage ? h("p", { className: "mcg-muted" }, localMessage) : null
     );
   }
 
@@ -914,24 +1050,52 @@
         records.error ? h("p", { className: "mcg-handoff-stop" }, records.error) : null,
         copyMessage ? h("p", { className: "mcg-muted" }, copyMessage) : null,
         h(DecisionQueue, { projects: projectCards, projectBriefs: projectBriefs, challengeReviews: challengeReviews }),
-        h("div", { className: "mcg-project-grid" },
-          projectCards.map(function (project) {
-            const projectId = project.project_id || project.name;
-            const brief = latestForProject(projectBriefs, projectId);
-            const review = latestForProject(challengeReviews, projectId);
-            return h(ProjectWorkspaceCard, {
-              key: project.project_id || project.name,
-              project: project,
-              readiness: projectReadiness(project, brief, review),
-              workspaceStatus: props.workspaceStatus || {},
-              onOpen: setSelectedProject,
-              onCopy: copyProjectPrompt,
-            });
-          })
+        h("div", { className: "mcg-project-room-layout" },
+          h("div", { className: "mcg-project-room-rail" },
+            h("div", { className: "mcg-workspace-section-title" }, "Project Rooms"),
+            projectCards.map(function (project) {
+              const projectId = project.project_id || project.name;
+              const isSelected = selectedId === projectId;
+              const brief = latestForProject(projectBriefs, projectId);
+              const review = latestForProject(challengeReviews, projectId);
+              const readiness = projectReadiness(project, brief, review);
+              return h("span", {
+                className: isSelected ? "mcg-project-room-tab mcg-project-room-tab-active" : "mcg-project-room-tab",
+                key: projectId,
+                role: "link",
+                tabIndex: 0,
+                onClick: function () { setSelectedProject(project); },
+                onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") setSelectedProject(project); },
+              },
+                h("strong", null, project.name),
+                h("span", null, readiness.label)
+              );
+            })
+          ),
+          selectedProject ? h("div", { className: "mcg-project-room-shell" },
+            h("div", { className: "mcg-project-card-head" },
+              h("div", null,
+                h("div", { className: "mcg-workspace-section-title" }, "Project Room: " + selectedProject.name),
+                h("p", { className: "mcg-muted" }, "Project-only workspace for requests, drafts, sessions, and reports.")
+              ),
+              h("span", { className: "mcg-badge" }, selectedReadiness ? selectedReadiness.label : "Room")
+            ),
+            selectedReadiness ? h("p", { className: selectedReadiness.tone === "ready" ? "mcg-muted" : "mcg-handoff-warning" }, selectedReadiness.detail) : null,
+            h(ProjectRoomComposer, {
+              project: selectedProject,
+              projectBrief: selectedProjectBrief,
+              challengeReview: selectedChallengeReview,
+              readiness: selectedReadiness,
+              onPrompt: setCopyMessage,
+              onCreateChallengeReview: createChallengeReview,
+              onCreateLaneRequest: createLaneRequest,
+            }),
+            h(ProjectRoomSessions, { state: selectedProjectState || { project_id: selectedId } })
+          ) : null
         ),
         selectedProject ? h("div", { className: "mcg-project-detail-workspace" },
           h("div", { className: "mcg-project-card-head" },
-            h("div", { className: "mcg-workspace-section-title" }, "Open Project: " + selectedProject.name),
+            h("div", { className: "mcg-workspace-section-title" }, "Project Records: " + selectedProject.name),
             h("span", { className: "mcg-badge" }, selectedReadiness ? selectedReadiness.label : "Send to Jenny disabled")
           ),
           selectedReadiness ? h("p", { className: selectedReadiness.tone === "ready" ? "mcg-muted" : "mcg-handoff-warning" }, selectedReadiness.detail) : null,
