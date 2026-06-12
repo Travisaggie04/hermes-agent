@@ -67,3 +67,8 @@ Forbidden tonight:
 
 Run `projects/shorts-video/lanes/read-only-audit-2026-06-12.md` and return a
 read-only pipeline audit plus a 25-video concept queue strategy.
+
+Use `docs/mission-control/video-production-decision-memo-2026-06-12.md` as the
+current toolchain and policy decision memo. It recommends a Shorts-first quality
+engine, not raw volume, because platform monetization policy rewards original,
+non-repetitive content.

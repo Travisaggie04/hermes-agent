@@ -65,3 +65,8 @@ Forbidden tonight:
 Run `projects/long-form-video/lanes/read-only-decision-memo-2026-06-12.md` and
 return a toolchain and format decision memo ranked by feasibility, quality,
 monetization, and automation risk.
+
+Use `docs/mission-control/video-production-decision-memo-2026-06-12.md` as the
+current decision memo. It recommends choosing one 10-15 second adult animated
+Signal Room mechanism proof first, with a faceless mechanism explainer as the
+fallback if local rigging blocks.
