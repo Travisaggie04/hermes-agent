@@ -68,6 +68,7 @@ hermes_cli/web_dist/
 apps/desktop/build/
 apps/desktop/dist/
 apps/desktop/release/
+apps/desktop/release-bridge/
 apps/desktop/release-nsis/
 apps/desktop/*.tsbuildinfo
 
