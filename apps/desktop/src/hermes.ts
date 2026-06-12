@@ -196,6 +196,50 @@ export interface MissionControlLaneRequestRecord {
   updated_at?: string
 }
 
+export interface MissionControlLaneRequestCreatePayload {
+  allowed_actions?: string[]
+  draft_prompt?: string
+  expected_report_format?: string[]
+  forbidden_actions?: string[]
+  mode?: string
+  objective?: string
+  project_id: string
+  stop_conditions?: string[]
+  title: string
+}
+
+export interface MissionControlProjectBriefRecord {
+  approval_rules?: string[]
+  constraints?: string[]
+  outcome?: string
+  project_id: string
+  status?: string
+  success_criteria?: string[]
+}
+
+export interface MissionControlChallengeReviewRecord {
+  concerns?: string[]
+  decision_state?: string
+  project_id: string
+  questions?: string[]
+  recommended_path?: string
+  request_summary?: string
+  required_approvals?: string[]
+  status?: string
+  suggested_lane_title?: string
+}
+
+export interface MissionControlChallengeReviewCreatePayload {
+  concerns?: string[]
+  decision_state?: string
+  project_id: string
+  questions?: string[]
+  recommended_path?: string
+  request_summary: string
+  required_approvals?: string[]
+  suggested_lane_title?: string
+}
+
 export interface MissionControlReportRecord {
   report_id: string
   project_id: string
@@ -351,6 +395,42 @@ export interface MissionControlLaneRequestsResponse {
   send_to_jenny_enabled?: boolean
 }
 
+export interface MissionControlLaneRequestCreateResponse {
+  dispatch_enabled?: boolean
+  lane_request: MissionControlLaneRequestRecord
+  manual_copy_only?: boolean
+  record_index?: number
+  record_type?: string
+  send_to_jenny_enabled?: boolean
+  stored?: boolean
+}
+
+export interface MissionControlProjectBriefsResponse {
+  count: number
+  dispatch_enabled?: boolean
+  manual_copy_only?: boolean
+  project_briefs: Array<MissionControlRecordEnvelope<MissionControlProjectBriefRecord>>
+  send_to_jenny_enabled?: boolean
+}
+
+export interface MissionControlChallengeReviewsResponse {
+  challenge_reviews: Array<MissionControlRecordEnvelope<MissionControlChallengeReviewRecord>>
+  count: number
+  dispatch_enabled?: boolean
+  manual_copy_only?: boolean
+  send_to_jenny_enabled?: boolean
+}
+
+export interface MissionControlChallengeReviewCreateResponse {
+  challenge_review: MissionControlChallengeReviewRecord
+  dispatch_enabled?: boolean
+  manual_copy_only?: boolean
+  record_index?: number
+  record_type?: string
+  send_to_jenny_enabled?: boolean
+  stored?: boolean
+}
+
 export interface MissionControlReportsResponse {
   count: number
   dispatch_enabled?: boolean
@@ -396,6 +476,34 @@ export function getMissionControlProjects(): Promise<MissionControlProjectsRespo
 
 export function getMissionControlLaneRequests(): Promise<MissionControlLaneRequestsResponse> {
   return window.hermesDesktop.api<MissionControlLaneRequestsResponse>({ path: `${MISSION_CONTROL_API}/workspace/lane-requests` })
+}
+
+export function createMissionControlLaneRequest(
+  payload: MissionControlLaneRequestCreatePayload
+): Promise<MissionControlLaneRequestCreateResponse> {
+  return window.hermesDesktop.api<MissionControlLaneRequestCreateResponse>({
+    body: payload,
+    method: 'POST',
+    path: `${MISSION_CONTROL_API}/workspace/lane-requests/create`
+  })
+}
+
+export function getMissionControlProjectBriefs(): Promise<MissionControlProjectBriefsResponse> {
+  return window.hermesDesktop.api<MissionControlProjectBriefsResponse>({ path: `${MISSION_CONTROL_API}/workspace/project-briefs` })
+}
+
+export function getMissionControlChallengeReviews(): Promise<MissionControlChallengeReviewsResponse> {
+  return window.hermesDesktop.api<MissionControlChallengeReviewsResponse>({ path: `${MISSION_CONTROL_API}/workspace/challenge-reviews` })
+}
+
+export function createMissionControlChallengeReview(
+  payload: MissionControlChallengeReviewCreatePayload
+): Promise<MissionControlChallengeReviewCreateResponse> {
+  return window.hermesDesktop.api<MissionControlChallengeReviewCreateResponse>({
+    body: payload,
+    method: 'POST',
+    path: `${MISSION_CONTROL_API}/workspace/challenge-reviews/create`
+  })
 }
 
 export function getMissionControlReports(): Promise<MissionControlReportsResponse> {

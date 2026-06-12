@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  createMissionControlChallengeReview,
+  createMissionControlLaneRequest,
+  getMissionControlChallengeReviews,
   getMissionControlLaneRequests,
+  getMissionControlProjectBriefs,
   getMissionControlProjects,
   getMissionControlProjectState,
   getMissionControlReports,
@@ -19,12 +23,16 @@ describe('Mission Control desktop API helpers', () => {
 
     await getMissionControlWorkspaceStatus()
     await getMissionControlProjects()
+    await getMissionControlProjectBriefs()
+    await getMissionControlChallengeReviews()
     await getMissionControlLaneRequests()
     await getMissionControlReports()
     await getMissionControlProjectState()
 
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace-status' })
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/projects' })
+    expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/project-briefs' })
+    expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/challenge-reviews' })
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/lane-requests' })
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/reports' })
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/project-state' })
@@ -33,5 +41,40 @@ describe('Mission Control desktop API helpers', () => {
       expect(request.method).toBeUndefined()
       expect(request.body).toBeUndefined()
     }
+  })
+
+  it('uses explicit inert POST endpoints for challenge and lane draft records', async () => {
+    const api = vi.fn().mockResolvedValue({})
+    vi.stubGlobal('window', { hermesDesktop: { api } })
+
+    await createMissionControlChallengeReview({
+      decision_state: 'needs_spec_first',
+      project_id: 'project-hermes-mission-control',
+      request_summary: 'Clarify Mission Control project rooms'
+    })
+    await createMissionControlLaneRequest({
+      objective: 'Inspect project room usability.',
+      project_id: 'project-hermes-mission-control',
+      title: 'Read-only project room usability check'
+    })
+
+    expect(api).toHaveBeenCalledWith({
+      body: {
+        decision_state: 'needs_spec_first',
+        project_id: 'project-hermes-mission-control',
+        request_summary: 'Clarify Mission Control project rooms'
+      },
+      method: 'POST',
+      path: '/api/plugins/mission-control-governance/workspace/challenge-reviews/create'
+    })
+    expect(api).toHaveBeenCalledWith({
+      body: {
+        objective: 'Inspect project room usability.',
+        project_id: 'project-hermes-mission-control',
+        title: 'Read-only project room usability check'
+      },
+      method: 'POST',
+      path: '/api/plugins/mission-control-governance/workspace/lane-requests/create'
+    })
   })
 })

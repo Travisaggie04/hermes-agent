@@ -1,15 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import {
+  createMissionControlChallengeReview,
+  createMissionControlLaneRequest,
   createMissionControlReport,
   createMissionControlSessionProjectLink,
+  getMissionControlChallengeReviews,
   getMissionControlLaneRequests,
+  getMissionControlProjectBriefs,
   getMissionControlProjects,
   getMissionControlProjectSessions,
   getMissionControlProjectState,
   getMissionControlReports,
   getMissionControlWorkspaceStatus,
+  type MissionControlChallengeReviewRecord,
   type MissionControlLaneRequestRecord,
+  type MissionControlProjectBriefRecord,
   type MissionControlProjectRecord,
   type MissionControlProjectSession,
   type MissionControlProjectSessionGroup,
@@ -20,7 +26,9 @@ import {
 import { cn } from '@/lib/utils'
 
 interface MissionControlSnapshot {
+  challengeReviews: MissionControlChallengeReviewRecord[]
   laneRequests: MissionControlLaneRequestRecord[]
+  projectBriefs: MissionControlProjectBriefRecord[]
   projectSessionGroups: MissionControlProjectSessionGroup[]
   projects: MissionControlProjectRecord[]
   projectStates: MissionControlProjectState[]
@@ -29,7 +37,9 @@ interface MissionControlSnapshot {
 }
 
 const emptySnapshot: MissionControlSnapshot = {
+  challengeReviews: [],
   laneRequests: [],
+  projectBriefs: [],
   projectSessionGroups: [],
   projects: [],
   projectStates: [],
@@ -54,6 +64,7 @@ const REAL_PROJECT_NAMES = [
 ]
 
 const MAX_COPY_PROMPT_CHARS = 2000
+const MAX_PHONE_SAFE_PACKET_CHARS = 1900
 
 function text(value: unknown, fallback = 'Not recorded'): string {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback
@@ -96,6 +107,13 @@ function truncate(value: string, maxChars: number): string {
   }
 
   return `${value.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`
+}
+
+function compactText(value: string | string[] | null | undefined, maxChars: number): string {
+  const raw = Array.isArray(value) ? value.filter(Boolean).join('; ') : value ?? ''
+  const normalized = raw.replace(/\s+/g, ' ').trim()
+
+  return normalized.length > maxChars ? `${normalized.slice(0, Math.max(0, maxChars - 3)).trim()}...` : normalized
 }
 
 function unwrapRecords<T>(items: Array<{ record?: T } | T> | undefined): T[] {
@@ -171,6 +189,10 @@ function latestLaneForProject(projectId: string, lanes: MissionControlLaneReques
 
 function latestReportForProject(projectId: string, reports: MissionControlReportRecord[]) {
   return [...reports].reverse().find(report => report.project_id === projectId) ?? null
+}
+
+function latestForProject<T extends { project_id?: string }>(projectId: string, records: T[]) {
+  return [...records].reverse().find(record => record.project_id === projectId) ?? null
 }
 
 export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) {
@@ -385,10 +407,91 @@ Send to Jenny remains disabled; paste manually only after review.`
   return truncate(prompt, MAX_COPY_PROMPT_CHARS)
 }
 
+function projectReadinessLabel(
+  brief: MissionControlProjectBriefRecord | null,
+  review: MissionControlChallengeReviewRecord | null
+): { detail: string; label: string } {
+  if (!brief) {
+    return { detail: 'Create or update the project brief before Jenny drafts work.', label: 'Needs brief' }
+  }
+  if (!review) {
+    return { detail: 'Run the Jenny challenge gate before creating a lane draft.', label: 'Needs challenge' }
+  }
+  if (review.decision_state === 'clear_and_safe') {
+    return { detail: 'Latest challenge review cleared a bounded lane draft.', label: 'Lane draft ok' }
+  }
+  if (review.decision_state === 'needs_approval') {
+    return { detail: 'Travis needs to approve the path before Jenny proceeds.', label: 'Needs approval' }
+  }
+  if (review.decision_state === 'unsafe' || review.decision_state === 'wrong_approach_likely') {
+    return { detail: 'Jenny should push back and recommend a safer path.', label: 'Challenge blocked' }
+  }
+
+  return { detail: 'Clarify the request or split it before a lane draft.', label: 'Spec first' }
+}
+
+function laneDraftBlockMessage(review: MissionControlChallengeReviewRecord | null): string | null {
+  if (!review) {
+    return 'Create a Jenny challenge review before saving a lane request draft.'
+  }
+
+  if (review.decision_state !== 'clear_and_safe') {
+    return `Latest challenge review is ${review.decision_state || 'missing'}. Resolve that before saving a lane request draft.`
+  }
+
+  return null
+}
+
+function buildPhoneSafeProjectPacket({
+  brief,
+  project,
+  requestText,
+  review,
+  state,
+  status
+}: {
+  brief: MissionControlProjectBriefRecord | null
+  project: MissionControlProjectRecord
+  requestText: string
+  review: MissionControlChallengeReviewRecord | null
+  state: MissionControlProjectState | null
+  status: ReturnType<typeof summarizeWorkspaceStatus>
+}): string {
+  const readiness = projectReadinessLabel(brief, review)
+  const packet = `Project room request:
+${project.name}
+
+Request:
+${compactText(requestText, 420) || '<write the request>'}
+
+Current brief:
+${compactText(brief?.outcome, 220) || 'missing project brief'}
+
+Challenge state:
+${compactText(review?.decision_state, 60) || 'missing'} / ${compactText(review?.recommended_path, 240) || 'challenge review required before lane draft'}
+
+Readiness:
+${readiness.label}
+
+Current goal:
+${compactText(state?.current_goal ?? project.current_goal, 220) || 'not recorded'}
+
+Allowed: read approved context, report status, recommend next safe lane.
+Forbidden: no send path, live mutation, Waha, queue, model, social, payment, worker, timer, deploy, restart, runtime switch, config/state, or secrets unless separately approved.
+
+Safety: guard=${status.guard}; dispatch=${yesNo(status.dispatch)}; active_lane_count=${status.activeLaneCount}; stale_warnings=${status.staleWarnings.length ? status.staleWarnings.join(', ') : 'none'}.
+
+Return: preflight, recommendation, risks, next lane, safety confirmation.`
+
+  return truncate(packet.trim(), MAX_PHONE_SAFE_PACKET_CHARS)
+}
+
 async function loadMissionControlSnapshot(): Promise<MissionControlSnapshot> {
-  const [workspaceStatus, projects, laneRequests, reports, projectState, projectSessions] = await Promise.all([
+  const [workspaceStatus, projects, projectBriefs, challengeReviews, laneRequests, reports, projectState, projectSessions] = await Promise.all([
     getMissionControlWorkspaceStatus(),
     getMissionControlProjects(),
+    getMissionControlProjectBriefs(),
+    getMissionControlChallengeReviews(),
     getMissionControlLaneRequests(),
     getMissionControlReports(),
     getMissionControlProjectState(),
@@ -396,7 +499,9 @@ async function loadMissionControlSnapshot(): Promise<MissionControlSnapshot> {
   ])
 
   return {
+    challengeReviews: unwrapRecords(challengeReviews.challenge_reviews),
     laneRequests: unwrapRecords(laneRequests.lane_requests),
+    projectBriefs: unwrapRecords(projectBriefs.project_briefs),
     projectSessionGroups: projectSessions.groups ?? [],
     projects: unwrapRecords(projects.projects),
     projectStates: projectState.project_states ?? [],
@@ -416,6 +521,10 @@ export function MissionControlView() {
   const [sessionLinkDialog, setSessionLinkDialog] = useState<SessionLinkDialogState | null>(null)
   const [sessionLinkSaving, setSessionLinkSaving] = useState(false)
   const [sessionLinkMessage, setSessionLinkMessage] = useState('')
+  const [selectedProjectId, setSelectedProjectId] = useState('')
+  const [projectRequest, setProjectRequest] = useState('')
+  const [projectRoomMessage, setProjectRoomMessage] = useState('')
+  const [projectRoomSaving, setProjectRoomSaving] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -452,6 +561,10 @@ export function MissionControlView() {
   const status = useMemo(() => summarizeWorkspaceStatus(snapshot.workspaceStatus), [snapshot.workspaceStatus])
   const realProjects = useMemo(() => sortRealProjects(snapshot.projects.filter(isRealProject)), [snapshot.projects])
   const unassignedGroup = useMemo(() => unassignedSessionGroup(snapshot.projectSessionGroups), [snapshot.projectSessionGroups])
+  const selectedProject = useMemo(
+    () => realProjects.find(project => project.project_id === selectedProjectId) ?? realProjects[0] ?? null,
+    [realProjects, selectedProjectId]
+  )
 
   const supportingProjects = useMemo(
     () => snapshot.projects.filter(project => !isRealProject(project) || isSmokeProject(project)),
@@ -464,6 +577,90 @@ export function MissionControlView() {
     const prompt = buildMissionControlCopyPrompt({ project, report, state, status })
     await navigator.clipboard?.writeText(prompt)
     setCopiedProjectId(project.project_id)
+  }
+
+  function packetForProject(project: MissionControlProjectRecord) {
+    return buildPhoneSafeProjectPacket({
+      brief: latestForProject(project.project_id, snapshot.projectBriefs),
+      project,
+      requestText: projectRequest,
+      review: latestForProject(project.project_id, snapshot.challengeReviews),
+      state: stateForProject(project, snapshot.projectStates),
+      status
+    })
+  }
+
+  async function copyProjectRoomPacket(project: MissionControlProjectRecord) {
+    await navigator.clipboard?.writeText(packetForProject(project))
+    setProjectRoomMessage('Copied phone-safe project packet.')
+  }
+
+  async function saveChallengeDraft(project: MissionControlProjectRecord) {
+    if (!projectRequest.trim()) {
+      setProjectRoomMessage('Write one bounded request before saving a challenge draft.')
+
+      return
+    }
+
+    setProjectRoomSaving(true)
+    setProjectRoomMessage('')
+
+    try {
+      await createMissionControlChallengeReview({
+        concerns: ['request entered from Desktop project room requires Jenny challenge review'],
+        decision_state: 'needs_spec_first',
+        project_id: project.project_id,
+        questions: ['What outcome should this project request produce?'],
+        recommended_path: 'Clarify the request, update the project brief if needed, then draft a bounded read-only lane.',
+        request_summary: projectRequest.trim(),
+        required_approvals: ['explicit approval before any send path or live action'],
+        suggested_lane_title: compactText(projectRequest, 90) || 'Read-only project room request'
+      })
+      setSnapshot(await loadMissionControlSnapshot())
+      setProjectRoomMessage('Saved challenge draft. Jenny should question or narrow this before work starts.')
+    } catch (err) {
+      setProjectRoomMessage(String(err instanceof Error ? err.message : err))
+    } finally {
+      setProjectRoomSaving(false)
+    }
+  }
+
+  async function saveReadOnlyLaneDraft(project: MissionControlProjectRecord) {
+    if (!projectRequest.trim()) {
+      setProjectRoomMessage('Write one bounded request before saving a lane draft.')
+
+      return
+    }
+
+    const review = latestForProject(project.project_id, snapshot.challengeReviews)
+    const blockMessage = laneDraftBlockMessage(review)
+    if (blockMessage) {
+      setProjectRoomMessage(blockMessage)
+
+      return
+    }
+
+    setProjectRoomSaving(true)
+    setProjectRoomMessage('')
+
+    try {
+      await createMissionControlLaneRequest({
+        allowed_actions: ['read approved project context', 'report status', 'recommend next safe lane'],
+        draft_prompt: packetForProject(project),
+        expected_report_format: ['preflight', 'recommendation', 'risks', 'next lane', 'safety confirmation'],
+        forbidden_actions: ['dispatch', 'run tools', 'queue mutation', 'Waha mutation', 'model routing', 'automatic send'],
+        objective: projectRequest.trim(),
+        project_id: project.project_id,
+        stop_conditions: ['workspace-status preflight fails', 'request requires approval'],
+        title: compactText(review?.suggested_lane_title || projectRequest, 120) || 'Read-only project room request'
+      })
+      setSnapshot(await loadMissionControlSnapshot())
+      setProjectRoomMessage('Saved read-only lane draft. It remains inert until separately approved.')
+    } catch (err) {
+      setProjectRoomMessage(String(err instanceof Error ? err.message : err))
+    } finally {
+      setProjectRoomSaving(false)
+    }
   }
 
   function updateReportField(field: keyof ReportFormState, value: string) {
@@ -562,6 +759,29 @@ export function MissionControlView() {
 
       <WorkspaceStatusPanel status={status} />
 
+      {selectedProject ? (
+        <ProjectRoomsWorkspace
+          brief={latestForProject(selectedProject.project_id, snapshot.projectBriefs)}
+          message={projectRoomMessage}
+          onCopyPacket={() => void copyProjectRoomPacket(selectedProject)}
+          onRequestChange={setProjectRequest}
+          onSaveChallenge={() => void saveChallengeDraft(selectedProject)}
+          onSaveLane={() => void saveReadOnlyLaneDraft(selectedProject)}
+          onSelectProject={projectId => {
+            setSelectedProjectId(projectId)
+            setProjectRoomMessage('')
+          }}
+          packet={packetForProject(selectedProject)}
+          project={selectedProject}
+          projects={realProjects}
+          request={projectRequest}
+          review={latestForProject(selectedProject.project_id, snapshot.challengeReviews)}
+          saving={projectRoomSaving}
+          sessionGroup={sessionGroupForProject(selectedProject, snapshot.projectSessionGroups)}
+          state={stateForProject(selectedProject, snapshot.projectStates)}
+        />
+      ) : null}
+
       <ManualReportIngestion
         form={reportForm}
         message={reportMessage}
@@ -638,6 +858,141 @@ export function MissionControlView() {
           </div>
         </section>
       ) : null}
+    </section>
+  )
+}
+
+function ProjectRoomsWorkspace({
+  brief,
+  message,
+  onCopyPacket,
+  onRequestChange,
+  onSaveChallenge,
+  onSaveLane,
+  onSelectProject,
+  packet,
+  project,
+  projects,
+  request,
+  review,
+  saving,
+  sessionGroup,
+  state
+}: {
+  brief: MissionControlProjectBriefRecord | null
+  message: string
+  onCopyPacket: () => void
+  onRequestChange: (value: string) => void
+  onSaveChallenge: () => void
+  onSaveLane: () => void
+  onSelectProject: (projectId: string) => void
+  packet: string
+  project: MissionControlProjectRecord
+  projects: MissionControlProjectRecord[]
+  request: string
+  review: MissionControlChallengeReviewRecord | null
+  saving: boolean
+  sessionGroup: MissionControlProjectSessionGroup | null
+  state: MissionControlProjectState | null
+}) {
+  const readiness = projectReadinessLabel(brief, review)
+  const sessions = state?.recent_sessions?.length ? state.recent_sessions : (sessionGroup?.sessions ?? [])
+
+  return (
+    <section aria-label="Project Rooms" className="mt-5 grid gap-4 rounded-xl border border-border/70 bg-background/50 p-4 xl:grid-cols-[18rem_1fr]">
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold">Project Rooms</h2>
+          <span className="rounded-full border border-border/70 px-2.5 py-1 text-xs text-muted-foreground">{projects.length} projects</span>
+        </div>
+        <div className="mt-3 grid gap-2">
+          {projects.map(candidate => (
+            <button
+              className={cn(
+                'rounded-lg border px-3 py-2 text-left text-sm hover:bg-muted',
+                candidate.project_id === project.project_id ? 'border-emerald-500/40 bg-emerald-500/10' : 'border-border/70 bg-background/60'
+              )}
+              key={candidate.project_id}
+              onClick={() => onSelectProject(candidate.project_id)}
+              type="button"
+            >
+              <span className="block font-medium">{candidate.name}</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">{candidate.project_id}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Project Room</p>
+            <h2 className="mt-1 text-lg font-semibold">Project Room: {project.name}</h2>
+          </div>
+          <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-700 dark:text-emerald-300">
+            {readiness.label}
+          </span>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <Field label="current goal" value={state?.current_goal ?? project.current_goal} />
+          <Field label="readiness" value={readiness.detail} />
+          <Field label="project brief" value={compactText(brief?.outcome, 320) || 'No project brief recorded'} />
+          <Field label="challenge review" value={review ? `${review.decision_state ?? 'unknown'} / ${review.recommended_path ?? 'No recommended path recorded'}` : 'No challenge review recorded'} />
+        </div>
+
+        <label className="mt-4 grid gap-1 text-xs font-medium">
+          Ask Jenny / Propose Work
+          <textarea
+            className="min-h-24 rounded-md border border-border/80 bg-background px-3 py-2 text-sm"
+            onChange={event => onRequestChange(event.target.value)}
+            placeholder="One bounded project request..."
+            value={request}
+          />
+        </label>
+
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
+          <button className="rounded-md border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onCopyPacket} type="button">
+            Copy phone-safe packet
+          </button>
+          <button className="rounded-md border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onSaveChallenge} type="button">
+            Save challenge draft
+          </button>
+          <button className="rounded-md border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onSaveLane} type="button">
+            Save read-only lane draft
+          </button>
+        </div>
+        {message ? <p className="mt-2 text-sm text-muted-foreground">{message}</p> : null}
+
+        <div className="mt-4 grid gap-3 xl:grid-cols-2">
+          <section className="rounded-lg border border-border/70 bg-background/60 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">Phone-safe packet</h3>
+              <span className="text-xs text-muted-foreground">{packet.length}/{MAX_PHONE_SAFE_PACKET_CHARS}</span>
+            </div>
+            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground">{packet}</pre>
+          </section>
+
+          <section className="rounded-lg border border-border/70 bg-background/60 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">Project Sessions</h3>
+              <span className="text-xs text-muted-foreground">{sessions.length} linked</span>
+            </div>
+            <div className="mt-2 grid gap-2">
+              {sessions.length ? (
+                sessions.slice(0, 4).map(session => (
+                  <div className="rounded-md border border-border/60 bg-background/70 p-2 text-xs" key={session.durable_session_id || session.session_id}>
+                    <div className="font-medium text-foreground/90">{sessionTitle(session)}</div>
+                    <div className="mt-0.5 text-muted-foreground">{sessionMeta(session)}</div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-muted-foreground">No linked sessions for this project yet.</p>
+              )}
+            </div>
+          </section>
+        </div>
+      </div>
     </section>
   )
 }

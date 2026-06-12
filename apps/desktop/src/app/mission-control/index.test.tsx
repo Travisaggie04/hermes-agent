@@ -4,17 +4,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const getMissionControlWorkspaceStatus = vi.fn()
 const getMissionControlProjects = vi.fn()
+const getMissionControlProjectBriefs = vi.fn()
+const getMissionControlChallengeReviews = vi.fn()
 const getMissionControlLaneRequests = vi.fn()
 const getMissionControlReports = vi.fn()
 const getMissionControlProjectState = vi.fn()
 const getMissionControlProjectSessions = vi.fn()
+const createMissionControlChallengeReview = vi.fn()
+const createMissionControlLaneRequest = vi.fn()
 const createMissionControlReport = vi.fn()
 const createMissionControlSessionProjectLink = vi.fn()
 
 vi.mock('@/hermes', () => ({
+  createMissionControlChallengeReview: (payload: unknown) => createMissionControlChallengeReview(payload),
+  createMissionControlLaneRequest: (payload: unknown) => createMissionControlLaneRequest(payload),
   createMissionControlReport: (payload: unknown) => createMissionControlReport(payload),
   createMissionControlSessionProjectLink: (payload: unknown) => createMissionControlSessionProjectLink(payload),
+  getMissionControlChallengeReviews: () => getMissionControlChallengeReviews(),
   getMissionControlWorkspaceStatus: () => getMissionControlWorkspaceStatus(),
+  getMissionControlProjectBriefs: () => getMissionControlProjectBriefs(),
   getMissionControlProjects: () => getMissionControlProjects(),
   getMissionControlLaneRequests: () => getMissionControlLaneRequests(),
   getMissionControlReports: () => getMissionControlReports(),
@@ -68,6 +76,31 @@ beforeEach(() => {
     send_to_jenny_enabled: false,
     stored: true
   })
+  createMissionControlChallengeReview.mockResolvedValue({
+    challenge_review: {
+      decision_state: 'needs_spec_first',
+      project_id: 'project-hermes-mission-control',
+      request_summary: 'Make Mission Control usable from project rooms'
+    },
+    dispatch_enabled: false,
+    manual_copy_only: true,
+    record_type: 'ChallengeReviewRecord',
+    send_to_jenny_enabled: false,
+    stored: true
+  })
+  createMissionControlLaneRequest.mockResolvedValue({
+    dispatch_enabled: false,
+    lane_request: {
+      lane_request_id: 'lane-created',
+      project_id: 'project-hermes-mission-control',
+      status: 'draft',
+      title: 'Read-only project room request'
+    },
+    manual_copy_only: true,
+    record_type: 'LaneRequestRecord',
+    send_to_jenny_enabled: false,
+    stored: true
+  })
   createMissionControlSessionProjectLink.mockResolvedValue({
     dispatch_enabled: false,
     manual_copy_only: true,
@@ -113,6 +146,46 @@ beforeEach(() => {
         record_type: 'ProjectRecord'
       }))
     ]
+  })
+  getMissionControlProjectBriefs.mockResolvedValue({
+    count: 1,
+    dispatch_enabled: false,
+    manual_copy_only: true,
+    project_briefs: [
+      {
+        record: {
+          approval_rules: ['explicit approval before send path'],
+          constraints: ['manual-copy only'],
+          outcome: 'Make Mission Control the obvious operating surface before enabling execution.',
+          project_id: 'project-hermes-mission-control',
+          status: 'active',
+          success_criteria: ['project rooms visible', 'challenge gate visible']
+        },
+        record_type: 'ProjectBriefRecord'
+      }
+    ],
+    send_to_jenny_enabled: false
+  })
+  getMissionControlChallengeReviews.mockResolvedValue({
+    challenge_reviews: [
+      {
+        record: {
+          concerns: [],
+          decision_state: 'clear_and_safe',
+          project_id: 'project-hermes-mission-control',
+          recommended_path: 'Use a bounded read-only workspace usability lane.',
+          request_summary: 'Make project rooms visible',
+          required_approvals: ['deploy/restart approval'],
+          status: 'accepted',
+          suggested_lane_title: 'Read-only project room usability check'
+        },
+        record_type: 'ChallengeReviewRecord'
+      }
+    ],
+    count: 1,
+    dispatch_enabled: false,
+    manual_copy_only: true,
+    send_to_jenny_enabled: false
   })
   getMissionControlLaneRequests.mockResolvedValue({
     count: 1,
@@ -307,11 +380,15 @@ describe('MissionControlView', () => {
     await waitFor(() => expect(getMissionControlProjectState).toHaveBeenCalledTimes(1))
     expect(getMissionControlWorkspaceStatus).toHaveBeenCalledTimes(1)
     expect(getMissionControlProjects).toHaveBeenCalledTimes(1)
+    expect(getMissionControlProjectBriefs).toHaveBeenCalledTimes(1)
+    expect(getMissionControlChallengeReviews).toHaveBeenCalledTimes(1)
     expect(getMissionControlLaneRequests).toHaveBeenCalledTimes(1)
     expect(getMissionControlReports).toHaveBeenCalledTimes(1)
     expect(getMissionControlProjectSessions).toHaveBeenCalledTimes(1)
 
     expect(screen.getByText('Real project workspace')).toBeTruthy()
+    expect(screen.getByText('Project Rooms')).toBeTruthy()
+    expect(screen.getByText('Project Room: Hermes / Mission Control')).toBeTruthy()
     expect(screen.getByText('5 of 5 real projects loaded')).toBeTruthy()
 
     for (const [, name] of realProjects) {
@@ -345,8 +422,8 @@ describe('MissionControlView', () => {
     await renderMissionControl()
 
     expect((await screen.findAllByText('Project sessions')).length).toBeGreaterThan(0)
-    expect(screen.getByText('1 linked')).toBeTruthy()
-    expect(screen.getByText('Mission Control linked session')).toBeTruthy()
+    expect(screen.getAllByText('1 linked').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Mission Control linked session').length).toBeGreaterThan(0)
     expect(screen.getByText('Suggested sessions — display-only')).toBeTruthy()
     expect(screen.getByText('Suggestions do not create links or become source-of-truth records.')).toBeTruthy()
     expect(screen.getAllByText('Suggested Mission Control session').length).toBeGreaterThan(0)
@@ -475,6 +552,135 @@ describe('MissionControlView', () => {
     expect(prompt).toContain('Forbidden actions:')
     expect(prompt).toContain('Send to Jenny remains disabled')
     expect(screen.getAllByText(/Send to Jenny disabled/i).length).toBeGreaterThan(0)
+  })
+
+  it('shows project room controls and creates only inert challenge and lane drafts', async () => {
+    await renderMissionControl()
+
+    expect(await screen.findByText('Project Room: Hermes / Mission Control')).toBeTruthy()
+    expect(screen.getByText('Ask Jenny / Propose Work')).toBeTruthy()
+    expect(screen.getByText('Phone-safe packet')).toBeTruthy()
+    expect(screen.getByText('Project Sessions')).toBeTruthy()
+    expect(screen.getByText('Lane draft ok')).toBeTruthy()
+    expect(screen.getAllByText(/Use a bounded read-only workspace usability lane/).length).toBeGreaterThan(0)
+
+    fireEvent.change(screen.getByPlaceholderText('One bounded project request...'), {
+      target: { value: 'Make the visible Mission Control page show project rooms on laptop and phone.' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Copy phone-safe packet' }))
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Project room request:')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save challenge draft' }))
+    await waitFor(() => expect(createMissionControlChallengeReview).toHaveBeenCalledTimes(1))
+    expect(createMissionControlChallengeReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        decision_state: 'needs_spec_first',
+        project_id: 'project-hermes-mission-control',
+        request_summary: 'Make the visible Mission Control page show project rooms on laptop and phone.'
+      })
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save read-only lane draft' }))
+    await waitFor(() => expect(createMissionControlLaneRequest).toHaveBeenCalledTimes(1))
+    expect(createMissionControlLaneRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        forbidden_actions: expect.arrayContaining(['dispatch', 'automatic send']),
+        project_id: 'project-hermes-mission-control',
+        title: 'Read-only project room usability check'
+      })
+    )
+  })
+
+  it('blocks desktop lane drafts when the newest challenge review is not clear', async () => {
+    getMissionControlChallengeReviews.mockResolvedValue({
+      challenge_reviews: [
+        {
+          record: {
+            decision_state: 'clear_and_safe',
+            project_id: 'project-hermes-mission-control',
+            recommended_path: 'Older clear review.',
+            request_summary: 'Old request',
+            status: 'accepted',
+            suggested_lane_title: 'Old clear lane'
+          },
+          record_type: 'ChallengeReviewRecord'
+        },
+        {
+          record: {
+            decision_state: 'needs_spec_first',
+            project_id: 'project-hermes-mission-control',
+            recommended_path: 'Newest review requires a spec first.',
+            request_summary: 'New request',
+            status: 'draft',
+            suggested_lane_title: 'Blocked lane'
+          },
+          record_type: 'ChallengeReviewRecord'
+        }
+      ],
+      count: 2,
+      dispatch_enabled: false,
+      manual_copy_only: true,
+      send_to_jenny_enabled: false
+    })
+
+    await renderMissionControl()
+
+    fireEvent.change(await screen.findByPlaceholderText('One bounded project request...'), {
+      target: { value: 'Start a broad Mission Control lane without a spec.' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save read-only lane draft' }))
+
+    expect(await screen.findByText('Latest challenge review is needs_spec_first. Resolve that before saving a lane request draft.')).toBeTruthy()
+    expect(createMissionControlLaneRequest).not.toHaveBeenCalled()
+  })
+
+  it('allows desktop lane drafts when the newest challenge review is clear', async () => {
+    getMissionControlChallengeReviews.mockResolvedValue({
+      challenge_reviews: [
+        {
+          record: {
+            decision_state: 'needs_spec_first',
+            project_id: 'project-hermes-mission-control',
+            recommended_path: 'Older review required a spec.',
+            request_summary: 'Old request',
+            status: 'draft',
+            suggested_lane_title: 'Old blocked lane'
+          },
+          record_type: 'ChallengeReviewRecord'
+        },
+        {
+          record: {
+            decision_state: 'clear_and_safe',
+            project_id: 'project-hermes-mission-control',
+            recommended_path: 'Newest review cleared a bounded lane.',
+            request_summary: 'New request',
+            status: 'accepted',
+            suggested_lane_title: 'Newest clear lane'
+          },
+          record_type: 'ChallengeReviewRecord'
+        }
+      ],
+      count: 2,
+      dispatch_enabled: false,
+      manual_copy_only: true,
+      send_to_jenny_enabled: false
+    })
+
+    await renderMissionControl()
+
+    fireEvent.change(await screen.findByPlaceholderText('One bounded project request...'), {
+      target: { value: 'Inspect whether Project Rooms are usable now.' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save read-only lane draft' }))
+
+    await waitFor(() => expect(createMissionControlLaneRequest).toHaveBeenCalledTimes(1))
+    expect(createMissionControlLaneRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project_id: 'project-hermes-mission-control',
+        title: 'Newest clear lane'
+      })
+    )
   })
 
   it('builds distinct project-specific next-lane prompts for all five real projects', async () => {

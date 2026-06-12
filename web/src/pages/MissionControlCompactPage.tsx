@@ -5,7 +5,11 @@ import { cn } from "@/lib/utils";
 
 const WORKSPACE_STATUS_URL = "/api/plugins/mission-control-governance/workspace-status";
 const WORKSPACE_PROJECTS_URL = "/api/plugins/mission-control-governance/workspace/projects";
+const WORKSPACE_PROJECT_BRIEFS_URL = "/api/plugins/mission-control-governance/workspace/project-briefs";
+const WORKSPACE_CHALLENGE_REVIEWS_URL = "/api/plugins/mission-control-governance/workspace/challenge-reviews";
+const WORKSPACE_CHALLENGE_REVIEWS_CREATE_URL = "/api/plugins/mission-control-governance/workspace/challenge-reviews/create";
 const WORKSPACE_LANE_REQUESTS_URL = "/api/plugins/mission-control-governance/workspace/lane-requests";
+const WORKSPACE_LANE_REQUESTS_CREATE_URL = "/api/plugins/mission-control-governance/workspace/lane-requests/create";
 const WORKSPACE_REPORTS_URL = "/api/plugins/mission-control-governance/workspace/reports";
 const WORKSPACE_REPORTS_CREATE_URL = "/api/plugins/mission-control-governance/workspace/reports/create";
 const WORKSPACE_PROJECT_STATE_URL = "/api/plugins/mission-control-governance/workspace/project-state";
@@ -62,6 +66,27 @@ interface LaneRequestRecord {
   title?: string;
 }
 
+interface ProjectBriefRecord {
+  approval_rules?: string[];
+  constraints?: string[];
+  outcome?: string;
+  project_id?: string;
+  status?: string;
+  success_criteria?: string[];
+}
+
+interface ChallengeReviewRecord {
+  concerns?: string[];
+  decision_state?: string;
+  project_id?: string;
+  questions?: string[];
+  recommended_path?: string;
+  request_summary?: string;
+  required_approvals?: string[];
+  status?: string;
+  suggested_lane_title?: string;
+}
+
 interface ReportRecord {
   blockers?: string[];
   changed_files?: string[];
@@ -88,9 +113,19 @@ interface ProjectStateRecord {
   missing_state_fields?: string[];
   next_recommended_lane?: string;
   project_id?: string;
+  recent_sessions?: ProjectSessionRecord[];
   risks?: string[];
   risks_blockers?: string[];
   status?: string;
+}
+
+interface ProjectSessionRecord {
+  cwd_snapshot?: string;
+  linked_project_id?: string;
+  profile?: string;
+  session_id?: string;
+  source?: string;
+  title?: string;
 }
 
 interface WorkspaceStatus {
@@ -102,7 +137,9 @@ interface WorkspaceStatus {
 }
 
 interface CompactSnapshot {
+  challengeReviews: ChallengeReviewRecord[];
   laneRequests: LaneRequestRecord[];
+  projectBriefs: ProjectBriefRecord[];
   projectStates: ProjectStateRecord[];
   projects: ProjectRecord[];
   reports: ReportRecord[];
@@ -120,7 +157,12 @@ interface ProjectViewModel {
   latestResult: string;
   missingFields: string;
   nextLane: string;
+  projectBrief?: ProjectBriefRecord;
+  projectState?: ProjectStateRecord;
   project: ProjectRecord;
+  readinessDetail: string;
+  readinessLabel: string;
+  challengeReview?: ChallengeReviewRecord;
   risks: string;
   status: string;
 }
@@ -158,6 +200,12 @@ function listText(values: string[] | undefined, fallback: string): string {
   return Array.isArray(values) && values.length ? values.filter(Boolean).join("; ") : fallback;
 }
 
+function compactText(value: string | string[] | undefined, maxChars: number): string {
+  const raw = Array.isArray(value) ? value.filter(Boolean).join("; ") : value ?? "";
+  const normalized = raw.replace(/\s+/g, " ").trim();
+  return normalized.length > maxChars ? `${normalized.slice(0, Math.max(0, maxChars - 3)).trim()}...` : normalized;
+}
+
 function lineList(value: string): string[] {
   return value
     .split(/\r?\n/)
@@ -188,10 +236,42 @@ function latestForProject<T extends { project_id?: string }>(projectId: string, 
   return [...values].reverse().find(value => value.project_id === projectId);
 }
 
+function projectReadinessLabel(brief: ProjectBriefRecord | undefined, review: ChallengeReviewRecord | undefined): { detail: string; label: string } {
+  if (!brief) {
+    return { detail: "Create or update the project brief before Jenny drafts work.", label: "Needs brief" };
+  }
+  if (!review) {
+    return { detail: "Run the Jenny challenge gate before creating a lane draft.", label: "Needs challenge" };
+  }
+  if (review.decision_state === "clear_and_safe") {
+    return { detail: "Latest challenge review cleared a bounded lane draft.", label: "Lane draft ok" };
+  }
+  if (review.decision_state === "needs_approval") {
+    return { detail: "Travis needs to approve the path before Jenny proceeds.", label: "Needs approval" };
+  }
+  if (review.decision_state === "unsafe" || review.decision_state === "wrong_approach_likely") {
+    return { detail: "Jenny should push back and recommend a safer path.", label: "Challenge blocked" };
+  }
+  return { detail: "Clarify the request or split it before a lane draft.", label: "Spec first" };
+}
+
+function laneDraftBlockMessage(review: ChallengeReviewRecord | undefined): string | null {
+  if (!review) {
+    return "Create a Jenny challenge review before saving a lane request draft.";
+  }
+  if (review.decision_state !== "clear_and_safe") {
+    return `Latest challenge review is ${review.decision_state || "missing"}. Resolve that before saving a lane request draft.`;
+  }
+  return null;
+}
+
 function viewModelForProject(snapshot: CompactSnapshot, project: ProjectRecord): ProjectViewModel {
   const state = latestForProject(project.project_id, snapshot.projectStates);
   const report = latestForProject(project.project_id, snapshot.reports);
   const lane = latestForProject(project.project_id, snapshot.laneRequests);
+  const projectBrief = latestForProject(project.project_id, snapshot.projectBriefs);
+  const challengeReview = latestForProject(project.project_id, snapshot.challengeReviews);
+  const readiness = projectReadinessLabel(projectBrief, challengeReview);
   const riskValues = state?.risks ?? state?.risks_blockers ?? report?.risks;
   const blockerValues = state?.blockers ?? report?.blockers;
 
@@ -206,7 +286,12 @@ function viewModelForProject(snapshot: CompactSnapshot, project: ProjectRecord):
     latestResult: text(state?.latest_result || report?.result || project.latest_result, "No result yet"),
     missingFields: listText(state?.missing_state_fields, "None — report state is current"),
     nextLane: text(state?.next_recommended_lane ?? report?.next_recommended_lane ?? project.next_recommended_lane ?? lane?.title, "No recommended lane yet"),
+    projectBrief,
+    projectState: state,
     project,
+    readinessDetail: readiness.detail,
+    readinessLabel: readiness.label,
+    challengeReview,
     risks: listText(riskValues, "No risks recorded"),
     status: text(state?.status ?? project.status, "Status not recorded"),
   };
@@ -240,17 +325,55 @@ function buildCompactNextLanePrompt(projectView: ProjectViewModel, workspaceStat
   ].join("\n");
 }
 
+function buildPhoneSafeProjectPacket(projectView: ProjectViewModel, requestText: string, workspaceStatus: WorkspaceStatus): string {
+  const request = compactText(requestText, 420) || "<write the request>";
+  const brief = projectView.projectBrief;
+  const review = projectView.challengeReview;
+  const guard = compactText(projectView.project.mistakes_guards, 220) || "manual-copy only; no live action";
+  const packet = [
+    "Project room request:",
+    projectView.project.name,
+    "",
+    "Request:",
+    request,
+    "",
+    "Current brief:",
+    compactText(brief?.outcome, 220) || "missing project brief",
+    "",
+    "Challenge state:",
+    `${compactText(review?.decision_state, 60) || "missing"} / ${compactText(review?.recommended_path, 240) || "challenge review required before lane draft"}`,
+    "",
+    "Readiness:",
+    projectView.readinessLabel,
+    "",
+    "Guards:",
+    guard,
+    "",
+    "Allowed: read approved context, report status, recommend next safe lane.",
+    "Forbidden: no send path, live mutation, Waha, queue, model, social, payment, worker, timer, deploy, restart, runtime switch, config/state, or secrets unless separately approved.",
+    "",
+    `Safety status: ${safetySummary(workspaceStatus)}`,
+    "",
+    "Return: preflight, recommendation, risks, next lane, safety confirmation.",
+  ].join("\n").trim();
+  return packet.length <= 1900 ? packet : `${packet.slice(0, 1897).trim()}...`;
+}
+
 async function loadCompactSnapshot(): Promise<CompactSnapshot> {
-  const [workspaceStatus, projects, laneRequests, reports, projectState] = await Promise.all([
+  const [workspaceStatus, projects, projectBriefs, challengeReviews, laneRequests, reports, projectState] = await Promise.all([
     fetchJSON<WorkspaceStatus>(WORKSPACE_STATUS_URL),
     fetchJSON<{ projects?: Array<WrappedRecord<ProjectRecord> | ProjectRecord> }>(WORKSPACE_PROJECTS_URL),
+    fetchJSON<{ project_briefs?: Array<WrappedRecord<ProjectBriefRecord> | ProjectBriefRecord> }>(WORKSPACE_PROJECT_BRIEFS_URL),
+    fetchJSON<{ challenge_reviews?: Array<WrappedRecord<ChallengeReviewRecord> | ChallengeReviewRecord> }>(WORKSPACE_CHALLENGE_REVIEWS_URL),
     fetchJSON<{ lane_requests?: Array<WrappedRecord<LaneRequestRecord> | LaneRequestRecord> }>(WORKSPACE_LANE_REQUESTS_URL),
     fetchJSON<{ reports?: Array<WrappedRecord<ReportRecord> | ReportRecord> }>(WORKSPACE_REPORTS_URL),
     fetchJSON<{ project_states?: ProjectStateRecord[] }>(WORKSPACE_PROJECT_STATE_URL),
   ]);
 
   return {
+    challengeReviews: unwrapRecords(challengeReviews.challenge_reviews),
     laneRequests: unwrapRecords(laneRequests.lane_requests),
+    projectBriefs: unwrapRecords(projectBriefs.project_briefs),
     projectStates: projectState.project_states ?? [],
     projects: unwrapRecords(projects.projects),
     reports: unwrapRecords(reports.reports),
@@ -266,6 +389,10 @@ export default function MissionControlCompactPage() {
   const [reportForm, setReportForm] = useState<ReportFormState>(EMPTY_REPORT_FORM);
   const [reportMessage, setReportMessage] = useState("");
   const [savingReport, setSavingReport] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [projectRequest, setProjectRequest] = useState("");
+  const [roomMessage, setRoomMessage] = useState("");
+  const [roomBusy, setRoomBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -294,10 +421,98 @@ export default function MissionControlCompactPage() {
     return snapshot.projects.filter(project => !isRealProject(project) || isSmokeProject(project));
   }, [snapshot]);
 
+  const selectedProjectView = useMemo(() => {
+    if (!snapshot || !realProjects.length) return null;
+    const selected = realProjects.find(project => project.project_id === selectedProjectId) ?? realProjects[0];
+    return viewModelForProject(snapshot, selected);
+  }, [realProjects, selectedProjectId, snapshot]);
+
   async function copyPrompt(projectView: ProjectViewModel) {
     const prompt = buildCompactNextLanePrompt(projectView, snapshot?.workspaceStatus ?? {});
     await navigator.clipboard?.writeText(prompt);
     setCopiedProjectId(projectView.project.project_id);
+  }
+
+  async function copyPhoneSafePacket(projectView: ProjectViewModel) {
+    const packet = buildPhoneSafeProjectPacket(projectView, projectRequest, snapshot?.workspaceStatus ?? {});
+    if (!navigator.clipboard?.writeText) {
+      setRoomMessage("Clipboard unavailable. Select and copy the phone-safe packet manually.");
+      return;
+    }
+    await navigator.clipboard.writeText(packet);
+    setRoomMessage("Copied phone-safe project packet.");
+  }
+
+  async function refreshSnapshot() {
+    const nextSnapshot = await loadCompactSnapshot();
+    setSnapshot(nextSnapshot);
+  }
+
+  async function saveChallengeDraft(projectView: ProjectViewModel) {
+    if (!projectRequest.trim()) {
+      setRoomMessage("Write one bounded request before saving a challenge draft.");
+      return;
+    }
+    setRoomBusy(true);
+    setRoomMessage("");
+    try {
+      await fetchJSON(WORKSPACE_CHALLENGE_REVIEWS_CREATE_URL, {
+        body: JSON.stringify({
+          concerns: ["request entered from compact project room requires Jenny challenge review"],
+          decision_state: "needs_spec_first",
+          project_id: projectView.project.project_id,
+          questions: ["What outcome should this project request produce?"],
+          recommended_path: "Clarify the request, update the project brief if needed, then draft a bounded read-only lane.",
+          request_summary: projectRequest.trim(),
+          required_approvals: ["explicit approval before any send path or live action"],
+          suggested_lane_title: compactText(projectRequest, 90) || "Read-only project room request",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      await refreshSnapshot();
+      setRoomMessage("Saved challenge draft. Jenny should question or narrow this before work starts.");
+    } catch (err) {
+      setRoomMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRoomBusy(false);
+    }
+  }
+
+  async function saveReadOnlyLaneDraft(projectView: ProjectViewModel) {
+    if (!projectRequest.trim()) {
+      setRoomMessage("Write one bounded request before saving a lane draft.");
+      return;
+    }
+    const blockMessage = laneDraftBlockMessage(projectView.challengeReview);
+    if (blockMessage) {
+      setRoomMessage(blockMessage);
+      return;
+    }
+    setRoomBusy(true);
+    setRoomMessage("");
+    try {
+      await fetchJSON(WORKSPACE_LANE_REQUESTS_CREATE_URL, {
+        body: JSON.stringify({
+          allowed_actions: ["read approved project context", "report status", "recommend next safe lane"],
+          draft_prompt: buildPhoneSafeProjectPacket(projectView, projectRequest, snapshot?.workspaceStatus ?? {}),
+          expected_report_format: ["preflight", "recommendation", "risks", "next lane", "safety confirmation"],
+          forbidden_actions: ["dispatch", "run tools", "queue mutation", "Waha mutation", "model routing", "automatic send"],
+          objective: projectRequest.trim(),
+          project_id: projectView.project.project_id,
+          stop_conditions: ["workspace-status preflight fails", "request requires approval"],
+          title: compactText(projectView.challengeReview?.suggested_lane_title || projectRequest, 120) || "Read-only project room request",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      await refreshSnapshot();
+      setRoomMessage("Saved read-only lane draft. It remains inert until separately approved.");
+    } catch (err) {
+      setRoomMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRoomBusy(false);
+    }
   }
 
   function updateReportField(field: keyof ReportFormState, value: string) {
@@ -356,6 +571,25 @@ export default function MissionControlCompactPage() {
 
       {snapshot ? <SafetyStrip status={snapshot.workspaceStatus} /> : null}
 
+      {selectedProjectView ? (
+        <CompactProjectRoom
+          busy={roomBusy}
+          message={roomMessage}
+          onCopyPacket={() => void copyPhoneSafePacket(selectedProjectView)}
+          onRequestChange={setProjectRequest}
+          onSaveChallenge={() => void saveChallengeDraft(selectedProjectView)}
+          onSaveLane={() => void saveReadOnlyLaneDraft(selectedProjectView)}
+          onSelectProject={projectId => {
+            setSelectedProjectId(projectId);
+            setRoomMessage("");
+          }}
+          packet={buildPhoneSafeProjectPacket(selectedProjectView, projectRequest, snapshot?.workspaceStatus ?? {})}
+          projectRequest={projectRequest}
+          projects={realProjects}
+          selectedProjectView={selectedProjectView}
+        />
+      ) : null}
+
       {snapshot ? (
         <CompactReportIngestion
           form={reportForm}
@@ -394,6 +628,138 @@ export default function MissionControlCompactPage() {
         </section>
       ) : null}
     </main>
+  );
+}
+
+function CompactProjectRoom({
+  busy,
+  message,
+  onCopyPacket,
+  onRequestChange,
+  onSaveChallenge,
+  onSaveLane,
+  onSelectProject,
+  packet,
+  projectRequest,
+  projects,
+  selectedProjectView,
+}: {
+  busy: boolean;
+  message: string;
+  onCopyPacket: () => void;
+  onRequestChange: (value: string) => void;
+  onSaveChallenge: () => void;
+  onSaveLane: () => void;
+  onSelectProject: (projectId: string) => void;
+  packet: string;
+  projectRequest: string;
+  projects: ProjectRecord[];
+  selectedProjectView: ProjectViewModel;
+}) {
+  const sessions = selectedProjectView.projectState?.recent_sessions ?? [];
+  const review = selectedProjectView.challengeReview;
+  const brief = selectedProjectView.projectBrief;
+  return (
+    <section className="mt-4 grid gap-3 lg:grid-cols-[minmax(12rem,18rem)_1fr]" aria-label="Project Rooms">
+      <div className="rounded-2xl border border-border/70 bg-card p-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">Project Rooms</h2>
+          <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{projects.length}</span>
+        </div>
+        <div className="mt-3 grid gap-2">
+          {projects.map(project => (
+            <button
+              className={cn(
+                "rounded-xl border px-3 py-2 text-left text-sm transition hover:bg-muted",
+                project.project_id === selectedProjectView.project.project_id ? "border-emerald-500/40 bg-emerald-500/10" : "border-border/70 bg-background",
+              )}
+              key={project.project_id}
+              onClick={() => onSelectProject(project.project_id)}
+              type="button"
+            >
+              <span className="block font-semibold">{project.name}</span>
+              <span className="mt-0.5 block text-[0.68rem] text-muted-foreground">{project.project_id}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <article className="rounded-2xl border border-border/70 bg-card p-3" data-testid="compact-project-room">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Project Room</p>
+            <h2 className="mt-1 text-lg font-semibold leading-tight">Project Room: {selectedProjectView.project.name}</h2>
+          </div>
+          <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-700 dark:text-emerald-300">
+            {selectedProjectView.readinessLabel}
+          </span>
+        </div>
+
+        <div className="mt-3 grid gap-2 md:grid-cols-2">
+          <CompactField label="current goal" value={selectedProjectView.currentGoal} />
+          <CompactField label="readiness" value={selectedProjectView.readinessDetail} />
+          <CompactField label="latest report/result" value={`${selectedProjectView.latestReport} / ${selectedProjectView.latestResult}`} />
+          <CompactField label="next recommended lane" value={selectedProjectView.nextLane} />
+          <CompactField label="project brief" value={compactText(brief?.outcome, 320) || "No project brief recorded"} />
+          <CompactField
+            label="challenge review"
+            value={review ? `${review.decision_state ?? "unknown"} / ${review.recommended_path ?? "No recommended path recorded"}` : "No challenge review recorded"}
+          />
+        </div>
+
+        <label className="mt-4 grid gap-1 text-xs font-medium">
+          Ask Jenny / Propose Work
+          <textarea
+            className="min-h-24 rounded-xl border border-border/80 bg-background px-3 py-2 text-sm"
+            onChange={event => onRequestChange(event.target.value)}
+            placeholder="One bounded project request..."
+            value={projectRequest}
+          />
+        </label>
+
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onCopyPacket} type="button">
+            Copy phone-safe packet
+          </button>
+          <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onSaveChallenge} type="button">
+            Save challenge draft
+          </button>
+          <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onSaveLane} type="button">
+            Save read-only lane draft
+          </button>
+        </div>
+        {message ? <p className="mt-2 text-xs text-muted-foreground">{message}</p> : null}
+
+        <div className="mt-4 rounded-xl border border-border/70 bg-background p-3">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold">Phone-safe packet</h3>
+            <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{packet.length} / 1900</span>
+          </div>
+          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground">{packet}</pre>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-border/70 bg-background p-3">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold">Project Sessions</h3>
+            <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{sessions.length} linked</span>
+          </div>
+          <div className="mt-2 grid gap-2">
+            {sessions.length ? (
+              sessions.map((session, index) => (
+                <div className="rounded-lg border border-border/60 bg-card/60 p-2 text-xs" key={session.session_id || index}>
+                  <div className="font-semibold">{session.title || session.session_id || "Linked session"}</div>
+                  <div className="mt-0.5 text-muted-foreground">
+                    {[session.profile, session.source, session.cwd_snapshot].filter(Boolean).join(" / ") || "session context"}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-muted-foreground">No linked sessions for this project yet.</p>
+            )}
+          </div>
+        </div>
+      </article>
+    </section>
   );
 }
 
