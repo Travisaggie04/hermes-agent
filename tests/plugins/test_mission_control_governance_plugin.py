@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 from mission_control.records import (
     AcceptedBaselineRecord,
+    ApprovalRecord,
     ApprovalSlice,
     ArtifactRef,
     EvidenceCard,
@@ -26,6 +27,8 @@ from mission_control.records import (
     OperatingWorkspaceHandoffRecord,
     OperatorAction,
     ProjectRecord,
+    ReportRecord,
+    RunRecord,
     SessionProjectLinkRecord,
     StartGateCheck,
     TaskControlEnvelope,
@@ -247,6 +250,270 @@ def test_workspace_jenny_report_api_creates_lists_and_stays_inert(plugin_api, cl
     assert listed.status_code == 200
     assert listed.json()["count"] == 1
     assert listed.json()["reports"][0]["record"]["summary"] == "Jenny completed the read-only status refresh."
+
+
+def _assert_inert_workspace_payload(payload):
+    assert payload["display_only"] is True
+    assert payload["manual_copy_only"] is True
+    assert payload["send_to_jenny_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+
+
+def test_control_plane_records_round_trip_and_register():
+    approval = ApprovalRecord(
+        approval_id="approval-1",
+        project_id="project-hermes",
+        lane_request_id="lane-request-1",
+        run_id="run-1",
+        action_class="read_only_lane",
+        approval_scope="project-hermes read-only status refresh",
+        approved_actions=("inspect", "report"),
+        forbidden_actions=("dispatch", "session-send"),
+        status="approved",
+        approved_by="Travis",
+        approval_source="desktop",
+        approval_text="Approved read-only inspection only.",
+        created_at="2026-06-12T00:00:00Z",
+        approved_at="2026-06-12T00:01:00Z",
+        baseline_head="d7d1e0d758a64783f4de435f06450be218e8a2bf",
+        metadata={"manual_copy_only": True},
+    )
+    assert ApprovalRecord.from_dict(approval.to_dict()) == approval
+
+    run = RunRecord(
+        run_id="run-1",
+        project_id="project-hermes",
+        lane_request_id="lane-request-1",
+        approval_id="approval-1",
+        lane_type="read_only_inspection",
+        title="Inspect Mission Control state",
+        objective="Read-only validation only.",
+        status="requested",
+        allowed_actions=("read files",),
+        forbidden_actions=("write files", "dispatch"),
+        baseline_head="d7d1e0d758a64783f4de435f06450be218e8a2bf",
+        runtime_guard_state="pass",
+        dispatch_state=False,
+        safety_gate_status="pass",
+        safety_gate_reasons=("dispatch false",),
+        report_ids=("report-1",),
+        metadata={"manual_copy_only": True},
+    )
+    assert RunRecord.from_dict(run.to_dict()) == run
+    assert run.execution_mode == "manual_copy"
+
+    report = ReportRecord(
+        report_id="report-1",
+        run_id="run-1",
+        approval_id="approval-1",
+        project_id="project-hermes",
+        lane_request_id="lane-request-1",
+        status="received",
+        report_kind="jenny_result",
+        summary="Preflight passed.",
+        result="No mutation occurred.",
+        risks=("none",),
+        blockers=(),
+        changed_files=("mission_control/records/models.py",),
+        tests=("pytest tests/plugins/test_mission_control_governance_plugin.py",),
+        next_recommended_lane="Review report inbox UI.",
+        evidence_refs=("reports/control-plane/preflight.md",),
+        artifact_refs=("reports/control-plane/output.md",),
+        submitted_by="Jenny",
+        submitted_from="desktop_manual_paste",
+        created_at="2026-06-12T00:02:00Z",
+    )
+    assert ReportRecord.from_dict(report.to_dict()) == report
+
+    from mission_control.records.models import RECORD_TYPES
+
+    assert RECORD_TYPES["ApprovalRecord"] is ApprovalRecord
+    assert RECORD_TYPES["RunRecord"] is RunRecord
+    assert RECORD_TYPES["ReportRecord"] is ReportRecord
+
+
+def test_control_plane_get_endpoints_empty_are_inert(client):
+    for path, collection in (
+        ("/api/plugins/mission-control-governance/workspace/approvals", "approvals"),
+        ("/api/plugins/mission-control-governance/workspace/runs", "runs"),
+        ("/api/plugins/mission-control-governance/workspace/report-inbox", "reports"),
+    ):
+        response = client.get(path)
+        assert response.status_code == 200
+        payload = response.json()
+        _assert_inert_workspace_payload(payload)
+        assert payload["stored"] is False
+        assert payload["count"] == 0
+        assert payload[collection] == []
+
+
+def test_control_plane_append_endpoints_store_temp_records_and_stay_inert(plugin_api, client):
+    approval = client.post(
+        "/api/plugins/mission-control-governance/workspace/approvals/create",
+        json={
+            "project_id": "project-hermes",
+            "lane_request_id": "lane-request-1",
+            "run_id": "run-1",
+            "action_class": "read_only_lane",
+            "approval_scope": "project-hermes read-only inspection only",
+            "approved_actions": ["inspect", "report"],
+            "forbidden_actions": ["dispatch", "session-send", "queue mutation"],
+            "status": "approved",
+            "approved_by": "Travis",
+            "approval_source": "desktop",
+            "approval_text": "Approved only for read-only inspection.",
+            "baseline_head": "d7d1e0d758a64783f4de435f06450be218e8a2bf",
+        },
+    )
+    assert approval.status_code == 200
+    approval_payload = approval.json()
+    _assert_inert_workspace_payload(approval_payload)
+    assert approval_payload["stored"] is True
+    assert approval_payload["record_type"] == "ApprovalRecord"
+    assert approval_payload["approval"]["approval_mode"] == "one_time"
+
+    run = client.post(
+        "/api/plugins/mission-control-governance/workspace/runs/create",
+        json={
+            "run_id": "run-1",
+            "project_id": "project-hermes",
+            "lane_request_id": "lane-request-1",
+            "approval_id": approval_payload["approval"]["approval_id"],
+            "lane_type": "read_only_inspection",
+            "title": "Inspect control plane",
+            "objective": "Read-only inspection.",
+            "status": "requested",
+            "allowed_actions": ["read source"],
+            "forbidden_actions": ["write files", "dispatch"],
+            "baseline_head": "d7d1e0d758a64783f4de435f06450be218e8a2bf",
+            "runtime_guard_state": "pass",
+            "dispatch_state": False,
+            "active_lane_count_at_start": 0,
+            "agent_identity": "Jenny",
+            "source": "desktop",
+            "safety_gate_status": "pass",
+            "safety_gate_reasons": ["dispatch false"],
+        },
+    )
+    assert run.status_code == 200
+    run_payload = run.json()
+    _assert_inert_workspace_payload(run_payload)
+    assert run_payload["stored"] is True
+    assert run_payload["record_type"] == "RunRecord"
+    assert run_payload["run"]["execution_mode"] == "manual_copy"
+
+    report = client.post(
+        "/api/plugins/mission-control-governance/workspace/reports/ingest",
+        json={
+            "run_id": "run-1",
+            "approval_id": approval_payload["approval"]["approval_id"],
+            "project_id": "project-hermes",
+            "lane_request_id": "lane-request-1",
+            "summary": "Jenny returned a read-only report.",
+            "result": "No mutation occurred.",
+            "risks": ["none"],
+            "blockers": [],
+            "changed_files": [],
+            "tests": ["pytest"],
+            "next_recommended_lane": "Review UI inbox.",
+            "evidence_refs": ["reports/control-plane/report.md"],
+            "artifact_refs": ["reports/control-plane/artifact.md"],
+            "submitted_by": "Jenny",
+            "submitted_from": "desktop_manual_paste",
+        },
+    )
+    assert report.status_code == 200
+    report_payload = report.json()
+    _assert_inert_workspace_payload(report_payload)
+    assert report_payload["stored"] is True
+    assert report_payload["record_type"] == "ReportRecord"
+
+    assert len(JsonlRecordStore(plugin_api.record_store_path()).read_all(ApprovalRecord)) == 1
+    assert len(JsonlRecordStore(plugin_api.record_store_path()).read_all(RunRecord)) == 1
+    assert len(JsonlRecordStore(plugin_api.record_store_path()).read_all(ReportRecord)) == 1
+
+
+def test_control_plane_validation_rejects_broad_or_executable_approvals(client):
+    broad = client.post(
+        "/api/plugins/mission-control-governance/workspace/approvals/create",
+        json={
+            "action_class": "read_only_lane",
+            "approval_scope": "*",
+            "approved_actions": ["all"],
+            "status": "approved",
+        },
+    )
+    assert broad.status_code == 422
+
+    dangerous = client.post(
+        "/api/plugins/mission-control-governance/workspace/approvals/create",
+        json={
+            "action_class": "deploy",
+            "approval_scope": "deploy production runtime",
+            "approved_actions": ["deploy"],
+            "status": "approved",
+        },
+    )
+    assert dangerous.status_code == 422
+
+    proposed = client.post(
+        "/api/plugins/mission-control-governance/workspace/approvals/create",
+        json={
+            "action_class": "deploy",
+            "approval_scope": "project-hermes deploy proposal display only",
+            "approved_actions": ["deploy"],
+            "forbidden_actions": ["execute deploy", "runtime switch"],
+            "status": "proposed",
+        },
+    )
+    assert proposed.status_code == 200
+    payload = proposed.json()
+    _assert_inert_workspace_payload(payload)
+    assert payload["approval"]["status"] == "proposed"
+
+
+def test_control_plane_validation_rejects_invalid_statuses_and_execution_modes(client):
+    invalid_approval = client.post(
+        "/api/plugins/mission-control-governance/workspace/approvals/create",
+        json={
+            "action_class": "read_only_lane",
+            "approval_scope": "project-hermes read-only inspection",
+            "status": "running",
+        },
+    )
+    assert invalid_approval.status_code == 422
+
+    invalid_run = client.post(
+        "/api/plugins/mission-control-governance/workspace/runs/create",
+        json={
+            "project_id": "project-hermes",
+            "lane_type": "read_only_inspection",
+            "title": "Unsafe run",
+            "status": "running",
+            "execution_mode": "send_to_jenny_read_only",
+        },
+    )
+    assert invalid_run.status_code == 422
+
+    invalid_report = client.post(
+        "/api/plugins/mission-control-governance/workspace/reports/ingest",
+        json={
+            "project_id": "project-hermes",
+            "summary": "bad status",
+            "status": "running",
+        },
+    )
+    assert invalid_report.status_code == 422
+
+
+def test_control_plane_backend_does_not_wire_session_send_or_dispatch():
+    source = API_PATH.read_text(encoding="utf-8")
+    control_plane_source = source[source.index('@router.get("/workspace/approvals")') : source.index('@router.get("/records")')]
+    forbidden = ["session_send", "session-send", "dispatch_task", "send_to_jenny_enabled\": True", "dispatch_enabled\": True"]
+    assert not any(fragment in control_plane_source for fragment in forbidden)
 
 
 def test_session_project_link_record_serializes_deserializes():
@@ -1277,6 +1544,12 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/lane-requests/create": {"POST"},
         "/workspace/reports": {"GET"},
         "/workspace/reports/create": {"POST"},
+        "/workspace/approvals": {"GET"},
+        "/workspace/approvals/create": {"POST"},
+        "/workspace/runs": {"GET"},
+        "/workspace/runs/create": {"POST"},
+        "/workspace/report-inbox": {"GET"},
+        "/workspace/reports/ingest": {"POST"},
         "/workspace/session-project-links": {"GET"},
         "/workspace/session-project-links/create": {"POST"},
         "/workspace/project-sessions": {"GET"},
@@ -1307,6 +1580,9 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/project-templates",
         "/workspace/lane-requests",
         "/workspace/reports",
+        "/workspace/approvals",
+        "/workspace/runs",
+        "/workspace/report-inbox",
         "/workspace/session-project-links",
         "/workspace/project-sessions",
         "/workspace/project-state",

@@ -39,6 +39,7 @@ from mission_control.kanban_linkage import linked_kanban_task_payload
 from mission_control.start_gate import evaluate_start_gate
 from mission_control.records import (
     AcceptedBaselineRecord,
+    ApprovalRecord,
     ApprovalSlice,
     EvidenceCard,
     GoalContract,
@@ -49,6 +50,8 @@ from mission_control.records import (
     OperatingWorkspaceHandoffRecord,
     OperatorAction,
     ProjectRecord,
+    ReportRecord,
+    RunRecord,
     SessionProjectLinkRecord,
     StartGateCheck,
     TaskControlEnvelope,
@@ -108,6 +111,44 @@ INERT_FLAGS = {
     "inert_context_only": True,
     "execution_enabled": False,
 }
+CONTROL_PLANE_INERT_FLAGS = {
+    **INERT_FLAGS,
+    "display_only": True,
+    "manual_copy_only": True,
+    "send_to_jenny_enabled": False,
+    "dispatch_enabled": False,
+}
+APPROVAL_STATUSES = {"proposed", "approved", "rejected", "expired", "consumed", "cancelled"}
+RUN_STATUSES = {"requested", "preflight_passed", "running", "stopping", "stopped", "completed", "failed", "cancelled", "blocked"}
+REPORT_STATUSES = {"received", "needs_review", "accepted", "rejected", "superseded"}
+SAFE_APPROVAL_ACTION_CLASSES = {"read_only_lane", "read_only_design", "read_only_inspection", "pr_creation"}
+DANGEROUS_APPROVAL_ACTION_CLASSES = {
+    "merge",
+    "deploy",
+    "runtime_switch",
+    "payment",
+    "waha",
+    "social_post",
+    "model_routing",
+    "queue_mutation",
+    "worker_timer_enablement",
+}
+APPROVAL_ACTION_CLASSES = SAFE_APPROVAL_ACTION_CLASSES | DANGEROUS_APPROVAL_ACTION_CLASSES
+RUN_LANE_TYPES = {
+    "read_only_design",
+    "read_only_inspection",
+    "implementation",
+    "pr_creation",
+    "deploy",
+    "runtime_switch",
+    "payment",
+    "waha",
+    "social_post",
+    "model_routing",
+    "queue_mutation",
+    "worker_timer_enablement",
+}
+BROAD_APPROVAL_VALUES = {"*", "all", "any", "global", "everything", "unlimited"}
 
 PROJECT_ONBOARDING_TEMPLATES = (
     {
@@ -448,6 +489,20 @@ def _workspace_list(value: Any) -> tuple[str, ...]:
     return tuple(_workspace_text(item, max_chars=240) for item in values if str(item).strip())
 
 
+def _workspace_int(value: Any) -> int:
+    if value is None or value == "":
+        return 0
+    if isinstance(value, bool):
+        raise HTTPException(status_code=422, detail="workspace integer field must be an integer")
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="workspace integer field must be an integer") from exc
+    if parsed < 0 or parsed > 999:
+        raise HTTPException(status_code=422, detail="workspace integer field out of range")
+    return parsed
+
+
 async def _read_workspace_json_body(request: Request) -> dict[str, Any]:
     content_type = request.headers.get("content-type", "")
     if content_type and "application/json" not in content_type.lower():
@@ -489,6 +544,8 @@ def _workspace_record_payload(record: Any) -> dict[str, Any]:
         return _lane_request_payload(record)
     if isinstance(record, JennyReportRecord):
         return _jenny_report_payload(record)
+    if isinstance(record, (ApprovalRecord, ReportRecord, RunRecord)):
+        return record.to_dict()
     if isinstance(record, SessionProjectLinkRecord):
         return _session_project_link_payload(record)
     return _record_payload(record)
@@ -969,6 +1026,177 @@ def _build_jenny_report_record(payload: dict[str, Any]) -> JennyReportRecord:
             "send_to_jenny_enabled": False,
             "dispatch_enabled": False,
             "artifact_links": _workspace_list(payload.get("artifact_links")),
+        },
+    )
+
+
+def _normalized_control_plane_status(value: Any, allowed: set[str], default: str) -> str:
+    status = _workspace_text(value, max_chars=80) or default
+    if status not in allowed:
+        raise HTTPException(status_code=422, detail=f"status must be one of: {', '.join(sorted(allowed))}")
+    return status
+
+
+def _normalized_control_plane_action_class(value: Any) -> str:
+    action_class = _workspace_text(value, max_chars=80)
+    if action_class not in APPROVAL_ACTION_CLASSES:
+        raise HTTPException(status_code=422, detail="invalid action_class")
+    return action_class
+
+
+def _normalized_run_lane_type(value: Any) -> str:
+    lane_type = _workspace_text(value, max_chars=80)
+    if lane_type not in RUN_LANE_TYPES:
+        raise HTTPException(status_code=422, detail="invalid lane_type")
+    return lane_type
+
+
+def _looks_broad_approval(value: str) -> bool:
+    text = value.strip().lower()
+    if not text:
+        return True
+    if text in BROAD_APPROVAL_VALUES:
+        return True
+    return any(phrase in text for phrase in ("all actions", "any action", "global execution", "unlimited approval"))
+
+
+def _reject_broad_actions(actions: tuple[str, ...]) -> None:
+    for action in actions:
+        if action.strip().lower() in BROAD_APPROVAL_VALUES:
+            raise HTTPException(status_code=422, detail="broad approval actions are not allowed")
+
+
+def _build_approval_record(payload: dict[str, Any]) -> ApprovalRecord:
+    action_class = _normalized_control_plane_action_class(payload.get("action_class"))
+    status = _normalized_control_plane_status(payload.get("status"), APPROVAL_STATUSES, "proposed")
+    approval_scope = _workspace_text(payload.get("approval_scope"), max_chars=MAX_WORKSPACE_TEXT_CHARS)
+    approved_actions = _workspace_list(payload.get("approved_actions"))
+    forbidden_actions = _workspace_list(payload.get("forbidden_actions"))
+    if _looks_broad_approval(approval_scope):
+        raise HTTPException(status_code=422, detail="approval_scope must be exact and bounded")
+    _reject_broad_actions(approved_actions)
+    if action_class in DANGEROUS_APPROVAL_ACTION_CLASSES and status != "proposed":
+        raise HTTPException(status_code=422, detail="dangerous approvals may only be proposed/display-only in this backend foundation")
+    approval_mode = _workspace_text(payload.get("approval_mode"), max_chars=40) or "one_time"
+    if approval_mode != "one_time":
+        raise HTTPException(status_code=422, detail="approval_mode must be one_time in this backend foundation")
+    now = _utc_now()
+    return ApprovalRecord(
+        approval_id=_workspace_text(payload.get("approval_id"), max_chars=120) or f"approval-{uuid.uuid4().hex[:12]}",
+        project_id=_workspace_text(payload.get("project_id"), max_chars=120),
+        session_id=_workspace_text(payload.get("session_id"), max_chars=160),
+        lane_request_id=_workspace_text(payload.get("lane_request_id"), max_chars=120),
+        run_id=_workspace_text(payload.get("run_id"), max_chars=120),
+        action_class=action_class,
+        approval_scope=approval_scope,
+        approved_actions=approved_actions,
+        forbidden_actions=forbidden_actions,
+        status=status,
+        approval_mode=approval_mode,
+        approved_by=_workspace_text(payload.get("approved_by"), max_chars=120),
+        approval_source=_workspace_text(payload.get("approval_source"), max_chars=80),
+        approval_text=_workspace_text(payload.get("approval_text"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
+        created_at=_workspace_text(payload.get("created_at"), max_chars=80) or now,
+        approved_at=_workspace_text(payload.get("approved_at"), max_chars=80),
+        expires_at=_workspace_text(payload.get("expires_at"), max_chars=80) or None,
+        consumed_at=_workspace_text(payload.get("consumed_at"), max_chars=80),
+        baseline_runtime_path=_workspace_text(payload.get("baseline_runtime_path"), max_chars=240),
+        baseline_head=_workspace_text(payload.get("baseline_head"), max_chars=80),
+        packet_hash=_workspace_text(payload.get("packet_hash"), max_chars=80),
+        scope_fingerprint=_workspace_text(payload.get("scope_fingerprint"), max_chars=120),
+        metadata={
+            "source": "mission_control_control_plane_approval_backend_v1",
+            "manual_copy_only": True,
+            "send_to_jenny_enabled": False,
+            "dispatch_enabled": False,
+            "dangerous_action_display_only": action_class in DANGEROUS_APPROVAL_ACTION_CLASSES,
+        },
+    )
+
+
+def _build_run_record(payload: dict[str, Any]) -> RunRecord:
+    project_id = _workspace_text(payload.get("project_id"), max_chars=120)
+    if not project_id:
+        raise HTTPException(status_code=422, detail="project_id is required")
+    lane_type = _normalized_run_lane_type(payload.get("lane_type"))
+    status = _normalized_control_plane_status(payload.get("status"), RUN_STATUSES, "requested")
+    execution_mode = _workspace_text(payload.get("execution_mode"), max_chars=80) or "manual_copy"
+    if execution_mode != "manual_copy":
+        raise HTTPException(status_code=422, detail="execution_mode must remain manual_copy in this backend foundation")
+    return RunRecord(
+        run_id=_workspace_text(payload.get("run_id"), max_chars=120) or f"run-{uuid.uuid4().hex[:12]}",
+        project_id=project_id,
+        lane_request_id=_workspace_text(payload.get("lane_request_id"), max_chars=120),
+        approval_id=_workspace_text(payload.get("approval_id"), max_chars=120),
+        lane_type=lane_type,
+        title=_workspace_text(payload.get("title"), max_chars=180),
+        objective=_workspace_text(payload.get("objective"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
+        status=status,
+        execution_mode=execution_mode,
+        allowed_actions=_workspace_list(payload.get("allowed_actions")),
+        forbidden_actions=_workspace_list(payload.get("forbidden_actions")),
+        stop_conditions=_workspace_list(payload.get("stop_conditions")),
+        baseline_runtime_path=_workspace_text(payload.get("baseline_runtime_path"), max_chars=240),
+        baseline_head=_workspace_text(payload.get("baseline_head"), max_chars=80),
+        runtime_guard_state=_workspace_text(payload.get("runtime_guard_state"), max_chars=80),
+        dispatch_state=False,
+        active_lane_count_at_start=_workspace_int(payload.get("active_lane_count_at_start")),
+        agent_identity=_workspace_text(payload.get("agent_identity"), max_chars=120),
+        session_id=_workspace_text(payload.get("session_id"), max_chars=160),
+        source=_workspace_text(payload.get("source"), max_chars=80),
+        started_at=_workspace_text(payload.get("started_at"), max_chars=80),
+        stopped_at=_workspace_text(payload.get("stopped_at"), max_chars=80),
+        stop_reason=_workspace_text(payload.get("stop_reason"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
+        safety_gate_status=_workspace_text(payload.get("safety_gate_status"), max_chars=80),
+        safety_gate_reasons=_workspace_list(payload.get("safety_gate_reasons")),
+        report_ids=_workspace_list(payload.get("report_ids")),
+        result_record_ids=_workspace_list(payload.get("result_record_ids")),
+        metadata={
+            "source": "mission_control_control_plane_run_backend_v1",
+            "manual_copy_only": True,
+            "send_to_jenny_enabled": False,
+            "dispatch_enabled": False,
+        },
+    )
+
+
+def _build_report_record(payload: dict[str, Any]) -> ReportRecord:
+    project_id = _workspace_text(payload.get("project_id"), max_chars=120)
+    summary = _workspace_text(payload.get("summary"), max_chars=MAX_WORKSPACE_PROMPT_CHARS)
+    if not project_id:
+        raise HTTPException(status_code=422, detail="project_id is required")
+    if not summary:
+        raise HTTPException(status_code=422, detail="summary is required")
+    status = _normalized_control_plane_status(payload.get("status"), REPORT_STATUSES, "received")
+    now = _utc_now()
+    return ReportRecord(
+        report_id=_workspace_text(payload.get("report_id"), max_chars=120) or f"report-{uuid.uuid4().hex[:12]}",
+        run_id=_workspace_text(payload.get("run_id"), max_chars=120),
+        approval_id=_workspace_text(payload.get("approval_id"), max_chars=120),
+        project_id=project_id,
+        lane_request_id=_workspace_text(payload.get("lane_request_id"), max_chars=120),
+        status=status,
+        report_kind=_workspace_text(payload.get("report_kind"), max_chars=80) or "jenny_result",
+        summary=summary,
+        result=_workspace_text(payload.get("result"), max_chars=MAX_WORKSPACE_PROMPT_CHARS),
+        risks=_workspace_list(payload.get("risks")),
+        blockers=_workspace_list(payload.get("blockers")),
+        changed_files=_workspace_list(payload.get("changed_files")),
+        tests=_workspace_list(payload.get("tests")),
+        next_recommended_lane=_workspace_text(payload.get("next_recommended_lane")),
+        evidence_refs=_workspace_list(payload.get("evidence_refs")),
+        artifact_refs=_workspace_list(payload.get("artifact_refs")),
+        submitted_by=_workspace_text(payload.get("submitted_by"), max_chars=120),
+        submitted_from=_workspace_text(payload.get("submitted_from"), max_chars=120),
+        created_at=_workspace_text(payload.get("created_at"), max_chars=80) or now,
+        reviewed_at=_workspace_text(payload.get("reviewed_at"), max_chars=80),
+        reviewed_by=_workspace_text(payload.get("reviewed_by"), max_chars=120),
+        redaction_status=_workspace_text(payload.get("redaction_status"), max_chars=120) or "operator_supplied_redacted",
+        metadata={
+            "source": "mission_control_control_plane_report_backend_v1",
+            "manual_copy_only": True,
+            "send_to_jenny_enabled": False,
+            "dispatch_enabled": False,
         },
     )
 
@@ -2403,6 +2631,84 @@ async def workspace_jenny_report_create(request: Request) -> dict[str, Any]:
         "record_index": index,
         "record_type": record.record_type,
         "report": _jenny_report_payload(record),
+    }
+
+
+@router.get("/workspace/approvals")
+async def workspace_approvals(limit: str | None = Query(default=None)) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    approvals = _latest_workspace_records(ApprovalRecord, applied_limit)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": False,
+        "count": len(approvals),
+        "approvals": approvals,
+    }
+
+
+@router.post("/workspace/approvals/create")
+async def workspace_approval_create(request: Request) -> dict[str, Any]:
+    payload = await _read_workspace_json_body(request)
+    record = _build_approval_record(payload)
+    index = JsonlRecordStore(record_store_path()).append(record)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": True,
+        "record_index": index,
+        "record_type": record.record_type,
+        "approval": record.to_dict(),
+    }
+
+
+@router.get("/workspace/runs")
+async def workspace_runs(limit: str | None = Query(default=None)) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    runs = _latest_workspace_records(RunRecord, applied_limit)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": False,
+        "count": len(runs),
+        "runs": runs,
+    }
+
+
+@router.post("/workspace/runs/create")
+async def workspace_run_create(request: Request) -> dict[str, Any]:
+    payload = await _read_workspace_json_body(request)
+    record = _build_run_record(payload)
+    index = JsonlRecordStore(record_store_path()).append(record)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": True,
+        "record_index": index,
+        "record_type": record.record_type,
+        "run": record.to_dict(),
+    }
+
+
+@router.get("/workspace/report-inbox")
+async def workspace_report_inbox(limit: str | None = Query(default=None)) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    reports = _latest_workspace_records(ReportRecord, applied_limit)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": False,
+        "count": len(reports),
+        "reports": reports,
+    }
+
+
+@router.post("/workspace/reports/ingest")
+async def workspace_report_ingest(request: Request) -> dict[str, Any]:
+    payload = await _read_workspace_json_body(request)
+    record = _build_report_record(payload)
+    index = JsonlRecordStore(record_store_path()).append(record)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": True,
+        "record_index": index,
+        "record_type": record.record_type,
+        "report": record.to_dict(),
     }
 
 
