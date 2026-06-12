@@ -113,6 +113,10 @@ def test_mission_control_governance_router_exposes_no_execution_or_mutation_cont
     allowed_append_only_record_routes = {
         "/workspace/projects/create",
         "/workspace/projects/seed-defaults",
+        "/workspace/project-briefs",
+        "/workspace/project-briefs/create",
+        "/workspace/challenge-reviews",
+        "/workspace/challenge-reviews/create",
         "/workspace/lane-requests/create",
         "/workspace/reports/create",
         "/workspace/session-project-links/create",
@@ -145,6 +149,8 @@ def test_mission_control_governance_router_exposes_no_execution_or_mutation_cont
         "/lane-preflight/evaluate",
         "/workspace/projects/create",
         "/workspace/projects/seed-defaults",
+        "/workspace/project-briefs/create",
+        "/workspace/challenge-reviews/create",
         "/workspace/lane-requests/create",
         "/workspace/reports/create",
         "/workspace/session-project-links/create",
@@ -189,6 +195,8 @@ def test_mission_control_preview_routes_remain_non_persistent_and_inert(client=N
     allowed_append_only_record_routes = {
         "/workspace/projects/create",
         "/workspace/projects/seed-defaults",
+        "/workspace/project-briefs/create",
+        "/workspace/challenge-reviews/create",
         "/workspace/lane-requests/create",
         "/workspace/reports/create",
         "/workspace/session-project-links/create",

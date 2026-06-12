@@ -62,11 +62,11 @@ _DEFAULT_STATUS: dict[str, Any] = {
         "clean": True,
     },
     "lane": {
-        "active_lane": "Mission Control Operating Workspace",
-        "mode": "display-only status",
+        "active_lane": "",
+        "mode": "",
         "declared_baseline_head": "775f49352189fdec3169f59e3378b6744da2bdda",
         "max_active_lane": 1,
-        "active_lane_count": 1,
+        "active_lane_count": 0,
     },
     "safety": {
         "dispatch_in_gateway": False,
@@ -160,10 +160,16 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         lane_input = _record_authoritative_lane_input(lane_input)
     lane = _lane_section(lane_input, defaults=lane_defaults)
     safety = _safety_section(_section(source, "safety"), defaults=_DEFAULT_STATUS["safety"])
-    activity = _activity_section(_section(source, "activity"), defaults=_DEFAULT_STATUS["activity"])
+    activity_input = _section(source, "activity")
+    activity = _activity_section(activity_input, defaults=_DEFAULT_STATUS["activity"])
     if accepted_record.get("present") is True:
         safety = {**safety, "dispatch_in_gateway": accepted_record.get("dispatch_in_gateway")}
-        activity = {**activity, "active_workers": 0, "active_tasks": 0, "active_runs": accepted_record.get("active_kanban", 0)}
+        active_runs = (
+            _safe_int(activity_input.get("active_runs"), default=accepted_record.get("active_kanban", 0))
+            if "active_runs" in activity_input
+            else accepted_record.get("active_kanban", 0)
+        )
+        activity = {**activity, "active_workers": 0, "active_tasks": 0, "active_runs": active_runs}
         lane = {**lane, "max_active_lane": accepted_record.get("max_active_lane", lane.get("max_active_lane", 1))}
     pr_gate = _pr_gate_section(_section(source, "pr_gate"), defaults=_DEFAULT_STATUS["pr_gate"])
     deployment = _deployment_section(_section(source, "deployment"), defaults=_DEFAULT_STATUS["deployment"])
