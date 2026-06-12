@@ -69,3 +69,8 @@ Forbidden tonight:
 Run `projects/tool-tally/lanes/read-only-recovery-audit-2026-06-12.md` and
 define safety gates for report generation, checkout, and outreach before any
 live reactivation.
+
+Use `docs/mission-control/tool-tally-recovery-plan-2026-06-12.md` as the current
+recovery order. It keeps checkout, payment writes, customer delivery, and
+outreach disabled until the local report-generation and operational-truth gates
+pass.
