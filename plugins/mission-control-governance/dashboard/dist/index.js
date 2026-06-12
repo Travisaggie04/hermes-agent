@@ -400,7 +400,7 @@
     const filtered = (items || []).filter(function (item) {
       return item && item.project_id === projectId;
     });
-    return filtered.length ? filtered[0] : null;
+    return filtered.length ? filtered[filtered.length - 1] : null;
   }
 
   function challengeNeedsDecision(review) {

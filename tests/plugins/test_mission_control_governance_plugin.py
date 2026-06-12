@@ -1558,6 +1558,28 @@ def test_project_workspace_records_pr_a_bundle_is_manual_copy_only():
         assert forbidden not in bundle
 
 
+def test_project_workspace_latest_brief_and_challenge_review_use_newest_record():
+    bundle = (PLUGIN_DIR / "dashboard" / "dist" / "index.js").read_text()
+
+    assert "return filtered.length ? filtered[filtered.length - 1] : null;" in bundle
+    assert "const latestReview = latestForProject(records.challengeReviews.map(challengeReviewFromRecord).filter(Boolean), selectedId);" in bundle
+    assert 'if (latestReview.decision_state !== "clear_and_safe")' in bundle
+    assert "Latest challenge review is " in bundle
+    assert "Create a Jenny challenge review before saving a lane request draft." in bundle
+
+    old_clear_new_unsafe = [
+        {"project_id": "project-hermes", "decision_state": "clear_and_safe"},
+        {"project_id": "project-hermes", "decision_state": "unsafe"},
+    ]
+    old_unsafe_new_clear = [
+        {"project_id": "project-hermes", "decision_state": "unsafe"},
+        {"project_id": "project-hermes", "decision_state": "clear_and_safe"},
+    ]
+
+    assert old_clear_new_unsafe[-1]["decision_state"] == "unsafe"
+    assert old_unsafe_new_clear[-1]["decision_state"] == "clear_and_safe"
+
+
 def test_autonomy_readiness_ledger_bundle_is_static_display_only():
     bundle = (PLUGIN_DIR / "dashboard" / "dist" / "index.js").read_text()
 
