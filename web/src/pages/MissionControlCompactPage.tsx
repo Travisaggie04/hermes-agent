@@ -15,6 +15,7 @@ const WORKSPACE_REPORTS_CREATE_URL = "/api/plugins/mission-control-governance/wo
 const WORKSPACE_JENNY_BRIDGE_OUTBOX_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/outbox";
 const WORKSPACE_JENNY_BRIDGE_OUTBOX_CREATE_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/outbox/create";
 const WORKSPACE_JENNY_BRIDGE_INBOX_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/inbox";
+const WORKSPACE_JENNY_BRIDGE_POLLER_STATUS_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/poller-status";
 const WORKSPACE_PROJECT_STATE_URL = "/api/plugins/mission-control-governance/workspace/project-state";
 
 const REAL_PROJECT_IDS = [
@@ -121,6 +122,21 @@ interface JennyBridgeResponseRecord {
   status?: string;
 }
 
+interface JennyBridgePollerStatus {
+  dispatch_enabled?: boolean;
+  execution_enabled?: boolean;
+  last_error?: string;
+  last_poll_at?: string;
+  last_response_at?: string;
+  last_response_request_id?: string;
+  last_status?: string;
+  manual_start_only?: boolean;
+  pending_count?: number;
+  session_send_enabled?: boolean;
+  timer_enabled?: boolean;
+  worker_enabled?: boolean;
+}
+
 interface ProjectStateRecord {
   artifact_links?: string[];
   blockers?: string[];
@@ -163,6 +179,7 @@ interface CompactSnapshot {
   challengeReviews: ChallengeReviewRecord[];
   jennyBridgeRequests: JennyBridgeRequestRecord[];
   jennyBridgeResponses: JennyBridgeResponseRecord[];
+  jennyBridgePollerStatus: JennyBridgePollerStatus;
   laneRequests: LaneRequestRecord[];
   projectBriefs: ProjectBriefRecord[];
   projectStates: ProjectStateRecord[];
@@ -465,7 +482,7 @@ function buildPhoneSafeProjectPacket(projectView: ProjectViewModel, requestText:
 }
 
 async function loadCompactSnapshot(): Promise<CompactSnapshot> {
-  const [workspaceStatus, projects, projectBriefs, challengeReviews, laneRequests, reports, projectState, jennyBridgeOutbox, jennyBridgeInbox] = await Promise.all([
+  const [workspaceStatus, projects, projectBriefs, challengeReviews, laneRequests, reports, projectState, jennyBridgeOutbox, jennyBridgeInbox, jennyBridgePollerStatus] = await Promise.all([
     fetchJSON<WorkspaceStatus>(WORKSPACE_STATUS_URL),
     fetchJSON<{ projects?: Array<WrappedRecord<ProjectRecord> | ProjectRecord> }>(WORKSPACE_PROJECTS_URL),
     fetchJSON<{ project_briefs?: Array<WrappedRecord<ProjectBriefRecord> | ProjectBriefRecord> }>(WORKSPACE_PROJECT_BRIEFS_URL),
@@ -475,12 +492,14 @@ async function loadCompactSnapshot(): Promise<CompactSnapshot> {
     fetchJSON<{ project_states?: ProjectStateRecord[] }>(WORKSPACE_PROJECT_STATE_URL),
     fetchJSON<{ requests?: Array<WrappedRecord<JennyBridgeRequestRecord> | JennyBridgeRequestRecord> }>(WORKSPACE_JENNY_BRIDGE_OUTBOX_URL),
     fetchJSON<{ responses?: Array<WrappedRecord<JennyBridgeResponseRecord> | JennyBridgeResponseRecord> }>(WORKSPACE_JENNY_BRIDGE_INBOX_URL),
+    fetchJSON<JennyBridgePollerStatus>(WORKSPACE_JENNY_BRIDGE_POLLER_STATUS_URL),
   ]);
 
   return {
     challengeReviews: unwrapRecords(challengeReviews.challenge_reviews),
     jennyBridgeRequests: unwrapRecords(jennyBridgeOutbox.requests),
     jennyBridgeResponses: unwrapRecords(jennyBridgeInbox.responses),
+    jennyBridgePollerStatus,
     laneRequests: unwrapRecords(laneRequests.lane_requests),
     projectBriefs: unwrapRecords(projectBriefs.project_briefs),
     projectStates: projectState.project_states ?? [],
@@ -727,6 +746,7 @@ export default function MissionControlCompactPage() {
           message={roomMessage}
           bridgeRequests={snapshot?.jennyBridgeRequests.filter(request => request.project_id === selectedProjectView.project.project_id) ?? []}
           bridgeResponses={snapshot?.jennyBridgeResponses.filter(response => response.project_id === selectedProjectView.project.project_id) ?? []}
+          bridgeStatus={snapshot?.jennyBridgePollerStatus ?? {}}
           onCopyPacket={() => void copyPhoneSafePacket(selectedProjectView)}
           onQueueBridge={() => void queueJennyBridgeMessage(selectedProjectView)}
           onRefreshBridge={() => void refreshBridge()}
@@ -793,6 +813,7 @@ function CompactProjectRoom({
   busy,
   bridgeRequests,
   bridgeResponses,
+  bridgeStatus,
   message,
   onCopyPacket,
   onQueueBridge,
@@ -809,6 +830,7 @@ function CompactProjectRoom({
   busy: boolean;
   bridgeRequests: JennyBridgeRequestRecord[];
   bridgeResponses: JennyBridgeResponseRecord[];
+  bridgeStatus: JennyBridgePollerStatus;
   message: string;
   onCopyPacket: () => void;
   onQueueBridge: () => void;
@@ -909,6 +931,14 @@ function CompactProjectRoom({
             <span className="rounded-full border border-emerald-500/30 px-2 py-0.5 text-[0.65rem] text-emerald-700 dark:text-emerald-300">no dispatch</span>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">Record-backed outbox/inbox for Jenny relay. Use refresh to check replies. Direct send remains disabled.</p>
+          <div className="mt-3 grid gap-2 rounded-lg border border-emerald-500/20 bg-background/70 p-2 text-xs sm:grid-cols-2">
+            <CompactField label="manual relay" value={bridgeStatus.manual_start_only === false ? "disabled" : "manual-start only"} />
+            <CompactField label="pending" value={String(bridgeStatus.pending_count ?? bridgeRequests.filter(request => (request.bridge_state ?? request.status ?? "queued") !== "replied").length)} />
+            <CompactField label="last status" value={bridgeStatus.last_status ?? "idle"} />
+            <CompactField label="last response" value={bridgeStatus.last_response_request_id || bridgeStatus.last_response_at || "none"} />
+            <CompactField label="last error" value={bridgeStatus.last_error || "none"} />
+            <CompactField label="worker/timer" value={`worker ${bridgeStatus.worker_enabled ? "enabled" : "disabled"} / timer ${bridgeStatus.timer_enabled ? "enabled" : "disabled"}`} />
+          </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             <CompactBridgeList
               title="Outbound"

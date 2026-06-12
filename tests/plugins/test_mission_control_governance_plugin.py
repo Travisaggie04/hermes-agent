@@ -24,6 +24,7 @@ from mission_control.records import (
     JsonlRecordStore,
     JennyBridgeMessageRequestRecord,
     JennyBridgeMessageResponseRecord,
+    JennyBridgePollerStatusRecord,
     JennyReportRecord,
     LaneRequestRecord,
     MissionBrief,
@@ -469,6 +470,56 @@ def test_workspace_jenny_bridge_api_creates_lists_and_stays_inert(plugin_api, cl
     assert pending_after_response.status_code == 200
     assert pending_after_response.json()["count"] == 0
     assert "No pending bridge requests." in pending_after_response.json()["relay_packet"]
+
+
+def test_workspace_jenny_bridge_poller_status_is_read_only(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(
+        JennyBridgeMessageRequestRecord(
+            request_id="bridge-request-1",
+            project_id="project-hermes",
+            message="Pending bridge request.",
+            status="queued",
+        )
+    )
+    store.append(
+        JennyBridgePollerStatusRecord(
+            status_id="bridge-status-1",
+            poller_id="manual-jenny-bridge-relay",
+            mode="manual",
+            status="error",
+            pending_count=1,
+            handled_request_id="bridge-request-1",
+            last_error="operator stopped before responding",
+            created_at="2026-06-12T15:22:00Z",
+            metadata={
+                "manual_start_only": True,
+                "dispatch_enabled": False,
+                "session_send_enabled": False,
+                "worker_enabled": False,
+                "timer_enabled": False,
+            },
+        )
+    )
+
+    before = len(store.read_all())
+    response = client.get("/api/plugins/mission-control-governance/workspace/jenny-bridge/poller-status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stored"] is False
+    assert payload["display_only"] is True
+    assert payload["manual_start_only"] is True
+    assert payload["dispatch_enabled"] is False
+    assert payload["send_to_jenny_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["worker_enabled"] is False
+    assert payload["timer_enabled"] is False
+    assert payload["pending_count"] == 1
+    assert payload["last_status"] == "error"
+    assert payload["last_error"] == "operator stopped before responding"
+    assert payload["status_records"][0]["record"]["status_id"] == "bridge-status-1"
+    assert len(store.read_all()) == before
 
 
 def _assert_inert_workspace_payload(payload):
@@ -1841,6 +1892,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/reports/create": {"POST"},
         "/workspace/jenny-bridge/outbox": {"GET"},
         "/workspace/jenny-bridge/pending": {"GET"},
+        "/workspace/jenny-bridge/poller-status": {"GET"},
         "/workspace/jenny-bridge/outbox/create": {"POST"},
         "/workspace/jenny-bridge/inbox": {"GET"},
         "/workspace/jenny-bridge/inbox/create": {"POST"},

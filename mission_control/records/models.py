@@ -584,6 +584,63 @@ class JennyBridgeMessageResponseRecord:
 
 
 @dataclass(frozen=True)
+class JennyBridgePollerStatusRecord:
+    status_id: str
+    poller_id: str = "manual-jenny-bridge-relay"
+    mode: str = "manual"
+    status: str = "idle"
+    pending_count: int = 0
+    handled_request_id: str = ""
+    handled_response_id: str = ""
+    last_error: str = ""
+    runtime_path: str = ""
+    head: str = ""
+    operator: str = "manual"
+    created_at: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "JennyBridgePollerStatusRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status_id": self.status_id,
+            "poller_id": self.poller_id,
+            "mode": self.mode,
+            "status": self.status,
+            "pending_count": self.pending_count,
+            "handled_request_id": self.handled_request_id,
+            "handled_response_id": self.handled_response_id,
+            "last_error": self.last_error,
+            "runtime_path": self.runtime_path,
+            "head": self.head,
+            "operator": self.operator,
+            "created_at": self.created_at,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> JennyBridgePollerStatusRecord:
+        return cls(
+            status_id=_required(data, "status_id"),
+            poller_id=data.get("poller_id", "manual-jenny-bridge-relay"),
+            mode=data.get("mode", "manual"),
+            status=data.get("status", "idle"),
+            pending_count=int(data.get("pending_count", 0) or 0),
+            handled_request_id=data.get("handled_request_id", ""),
+            handled_response_id=data.get("handled_response_id", ""),
+            last_error=data.get("last_error", ""),
+            runtime_path=data.get("runtime_path", ""),
+            head=data.get("head", ""),
+            operator=data.get("operator", "manual"),
+            created_at=data.get("created_at", ""),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
 class ApprovalRecord:
     approval_id: str
     project_id: str = ""
@@ -1855,6 +1912,7 @@ RECORD_TYPES = {
         JennyReportRecord,
         JennyBridgeMessageRequestRecord,
         JennyBridgeMessageResponseRecord,
+        JennyBridgePollerStatusRecord,
         ReportRecord,
         RunRecord,
         SessionProjectLinkRecord,

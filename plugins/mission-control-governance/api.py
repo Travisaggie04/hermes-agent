@@ -47,6 +47,7 @@ from mission_control.records import (
     GoalContract,
     JennyBridgeMessageRequestRecord,
     JennyBridgeMessageResponseRecord,
+    JennyBridgePollerStatusRecord,
     JsonlRecordStore,
     JennyReportRecord,
     LaneRequestRecord,
@@ -557,6 +558,10 @@ def _jenny_bridge_response_payload(record: JennyBridgeMessageResponseRecord) -> 
     return record.to_dict()
 
 
+def _jenny_bridge_poller_status_payload(record: JennyBridgePollerStatusRecord) -> dict[str, Any]:
+    return record.to_dict()
+
+
 def _session_project_link_payload(record: SessionProjectLinkRecord) -> dict[str, Any]:
     payload = record.to_dict()
     payload["durable_session_id"] = record.durable_session_id
@@ -574,6 +579,8 @@ def _workspace_record_payload(record: Any) -> dict[str, Any]:
         return _jenny_bridge_request_payload(record)
     if isinstance(record, JennyBridgeMessageResponseRecord):
         return _jenny_bridge_response_payload(record)
+    if isinstance(record, JennyBridgePollerStatusRecord):
+        return _jenny_bridge_poller_status_payload(record)
     if isinstance(record, (ApprovalRecord, ReportRecord, RunRecord)):
         return record.to_dict()
     if isinstance(record, SessionProjectLinkRecord):
@@ -669,6 +676,30 @@ def _jenny_bridge_relay_packet(requests: list[dict[str, Any]]) -> str:
     if len(packet) <= MAX_JENNY_BRIDGE_RELAY_PACKET_CHARS:
         return packet
     return f"{packet[: MAX_JENNY_BRIDGE_RELAY_PACKET_CHARS - 16].rstrip()}\n...[truncated]"
+
+
+def _jenny_bridge_poller_status_projection(limit: int = DEFAULT_RECORDS_LIMIT) -> dict[str, Any]:
+    pending = _pending_jenny_bridge_requests(limit=limit)
+    statuses = _latest_workspace_records(JennyBridgePollerStatusRecord, limit)
+    responses = _latest_workspace_records(JennyBridgeMessageResponseRecord, limit)
+    latest_status = statuses[-1]["record"] if statuses else {}
+    latest_response = responses[-1]["record"] if responses else {}
+    return {
+        "manual_start_only": True,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "execution_enabled": False,
+        "worker_enabled": False,
+        "timer_enabled": False,
+        "count": len(statuses),
+        "pending_count": len(pending),
+        "last_poll_at": latest_status.get("created_at", ""),
+        "last_status": latest_status.get("status", "idle"),
+        "last_response_at": latest_response.get("created_at", ""),
+        "last_response_request_id": latest_response.get("request_id", ""),
+        "last_error": latest_status.get("last_error", ""),
+        "status_records": statuses,
+    }
 
 
 def _project_slug(value: str) -> str:
@@ -3010,6 +3041,22 @@ async def workspace_jenny_bridge_pending(
         "count": len(requests),
         "requests": requests,
         "relay_packet": _jenny_bridge_relay_packet(requests),
+    }
+
+
+@router.get("/workspace/jenny-bridge/poller-status")
+async def workspace_jenny_bridge_poller_status(limit: str | None = Query(default=None)) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    projection = _jenny_bridge_poller_status_projection(applied_limit)
+    return {
+        **INERT_FLAGS,
+        "stored": False,
+        "display_only": True,
+        "manual_start_only": True,
+        "manual_copy_only": False,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        **projection,
     }
 
 
