@@ -523,6 +523,20 @@ def _run_gh_api(args: list[str]) -> Any:
     return json.loads(result.stdout or "null")
 
 
+def _github_issue_comments_args(repo: str, issue_number: int) -> list[str]:
+    return [f"repos/{repo}/issues/{issue_number}/comments", "--paginate", "--slurp"]
+
+
+def _normalize_github_comments_response(response: Any) -> list[dict[str, Any]]:
+    if isinstance(response, list) and all(isinstance(page, list) for page in response):
+        flattened = [comment for page in response for comment in page]
+    else:
+        flattened = response
+    if not isinstance(flattened, list) or not all(isinstance(comment, dict) for comment in flattened):
+        raise ValueError("GitHub comments response must be a list")
+    return flattened
+
+
 def _run_ssh(args: list[str]) -> str:
     # Manual foreground operator path only. Does not start a daemon, timer, or worker.
     result = subprocess.run(args, check=True, capture_output=True, text=True)
@@ -530,9 +544,7 @@ def _run_ssh(args: list[str]) -> str:
 
 
 def poll_github_issue(*, repo: str, issue_number: int, path: Path | None = None, operator: str = "manual") -> dict[str, Any]:
-    comments = _run_gh_api([f"repos/{repo}/issues/{issue_number}/comments", "--paginate"])
-    if not isinstance(comments, list):
-        raise ValueError("GitHub comments response must be a list")
+    comments = _normalize_github_comments_response(_run_gh_api(_github_issue_comments_args(repo, issue_number)))
     return poll_comments(comments, repo=repo, issue_number=issue_number, path=path, operator=operator)
 
 
@@ -803,9 +815,8 @@ def watch_github_issue(
         while max_iterations is None or iterations < max_iterations:
             iterations += 1
             try:
-                comments = fetch_comments() if fetch_comments is not None else _run_gh_api([f"repos/{repo}/issues/{issue_number}/comments", "--paginate"])
-                if not isinstance(comments, list):
-                    raise ValueError("GitHub comments response must be a list")
+                raw_comments = fetch_comments() if fetch_comments is not None else _run_gh_api(_github_issue_comments_args(repo, issue_number))
+                comments = _normalize_github_comments_response(raw_comments)
                 result = poll_comments(
                     comments,
                     repo=repo,
