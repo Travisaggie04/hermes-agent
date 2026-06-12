@@ -74,3 +74,12 @@ Use `docs/mission-control/tool-tally-recovery-plan-2026-06-12.md` as the current
 recovery order. It keeps checkout, payment writes, customer delivery, and
 outreach disabled until the local report-generation and operational-truth gates
 pass.
+
+Latest read-only inventory:
+
+- `docs/mission-control/tool-tally-report-engine-inventory-2026-06-12.md`
+
+That inventory confirms the current recovery worktree is still focused on
+paid-order-to-report-job conversion, report package building, PDF quality, and
+quality-agent acceptance. The next safe implementation lane is local-only report
+engine recovery against fixture data.
