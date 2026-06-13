@@ -1262,17 +1262,17 @@ export function MissionControlView() {
       <header className="mb-5 flex flex-col gap-2 border-b border-border/60 pb-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-lg font-semibold tracking-tight">Mission Control</h1>
+            <h1 className="text-lg font-semibold tracking-tight">Jenny Workspace</h1>
             <p className="max-w-3xl text-sm text-muted-foreground">
-              Jenny OS workspace. Focus is currently Hermes / Mission Control; other business projects are paused until Jenny is reliable here.
+              Pick a project, talk to Jenny, and keep the safety controls in the background. Hermes / Mission Control is the active recovery lane.
             </p>
           </div>
           <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-            Send to Jenny disabled
+            Jenny bridge guarded
           </span>
         </div>
         <p className="text-xs text-muted-foreground">
-          Manual-copy only. No dispatch, queue mutation, protected-domain mutation, routing change, guard enforcement, browser storage, timer, or hidden worker.
+          Project chat is record-backed. Deploys, gateway restarts, posting, payments, outreach, and hidden workers still require the normal approval gates.
         </p>
       </header>
 
@@ -1578,10 +1578,10 @@ function ProjectRoomsWorkspace({
   ].sort((left, right) => String(left.time ?? '').localeCompare(String(right.time ?? ''))).slice(-8)
 
   return (
-    <section aria-label="Project Rooms" className="mt-5 grid gap-4 rounded-xl border border-border/70 bg-background/50 p-4 xl:grid-cols-[17rem_1fr]">
+    <section aria-label="Project Chat Rooms" className="mt-5 grid gap-4 rounded-xl border border-border/70 bg-background/50 p-4 xl:grid-cols-[16rem_minmax(0,1fr)]">
       <aside>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold">Project Rooms</h2>
+          <h2 className="text-base font-semibold">Projects</h2>
           <span className="rounded-full border border-border/70 px-2.5 py-1 text-xs text-muted-foreground">{projects.length} projects</span>
         </div>
         <div className="mt-3 grid gap-2">
@@ -1596,7 +1596,9 @@ function ProjectRoomsWorkspace({
               type="button"
             >
               <span className="block font-medium">{candidate.name}</span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">{candidate.project_id}</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {candidate.project_id === HERMES_PROJECT_ID ? 'Active recovery lane' : 'Paused until Jenny is stable'}
+              </span>
             </button>
           ))}
         </div>
@@ -1605,31 +1607,30 @@ function ProjectRoomsWorkspace({
       <div className="min-w-0">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Project Chat</p>
-            <h2 className="mt-1 text-xl font-semibold">Chat with Jenny: {project.name}</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Chat room</p>
+            <h2 className="mt-1 text-xl font-semibold">{project.name}</h2>
           </div>
           <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-700 dark:text-emerald-300">
             {readiness.label}
           </span>
         </div>
 
-        <div className="mt-3 grid gap-2 text-xs md:grid-cols-4">
-          <div className="rounded-lg border border-border/70 bg-background/70 p-2">
-            <div className="font-semibold text-foreground/90">Current goal</div>
-            <p className="mt-1 text-muted-foreground">{compactText(state?.current_goal ?? project.current_goal, 160) || 'No current goal recorded.'}</p>
+        <div className="mt-3 rounded-xl border border-border/70 bg-background/70 p-3 text-sm">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className="font-semibold text-foreground/90">Goal</span>
+            <span className="text-muted-foreground">{compactText(state?.current_goal ?? project.current_goal, 180) || 'No current goal recorded.'}</span>
+            <span className="hidden h-4 w-px bg-border md:block" />
+            <span className="font-semibold text-foreground/90">Jenny</span>
+            <span className="text-muted-foreground">{deliveryStatus}</span>
           </div>
-          <div className="rounded-lg border border-border/70 bg-background/70 p-2">
-            <div className="font-semibold text-foreground/90">Readiness</div>
-            <p className="mt-1 text-muted-foreground">{readiness.detail}</p>
-          </div>
-          <div className="rounded-lg border border-border/70 bg-background/70 p-2">
-            <div className="font-semibold text-foreground/90">Last update</div>
-            <p className="mt-1 text-muted-foreground">{compactText(report?.summary || report?.result, 160) || 'No update recorded yet.'}</p>
-          </div>
-          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2">
-            <div className="font-semibold text-foreground/90">Jenny status</div>
-            <p className="mt-1 text-muted-foreground">{deliveryStatus}</p>
-          </div>
+          <details className="mt-2">
+            <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">Project context</summary>
+            <div className="mt-2 grid gap-2 text-xs md:grid-cols-3">
+              <Field label="readiness" value={readiness.detail} />
+              <Field label="last update" value={compactText(report?.summary || report?.result, 220) || 'No update recorded yet.'} />
+              <Field label="report contract" value={reportContractSummaryForState(state, report)} />
+            </div>
+          </details>
         </div>
 
         <section aria-label="Project chat transcript" className="mt-4 rounded-xl border border-border/70 bg-background/80 p-3">
@@ -1637,7 +1638,7 @@ function ProjectRoomsWorkspace({
             <h3 className="text-sm font-semibold">Conversation</h3>
             <span className="text-xs text-muted-foreground">{chatMessages.length ? `${chatMessages.length} recent messages` : 'No messages yet'}</span>
           </div>
-          <div className="mt-3 grid max-h-[28rem] gap-3 overflow-auto pr-1">
+          <div className="mt-3 grid min-h-[18rem] max-h-[32rem] gap-3 overflow-auto pr-1">
             {chatMessages.length ? (
               chatMessages.map(chat => (
                 <article
@@ -1667,7 +1668,7 @@ function ProjectRoomsWorkspace({
         </section>
 
         <label className="mt-4 grid gap-1 text-sm font-medium">
-          Message Jenny about this project
+          Message
           <textarea
             className="min-h-32 rounded-xl border border-border/80 bg-background px-3 py-2 text-sm"
             onChange={event => onRequestChange(event.target.value)}
@@ -1678,7 +1679,7 @@ function ProjectRoomsWorkspace({
 
         <div className="mt-3 flex flex-wrap gap-2">
           <button className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={saving} onClick={onQueueBridge} type="button">
-            Send message to Jenny
+            Send to Jenny
           </button>
           <button
             className="rounded-md border border-sky-500/40 bg-sky-500/10 px-4 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/15 disabled:opacity-60 dark:text-sky-300"
@@ -1722,7 +1723,7 @@ function ProjectRoomsWorkspace({
         </section>
 
         <details className="mt-4 rounded-xl border border-border/70 bg-background/40 p-3">
-          <summary className="cursor-pointer text-sm font-semibold">Advanced controls and guardrails</summary>
+          <summary className="cursor-pointer text-sm font-semibold">Safety controls and technical details</summary>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <Field label="project brief" value={compactText(brief?.outcome, 320) || 'No project brief recorded'} />
             <Field label="challenge review" value={review ? `${review.decision_state ?? 'unknown'} / ${review.recommended_path ?? 'No recommended path recorded'}` : 'No challenge review recorded'} />
