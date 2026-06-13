@@ -29,7 +29,7 @@ DEFAULT_GITHUB_BRIDGE_REPO = "Travisaggie04/hermes-agent"
 DEFAULT_GITHUB_BRIDGE_ISSUE = 79
 DEFAULT_NOTIFY_SSH_TARGET = "jenny@100.115.125.111"
 DEFAULT_NOTIFY_REMOTE_RUNTIME = "/home/jenny/.hermes/hermes-runtime-github-bridge-mailbox-944411a"
-DEFAULT_HERMES_BIN = "/home/jenny/.local/bin/hermes"
+DEFAULT_HERMES_BIN = ""
 DEFAULT_MISSION_CONTROL_PROJECT_ID = "project-hermes-mission-control"
 PENDING_STATUSES = {"queued", "retry_requested"}
 REPLIED_STATUSES = {"replied", "closed"}
@@ -607,9 +607,10 @@ def run_hermes_responder(
 ) -> str:
     env = {"HERMES_HOME": profile_home} if profile_home else None
     prompt = mission_control_responder_prompt(record)
+    command = [hermes_bin] if hermes_bin else [sys.executable, "-m", "hermes_cli.main"]
     proc = subprocess.run(
-        [
-            hermes_bin,
+        command
+        + [
             "chat",
             "-Q",
             "-t",
@@ -1186,7 +1187,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Ignore pending requests created before this ISO timestamp",
     )
     answer_parser.add_argument("--operator", default="manual")
-    answer_parser.add_argument("--hermes-bin", default=DEFAULT_HERMES_BIN)
+    answer_parser.add_argument(
+        "--hermes-bin",
+        default=DEFAULT_HERMES_BIN,
+        help="Optional Hermes executable override; empty uses the active runtime module",
+    )
     answer_parser.add_argument("--profile-home", default="")
     answer_parser.add_argument("--cwd", default="/home/jenny")
     answer_parser.add_argument("--timeout-seconds", type=int, default=240)

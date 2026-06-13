@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 
 from mission_control.github_bridge_mailbox import (
     GITHUB_BRIDGE_MARKER,
@@ -19,6 +20,7 @@ from mission_control.github_bridge_mailbox import (
     poll_comments,
     poll_github_issue,
     response_comment_body,
+    run_hermes_responder,
     watch_github_issue,
 )
 from mission_control.records import GitHubBridgeMailboxStatusRecord, GitHubBridgeMessageRecord, JsonlRecordStore
@@ -328,6 +330,35 @@ def test_clean_hermes_response_blocks_startup_screen_noise():
         "I received the Mission Control message, but Hermes returned a non-chat startup "
         "screen instead of a clean response."
     )
+
+
+def test_run_hermes_responder_defaults_to_active_runtime_module(monkeypatch):
+    seen: dict[str, object] = {}
+
+    class Result:
+        stdout = "Runtime Jenny response."
+
+    def fake_run(args, **kwargs):
+        seen["args"] = args
+        seen["kwargs"] = kwargs
+        return Result()
+
+    monkeypatch.setattr("mission_control.github_bridge_mailbox.subprocess.run", fake_run)
+    record = GitHubBridgeMessageRecord(
+        request_id="req-runtime",
+        project_id="project-hermes-mission-control",
+        from_agent="codex",
+        to_agent="jenny",
+        status="queued",
+        message="Use the active runtime.",
+        github_repo="Travisaggie04/hermes-agent",
+        github_issue_number=79,
+    )
+
+    assert run_hermes_responder(record, cwd="/tmp") == "Runtime Jenny response."
+    args = seen["args"]
+    assert args[:3] == [sys.executable, "-m", "hermes_cli.main"]
+    assert "/home/jenny/.local/bin/hermes" not in args
 
 
 def test_send_posts_one_bridge_message_and_records_status(tmp_path: Path, monkeypatch):
