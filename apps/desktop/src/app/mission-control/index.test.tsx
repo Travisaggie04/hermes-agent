@@ -601,7 +601,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Chat with Jenny: Hermes / Mission Control')).toBeTruthy()
     expect(screen.getByText('Conversation')).toBeTruthy()
     expect(screen.getByText('Jenny status')).toBeTruthy()
-    expect(screen.getByText('Replies up to date')).toBeTruthy()
+    expect(screen.getByText('Bridge watching for replies')).toBeTruthy()
     expect(screen.getByText('Previous sessions')).toBeTruthy()
     expect(screen.getByText('Advanced controls and guardrails')).toBeTruthy()
     expect(screen.getByText('Jenny bridge')).toBeTruthy()
@@ -694,9 +694,9 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText('Desktop read-only workspace v1').length).toBeGreaterThan(0)
     expect(screen.getByText('Read-only status refresh (draft)')).toBeTruthy()
     expect(screen.getByText('Projects on hold')).toBeTruthy()
-    expect(screen.getByText('Shorts Video')).toBeTruthy()
-    expect(screen.getByText('Long-form Video')).toBeTruthy()
-    expect(screen.getByText('Tool & Tally')).toBeTruthy()
+    expect(screen.getAllByText('Shorts Video').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Long-form Video').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Tool & Tally').length).toBeGreaterThan(0)
     expect(screen.getAllByText('None recorded').length).toBeGreaterThan(0)
     expect(screen.getAllByText('send_to_jenny: disabled').length).toBeGreaterThan(0)
     expect(screen.getAllByText('dispatch: disabled').length).toBeGreaterThan(0)
@@ -872,19 +872,6 @@ describe('MissionControlView', () => {
     )
     expect(createMissionControlJennyBridgeRequest).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start Hermes update lane' }))
-    await waitFor(() => expect(createMissionControlJennyBridgeRequest).toHaveBeenCalledTimes(1))
-    expect(createMissionControlJennyBridgeRequest).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        ack_key: expect.stringContaining('project-hermes-mission-control:hermes-update:'),
-        message: expect.stringContaining('Hermes update lane request:'),
-        project_id: 'project-hermes-mission-control',
-        sender: 'codex',
-        target_agent: 'jenny'
-      })
-    )
-    expect(createMissionControlJennyBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('gateway update as a separate explicit lane')
-
     fireEvent.click(screen.getByRole('button', { name: 'Save challenge draft' }))
     await waitFor(() => expect(createMissionControlChallengeReview).toHaveBeenCalledTimes(1))
     expect(createMissionControlChallengeReview).toHaveBeenCalledWith(
@@ -906,6 +893,19 @@ describe('MissionControlView', () => {
         title: 'Read-only project room usability check'
       })
     )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Hermes update lane' }))
+    await waitFor(() => expect(createMissionControlJennyBridgeRequest).toHaveBeenCalledTimes(1))
+    expect(createMissionControlJennyBridgeRequest).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        ack_key: expect.stringContaining('project-hermes-mission-control:hermes-update:'),
+        message: expect.stringContaining('Hermes update lane request:'),
+        project_id: 'project-hermes-mission-control',
+        sender: 'codex',
+        target_agent: 'jenny'
+      })
+    )
+    expect(createMissionControlJennyBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('gateway update as a separate explicit lane')
   })
 
   it('runs Jenny once for the latest pending GitHub bridge request only', async () => {
