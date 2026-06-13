@@ -90,3 +90,13 @@ Older open PRs #1-#8 and #18 should be treated as legacy backlog, not current
 ready-to-merge work. They are based on old stacked branches or old pre-current
 Mission Control foundations. Salvage useful ideas only through fresh branches
 from accepted-live, with current CI and protected-surface review.
+
+## 2026-06-13 Late Recovery UI Status
+
+See
+`docs/mission-control/mission-control-recovery-status-2026-06-13-late.md`.
+
+The current recovery UI sequence makes Mission Control / Jenny recovery the only
+active lane, keeps the other real projects visible but read-only, simplifies the
+workspace toward a project chat, and removes paused-project queue controls until
+Jenny is stable enough to resume project work through the new OS surface.
