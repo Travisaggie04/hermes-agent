@@ -123,7 +123,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Jenny bridge",
         "Record-backed outbox/inbox for Jenny relay",
         "WORKSPACE_JENNY_BRIDGE_OUTBOX_URL",
-        "WORKSPACE_JENNY_BRIDGE_OUTBOX_CREATE_URL",
+        "WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL",
         "WORKSPACE_JENNY_BRIDGE_INBOX_URL",
         "WORKSPACE_JENNY_BRIDGE_POLLER_STATUS_URL",
         "WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL",
@@ -257,6 +257,21 @@ def test_compact_chat_send_uses_github_mailbox_not_local_only_outbox() -> None:
     assert 'to_agent: "jenny"' in send_fn
     assert "bridgeRequestId()" in send_fn
     assert "Sent to Jenny mailbox" in send_fn
+
+
+def test_compact_admin_buttons_use_github_mailbox_not_local_only_outbox() -> None:
+    src = page_source()
+    for function_name, expected in [
+        ("queueHermesUpdateLane", "Sent safe Hermes update lane to Jenny mailbox"),
+        ("queueHermesStorageCleanupLane", "Sent safe Hermes storage cleanup lane to Jenny mailbox"),
+    ]:
+        function = function_source(src, function_name)
+        assert "WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL" in function
+        assert "WORKSPACE_JENNY_BRIDGE_OUTBOX_CREATE_URL" not in function
+        assert 'from_agent: "travis"' in function
+        assert 'to_agent: "jenny"' in function
+        assert "bridgeRequestId()" in function
+        assert expected in function
 
 
 def test_compact_cards_show_project_state_freshness_and_artifacts() -> None:

@@ -6,7 +6,6 @@ import {
   answerMissionControlGitHubBridgeOnce,
   createMissionControlChallengeReview,
   createMissionControlGitHubBridgeRequest,
-  createMissionControlJennyBridgeRequest,
   createMissionControlLaneRequest,
   createMissionControlReport,
   createMissionControlSessionProjectLink,
@@ -1309,15 +1308,15 @@ export function MissionControlView() {
     setProjectRequest(HERMES_UPDATE_LANE_REQUEST)
 
     try {
-      await createMissionControlJennyBridgeRequest({
-        ack_key: `${project.project_id}:hermes-update:${Date.now()}`,
+      await createMissionControlGitHubBridgeRequest({
+        from_agent: 'travis',
         message: buildHermesUpdateLanePacket(status),
         project_id: project.project_id,
-        sender: 'codex',
-        target_agent: 'jenny'
+        request_id: bridgeRequestId(),
+        to_agent: 'jenny'
       })
       setSnapshot(await loadMissionControlSnapshot())
-      setProjectRoomMessage('Queued safe Hermes update lane. It is append-only and does not update the laptop worker node, switch runtimes, or restart gateway.')
+      setProjectRoomMessage('Sent safe Hermes update lane to Jenny mailbox. It is append-only and does not update the laptop worker node, switch runtimes, or restart gateway.')
     } catch (err) {
       setProjectRoomMessage(String(err instanceof Error ? err.message : err))
     } finally {
@@ -1331,15 +1330,15 @@ export function MissionControlView() {
     setProjectRequest(HERMES_STORAGE_CLEANUP_LANE_REQUEST)
 
     try {
-      await createMissionControlJennyBridgeRequest({
-        ack_key: `${project.project_id}:hermes-storage-cleanup:${Date.now()}`,
+      await createMissionControlGitHubBridgeRequest({
+        from_agent: 'travis',
         message: buildHermesStorageCleanupLanePacket(status),
         project_id: project.project_id,
-        sender: 'codex',
-        target_agent: 'jenny'
+        request_id: bridgeRequestId(),
+        to_agent: 'jenny'
       })
       setSnapshot(await loadMissionControlSnapshot())
-      setProjectRoomMessage('Queued safe Hermes storage cleanup lane. It is append-only and does not delete, move, upload, restart, or switch anything.')
+      setProjectRoomMessage('Sent safe Hermes storage cleanup lane to Jenny mailbox. It is append-only and does not delete, move, upload, restart, or switch anything.')
     } catch (err) {
       setProjectRoomMessage(String(err instanceof Error ? err.message : err))
     } finally {

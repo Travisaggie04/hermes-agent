@@ -1016,30 +1016,31 @@ describe('MissionControlView', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Start Hermes update lane' }))
-    await waitFor(() => expect(createMissionControlJennyBridgeRequest).toHaveBeenCalledTimes(1))
-    expect(createMissionControlJennyBridgeRequest).toHaveBeenLastCalledWith(
+    await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(2))
+    expect(createMissionControlGitHubBridgeRequest).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        ack_key: expect.stringContaining('project-hermes-mission-control:hermes-update:'),
+        from_agent: 'travis',
         message: expect.stringContaining('Hermes update lane request:'),
         project_id: 'project-hermes-mission-control',
-        sender: 'codex',
-        target_agent: 'jenny'
+        request_id: expect.stringContaining('mission-control-chat-'),
+        to_agent: 'jenny'
       })
     )
-    expect(createMissionControlJennyBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('gateway update as a separate explicit lane')
+    expect(createMissionControlGitHubBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('gateway update as a separate explicit lane')
 
     fireEvent.click(screen.getByRole('button', { name: 'Start storage cleanup lane' }))
-    await waitFor(() => expect(createMissionControlJennyBridgeRequest).toHaveBeenCalledTimes(2))
-    expect(createMissionControlJennyBridgeRequest).toHaveBeenLastCalledWith(
+    await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(3))
+    expect(createMissionControlGitHubBridgeRequest).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        ack_key: expect.stringContaining('project-hermes-mission-control:hermes-storage-cleanup:'),
+        from_agent: 'travis',
         message: expect.stringContaining('Hermes storage cleanup lane request:'),
         project_id: 'project-hermes-mission-control',
-        sender: 'codex',
-        target_agent: 'jenny'
+        request_id: expect.stringContaining('mission-control-chat-'),
+        to_agent: 'jenny'
       })
     )
-    expect(createMissionControlJennyBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('Stop before deleting, pruning, moving, or uploading anything')
+    expect(createMissionControlGitHubBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('Stop before deleting, pruning, moving, or uploading anything')
+    expect(createMissionControlJennyBridgeRequest).not.toHaveBeenCalled()
   })
 
   it('keeps paused project hold panels read-only', async () => {
