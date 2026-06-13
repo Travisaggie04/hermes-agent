@@ -192,6 +192,14 @@ interface ProjectStateRecord {
   missing_state_fields?: string[];
   next_recommended_lane?: string;
   project_id?: string;
+  report_contract?: {
+    complete?: boolean;
+    display_only?: boolean;
+    missing_fields?: string[];
+    required_fields?: string[];
+    state?: string;
+    trusted_for_execution?: boolean;
+  };
   recent_sessions?: ProjectSessionRecord[];
   risks?: string[];
   risks_blockers?: string[];
@@ -245,6 +253,7 @@ interface ProjectViewModel {
   projectBrief?: ProjectBriefRecord;
   projectState?: ProjectStateRecord;
   project: ProjectRecord;
+  reportContract: string;
   report?: ReportRecord;
   readinessDetail: string;
   readinessLabel: string;
@@ -355,6 +364,21 @@ function reportContractSummary(report: ReportRecord | undefined): string {
     return "No report yet";
   }
   return missing.length ? `Missing: ${missing.join(", ")}` : "Complete";
+}
+
+function reportContractSummaryForState(state: ProjectStateRecord | undefined, report: ReportRecord | undefined): string {
+  const contract = state?.report_contract;
+  const missing = contract?.missing_fields?.filter(Boolean) ?? [];
+  if (contract?.state === "missing_report" || missing.includes("report")) {
+    return "No report yet";
+  }
+  if (missing.length) {
+    return `Missing: ${missing.join(", ")}`;
+  }
+  if (contract?.complete === true || contract?.state === "complete") {
+    return "Complete";
+  }
+  return reportContractSummary(report);
 }
 
 function projectRank(project: ProjectRecord): number {
@@ -479,6 +503,7 @@ function viewModelForProject(snapshot: CompactSnapshot, project: ProjectRecord):
     projectBrief,
     projectState: state,
     project,
+    reportContract: reportContractSummaryForState(state, report),
     report,
     readinessDetail: readiness.detail,
     readinessLabel: readiness.label,
@@ -980,7 +1005,7 @@ function CompactActiveLanes({ projectViews, status }: { projectViews: ProjectVie
             </div>
             <CompactField label="next safe lane" value={projectView.nextLane} />
             <CompactField label="latest evidence" value={projectView.latestReport} />
-            <CompactField label="report contract" value={reportContractSummary(projectView.report)} />
+            <CompactField label="report contract" value={projectView.reportContract} />
             <CompactField label="readiness" value={projectView.readinessDetail} />
           </article>
         ))}
@@ -1072,7 +1097,7 @@ function CompactProjectRoom({
         <div className="mt-3 grid gap-2 md:grid-cols-2">
           <CompactField label="current goal" value={selectedProjectView.currentGoal} />
           <CompactField label="readiness" value={selectedProjectView.readinessDetail} />
-          <CompactField label="latest report contract" value={reportContractSummary(selectedProjectView.report)} />
+          <CompactField label="latest report contract" value={selectedProjectView.reportContract} />
           <CompactField label="latest report/result" value={`${selectedProjectView.latestReport} / ${selectedProjectView.latestResult}`} />
           <CompactField label="next recommended lane" value={selectedProjectView.nextLane} />
           <CompactField label="project brief" value={compactText(brief?.outcome, 320) || "No project brief recorded"} />
@@ -1258,7 +1283,7 @@ function CompactProjectKanban({ projectViews }: { projectViews: ProjectViewModel
                       <div className="mt-1 text-[0.68rem] text-muted-foreground">{projectView.readinessLabel}</div>
                       <div className="mt-2 text-[0.68rem] leading-snug text-muted-foreground">Lane: {projectView.latestLane}</div>
                       <div className="mt-1 text-[0.68rem] leading-snug text-muted-foreground">Next: {projectView.nextLane}</div>
-                      <div className="mt-1 text-[0.68rem] leading-snug text-muted-foreground">Contract: {reportContractSummary(projectView.report)}</div>
+                      <div className="mt-1 text-[0.68rem] leading-snug text-muted-foreground">Contract: {projectView.reportContract}</div>
                     </article>
                   ))
                 ) : (

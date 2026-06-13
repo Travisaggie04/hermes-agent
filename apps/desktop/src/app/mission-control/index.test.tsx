@@ -302,7 +302,15 @@ beforeEach(() => {
           }
         ],
         unassigned_suggestion_count: 2,
-        missing_state_fields: [],
+        missing_state_fields: ['report_contract'],
+        report_contract: {
+          complete: false,
+          display_only: true,
+          missing_fields: ['evidence', 'tests'],
+          required_fields: ['summary', 'result', 'risks/blockers', 'evidence', 'tests', 'next lane'],
+          state: 'incomplete',
+          trusted_for_execution: false
+        },
         latest_lane_request: {
           lane_request_id: 'lane-1',
           project_id: 'project-hermes-mission-control',
@@ -327,7 +335,15 @@ beforeEach(() => {
         latest_report_summary: '',
         latest_result: '',
         has_real_report: false,
-        missing_state_fields: ['latest_lane', 'latest_jenny_report', 'latest_result', 'risks_blockers', 'artifact_links'],
+        missing_state_fields: ['latest_lane', 'latest_jenny_report', 'latest_result', 'risks_blockers', 'artifact_links', 'report_contract'],
+        report_contract: {
+          complete: false,
+          display_only: true,
+          missing_fields: ['report'],
+          required_fields: ['summary', 'result', 'risks/blockers', 'evidence', 'tests', 'next lane'],
+          state: 'missing_report',
+          trusted_for_execution: false
+        },
         latest_activity_source: 'project',
         risks: [],
         blockers: [],

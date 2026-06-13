@@ -345,6 +345,14 @@ export interface MissionControlProjectState {
   latest_jenny_report?: MissionControlReportRecord | null
   has_real_report?: boolean
   missing_state_fields?: string[]
+  report_contract?: {
+    complete?: boolean
+    display_only?: boolean
+    missing_fields?: string[]
+    required_fields?: string[]
+    state?: string
+    trusted_for_execution?: boolean
+  }
   latest_activity_at?: string
   latest_activity_source?: string
   artifact_links?: string[]
