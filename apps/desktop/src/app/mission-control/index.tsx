@@ -1464,6 +1464,7 @@ export function MissionControlView() {
             setProjectRoomMessage('')
           }}
           packet={packetForProject(selectedProject)}
+          paused={!ACTIVE_OS_PROJECT_IDS.includes(selectedProject.project_id)}
           project={selectedProject}
           projects={projectRoomProjects}
           report={
@@ -1669,6 +1670,7 @@ function ProjectRoomsWorkspace({
   onSaveLane,
   onSelectProject,
   packet,
+  paused,
   project,
   projects,
   request,
@@ -1698,6 +1700,7 @@ function ProjectRoomsWorkspace({
   onSaveLane: () => void
   onSelectProject: (projectId: string) => void
   packet: string
+  paused: boolean
   project: MissionControlProjectRecord
   projects: MissionControlProjectRecord[]
   request: string
@@ -1787,8 +1790,13 @@ function ProjectRoomsWorkspace({
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Chat room</p>
             <h2 className="mt-1 text-xl font-semibold">{project.name}</h2>
           </div>
-          <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-700 dark:text-emerald-300">
-            {readiness.label}
+          <span className={cn(
+            'rounded-full border px-2.5 py-1 text-xs',
+            paused
+              ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+              : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+          )}>
+            {paused ? 'Paused' : readiness.label}
           </span>
         </div>
 
@@ -1804,7 +1812,9 @@ function ProjectRoomsWorkspace({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Next step</div>
-                <p className="mt-1 text-sm text-foreground/90">{nextStep}</p>
+                <p className="mt-1 text-sm text-foreground/90">
+                  {paused ? 'Paused until Jenny is stable. Review context only; sending work to Jenny is disabled for this project.' : nextStep}
+                </p>
               </div>
               <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                 <span className="rounded-full border border-border/70 px-2 py-1">Pending {pendingCount}</span>
@@ -1860,19 +1870,20 @@ function ProjectRoomsWorkspace({
           Message
           <textarea
             className="min-h-32 rounded-xl border border-border/80 bg-background px-3 py-2 text-sm"
+            disabled={paused}
             onChange={event => onRequestChange(event.target.value)}
-            placeholder="Tell Jenny what you want to discuss or ask her to do next..."
+            placeholder={paused ? 'This project is on hold until Jenny is stable.' : 'Tell Jenny what you want to discuss or ask her to do next...'}
             value={request}
           />
         </label>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          <button className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={saving} onClick={onQueueBridge} type="button">
+          <button className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={saving || paused} onClick={onQueueBridge} type="button">
             Send to Jenny
           </button>
           <button
             className="rounded-md border border-sky-500/40 bg-sky-500/10 px-4 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/15 disabled:opacity-60 dark:text-sky-300"
-            disabled={saving || !latestPending}
+            disabled={saving || paused || !latestPending}
             onClick={onRunJennyOnce}
             type="button"
           >
@@ -1883,7 +1894,9 @@ function ProjectRoomsWorkspace({
           </button>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Live reply refresh is on and read-only. Jenny can reply through the bridge; work still waits for the normal approval gates.
+          {paused
+            ? 'This project is visible for planning context only. Resume it after the Mission Control/Jenny recovery lane is stable.'
+            : 'Live reply refresh is on and read-only. Jenny can reply through the bridge; work still waits for the normal approval gates.'}
         </p>
         {message ? <p className="mt-2 text-sm text-muted-foreground">{message}</p> : null}
 
@@ -1924,10 +1937,10 @@ function ProjectRoomsWorkspace({
             <button className="rounded-md border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onCopyPacket} type="button">
               Copy phone-safe packet
             </button>
-            <button className="rounded-md border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onSaveChallenge} type="button">
+            <button className="rounded-md border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving || paused} onClick={onSaveChallenge} type="button">
               Save challenge draft
             </button>
-            <button className="rounded-md border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onSaveLane} type="button">
+            <button className="rounded-md border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving || paused} onClick={onSaveLane} type="button">
               Save read-only lane draft
             </button>
             <button className="rounded-md border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onRefreshBridge} type="button">
