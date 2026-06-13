@@ -524,6 +524,11 @@ describe('MissionControlView', () => {
     expect(screen.getByText('display-only / no dispatch')).toBeTruthy()
     expect(screen.getAllByText('next safe lane').length).toBeGreaterThan(0)
     expect(screen.getByText('Project Rooms')).toBeTruthy()
+    expect(screen.getByText('Project Chat')).toBeTruthy()
+    expect(screen.getByText('Chat with Jenny: Hermes / Mission Control')).toBeTruthy()
+    expect(screen.getByText('Conversation')).toBeTruthy()
+    expect(screen.getByText('Previous sessions')).toBeTruthy()
+    expect(screen.getByText('Advanced controls and guardrails')).toBeTruthy()
     expect(screen.getByText('Jenny bridge')).toBeTruthy()
     expect(screen.getAllByText('manual-start only').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('response_appended')).toBeTruthy()
@@ -544,7 +549,7 @@ describe('MissionControlView', () => {
     expect(screen.getByRole('button', { name: 'Refresh bridge' })).toBeTruthy()
     expect(screen.getByText(/replied \/ jenny/)).toBeTruthy()
     expect(screen.getByText('Project Kanban')).toBeTruthy()
-    expect(screen.getByText('Project Room: Hermes / Mission Control')).toBeTruthy()
+    expect(screen.getByText('Chat with Jenny: Hermes / Mission Control')).toBeTruthy()
     expect(screen.getByText('Hermes update lane')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Start Hermes update lane' })).toBeTruthy()
     expect(screen.getByText(/bottom-bar desktop app version is separate from accepted-live\/dashboard deploys/)).toBeTruthy()
@@ -758,14 +763,15 @@ describe('MissionControlView', () => {
   it('shows project room controls and creates only inert challenge and lane drafts', async () => {
     await renderMissionControl()
 
-    expect(await screen.findByText('Project Room: Hermes / Mission Control')).toBeTruthy()
-    expect(screen.getByText('Ask Jenny / Propose Work')).toBeTruthy()
+    expect(await screen.findByText('Chat with Jenny: Hermes / Mission Control')).toBeTruthy()
+    expect(screen.getByText('Message Jenny about this project')).toBeTruthy()
+    expect(screen.getByText('Conversation')).toBeTruthy()
     expect(screen.getByText('Phone-safe packet')).toBeTruthy()
-    expect(screen.getByText('Project Sessions')).toBeTruthy()
+    expect(screen.getByText('Previous sessions')).toBeTruthy()
     expect(screen.getAllByText('Lane draft ok').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Use a bounded read-only workspace usability lane/).length).toBeGreaterThan(0)
 
-    fireEvent.change(screen.getByPlaceholderText('One bounded project request...'), {
+    fireEvent.change(screen.getByPlaceholderText('Tell Jenny what you want to discuss or ask her to do next...'), {
       target: { value: 'Make the visible Mission Control page show project rooms on laptop and phone.' }
     })
     fireEvent.click(screen.getByRole('button', { name: 'Copy phone-safe packet' }))
@@ -774,7 +780,7 @@ describe('MissionControlView', () => {
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Categories:')
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Blocking verdicts:')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Queue for Jenny bridge' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send message to Jenny' }))
     await waitFor(() => expect(createMissionControlJennyBridgeRequest).toHaveBeenCalledTimes(1))
     expect(createMissionControlJennyBridgeRequest).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -855,7 +861,7 @@ describe('MissionControlView', () => {
 
     await renderMissionControl()
 
-    fireEvent.change(await screen.findByPlaceholderText('One bounded project request...'), {
+    fireEvent.change(await screen.findByPlaceholderText('Tell Jenny what you want to discuss or ask her to do next...'), {
       target: { value: 'Start a broad Mission Control lane without a spec.' }
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save read-only lane draft' }))
@@ -898,7 +904,7 @@ describe('MissionControlView', () => {
 
     await renderMissionControl()
 
-    fireEvent.change(await screen.findByPlaceholderText('One bounded project request...'), {
+    fireEvent.change(await screen.findByPlaceholderText('Tell Jenny what you want to discuss or ask her to do next...'), {
       target: { value: 'Inspect whether Project Rooms are usable now.' }
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save read-only lane draft' }))

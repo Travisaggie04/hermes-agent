@@ -886,15 +886,6 @@ export default function MissionControlCompactPage() {
       {loading ? <p className="mt-4 rounded-xl border border-border/70 p-3 text-sm text-muted-foreground">Loading compact Mission Control…</p> : null}
       {error ? <p className="mt-4 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</p> : null}
 
-      {snapshot ? <SafetyStrip status={snapshot.workspaceStatus} /> : null}
-
-      {snapshot ? (
-        <CompactActiveLanes
-          projectViews={realProjects.filter(project => TONIGHT_PROJECT_IDS.includes(project.project_id)).map(project => viewModelForProject(snapshot, project))}
-          status={snapshot.workspaceStatus}
-        />
-      ) : null}
-
       {selectedProjectView ? (
         <CompactProjectRoom
           busy={roomBusy}
@@ -921,9 +912,21 @@ export default function MissionControlCompactPage() {
         />
       ) : null}
 
-      {snapshot ? (
-        <CompactProjectKanban projectViews={realProjects.map(project => viewModelForProject(snapshot, project))} />
-      ) : null}
+      <details className="mt-4 rounded-2xl border border-border/70 bg-card p-3">
+        <summary className="cursor-pointer text-sm font-semibold">Advanced status, paused projects, and reports</summary>
+        <div className="mt-3 grid gap-4">
+          {snapshot ? <SafetyStrip status={snapshot.workspaceStatus} /> : null}
+
+          {snapshot ? (
+            <CompactActiveLanes
+              projectViews={realProjects.filter(project => TONIGHT_PROJECT_IDS.includes(project.project_id)).map(project => viewModelForProject(snapshot, project))}
+              status={snapshot.workspaceStatus}
+            />
+          ) : null}
+
+          {snapshot ? (
+            <CompactProjectKanban projectViews={realProjects.map(project => viewModelForProject(snapshot, project))} />
+          ) : null}
 
       {snapshot ? (
         <CompactReportIngestion
@@ -951,7 +954,7 @@ export default function MissionControlCompactPage() {
       </section>
 
       {supportProjects.length ? (
-        <section className="mt-5 rounded-xl border border-dashed border-border/70 bg-muted/20 p-3 opacity-70" aria-label="Smoke support projects de-emphasized">
+        <section className="rounded-xl border border-dashed border-border/70 bg-muted/20 p-3 opacity-70" aria-label="Smoke support projects de-emphasized">
           <h2 className="text-sm font-semibold">Smoke/support records de-emphasized</h2>
           <div className="mt-2 grid gap-2">
             {supportProjects.map(project => (
@@ -962,6 +965,8 @@ export default function MissionControlCompactPage() {
           </div>
         </section>
       ) : null}
+        </div>
+      </details>
     </main>
   );
 }
@@ -1059,6 +1064,23 @@ function CompactProjectRoom({
   const review = selectedProjectView.challengeReview;
   const brief = selectedProjectView.projectBrief;
   const repliedRequestIds = new Set(bridgeResponses.map(response => response.request_id).filter(Boolean));
+  const chatMessages = [
+    ...bridgeRequests.map(request => ({
+      body: request.message,
+      id: request.request_id,
+      meta: request.bridge_state ?? (request.request_id && repliedRequestIds.has(request.request_id) ? "replied" : request.status ?? "queued"),
+      speaker: "You",
+      time: request.request_id,
+    })),
+    ...bridgeResponses.map(response => ({
+      body: response.message,
+      id: response.response_id,
+      meta: response.status ?? "reply",
+      speaker: "Jenny",
+      time: response.response_id,
+    })),
+  ].sort((left, right) => String(left.time ?? "").localeCompare(String(right.time ?? ""))).slice(-8);
+
   return (
     <section className="mt-4 grid gap-3 lg:grid-cols-[minmax(12rem,18rem)_1fr]" aria-label="Project Rooms">
       <div className="rounded-2xl border border-border/70 bg-card p-3">
@@ -1087,116 +1109,88 @@ function CompactProjectRoom({
       <article className="rounded-2xl border border-border/70 bg-card p-3" data-testid="compact-project-room">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Project Room</p>
-            <h2 className="mt-1 text-lg font-semibold leading-tight">Project Room: {selectedProjectView.project.name}</h2>
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Project Chat</p>
+            <h2 className="mt-1 text-lg font-semibold leading-tight">Chat with Jenny: {selectedProjectView.project.name}</h2>
           </div>
           <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-700 dark:text-emerald-300">
             {selectedProjectView.readinessLabel}
           </span>
         </div>
 
-        <div className="mt-3 grid gap-2 md:grid-cols-2">
-          <CompactField label="current goal" value={selectedProjectView.currentGoal} />
-          <CompactField label="readiness" value={selectedProjectView.readinessDetail} />
-          <CompactField label="latest report contract" value={selectedProjectView.reportContract} />
-          <CompactField label="latest report/result" value={`${selectedProjectView.latestReport} / ${selectedProjectView.latestResult}`} />
-          <CompactField label="next recommended lane" value={selectedProjectView.nextLane} />
-          <CompactField label="project brief" value={compactText(brief?.outcome, 320) || "No project brief recorded"} />
-          <CompactField
-            label="challenge review"
-            value={review ? `${review.decision_state ?? "unknown"} / ${review.recommended_path ?? "No recommended path recorded"}` : "No challenge review recorded"}
-          />
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-xl border border-border/70 bg-background p-2 text-xs">
+            <div className="font-semibold">Current goal</div>
+            <p className="mt-1 text-muted-foreground">{compactText(selectedProjectView.currentGoal, 150)}</p>
+          </div>
+          <div className="rounded-xl border border-border/70 bg-background p-2 text-xs">
+            <div className="font-semibold">Readiness</div>
+            <p className="mt-1 text-muted-foreground">{selectedProjectView.readinessDetail}</p>
+          </div>
+          <div className="rounded-xl border border-border/70 bg-background p-2 text-xs">
+            <div className="font-semibold">Last update</div>
+            <p className="mt-1 text-muted-foreground">{compactText(selectedProjectView.latestReport, 150)}</p>
+          </div>
         </div>
 
-        <label className="mt-4 grid gap-1 text-xs font-medium">
-          Ask Jenny / Propose Work
+        <section className="mt-4 rounded-2xl border border-border/70 bg-background p-3" aria-label="Project chat transcript">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold">Conversation</h3>
+            <span className="text-[0.68rem] text-muted-foreground">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
+          </div>
+          <div className="mt-3 grid max-h-96 gap-3 overflow-auto pr-1">
+            {chatMessages.length ? (
+              chatMessages.map(chat => (
+                <article
+                  className={cn(
+                    "max-w-[88%] rounded-2xl border px-3 py-2 text-sm",
+                    chat.speaker === "You" ? "justify-self-end border-emerald-500/30 bg-emerald-500/10" : "justify-self-start border-border/70 bg-card",
+                  )}
+                  key={`${chat.speaker}:${chat.id}`}
+                >
+                  <div className="mb-1 flex items-center justify-between gap-3 text-[0.68rem]">
+                    <span className="font-semibold">{chat.speaker}</span>
+                    <span className="text-muted-foreground">{chat.meta}</span>
+                  </div>
+                  <p className="whitespace-pre-wrap break-words">{compactText(chat.body, 750)}</p>
+                </article>
+              ))
+            ) : (
+              <p className="rounded-xl border border-dashed border-border/70 p-3 text-sm text-muted-foreground">
+                Start by writing a bounded request below. Mission Control will queue it for Jenny without dispatching work automatically.
+              </p>
+            )}
+          </div>
+        </section>
+
+        <label className="mt-4 grid gap-1 text-sm font-medium">
+          Message Jenny about this project
           <textarea
             className="min-h-24 rounded-xl border border-border/80 bg-background px-3 py-2 text-sm"
             onChange={event => onRequestChange(event.target.value)}
-            placeholder="One bounded project request..."
+            placeholder="Tell Jenny what you want to discuss or ask her to do next..."
             value={projectRequest}
           />
         </label>
 
-        <div className="mt-3 grid gap-2 sm:grid-cols-5">
-          <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onCopyPacket} type="button">
-            Copy phone-safe packet
-          </button>
+        <div className="mt-3 flex flex-wrap gap-2">
           <button className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={busy} onClick={onQueueBridge} type="button">
-            Queue for Jenny bridge
+            Send message to Jenny
           </button>
           <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onRefreshBridge} type="button">
-            Refresh bridge
-          </button>
-          <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onSaveChallenge} type="button">
-            Save challenge draft
-          </button>
-          <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onSaveLane} type="button">
-            Save read-only lane draft
+            Refresh replies
           </button>
         </div>
+        <p className="mt-2 text-xs text-muted-foreground">Messages are record-backed bridge requests. Dispatch, session-send, workers, and timers remain disabled.</p>
         {onQueueHermesUpdate ? (
-          <div className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-semibold">Hermes update lane</h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Queues a guarded VPS/laptop worker-node update checklist only. The bottom-bar desktop app version is separate from accepted-live/dashboard deploys. No runtime switch, restart, or laptop update happens here.
-                </p>
-              </div>
-              <button className="rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300" disabled={busy} onClick={onQueueHermesUpdate} type="button">
-                Start Hermes update lane
-              </button>
-            </div>
-          </div>
+          <button className="mt-2 rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300" disabled={busy} onClick={onQueueHermesUpdate} type="button">
+            Start Hermes update lane
+          </button>
         ) : null}
         {message ? <p className="mt-2 text-xs text-muted-foreground">{message}</p> : null}
 
-        <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
+        <section className="mt-4 rounded-xl border border-border/70 bg-background p-3">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">Jenny bridge</h3>
-            <span className="rounded-full border border-emerald-500/30 px-2 py-0.5 text-[0.65rem] text-emerald-700 dark:text-emerald-300">no dispatch</span>
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">Record-backed outbox/inbox for Jenny relay. Use refresh to check replies. Direct send remains disabled.</p>
-          <div className="mt-3 grid gap-2 rounded-lg border border-emerald-500/20 bg-background/70 p-2 text-xs sm:grid-cols-2">
-            <CompactField label="manual relay" value={bridgeStatus.manual_start_only === false ? "disabled" : "manual-start only"} />
-            <CompactField label="pending" value={String(bridgeStatus.pending_count ?? bridgeRequests.filter(request => (request.bridge_state ?? request.status ?? "queued") !== "replied").length)} />
-            <CompactField label="last status" value={bridgeStatus.last_status ?? "idle"} />
-            <CompactField label="last response" value={bridgeStatus.last_response_request_id || bridgeStatus.last_response_at || "none"} />
-            <CompactField label="last error" value={bridgeStatus.last_error || "none"} />
-            <CompactField label="worker/timer" value={`worker ${bridgeStatus.worker_enabled ? "enabled" : "disabled"} / timer ${bridgeStatus.timer_enabled ? "enabled" : "disabled"}`} />
-          </div>
-          <div className="mt-3 grid gap-2 rounded-lg border border-sky-500/20 bg-sky-500/5 p-2 text-xs sm:grid-cols-2">
-            <CompactField label="GitHub mailbox" value={githubBridgeStatus.manual_start_only === false ? "disabled" : "manual-start only"} />
-            <CompactField label="GitHub mode" value={githubBridgeStatus.mode || "manual"} />
-            <CompactField label="GitHub pending" value={String(githubBridgeStatus.pending_count ?? 0)} />
-            <CompactField label="GitHub last poll" value={githubBridgeStatus.last_poll_at || githubBridgeStatus.last_status || "not polled"} />
-            <CompactField label="GitHub last response" value={githubBridgeStatus.last_response_request_id || githubBridgeStatus.last_response_at || "none"} />
-            <CompactField label="GitHub last error" value={githubBridgeStatus.last_error || "none"} />
-            <CompactField label="daemon/worker/timer" value={`daemon ${githubBridgeStatus.daemon_enabled ? "enabled" : "disabled"} / worker ${githubBridgeStatus.worker_enabled ? "enabled" : "disabled"} / timer ${githubBridgeStatus.timer_enabled ? "enabled" : "disabled"}`} />
-          </div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <CompactBridgeList
-              title="Outbound"
-              empty="No queued messages."
-              items={bridgeRequests}
-              renderItem={item => `${item.bridge_state ?? (item.request_id && repliedRequestIds.has(item.request_id) ? "replied" : item.status ?? "queued")} / ${item.message}`}
-            />
-            <CompactBridgeList title="Replies" empty="No replies yet." items={bridgeResponses} renderItem={item => `${item.responder ?? "jenny"} / ${item.message}`} />
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-xl border border-border/70 bg-background p-3">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">Phone-safe packet</h3>
-            <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{packet.length} / 1900</span>
-          </div>
-          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground">{packet}</pre>
-        </div>
-
-        <div className="mt-4 rounded-xl border border-border/70 bg-background p-3">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">Project Sessions</h3>
+            <h3 className="text-sm font-semibold">Previous sessions</h3>
             <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{sessions.length} linked</span>
           </div>
           <div className="mt-2 grid gap-2">
@@ -1213,7 +1207,69 @@ function CompactProjectRoom({
               <p className="text-xs text-muted-foreground">No linked sessions for this project yet.</p>
             )}
           </div>
-        </div>
+        </section>
+
+        <details className="mt-4 rounded-xl border border-border/70 bg-background/60 p-3">
+          <summary className="cursor-pointer text-sm font-semibold">Advanced controls and guardrails</summary>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <CompactField label="project brief" value={compactText(brief?.outcome, 320) || "No project brief recorded"} />
+            <CompactField label="challenge review" value={review ? `${review.decision_state ?? "unknown"} / ${review.recommended_path ?? "No recommended path recorded"}` : "No challenge review recorded"} />
+            <CompactField label="latest report contract" value={selectedProjectView.reportContract} />
+            <CompactField label="latest result" value={selectedProjectView.latestResult} />
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onCopyPacket} type="button">
+              Copy phone-safe packet
+            </button>
+            <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onSaveChallenge} type="button">
+              Save challenge draft
+            </button>
+            <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onSaveLane} type="button">
+              Save read-only lane draft
+            </button>
+          </div>
+          <div className="sr-only">Queue for Jenny bridge</div>
+          <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">Jenny bridge</h3>
+              <span className="rounded-full border border-emerald-500/30 px-2 py-0.5 text-[0.65rem] text-emerald-700 dark:text-emerald-300">no dispatch</span>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">Record-backed outbox/inbox for Jenny relay. Use refresh to check replies. Direct send remains disabled.</p>
+            <div className="mt-3 grid gap-2 rounded-lg border border-emerald-500/20 bg-background/70 p-2 text-xs sm:grid-cols-2">
+              <CompactField label="manual relay" value={bridgeStatus.manual_start_only === false ? "disabled" : "manual-start only"} />
+              <CompactField label="pending" value={String(bridgeStatus.pending_count ?? bridgeRequests.filter(request => (request.bridge_state ?? request.status ?? "queued") !== "replied").length)} />
+              <CompactField label="last status" value={bridgeStatus.last_status ?? "idle"} />
+              <CompactField label="last response" value={bridgeStatus.last_response_request_id || bridgeStatus.last_response_at || "none"} />
+              <CompactField label="last error" value={bridgeStatus.last_error || "none"} />
+              <CompactField label="worker/timer" value={`worker ${bridgeStatus.worker_enabled ? "enabled" : "disabled"} / timer ${bridgeStatus.timer_enabled ? "enabled" : "disabled"}`} />
+            </div>
+            <div className="mt-3 grid gap-2 rounded-lg border border-sky-500/20 bg-sky-500/5 p-2 text-xs sm:grid-cols-2">
+              <CompactField label="GitHub mailbox" value={githubBridgeStatus.manual_start_only === false ? "disabled" : "manual-start only"} />
+              <CompactField label="GitHub mode" value={githubBridgeStatus.mode || "manual"} />
+              <CompactField label="GitHub pending" value={String(githubBridgeStatus.pending_count ?? 0)} />
+              <CompactField label="GitHub last poll" value={githubBridgeStatus.last_poll_at || githubBridgeStatus.last_status || "not polled"} />
+              <CompactField label="GitHub last response" value={githubBridgeStatus.last_response_request_id || githubBridgeStatus.last_response_at || "none"} />
+              <CompactField label="GitHub last error" value={githubBridgeStatus.last_error || "none"} />
+              <CompactField label="daemon/worker/timer" value={`daemon ${githubBridgeStatus.daemon_enabled ? "enabled" : "disabled"} / worker ${githubBridgeStatus.worker_enabled ? "enabled" : "disabled"} / timer ${githubBridgeStatus.timer_enabled ? "enabled" : "disabled"}`} />
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <CompactBridgeList
+                title="Outbound"
+                empty="No queued messages."
+                items={bridgeRequests}
+                renderItem={item => `${item.bridge_state ?? (item.request_id && repliedRequestIds.has(item.request_id) ? "replied" : item.status ?? "queued")} / ${item.message}`}
+              />
+              <CompactBridgeList title="Replies" empty="No replies yet." items={bridgeResponses} renderItem={item => `${item.responder ?? "jenny"} / ${item.message}`} />
+            </div>
+          </div>
+          <div className="mt-4 rounded-xl border border-border/70 bg-background p-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">Phone-safe packet</h3>
+              <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{packet.length} / 1900</span>
+            </div>
+            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground">{packet}</pre>
+          </div>
+        </details>
       </article>
     </section>
   );

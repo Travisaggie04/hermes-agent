@@ -59,13 +59,18 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
     src = page_source()
     for expected in [
         "Project Rooms",
-        "Project Room:",
-        "Ask Jenny / Propose Work",
+        "Project Chat",
+        "Chat with Jenny:",
+        "Conversation",
+        "Message Jenny about this project",
+        "Previous sessions",
+        "Advanced controls and guardrails",
         "Copy phone-safe packet",
         "Save challenge draft",
         "Save read-only lane draft",
+        "Send message to Jenny",
         "Queue for Jenny bridge",
-        "Refresh bridge",
+        "Refresh replies",
         "Hermes update lane",
         "Start Hermes update lane",
         "queueHermesUpdateLane",
@@ -93,7 +98,6 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "buildPhoneSafeProjectPacket",
         "WORKSPACE_CHALLENGE_REVIEWS_CREATE_URL",
         "WORKSPACE_LANE_REQUESTS_CREATE_URL",
-        "Project Sessions",
         "compact-project-room",
     ]:
         assert expected in src
