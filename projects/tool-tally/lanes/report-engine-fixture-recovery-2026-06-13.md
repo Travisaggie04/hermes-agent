@@ -20,6 +20,7 @@ engine can produce deterministic fixture-based proof packs.
 Local-only recovery work:
 
 - inventory the current report engine,
+- preserve current report-builder behavior until fixture evidence exists,
 - identify the renderer and dependency path,
 - create or verify a pinned report environment,
 - build fixture corpus,
@@ -30,27 +31,48 @@ Local-only recovery work:
 ## Recommended Recovery Order
 
 1. Keep checkout off and outreach no-send.
-2. Containerize or otherwise pin report dependencies:
+2. Treat the report builder as protected:
+   - do not refactor, replace, or simplify report-builder logic before a
+     fixture/golden-output baseline exists,
+   - do not change scoring, section ordering, template copy, or artifact naming
+     without a before/after fixture diff,
+   - preserve existing report quality behavior unless a failing fixture proves a
+     specific correction is needed.
+3. Inventory the current report-builder path and all inputs/outputs:
+   - builder scripts,
+   - templates,
+   - scoring/ranking logic,
+   - browser-capture inputs,
+   - PDF/rendering dependencies,
+   - historical sample reports,
+   - local operation artifacts.
+4. Containerize or otherwise pin report dependencies:
    - Python,
    - WeasyPrint,
    - fonts,
    - Pango/HarfBuzz dependencies,
    - browser dependencies if screenshots are needed.
-3. Build local fixtures:
+5. Build local fixtures:
    - sample site data,
    - screenshots,
    - expected audit outputs,
    - expected artifact names,
    - expected report metadata.
-4. Separate browser evidence capture from PDF rendering.
-5. Add report manifest per run:
+6. Add at least one golden-output proof:
+   - known fixture input,
+   - expected manifest,
+   - expected PDF/text assertions,
+   - expected artifact names,
+   - allowed nondeterministic fields documented explicitly.
+7. Separate browser evidence capture from PDF rendering.
+8. Add report manifest per run:
    - fixture ID,
    - order ID,
    - customer slug,
    - artifact type,
    - expected filename,
    - content hash.
-6. Add QA gates:
+9. Add QA gates:
    - HTML preview check,
    - visual diff,
    - PDF extracted text,
@@ -75,10 +97,15 @@ Local-only recovery work:
 - Local fixture creation.
 - Local report dry-runs.
 - Tests and docs.
+- Minimal report-builder fixes only after a fixture proves the defect and the
+  before/after output diff is captured.
 - Sandbox design review without live activation.
 
 ## Forbidden Without Explicit New Approval
 
+- Broad report-builder rewrite or template redesign.
+- Report scoring, section order, copy, or artifact naming changes without
+  fixture/golden-output evidence.
 - Turning checkout on.
 - Payment writes, charges, refunds, or customer delivery.
 - Customer outreach sends.
@@ -88,7 +115,10 @@ Local-only recovery work:
 
 ## Acceptance Evidence
 
+- Report-builder inventory with exact source files and runtime dependencies.
+- At least one fixture/golden-output baseline.
 - Fixture-based report dry-run result.
+- Before/after diff for any report-builder behavior change.
 - Artifact manifest proof.
 - PDF quality checks.
 - Explicit blockers if WeasyPrint or naming still fails.
