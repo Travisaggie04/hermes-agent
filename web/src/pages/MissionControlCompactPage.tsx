@@ -13,7 +13,6 @@ const WORKSPACE_LANE_REQUESTS_CREATE_URL = "/api/plugins/mission-control-governa
 const WORKSPACE_REPORTS_URL = "/api/plugins/mission-control-governance/workspace/reports";
 const WORKSPACE_REPORTS_CREATE_URL = "/api/plugins/mission-control-governance/workspace/reports/create";
 const WORKSPACE_JENNY_BRIDGE_OUTBOX_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/outbox";
-const WORKSPACE_JENNY_BRIDGE_OUTBOX_CREATE_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/outbox/create";
 const WORKSPACE_JENNY_BRIDGE_INBOX_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/inbox";
 const WORKSPACE_JENNY_BRIDGE_POLLER_STATUS_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/poller-status";
 const WORKSPACE_GITHUB_BRIDGE_STATUS_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/status";
@@ -1089,19 +1088,19 @@ export default function MissionControlCompactPage() {
     setRoomMessage("");
     setProjectRequest(HERMES_UPDATE_LANE_REQUEST);
     try {
-      await fetchJSON(WORKSPACE_JENNY_BRIDGE_OUTBOX_CREATE_URL, {
+      await fetchJSON(WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL, {
         body: JSON.stringify({
-          ack_key: `${projectView.project.project_id}:hermes-update:${Date.now()}`,
+          from_agent: "travis",
           message: buildHermesUpdateLanePacket(snapshot?.workspaceStatus ?? {}),
           project_id: projectView.project.project_id,
-          sender: "codex",
-          target_agent: "jenny",
+          request_id: bridgeRequestId(),
+          to_agent: "jenny",
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
       await refreshSnapshot();
-      setRoomMessage("Queued safe Hermes update lane. It is append-only and does not update the laptop worker node, switch runtimes, or restart gateway.");
+      setRoomMessage("Sent safe Hermes update lane to Jenny mailbox. It is append-only and does not update the laptop worker node, switch runtimes, or restart gateway.");
     } catch (err) {
       setRoomMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1114,19 +1113,19 @@ export default function MissionControlCompactPage() {
     setRoomMessage("");
     setProjectRequest(HERMES_STORAGE_CLEANUP_LANE_REQUEST);
     try {
-      await fetchJSON(WORKSPACE_JENNY_BRIDGE_OUTBOX_CREATE_URL, {
+      await fetchJSON(WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL, {
         body: JSON.stringify({
-          ack_key: `${projectView.project.project_id}:hermes-storage-cleanup:${Date.now()}`,
+          from_agent: "travis",
           message: buildHermesStorageCleanupLanePacket(snapshot?.workspaceStatus ?? {}),
           project_id: projectView.project.project_id,
-          sender: "codex",
-          target_agent: "jenny",
+          request_id: bridgeRequestId(),
+          to_agent: "jenny",
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
       await refreshSnapshot();
-      setRoomMessage("Queued safe Hermes storage cleanup lane. It is append-only and does not delete, move, upload, restart, or switch anything.");
+      setRoomMessage("Sent safe Hermes storage cleanup lane to Jenny mailbox. It is append-only and does not delete, move, upload, restart, or switch anything.");
     } catch (err) {
       setRoomMessage(err instanceof Error ? err.message : String(err));
     } finally {
