@@ -295,6 +295,43 @@ def test_answer_pending_with_hermes_answers_one_explicit_mission_control_request
     ]
 
 
+def test_answer_pending_with_hermes_records_error_without_posting_reply(tmp_path: Path):
+    records = tmp_path / "records.jsonl"
+    poll_comments(
+        [_comment(502, _body(request_id="req-error", message="Please answer this."))],
+        repo="Travisaggie04/hermes-agent",
+        issue_number=79,
+        path=records,
+    )
+
+    def fake_hermes(_record, **_kwargs):
+        return "Error: codex app-server startup failed: initialize timed out"
+
+    def fail_post_response(**_kwargs):
+        raise AssertionError("Hermes error responses must not be posted")
+
+    payload = answer_pending_with_hermes(
+        request_id="req-error",
+        repo="Travisaggie04/hermes-agent",
+        issue_number=79,
+        path=records,
+        run_hermes_fn=fake_hermes,
+        post_response_fn=fail_post_response,
+    )
+
+    store = JsonlRecordStore(records)
+    responses = [record for record in store.read_all(GitHubBridgeMessageRecord) if record.from_agent == "jenny"]
+    statuses = store.read_all(GitHubBridgeMailboxStatusRecord)
+    assert payload["answered"] is False
+    assert payload["response"] is None
+    assert responses == []
+    assert [status.status for status in statuses][-2:] == [
+        "hermes_answer_started",
+        "hermes_answer_error",
+    ]
+    assert "app-server startup failed" in statuses[-1].last_error
+
+
 def test_answer_pending_with_hermes_noops_when_only_stale_requests_match(tmp_path: Path):
     records = tmp_path / "records.jsonl"
     poll_comments(
