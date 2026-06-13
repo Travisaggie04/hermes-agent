@@ -610,6 +610,41 @@ export interface MissionControlWorkspaceStatus {
   stale_context?: { warnings?: string[] }
 }
 
+export interface MissionControlMemoryFileLevel {
+  bytes?: number
+  chars?: number
+  error?: string
+  exists?: boolean
+  limit_chars?: number
+  lines?: number
+  path?: string
+  percent_used?: number
+}
+
+export interface MissionControlProfileMemoryStorage {
+  home?: string
+  memory?: MissionControlMemoryFileLevel
+  profile?: string
+  total_bytes?: number
+  user?: MissionControlMemoryFileLevel
+}
+
+export interface MissionControlProfileMemoryStorageResponse {
+  count?: number
+  display_only?: boolean
+  dispatch_enabled?: boolean
+  dry_run_only?: boolean
+  errors?: Array<{ profile?: string; error?: string }>
+  profile_count?: number
+  profiles?: MissionControlProfileMemoryStorage[]
+  send_to_jenny_enabled?: boolean
+  source?: string
+  stored?: boolean
+  total_bytes?: number
+  total_memory_bytes?: number
+  total_user_bytes?: number
+}
+
 export interface MissionControlProjectsResponse {
   count: number
   dispatch_enabled?: boolean
@@ -699,6 +734,12 @@ const MISSION_CONTROL_API = '/api/plugins/mission-control-governance'
 
 export function getMissionControlWorkspaceStatus(): Promise<MissionControlWorkspaceStatus> {
   return window.hermesDesktop.api<MissionControlWorkspaceStatus>({ path: `${MISSION_CONTROL_API}/workspace-status` })
+}
+
+export function getMissionControlProfileMemoryStorage(): Promise<MissionControlProfileMemoryStorageResponse> {
+  return window.hermesDesktop.api<MissionControlProfileMemoryStorageResponse>({
+    path: `${MISSION_CONTROL_API}/workspace/profile-memory-storage`
+  })
 }
 
 export function getMissionControlProjects(): Promise<MissionControlProjectsResponse> {

@@ -20,6 +20,7 @@ const WORKSPACE_GITHUB_BRIDGE_STATUS_URL = "/api/plugins/mission-control-governa
 const WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/outbox/create";
 const WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/answer-once";
 const WORKSPACE_PROJECT_STATE_URL = "/api/plugins/mission-control-governance/workspace/project-state";
+const WORKSPACE_PROFILE_MEMORY_STORAGE_URL = "/api/plugins/mission-control-governance/workspace/profile-memory-storage";
 
 const REAL_PROJECT_IDS = [
   "project-hermes-mission-control",
@@ -36,6 +37,14 @@ const HERMES_UPDATE_LANE_REQUEST = [
   "Prepare a non-live VPS dashboard runtime at accepted-live and validate it before any dashboard-only switch.",
   "Keep gateway update as a separate explicit lane.",
   "Do not trigger the laptop worker-node update automatically, restart/switch gateway, dispatch, send sessions, use Waha/social/payment/customer actions, enable new background workers/timers/daemons/cron, or inspect/print secrets.",
+].join(" ");
+const HERMES_STORAGE_CLEANUP_LANE_REQUEST = [
+  "Start a safe Hermes storage cleanup readiness lane for the VPS and laptop Hermes worker node.",
+  "Inventory VPS disk usage, large runtime/worktree/cache/build artifacts, logs, and Mission Control record growth before recommending cleanup.",
+  "Preserve rollback runtimes and accepted-live evidence. Do not delete anything without a separate explicit cleanup approval.",
+  "Prefer moving review artifacts or exports to connected long-term storage when useful: OneDrive travis_Littleton@msn.com, Family Hub secondary storage, or the 5TB Google Drive.",
+  "Keep laptop cleanup advisory-only unless Travis separately approves worker-node cleanup.",
+  "Do not delete files, prune runtimes, mutate records/config/state.db, restart/switch gateway, dispatch, send sessions, use Waha/social/payment/customer actions, enable workers/timers/daemons/cron, or inspect/print secrets.",
 ].join(" ");
 
 const REAL_PROJECT_NAMES = [
@@ -242,6 +251,35 @@ interface WorkspaceStatus {
   stale_context?: { warnings?: string[] };
 }
 
+interface MemoryFileLevel {
+  bytes?: number;
+  chars?: number;
+  error?: string;
+  exists?: boolean;
+  limit_chars?: number;
+  lines?: number;
+  path?: string;
+  percent_used?: number;
+}
+
+interface ProfileMemoryStorageRecord {
+  home?: string;
+  memory?: MemoryFileLevel;
+  profile?: string;
+  total_bytes?: number;
+  user?: MemoryFileLevel;
+}
+
+interface ProfileMemoryStorage {
+  errors?: Array<{ profile?: string; error?: string }>;
+  profile_count?: number;
+  profiles?: ProfileMemoryStorageRecord[];
+  stored?: boolean;
+  total_bytes?: number;
+  total_memory_bytes?: number;
+  total_user_bytes?: number;
+}
+
 interface CompactSnapshot {
   challengeReviews: ChallengeReviewRecord[];
   jennyBridgeRequests: JennyBridgeRequestRecord[];
@@ -249,6 +287,7 @@ interface CompactSnapshot {
   jennyBridgePollerStatus: JennyBridgePollerStatus;
   githubBridgeStatus: GitHubBridgeStatus;
   laneRequests: LaneRequestRecord[];
+  memoryStorage: ProfileMemoryStorage;
   projectBriefs: ProjectBriefRecord[];
   projectStates: ProjectStateRecord[];
   projects: ProjectRecord[];
@@ -505,6 +544,20 @@ function isSmokeProject(project: ProjectRecord): boolean {
   return /smoke|support/i.test(`${project.project_id} ${project.name} ${project.status ?? ""}`);
 }
 
+function formatBytes(value: unknown): string {
+  const bytes = typeof value === "number" && Number.isFinite(value) ? value : 0;
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let amount = bytes / 1024;
+  for (const unit of units) {
+    if (amount < 1024 || unit === units[units.length - 1]) {
+      return `${amount.toFixed(amount >= 10 ? 0 : 1)} ${unit}`;
+    }
+    amount /= 1024;
+  }
+  return `${bytes} B`;
+}
+
 function latestForProject<T extends { project_id?: string }>(projectId: string, values: T[]): T | undefined {
   return [...values].reverse().find(value => value.project_id === projectId);
 }
@@ -720,8 +773,27 @@ function buildHermesUpdateLanePacket(workspaceStatus: WorkspaceStatus): string {
   ].join("\n");
 }
 
+function buildHermesStorageCleanupLanePacket(workspaceStatus: WorkspaceStatus): string {
+  return [
+    "Hermes storage cleanup lane request:",
+    "",
+    HERMES_STORAGE_CLEANUP_LANE_REQUEST,
+    "",
+    "Required safe sequence:",
+    "1. Read-only inventory of VPS disk usage, largest Hermes runtimes/worktrees/caches/build outputs/logs, and current rollback runtimes.",
+    "2. Identify what is safe to archive versus what must stay for accepted-live rollback, audit evidence, or current services.",
+    "3. Recommend a cleanup plan with exact paths, expected bytes recovered, rollback risk, and archive destination if needed.",
+    "4. Stop before deleting, pruning, moving, or uploading anything; request a separate explicit cleanup approval.",
+    "",
+    "Allowed: read-only storage inventory, cleanup recommendation, archive recommendation, and exact next approval.",
+    "Forbidden: delete/prune/move/upload files, mutate records/config/state.db, gateway restart/switch, laptop worker-node cleanup, dispatch, session sending, Waha/social/payment/customer action, workers/timers/daemons/cron, or secrets.",
+    "",
+    `Current Mission Control safety status: ${safetySummary(workspaceStatus)}`,
+  ].join("\n");
+}
+
 async function loadCompactSnapshot(): Promise<CompactSnapshot> {
-  const [workspaceStatus, projects, projectBriefs, challengeReviews, laneRequests, reports, projectState, jennyBridgeOutbox, jennyBridgeInbox, jennyBridgePollerStatus, githubBridgeStatus] = await Promise.all([
+  const [workspaceStatus, projects, projectBriefs, challengeReviews, laneRequests, reports, projectState, jennyBridgeOutbox, jennyBridgeInbox, jennyBridgePollerStatus, githubBridgeStatus, memoryStorage] = await Promise.all([
     fetchJSON<WorkspaceStatus>(WORKSPACE_STATUS_URL),
     fetchJSON<{ projects?: Array<WrappedRecord<ProjectRecord> | ProjectRecord> }>(WORKSPACE_PROJECTS_URL),
     fetchJSON<{ project_briefs?: Array<WrappedRecord<ProjectBriefRecord> | ProjectBriefRecord> }>(WORKSPACE_PROJECT_BRIEFS_URL),
@@ -733,6 +805,7 @@ async function loadCompactSnapshot(): Promise<CompactSnapshot> {
     fetchJSON<{ responses?: Array<WrappedRecord<JennyBridgeResponseRecord> | JennyBridgeResponseRecord> }>(WORKSPACE_JENNY_BRIDGE_INBOX_URL),
     fetchJSON<JennyBridgePollerStatus>(WORKSPACE_JENNY_BRIDGE_POLLER_STATUS_URL),
     fetchJSON<GitHubBridgeStatus>(WORKSPACE_GITHUB_BRIDGE_STATUS_URL),
+    fetchJSON<ProfileMemoryStorage>(WORKSPACE_PROFILE_MEMORY_STORAGE_URL),
   ]);
 
   return {
@@ -742,6 +815,7 @@ async function loadCompactSnapshot(): Promise<CompactSnapshot> {
     jennyBridgePollerStatus,
     githubBridgeStatus,
     laneRequests: unwrapRecords(laneRequests.lane_requests),
+    memoryStorage,
     projectBriefs: unwrapRecords(projectBriefs.project_briefs),
     projectStates: projectState.project_states ?? [],
     projects: unwrapRecords(projects.projects),
@@ -916,6 +990,31 @@ export default function MissionControlCompactPage() {
     }
   }
 
+  async function queueHermesStorageCleanupLane(projectView: ProjectViewModel) {
+    setRoomBusy(true);
+    setRoomMessage("");
+    setProjectRequest(HERMES_STORAGE_CLEANUP_LANE_REQUEST);
+    try {
+      await fetchJSON(WORKSPACE_JENNY_BRIDGE_OUTBOX_CREATE_URL, {
+        body: JSON.stringify({
+          ack_key: `${projectView.project.project_id}:hermes-storage-cleanup:${Date.now()}`,
+          message: buildHermesStorageCleanupLanePacket(snapshot?.workspaceStatus ?? {}),
+          project_id: projectView.project.project_id,
+          sender: "codex",
+          target_agent: "jenny",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      await refreshSnapshot();
+      setRoomMessage("Queued safe Hermes storage cleanup lane. It is append-only and does not delete, move, upload, restart, or switch anything.");
+    } catch (err) {
+      setRoomMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRoomBusy(false);
+    }
+  }
+
   async function refreshSnapshot() {
     const nextSnapshot = await loadCompactSnapshot();
     setSnapshot(nextSnapshot);
@@ -1066,9 +1165,11 @@ export default function MissionControlCompactPage() {
           bridgeStatus={snapshot?.jennyBridgePollerStatus ?? {}}
           githubBridgeMessages={unwrapRecords(snapshot?.githubBridgeStatus.recent_messages).filter(message => message.project_id === selectedProjectView.project.project_id)}
           githubBridgeStatus={snapshot?.githubBridgeStatus ?? {}}
+          memoryStorage={snapshot?.memoryStorage ?? {}}
           onCopyPacket={() => void copyPhoneSafePacket(selectedProjectView)}
           onQueueBridge={() => void queueJennyBridgeMessage(selectedProjectView)}
           onQueueHermesUpdate={selectedProjectView.project.project_id === HERMES_PROJECT_ID ? () => void queueHermesUpdateLane(selectedProjectView) : undefined}
+          onQueueStorageCleanup={selectedProjectView.project.project_id === HERMES_PROJECT_ID ? () => void queueHermesStorageCleanupLane(selectedProjectView) : undefined}
           onRefreshBridge={() => void refreshBridge()}
           onRequestChange={setProjectRequest}
           onRunJennyOnce={() => void runJennyOnce(selectedProjectView)}
@@ -1214,10 +1315,12 @@ function CompactProjectRoom({
   bridgeStatus,
   githubBridgeStatus,
   githubBridgeMessages,
+  memoryStorage,
   message,
   onCopyPacket,
   onQueueBridge,
   onQueueHermesUpdate,
+  onQueueStorageCleanup,
   onRefreshBridge,
   onRequestChange,
   onRunJennyOnce,
@@ -1235,10 +1338,12 @@ function CompactProjectRoom({
   bridgeStatus: JennyBridgePollerStatus;
   githubBridgeStatus: GitHubBridgeStatus;
   githubBridgeMessages: GitHubBridgeMessageRecord[];
+  memoryStorage: ProfileMemoryStorage;
   message: string;
   onCopyPacket: () => void;
   onQueueBridge: () => void;
   onQueueHermesUpdate?: () => void;
+  onQueueStorageCleanup?: () => void;
   onRefreshBridge: () => void;
   onRequestChange: (value: string) => void;
   onRunJennyOnce: () => void;
@@ -1426,6 +1531,11 @@ function CompactProjectRoom({
             Start Hermes update lane
           </button>
         ) : null}
+        {onQueueStorageCleanup ? (
+          <button className="mt-2 rounded-xl border border-sky-500/40 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/10 disabled:opacity-60 dark:text-sky-300" disabled={busy} onClick={onQueueStorageCleanup} type="button">
+            Start storage cleanup lane
+          </button>
+        ) : null}
         {message ? <p className="mt-2 text-xs text-muted-foreground">{message}</p> : null}
 
         <section className="mt-4 rounded-xl border border-border/70 bg-background p-3">
@@ -1451,6 +1561,28 @@ function CompactProjectRoom({
 
         <details className="mt-4 rounded-xl border border-border/70 bg-background/60 p-3">
           <summary className="cursor-pointer text-sm font-semibold">Safety controls and technical details</summary>
+          <section className="mt-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">Jenny memory storage</h3>
+              <span className="text-[0.68rem] text-violet-700 dark:text-violet-300">
+                {memoryStorage.profile_count ?? memoryStorage.profiles?.length ?? 0} profiles / {formatBytes(memoryStorage.total_bytes)}
+              </span>
+            </div>
+            <div className="mt-2 grid gap-2">
+              {(memoryStorage.profiles ?? []).length ? (
+                (memoryStorage.profiles ?? []).map(profile => (
+                  <article className="rounded-lg border border-violet-500/20 bg-background/70 p-2 text-xs" key={profile.profile ?? profile.home}>
+                    <div className="font-semibold">{profile.profile ?? "profile"}</div>
+                    <div className="mt-1 text-muted-foreground">Memory: {formatBytes(profile.memory?.bytes)} / {profile.memory?.chars ?? 0} chars / {profile.memory?.percent_used ?? 0}%</div>
+                    <div className="text-muted-foreground">User: {formatBytes(profile.user?.bytes)} / {profile.user?.chars ?? 0} chars / {profile.user?.percent_used ?? 0}%</div>
+                    {profile.memory?.error || profile.user?.error ? <div className="mt-1 text-destructive">Read issue: {profile.memory?.error || profile.user?.error}</div> : null}
+                  </article>
+                ))
+              ) : (
+                <p className="text-xs text-muted-foreground">No profile memory files reported.</p>
+              )}
+            </div>
+          </section>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             <CompactField label="project brief" value={compactText(brief?.outcome, 320) || "No project brief recorded"} />
             <CompactField label="challenge review" value={review ? `${review.decision_state ?? "unknown"} / ${review.recommended_path ?? "No recommended path recorded"}` : "No challenge review recorded"} />

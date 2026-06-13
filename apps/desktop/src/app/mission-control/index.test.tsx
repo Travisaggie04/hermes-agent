@@ -11,6 +11,7 @@ const getMissionControlJennyBridgeOutbox = vi.fn()
 const getMissionControlJennyBridgePollerStatus = vi.fn()
 const getMissionControlGitHubBridgeStatus = vi.fn()
 const getMissionControlLaneRequests = vi.fn()
+const getMissionControlProfileMemoryStorage = vi.fn()
 const getMissionControlReports = vi.fn()
 const getMissionControlProjectState = vi.fn()
 const getMissionControlProjectSessions = vi.fn()
@@ -39,6 +40,7 @@ vi.mock('@/hermes', () => ({
   getMissionControlProjectBriefs: () => getMissionControlProjectBriefs(),
   getMissionControlProjects: () => getMissionControlProjects(),
   getMissionControlLaneRequests: () => getMissionControlLaneRequests(),
+  getMissionControlProfileMemoryStorage: () => getMissionControlProfileMemoryStorage(),
   getMissionControlReports: () => getMissionControlReports(),
   getMissionControlProjectState: () => getMissionControlProjectState(),
   getMissionControlProjectSessions: () => getMissionControlProjectSessions()
@@ -152,6 +154,31 @@ beforeEach(() => {
     record_type: 'GitHubBridgeMessageRecord',
     send_to_jenny_enabled: true,
     stored: true
+  })
+  getMissionControlProfileMemoryStorage.mockResolvedValue({
+    display_only: true,
+    dry_run_only: true,
+    profile_count: 2,
+    profiles: [
+      {
+        home: '/home/jenny/.hermes',
+        memory: { bytes: 1100, chars: 1100, exists: true, percent_used: 50 },
+        profile: 'default',
+        total_bytes: 1300,
+        user: { bytes: 200, chars: 200, exists: true, percent_used: 15 }
+      },
+      {
+        home: '/home/jenny/.hermes/profiles/wahainspection',
+        memory: { bytes: 0, chars: 0, exists: false, percent_used: 0 },
+        profile: 'wahainspection',
+        total_bytes: 0,
+        user: { bytes: 0, chars: 0, exists: false, percent_used: 0 }
+      }
+    ],
+    stored: false,
+    total_bytes: 1300,
+    total_memory_bytes: 1100,
+    total_user_bytes: 200
   })
   answerMissionControlGitHubBridgeOnce.mockResolvedValue({
     answered: true,
@@ -852,6 +879,10 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Conversation')).toBeTruthy()
     expect(screen.getByText('Phone-safe packet')).toBeTruthy()
     expect(screen.getByText('Previous sessions')).toBeTruthy()
+    expect(screen.getByText('Hermes storage cleanup lane')).toBeTruthy()
+    expect(screen.getByText('Jenny memory storage')).toBeTruthy()
+    expect(screen.getByText(/2 profiles/)).toBeTruthy()
+    expect(screen.getByText('wahainspection')).toBeTruthy()
     expect(screen.getAllByText('Lane draft ok').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Use a bounded read-only workspace usability lane/).length).toBeGreaterThan(0)
 
@@ -918,6 +949,19 @@ describe('MissionControlView', () => {
       })
     )
     expect(createMissionControlJennyBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('gateway update as a separate explicit lane')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start storage cleanup lane' }))
+    await waitFor(() => expect(createMissionControlJennyBridgeRequest).toHaveBeenCalledTimes(2))
+    expect(createMissionControlJennyBridgeRequest).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        ack_key: expect.stringContaining('project-hermes-mission-control:hermes-storage-cleanup:'),
+        message: expect.stringContaining('Hermes storage cleanup lane request:'),
+        project_id: 'project-hermes-mission-control',
+        sender: 'codex',
+        target_agent: 'jenny'
+      })
+    )
+    expect(createMissionControlJennyBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('Stop before deleting, pruning, moving, or uploading anything')
   })
 
   it('runs Jenny once for the latest pending GitHub bridge request only', async () => {
@@ -1174,7 +1218,7 @@ describe('MissionControlView', () => {
         summary: 'Current Hermes report'
       })
     )
-    expect(screen.getByText(/Send to Jenny is still disabled/i)).toBeTruthy()
+    expect(screen.getByText(/Use project chat for guarded Jenny messages/i)).toBeTruthy()
   })
 
   it('keeps Mission Control view source free of disallowed POST, dispatch wiring, timers, storage, and workers', async () => {

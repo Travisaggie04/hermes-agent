@@ -2121,6 +2121,8 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/jenny-bridge/poller-status": {"GET"},
         "/workspace/github-bridge/status": {"GET"},
         "/workspace/github-bridge/outbox/create": {"POST"},
+        "/workspace/github-bridge/answer-once": {"POST"},
+        "/workspace/profile-memory-storage": {"GET"},
         "/workspace/jenny-bridge/outbox/create": {"POST"},
         "/workspace/jenny-bridge/inbox": {"GET"},
         "/workspace/jenny-bridge/inbox/create": {"POST"},
@@ -2162,6 +2164,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/challenge-reviews",
         "/workspace/lane-requests",
         "/workspace/reports",
+        "/workspace/profile-memory-storage",
         "/workspace/approvals",
         "/workspace/runs",
         "/workspace/report-inbox",
@@ -4517,6 +4520,48 @@ def test_workspace_status_get_uses_record_sourced_active_runs_not_static_lane(pl
     assert payload["lane"]["active_lane_count"] == 1
     assert payload["activity"]["active_runs"] == 1
     assert payload["control_plane_records"]["latest_active_run_id"] == "run-1"
+
+
+def test_workspace_profile_memory_storage_is_read_only(plugin_api, client, monkeypatch):
+    monkeypatch.setattr(
+        plugin_api,
+        "_profile_memory_storage_projection",
+        lambda: {
+            "profile_count": 2,
+            "profiles": [
+                {
+                    "profile": "default",
+                    "home": "/home/jenny/.hermes",
+                    "memory": {"bytes": 1100, "chars": 1100, "exists": True, "limit_chars": 2200, "percent_used": 50},
+                    "user": {"bytes": 200, "chars": 200, "exists": True, "limit_chars": 1375, "percent_used": 15},
+                    "total_bytes": 1300,
+                },
+                {
+                    "profile": "wahainspection",
+                    "home": "/home/jenny/.hermes/profiles/wahainspection",
+                    "memory": {"bytes": 0, "chars": 0, "exists": False, "limit_chars": 2200, "percent_used": 0},
+                    "user": {"bytes": 0, "chars": 0, "exists": False, "limit_chars": 1375, "percent_used": 0},
+                    "total_bytes": 0,
+                },
+            ],
+            "total_bytes": 1300,
+            "total_memory_bytes": 1100,
+            "total_user_bytes": 200,
+            "errors": [],
+        },
+    )
+
+    response = client.get("/api/plugins/mission-control-governance/workspace/profile-memory-storage")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stored"] is False
+    assert payload["display_only"] is True
+    assert payload["dispatch_enabled"] is False
+    assert payload["profile_count"] == 2
+    assert payload["profiles"][0]["profile"] == "default"
+    assert payload["profiles"][0]["memory"]["percent_used"] == 50
+    assert payload["profiles"][1]["profile"] == "wahainspection"
 
 
 def test_workspace_status_preview_accepts_accepted_baseline_source_but_remains_unstored(client):

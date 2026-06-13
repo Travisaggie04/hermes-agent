@@ -16,6 +16,7 @@ import {
   getMissionControlJennyBridgeOutbox,
   getMissionControlJennyBridgePollerStatus,
   getMissionControlLaneRequests,
+  getMissionControlProfileMemoryStorage,
   getMissionControlProjectBriefs,
   getMissionControlProjects,
   getMissionControlProjectSessions,
@@ -29,6 +30,7 @@ import {
   type MissionControlJennyBridgeRequestRecord,
   type MissionControlJennyBridgeResponseRecord,
   type MissionControlLaneRequestRecord,
+  type MissionControlProfileMemoryStorageResponse,
   type MissionControlProjectBriefRecord,
   type MissionControlProjectRecord,
   type MissionControlProjectSession,
@@ -46,6 +48,7 @@ interface MissionControlSnapshot {
   jennyBridgePollerStatus: MissionControlJennyBridgePollerStatusResponse
   githubBridgeStatus: MissionControlGitHubBridgeStatusResponse
   laneRequests: MissionControlLaneRequestRecord[]
+  memoryStorage: MissionControlProfileMemoryStorageResponse
   projectBriefs: MissionControlProjectBriefRecord[]
   projectSessionGroups: MissionControlProjectSessionGroup[]
   projects: MissionControlProjectRecord[]
@@ -61,6 +64,7 @@ const emptySnapshot: MissionControlSnapshot = {
   jennyBridgePollerStatus: {},
   githubBridgeStatus: {},
   laneRequests: [],
+  memoryStorage: {},
   projectBriefs: [],
   projectSessionGroups: [],
   projects: [],
@@ -84,6 +88,14 @@ const HERMES_UPDATE_LANE_REQUEST = [
   'Prepare a non-live VPS dashboard runtime at accepted-live and validate it before any dashboard-only switch.',
   'Keep gateway update as a separate explicit lane.',
   'Do not trigger the laptop worker-node update automatically, restart/switch gateway, dispatch, send sessions, use Waha/social/payment/customer actions, enable new background workers/timers/daemons/cron, or inspect/print secrets.'
+].join(' ')
+const HERMES_STORAGE_CLEANUP_LANE_REQUEST = [
+  'Start a safe Hermes storage cleanup readiness lane for the VPS and laptop Hermes worker node.',
+  'Inventory VPS disk usage, large runtime/worktree/cache/build artifacts, logs, and Mission Control record growth before recommending cleanup.',
+  'Preserve rollback runtimes and accepted-live evidence. Do not delete anything without a separate explicit cleanup approval.',
+  'Prefer moving review artifacts or exports to connected long-term storage when useful: OneDrive travis_Littleton@msn.com, Family Hub secondary storage, or the 5TB Google Drive.',
+  'Keep laptop cleanup advisory-only unless Travis separately approves worker-node cleanup.',
+  'Do not delete files, prune runtimes, mutate records/config/state.db, restart/switch gateway, dispatch, send sessions, use Waha/social/payment/customer actions, enable workers/timers/daemons/cron, or inspect/print secrets.'
 ].join(' ')
 
 const REAL_PROJECT_NAMES = [
@@ -112,6 +124,22 @@ function text(value: unknown, fallback = 'Not recorded'): string {
 
 function yesNo(value: unknown): string {
   return value === true ? 'yes' : value === false ? 'no' : 'unknown'
+}
+
+function formatBytes(value: unknown): string {
+  const bytes = typeof value === 'number' && Number.isFinite(value) ? value : 0
+  if (bytes < 1024) {
+    return `${bytes} B`
+  }
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let amount = bytes / 1024
+  for (const unit of units) {
+    if (amount < 1024 || unit === units[units.length - 1]) {
+      return `${amount.toFixed(amount >= 10 ? 0 : 1)} ${unit}`
+    }
+    amount /= 1024
+  }
+  return `${bytes} B`
 }
 
 function listText(values: unknown, fallback = 'None recorded'): string {
@@ -893,6 +921,25 @@ function buildHermesUpdateLanePacket(status: ReturnType<typeof summarizeWorkspac
   ].join('\n')
 }
 
+function buildHermesStorageCleanupLanePacket(status: ReturnType<typeof summarizeWorkspaceStatus>): string {
+  return [
+    'Hermes storage cleanup lane request:',
+    '',
+    HERMES_STORAGE_CLEANUP_LANE_REQUEST,
+    '',
+    'Required safe sequence:',
+    '1. Read-only inventory of VPS disk usage, largest Hermes runtimes/worktrees/caches/build outputs/logs, and current rollback runtimes.',
+    '2. Identify what is safe to archive versus what must stay for accepted-live rollback, audit evidence, or current services.',
+    '3. Recommend a cleanup plan with exact paths, expected bytes recovered, rollback risk, and archive destination if needed.',
+    '4. Stop before deleting, pruning, moving, or uploading anything; request a separate explicit cleanup approval.',
+    '',
+    'Allowed: read-only storage inventory, cleanup recommendation, archive recommendation, and exact next approval.',
+    'Forbidden: delete/prune/move/upload files, mutate records/config/state.db, gateway restart/switch, laptop worker-node cleanup, dispatch, session sending, Waha/social/payment/customer action, workers/timers/daemons/cron, or secrets.',
+    '',
+    `Current Mission Control safety status: guard=${status.guard}; dispatch=${yesNo(status.dispatch)}; active_lane_count=${status.activeLaneCount}.`
+  ].join('\n')
+}
+
 async function loadMissionControlSnapshot(): Promise<MissionControlSnapshot> {
   const [
     workspaceStatus,
@@ -906,7 +953,8 @@ async function loadMissionControlSnapshot(): Promise<MissionControlSnapshot> {
     jennyBridgeOutbox,
     jennyBridgeInbox,
     jennyBridgePollerStatus,
-    githubBridgeStatus
+    githubBridgeStatus,
+    memoryStorage
   ] = await Promise.all([
     getMissionControlWorkspaceStatus(),
     getMissionControlProjects(),
@@ -919,7 +967,8 @@ async function loadMissionControlSnapshot(): Promise<MissionControlSnapshot> {
     getMissionControlJennyBridgeOutbox(),
     getMissionControlJennyBridgeInbox(),
     getMissionControlJennyBridgePollerStatus(),
-    getMissionControlGitHubBridgeStatus()
+    getMissionControlGitHubBridgeStatus(),
+    getMissionControlProfileMemoryStorage()
   ])
 
   return {
@@ -929,6 +978,7 @@ async function loadMissionControlSnapshot(): Promise<MissionControlSnapshot> {
     jennyBridgePollerStatus,
     githubBridgeStatus,
     laneRequests: unwrapRecords(laneRequests.lane_requests),
+    memoryStorage,
     projectBriefs: unwrapRecords(projectBriefs.project_briefs),
     projectSessionGroups: projectSessions.groups ?? [],
     projects: unwrapRecords(projects.projects),
@@ -1147,6 +1197,28 @@ export function MissionControlView() {
     }
   }
 
+  async function queueHermesStorageCleanupLane(project: MissionControlProjectRecord) {
+    setProjectRoomSaving(true)
+    setProjectRoomMessage('')
+    setProjectRequest(HERMES_STORAGE_CLEANUP_LANE_REQUEST)
+
+    try {
+      await createMissionControlJennyBridgeRequest({
+        ack_key: `${project.project_id}:hermes-storage-cleanup:${Date.now()}`,
+        message: buildHermesStorageCleanupLanePacket(status),
+        project_id: project.project_id,
+        sender: 'codex',
+        target_agent: 'jenny'
+      })
+      setSnapshot(await loadMissionControlSnapshot())
+      setProjectRoomMessage('Queued safe Hermes storage cleanup lane. It is append-only and does not delete, move, upload, restart, or switch anything.')
+    } catch (err) {
+      setProjectRoomMessage(String(err instanceof Error ? err.message : err))
+    } finally {
+      setProjectRoomSaving(false)
+    }
+  }
+
   async function saveChallengeDraft(project: MissionControlProjectRecord) {
     if (!projectRequest.trim()) {
       setProjectRoomMessage('Write one bounded request before saving a challenge draft.')
@@ -1319,11 +1391,13 @@ export function MissionControlView() {
           brief={latestForProject(selectedProject.project_id, snapshot.projectBriefs)}
           githubBridgeMessages={unwrapRecords(snapshot.githubBridgeStatus.recent_messages).filter(message => message.project_id === selectedProject.project_id)}
           githubBridgeStatus={snapshot.githubBridgeStatus}
+          memoryStorage={snapshot.memoryStorage}
           message={projectRoomMessage}
           onCopyPacket={() => void copyProjectRoomPacket(selectedProject)}
           onOpenSession={session => navigate(sessionRoute(session.session_id))}
           onQueueBridge={() => void queueJennyBridgeRequest(selectedProject)}
           onQueueHermesUpdate={selectedProject.project_id === HERMES_PROJECT_ID ? () => void queueHermesUpdateLane(selectedProject) : undefined}
+          onQueueStorageCleanup={selectedProject.project_id === HERMES_PROJECT_ID ? () => void queueHermesStorageCleanupLane(selectedProject) : undefined}
           onRefreshBridge={() => void refreshMissionControlSnapshot('Refreshed bridge inbox/outbox.')}
           onRequestChange={setProjectRequest}
           onRunJennyOnce={() => void runJennyOnce(selectedProject)}
@@ -1519,10 +1593,12 @@ function ProjectRoomsWorkspace({
   bridgeStatus,
   githubBridgeStatus,
   githubBridgeMessages,
+  memoryStorage,
   message,
   onCopyPacket,
   onQueueBridge,
   onQueueHermesUpdate,
+  onQueueStorageCleanup,
   onRefreshBridge,
   onRequestChange,
   onRunJennyOnce,
@@ -1546,10 +1622,12 @@ function ProjectRoomsWorkspace({
   bridgeStatus: MissionControlJennyBridgePollerStatusResponse
   githubBridgeStatus: MissionControlGitHubBridgeStatusResponse
   githubBridgeMessages: MissionControlGitHubBridgeMessageRecord[]
+  memoryStorage: MissionControlProfileMemoryStorageResponse
   message: string
   onCopyPacket: () => void
   onQueueBridge: () => void
   onQueueHermesUpdate?: () => void
+  onQueueStorageCleanup?: () => void
   onRefreshBridge: () => void
   onRequestChange: (value: string) => void
   onRunJennyOnce: () => void
@@ -1808,6 +1886,52 @@ function ProjectRoomsWorkspace({
               </div>
             </div>
           ) : null}
+
+          {onQueueStorageCleanup ? (
+            <div className="mt-3 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-semibold">Hermes storage cleanup lane</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Starts a guarded storage inventory for VPS programming buildup and laptop worker-node posture. This queues a request only; no files are deleted, moved, uploaded, pruned, restarted, or switched.
+                  </p>
+                </div>
+                <button className="rounded-md border border-sky-500/40 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/10 disabled:opacity-60 dark:text-sky-300" disabled={saving} onClick={onQueueStorageCleanup} type="button">
+                  Start storage cleanup lane
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <section className="mt-3 rounded-lg border border-violet-500/30 bg-violet-500/5 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold">Jenny memory storage</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Read-only memory file levels for the main profile and named profiles. This does not edit memories.
+                </p>
+              </div>
+              <span className="rounded-full border border-violet-500/30 px-2 py-0.5 text-xs text-violet-700 dark:text-violet-300">
+                {memoryStorage.profile_count ?? memoryStorage.profiles?.length ?? 0} profiles / {formatBytes(memoryStorage.total_bytes)}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {(memoryStorage.profiles ?? []).length ? (
+                (memoryStorage.profiles ?? []).map(profile => (
+                  <article className="rounded-md border border-violet-500/20 bg-background/60 p-2 text-xs" key={profile.profile ?? profile.home}>
+                    <div className="font-semibold text-foreground/90">{profile.profile ?? 'profile'}</div>
+                    <div className="mt-2 grid gap-1 text-muted-foreground">
+                      <div>Memory: {formatBytes(profile.memory?.bytes)} / {profile.memory?.chars ?? 0} chars / {profile.memory?.percent_used ?? 0}%</div>
+                      <div>User: {formatBytes(profile.user?.bytes)} / {profile.user?.chars ?? 0} chars / {profile.user?.percent_used ?? 0}%</div>
+                      {profile.memory?.error || profile.user?.error ? <div className="text-destructive">Read issue: {profile.memory?.error || profile.user?.error}</div> : null}
+                    </div>
+                  </article>
+                ))
+              ) : (
+                <p className="text-xs text-muted-foreground">No profile memory files reported.</p>
+              )}
+            </div>
+          </section>
 
           <div className="mt-4 grid gap-3 xl:grid-cols-2">
             <section className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
