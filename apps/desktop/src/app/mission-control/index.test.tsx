@@ -519,8 +519,8 @@ describe('MissionControlView', () => {
     expect(getMissionControlGitHubBridgeStatus).toHaveBeenCalledTimes(1)
 
     expect(screen.getByText('Real project workspace')).toBeTruthy()
-    expect(screen.getByText('Tonight / Active Lanes')).toBeTruthy()
-    expect(screen.getByText('Four-project overnight control board. Display-only; lane state is derived from briefs, challenge reviews, lane drafts, and reports.')).toBeTruthy()
+    expect(screen.getByText('Active Jenny OS Lane')).toBeTruthy()
+    expect(screen.getByText('Mission Control/Jenny stability lane only. Display-only; lane state is derived from briefs, challenge reviews, lane drafts, and reports.')).toBeTruthy()
     expect(screen.getByText('display-only / no dispatch')).toBeTruthy()
     expect(screen.getAllByText('next safe lane').length).toBeGreaterThan(0)
     expect(screen.getByText('Project Rooms')).toBeTruthy()
@@ -556,12 +556,13 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText('report contract').length).toBeGreaterThan(0)
     expect(screen.getByText('latest report contract')).toBeTruthy()
     expect(screen.getAllByText(/Missing:.*evidence.*tests/).length).toBeGreaterThan(0)
-    expect(screen.getByText('5 of 5 real projects loaded')).toBeTruthy()
+    expect(screen.getByText('1 active / 4 paused')).toBeTruthy()
+    expect(screen.getByText('Projects on hold')).toBeTruthy()
 
     for (const [, name] of realProjects) {
       expect((await screen.findAllByText(name)).length).toBeGreaterThan(0)
-      expect(screen.getAllByText('Primary project').length).toBeGreaterThanOrEqual(5)
     }
+    expect(screen.getAllByText('Primary project').length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders a read-only project kanban lifecycle without queue mutation controls', async () => {
@@ -589,14 +590,14 @@ describe('MissionControlView', () => {
     expect(screen.queryByRole('button', { name: /start work/i })).toBeNull()
   })
 
-  it('renders tonight active lanes as a display-only four-project control board', async () => {
+  it('renders the active Jenny OS lane as the only active project board', async () => {
     await renderMissionControl()
 
-    const panel = await screen.findByRole('region', { name: 'Tonight active lanes' })
+    const panel = await screen.findByRole('region', { name: 'Active Jenny OS lane' })
     expect(panel.textContent).toContain('Hermes / Mission Control')
-    expect(panel.textContent).toContain('Shorts Video')
-    expect(panel.textContent).toContain('Long-form Video')
-    expect(panel.textContent).toContain('Tool & Tally')
+    expect(panel.textContent).not.toContain('Shorts Video')
+    expect(panel.textContent).not.toContain('Long-form Video')
+    expect(panel.textContent).not.toContain('Tool & Tally')
     expect(panel.textContent).not.toContain('Waha Work')
     expect(panel.textContent).toContain('Display-only')
     expect(panel.textContent).toContain('Active lane count: 0')

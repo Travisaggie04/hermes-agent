@@ -44,11 +44,13 @@ const REAL_PROJECT_NAMES = [
   "Waha Work",
 ] as const;
 
-const TONIGHT_PROJECT_IDS = [
-  "project-hermes-mission-control",
+const ACTIVE_OS_PROJECT_IDS = [HERMES_PROJECT_ID];
+
+const PAUSED_PROJECT_IDS = [
   "project-shorts-video",
   "project-long-form-video",
   "project-tool-tally",
+  "project-waha-work",
 ];
 
 const PROJECT_LANE_GUIDANCE: Record<string, string> = {
@@ -664,6 +666,14 @@ export default function MissionControlCompactPage() {
     if (!snapshot) return [];
     return snapshot.projects.filter(isRealProject).sort((a, b) => projectRank(a) - projectRank(b));
   }, [snapshot]);
+  const activeProjects = useMemo(() => {
+    const projects = realProjects.filter(project => ACTIVE_OS_PROJECT_IDS.includes(project.project_id));
+    return projects.length ? projects : realProjects;
+  }, [realProjects]);
+  const pausedProjects = useMemo(
+    () => realProjects.filter(project => PAUSED_PROJECT_IDS.includes(project.project_id) || !ACTIVE_OS_PROJECT_IDS.includes(project.project_id)),
+    [realProjects],
+  );
 
   const supportProjects = useMemo(() => {
     if (!snapshot) return [];
@@ -671,10 +681,10 @@ export default function MissionControlCompactPage() {
   }, [snapshot]);
 
   const selectedProjectView = useMemo(() => {
-    if (!snapshot || !realProjects.length) return null;
-    const selected = realProjects.find(project => project.project_id === selectedProjectId) ?? realProjects[0];
+    if (!snapshot || !activeProjects.length) return null;
+    const selected = activeProjects.find(project => project.project_id === selectedProjectId) ?? activeProjects[0];
     return viewModelForProject(snapshot, selected);
-  }, [realProjects, selectedProjectId, snapshot]);
+  }, [activeProjects, selectedProjectId, snapshot]);
 
   async function copyPrompt(projectView: ProjectViewModel) {
     const prompt = buildCompactNextLanePrompt(projectView, snapshot?.workspaceStatus ?? {});
@@ -874,8 +884,8 @@ export default function MissionControlCompactPage() {
         <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Mission Control compact</p>
         <div className="mt-1 flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold leading-tight">Phone project workspace</h1>
-            <p className="mt-1 text-xs text-muted-foreground">Use direct backend http://100.115.125.111:9119. Proxy 9121 API routes are not required.</p>
+            <h1 className="text-xl font-semibold leading-tight">Jenny OS workspace</h1>
+            <p className="mt-1 text-xs text-muted-foreground">Hermes / Mission Control is active. Shorts, long-form, Tool & Tally, and Waha are on hold until Jenny is stable here.</p>
           </div>
           <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-700 dark:text-emerald-300">
             Send disabled
@@ -907,7 +917,7 @@ export default function MissionControlCompactPage() {
           }}
           packet={buildPhoneSafeProjectPacket(selectedProjectView, projectRequest, snapshot?.workspaceStatus ?? {})}
           projectRequest={projectRequest}
-          projects={realProjects}
+          projects={activeProjects}
           selectedProjectView={selectedProjectView}
         />
       ) : null}
@@ -919,13 +929,13 @@ export default function MissionControlCompactPage() {
 
           {snapshot ? (
             <CompactActiveLanes
-              projectViews={realProjects.filter(project => TONIGHT_PROJECT_IDS.includes(project.project_id)).map(project => viewModelForProject(snapshot, project))}
+              projectViews={activeProjects.map(project => viewModelForProject(snapshot, project))}
               status={snapshot.workspaceStatus}
             />
           ) : null}
 
           {snapshot ? (
-            <CompactProjectKanban projectViews={realProjects.map(project => viewModelForProject(snapshot, project))} />
+            <CompactProjectKanban projectViews={activeProjects.map(project => viewModelForProject(snapshot, project))} />
           ) : null}
 
       {snapshot ? (
@@ -965,6 +975,19 @@ export default function MissionControlCompactPage() {
           </div>
         </section>
       ) : null}
+      {pausedProjects.length ? (
+        <section className="rounded-xl border border-dashed border-border/70 bg-muted/20 p-3" aria-label="Paused projects">
+          <h2 className="text-sm font-semibold">Projects on hold</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Visible for audit context only while Jenny/Mission Control is the active OS lane.</p>
+          <div className="mt-2 grid gap-2">
+            {pausedProjects.map(project => (
+              <p className="rounded-lg border border-border/60 bg-background/50 p-2 text-xs text-muted-foreground" key={project.project_id || project.name}>
+                {project.name} - on hold
+              </p>
+            ))}
+          </div>
+        </section>
+      ) : null}
         </div>
       </details>
     </main>
@@ -989,11 +1012,11 @@ function compactActiveLaneStage(projectView: ProjectViewModel): string {
 
 function CompactActiveLanes({ projectViews, status }: { projectViews: ProjectViewModel[]; status: WorkspaceStatus }) {
   return (
-    <section className="mt-4 rounded-2xl border border-border/70 bg-card p-3" aria-label="Tonight active lanes compact">
+    <section className="mt-4 rounded-2xl border border-border/70 bg-card p-3" aria-label="Active Jenny OS lane compact">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold">Tonight / Active Lanes</h2>
-          <p className="mt-1 text-[0.68rem] text-muted-foreground">Four-project overnight board. Display-only; no dispatch, queue mutation, worker, or timer.</p>
+          <h2 className="text-sm font-semibold">Active Jenny OS Lane</h2>
+          <p className="mt-1 text-[0.68rem] text-muted-foreground">Mission Control/Jenny stability lane only. Display-only; no dispatch, queue mutation, worker, or timer.</p>
         </div>
         <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[0.65rem] font-semibold text-sky-700 dark:text-sky-300">
           display-only
