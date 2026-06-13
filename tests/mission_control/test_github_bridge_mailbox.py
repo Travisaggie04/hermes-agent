@@ -5,7 +5,9 @@ from pathlib import Path
 
 from mission_control.github_bridge_mailbox import (
     GITHUB_BRIDGE_MARKER,
+    answer_pending_with_hermes,
     append_response,
+    clean_hermes_response,
     github_bridge_latest,
     github_bridge_status,
     list_pending_messages,
@@ -240,6 +242,92 @@ def test_duplicate_non_dry_run_response_does_not_post_to_github(tmp_path: Path, 
     assert duplicate["status"]["status"] == "skipped_duplicate"
     assert [message.status for message in messages] == ["queued", "replied"]
     assert [status.status for status in statuses] == ["poll_completed", "response_appended", "skipped_duplicate"]
+
+
+def test_answer_pending_with_hermes_answers_one_explicit_mission_control_request(tmp_path: Path):
+    records = tmp_path / "records.jsonl"
+    poll_comments(
+        [
+            _comment(501, _body(request_id="req-old", message="Old request.")),
+            _comment(502, _body(request_id="req-target", message="Please answer this.")),
+        ],
+        repo="Travisaggie04/hermes-agent",
+        issue_number=79,
+        path=records,
+    )
+    seen: dict[str, str] = {}
+
+    def fake_hermes(record, **_kwargs):
+        seen["request_id"] = record.request_id
+        return "Jenny answer from Hermes."
+
+    def fake_post_response(**kwargs):
+        index, record, status_record = append_response(**kwargs, github_comment_id="901")
+        return {
+            "record_index": index,
+            "record_type": record.record_type if record else "GitHubBridgeMailboxStatusRecord",
+            "response": record.to_dict() if record else None,
+            "status": status_record.to_dict(),
+        }
+
+    payload = answer_pending_with_hermes(
+        request_id="req-target",
+        repo="Travisaggie04/hermes-agent",
+        issue_number=79,
+        path=records,
+        run_hermes_fn=fake_hermes,
+        post_response_fn=fake_post_response,
+    )
+
+    store = JsonlRecordStore(records)
+    responses = [record for record in store.read_all(GitHubBridgeMessageRecord) if record.from_agent == "jenny"]
+    statuses = store.read_all(GitHubBridgeMailboxStatusRecord)
+    assert payload["answered"] is True
+    assert seen["request_id"] == "req-target"
+    assert [response.request_id for response in responses] == ["req-target"]
+    assert responses[0].message == "Jenny answer from Hermes."
+    assert [status.status for status in statuses][-3:] == [
+        "hermes_answer_started",
+        "response_appended",
+        "hermes_answer_completed",
+    ]
+
+
+def test_answer_pending_with_hermes_noops_when_only_stale_requests_match(tmp_path: Path):
+    records = tmp_path / "records.jsonl"
+    poll_comments(
+        [
+            _comment(
+                501,
+                _body(request_id="req-stale", created_at="2026-06-13T00:00:00Z"),
+                created_at="2026-06-13T00:00:00Z",
+            )
+        ],
+        repo="Travisaggie04/hermes-agent",
+        issue_number=79,
+        path=records,
+    )
+
+    payload = answer_pending_with_hermes(
+        not_before="2026-06-13T01:00:00Z",
+        repo="Travisaggie04/hermes-agent",
+        issue_number=79,
+        path=records,
+        run_hermes_fn=lambda *_args, **_kwargs: "should not run",
+    )
+
+    store = JsonlRecordStore(records)
+    statuses = store.read_all(GitHubBridgeMailboxStatusRecord)
+    assert payload["answered"] is False
+    assert statuses[-1].status == "hermes_answer_noop"
+    assert "no matching pending" in statuses[-1].last_error
+
+
+def test_clean_hermes_response_blocks_startup_screen_noise():
+    assert clean_hermes_response("Hermes Agent\nAvailable Skills\n...") == (
+        "I received the Mission Control message, but Hermes returned a non-chat startup "
+        "screen instead of a clean response."
+    )
 
 
 def test_send_posts_one_bridge_message_and_records_status(tmp_path: Path, monkeypatch):
