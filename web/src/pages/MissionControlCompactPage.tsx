@@ -645,7 +645,7 @@ function structuredJennyHandoff(projectName: string): string {
 function buildCompactNextLanePrompt(projectView: ProjectViewModel, workspaceStatus: WorkspaceStatus): string {
   const guidance = PROJECT_LANE_GUIDANCE[projectView.project.project_id] ?? "Read-only Mission Control status lane. Report current state and the next safe manual step.";
   return [
-    "MISSION CONTROL COMPACT — MANUAL COPY ONLY",
+    "MISSION CONTROL COMPACT — REVIEW PACKET",
     "",
     `Project: ${projectView.project.name}`,
     `Status: ${projectView.status}`,
@@ -658,7 +658,7 @@ function buildCompactNextLanePrompt(projectView: ProjectViewModel, workspaceStat
     "Allowed actions: read existing GET-only Mission Control state, inspect approved source-of-truth, and report a bounded next lane.",
     "Forbidden actions: no POST, session-send, dispatch, queue/Kanban/Waha/model routing, workers, timers, browser storage, records/config mutation, deploy, restart, or secrets.",
     `Safety status: ${safetySummary(workspaceStatus)}`,
-    "Send to Jenny disabled. Copy this prompt manually only after review.",
+    "Use guarded project chat for the Jenny mailbox, or copy this packet manually after review. Direct session send remains disabled.",
   ].join("\n");
 }
 
@@ -668,7 +668,7 @@ function buildPhoneSafeProjectPacket(projectView: ProjectViewModel, requestText:
   const review = projectView.challengeReview;
   const categories = review?.challenge_categories?.length ? review.challenge_categories.join(", ") : "none recorded";
   const verdicts = review?.blocking_verdicts?.length ? review.blocking_verdicts.join(", ") : "none recorded";
-  const guard = compactText(projectView.project.mistakes_guards, 220) || "manual-copy only; no live action";
+  const guard = compactText(projectView.project.mistakes_guards, 220) || "guarded mailbox only; no live action";
   const packet = [
     "Project room request:",
     projectView.project.name,
@@ -691,7 +691,7 @@ function buildPhoneSafeProjectPacket(projectView: ProjectViewModel, requestText:
     guard,
     "",
     "Allowed: read approved context, report status, recommend next safe lane.",
-    "Forbidden: no send path, live mutation, Waha, queue, model, social, payment, worker, timer, deploy, restart, runtime switch, config/state, or secrets unless separately approved.",
+    "Forbidden: no direct session send, live mutation, Waha, queue, model, social, payment, worker, timer, deploy, restart, runtime switch, config/state, or secrets unless separately approved.",
     "",
     `Safety status: ${safetySummary(workspaceStatus)}`,
     "",
@@ -1031,7 +1031,7 @@ export default function MissionControlCompactPage() {
       const nextSnapshot = await loadCompactSnapshot();
       setSnapshot(nextSnapshot);
       setReportForm({ ...EMPTY_REPORT_FORM, projectId: reportForm.projectId });
-      setReportMessage("Jenny report saved manually. Send to Jenny remains disabled.");
+      setReportMessage("Jenny report saved manually. Direct session send remains disabled.");
     } catch (err) {
       setReportMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1049,7 +1049,7 @@ export default function MissionControlCompactPage() {
             <p className="mt-1 text-xs text-muted-foreground">Hermes / Mission Control is active. Shorts, long-form, Tool & Tally, and Waha are on hold until Jenny is stable here.</p>
           </div>
           <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-700 dark:text-emerald-300">
-            Send disabled
+            Jenny guarded
           </span>
         </div>
       </header>
@@ -1613,7 +1613,7 @@ function CompactReportIngestion({
   return (
     <section className="mt-4 rounded-2xl border border-border/70 bg-card p-3" aria-label="Manual Jenny report ingestion compact">
       <h2 className="text-sm font-semibold">Save Jenny report manually</h2>
-      <p className="mt-1 text-[0.68rem] text-muted-foreground">Append-only reports/create only. Send to Jenny disabled; no dispatch or queue routing.</p>
+      <p className="mt-1 text-[0.68rem] text-muted-foreground">Append-only reports/create only. Guarded mailbox is separate; this report form does not dispatch or route queues.</p>
       <label className="mt-3 grid gap-1 text-xs font-medium">
         Project
         <select className="rounded-xl border border-border/80 bg-background px-3 py-2 text-sm" onChange={event => onChange("projectId", event.target.value)} value={form.projectId}>
@@ -1700,7 +1700,7 @@ function CompactProjectCard({ copied, onCopy, projectView }: { copied: boolean; 
       <button className="mt-3 w-full rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted" onClick={onCopy} type="button">
         {copied ? "Prompt copied" : "Copy next lane prompt"}
       </button>
-      <p className="mt-2 text-[0.68rem] text-muted-foreground">Send to Jenny disabled — manual copy only.</p>
+      <p className="mt-2 text-[0.68rem] text-muted-foreground">Use project chat for the guarded Jenny mailbox, or copy this archive prompt manually.</p>
     </article>
   );
 }
