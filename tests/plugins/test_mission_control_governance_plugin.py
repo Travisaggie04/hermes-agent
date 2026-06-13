@@ -670,6 +670,73 @@ def test_workspace_github_bridge_outbox_create_posts_one_mailbox_message(plugin_
     assert [record.request_id for record in records] == ["github-req-ui"]
 
 
+def test_workspace_github_bridge_answer_once_requires_explicit_request(plugin_api, client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/github-bridge/answer-once",
+        json={"project_id": "project-hermes"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "request_id is required"
+
+
+def test_workspace_github_bridge_answer_once_runs_single_manual_answer(plugin_api, client, monkeypatch):
+    def fake_answer_pending_with_hermes(**kwargs):
+        assert kwargs["project_id"] == "project-hermes"
+        assert kwargs["request_id"] == "github-req-ui"
+        assert kwargs["path"] == plugin_api.record_store_path()
+        assert kwargs["operator"] == "mission-control-ui"
+        return {
+            "manual_start_only": True,
+            "dispatch_enabled": False,
+            "session_send_enabled": False,
+            "execution_enabled": False,
+            "worker_enabled": False,
+            "timer_enabled": False,
+            "answered": True,
+            "request": {
+                "request_id": "github-req-ui",
+                "project_id": "project-hermes",
+                "from_agent": "travis",
+                "to_agent": "jenny",
+                "status": "queued",
+                "message": "Please answer one request.",
+            },
+            "response": {
+                "request_id": "github-req-ui",
+                "project_id": "project-hermes",
+                "from_agent": "jenny",
+                "to_agent": "travis",
+                "status": "replied",
+                "message": "Answered once.",
+            },
+            "status": {"status": "hermes_answer_completed"},
+        }
+
+    monkeypatch.setattr(plugin_api, "answer_pending_with_hermes", fake_answer_pending_with_hermes)
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/github-bridge/answer-once",
+        json={"project_id": "project-hermes", "request_id": "github-req-ui"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stored"] is True
+    assert payload["manual_start_only"] is True
+    assert payload["send_to_jenny_enabled"] is True
+    assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["worker_enabled"] is False
+    assert payload["timer_enabled"] is False
+    assert payload["daemon_enabled"] is False
+    assert payload["github_bridge_enabled"] is True
+    assert payload["answered"] is True
+    assert payload["request"]["request_id"] == "github-req-ui"
+    assert payload["response"]["message"] == "Answered once."
+
+
 def _assert_inert_workspace_payload(payload):
     assert payload["display_only"] is True
     assert payload["manual_copy_only"] is True

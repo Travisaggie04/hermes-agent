@@ -525,6 +525,28 @@ export interface MissionControlGitHubBridgeRequestCreateResponse {
   stored?: boolean
 }
 
+export interface MissionControlGitHubBridgeAnswerOncePayload {
+  project_id: string
+  request_id: string
+}
+
+export interface MissionControlGitHubBridgeAnswerOnceResponse {
+  answered?: boolean
+  daemon_enabled?: boolean
+  dispatch_enabled?: boolean
+  execution_enabled?: boolean
+  github_bridge_enabled?: boolean
+  manual_start_only?: boolean
+  request?: MissionControlGitHubBridgeMessageRecord | null
+  response?: MissionControlGitHubBridgeMessageRecord | null
+  send_to_jenny_enabled?: boolean
+  session_send_enabled?: boolean
+  status?: MissionControlGitHubBridgeMailboxStatusRecord | Record<string, unknown>
+  stored?: boolean
+  timer_enabled?: boolean
+  worker_enabled?: boolean
+}
+
 export interface MissionControlJennyBridgeRequestCreatePayload {
   ack_key?: string
   dedupe_key?: string
@@ -764,6 +786,16 @@ export function createMissionControlGitHubBridgeRequest(
     body: payload,
     method: 'POST',
     path: `${MISSION_CONTROL_API}/workspace/github-bridge/outbox/create`
+  })
+}
+
+export function answerMissionControlGitHubBridgeOnce(
+  payload: MissionControlGitHubBridgeAnswerOncePayload
+): Promise<MissionControlGitHubBridgeAnswerOnceResponse> {
+  return window.hermesDesktop.api<MissionControlGitHubBridgeAnswerOnceResponse>({
+    body: payload,
+    method: 'POST',
+    path: `${MISSION_CONTROL_API}/workspace/github-bridge/answer-once`
   })
 }
 
