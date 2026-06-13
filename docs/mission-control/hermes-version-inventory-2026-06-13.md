@@ -1,14 +1,15 @@
 # Hermes Version Inventory - 2026-06-13
 
-This is a read-only version inventory for Travis's laptop/Codex checkout and
-Jenny's VPS runtimes. It does not approve an update, deploy, restart, runtime
-switch, record mutation, dispatch/session-send, Waha action, or gateway change.
+This is a read-only version inventory for Travis's laptop/Codex checkout,
+Travis's laptop Hermes worker node, and Jenny's VPS runtimes. It does not
+approve an update, deploy, restart, runtime switch, laptop worker-node trigger,
+record mutation, dispatch/session-send, Waha action, or gateway change.
 
 ## Local Accepted-Live Checkout
 
 - Branch: `accepted-live/approval-safety-5ad8906`
-- Head: `dddb87696bc5caf4aa2aaa993c73a231d3ba2171`
-- Description: `v2026.5.16-1486-gdddb87696`
+- Head after PR #106: `98eca98f4f83a14a77a03972c24108591cf27261`
+- Description after PR #106: `v2026.5.16-1489-g98eca98f4`
 - `pyproject.toml` package version: `0.16.0`
 - `hermes_cli.__version__`: `0.16.0`
 - `hermes_cli.__release_date__`: `2026.6.5`
@@ -29,8 +30,8 @@ were:
 
 `GET /repos/Travisaggie04/hermes-agent/releases/latest` returned HTTP `404`,
 so there is no GitHub "latest release" object to trust as the update target.
-The update source must be verified from the desktop updater/install channel or
-from a specific reviewed branch/commit.
+The update source must be verified from the VPS-triggered worker-node
+updater/install channel or from a specific reviewed branch/commit.
 
 ## VPS Runtime Inventory
 
@@ -46,9 +47,13 @@ restart or switch either service.
 
 - The desktop footer showing `v0.16.0` is consistent with the CLI/runtime
   package version, not necessarily the Electron desktop package version.
-- The desktop updater may be using an installer/update channel that is separate
-  from GitHub Releases. That channel still needs to be identified before
-  changing laptop or VPS versions.
+- The laptop worker-node updater may be using an installer/update channel that
+  is separate from GitHub Releases. That channel still needs to be identified
+  before changing laptop or VPS versions.
+- Travis clarified that the laptop Hermes install is a worker node and that the
+  VPS historically triggered laptop Hermes updates. The update source should
+  therefore be inventoried as a VPS-triggered worker-node path, not assumed to
+  be a standalone laptop click-to-update flow.
 - The VPS dashboard is intentionally behind the current accepted-live branch
   after later docs/record work. That is not automatically an update problem:
   dashboard-only switch remains a separate deploy lane.
@@ -58,11 +63,12 @@ restart or switch either service.
 
 ## Recommended Safe Update Sequence
 
-1. Identify the desktop updater source and exact target version before clicking
-   update.
-2. Update the laptop desktop app first only if the updater source is trusted and
-   the release notes do not imply gateway/runtime migration.
-3. Smoke-check laptop Mission Control:
+1. Identify the VPS-triggered laptop worker-node updater source, command, target
+   version, and rollback path before triggering any laptop update.
+2. Keep laptop worker-node update as a separate explicit approval step; do not
+   trigger it as part of dashboard-only Mission Control deployment.
+3. Smoke-check laptop Mission Control after a separately approved worker-node
+   update:
    - app opens,
    - Mission Control renders,
    - GitHub/Jenny bridge status renders,
@@ -82,6 +88,7 @@ restart or switch either service.
 ## Hard Stops
 
 - No gateway restart in the version-readiness lane.
+- No laptop worker-node update trigger in the version-readiness lane.
 - No dispatch/session-send.
 - No Waha/social posting/scheduler actions.
 - No checkout/payment/customer/outreach changes.
@@ -91,7 +98,7 @@ restart or switch either service.
 
 ## Next Recommended Lane
 
-Run a desktop updater-source inventory. The output should name the updater
-manifest/source, the proposed desktop version, whether the update affects only
-the Electron shell or also the Hermes runtime, and the rollback path before any
-update is installed.
+Run a VPS-triggered laptop worker-node updater-source inventory. The output
+should name the updater command/manifest/source, proposed worker-node version,
+whether the update affects only the desktop shell or also the Hermes runtime,
+and the rollback path before any update is triggered.

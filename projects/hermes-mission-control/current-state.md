@@ -38,6 +38,9 @@ Mission Control should provide:
 - Live gateway runtime observed before this context update:
   `/home/jenny/.hermes/hermes-runtime-control-plane-af1eafe`
 - GitHub bridge mailbox transport: PR #79 conversation thread.
+- Laptop Hermes role: worker node. Travis clarified that the VPS historically
+  triggered laptop Hermes updates, so laptop updates must be treated as a
+  worker-node update trigger with separate inventory, rollback, and approval.
 
 ## Tonight's Lane
 
@@ -54,6 +57,7 @@ Allowed tonight:
 Forbidden without explicit approval:
 
 - Gateway restart.
+- Laptop worker-node update trigger.
 - Dispatch or session-send.
 - Waha or social posting.
 - Payment, checkout, customer outreach, or model routing changes.
