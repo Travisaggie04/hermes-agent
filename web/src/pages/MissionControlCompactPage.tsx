@@ -1242,7 +1242,7 @@ export default function MissionControlCompactPage() {
       ) : null}
 
       <details className="mt-4 rounded-2xl border border-border/70 bg-card p-3">
-        <summary className="cursor-pointer text-sm font-semibold">Technical status, reports, and paused projects</summary>
+        <summary className="cursor-pointer text-sm font-semibold">Advanced status and reports</summary>
         <div className="mt-3 grid gap-4">
           {snapshot ? <SafetyStrip status={snapshot.workspaceStatus} /> : null}
 
@@ -1531,7 +1531,7 @@ function CompactProjectRoom({
             </div>
           </div>
           <details className="mt-2">
-            <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">Project context</summary>
+            <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">About this project</summary>
             <div className="mt-2 grid gap-2 text-xs">
               <CompactField label="readiness" value={selectedProjectView.readinessDetail} />
               <CompactField label="last update" value={compactText(selectedProjectView.latestReport, 220)} />
@@ -1573,7 +1573,7 @@ function CompactProjectRoom({
         </section>
 
         <label className="mt-4 grid gap-1 text-sm font-medium">
-          Message
+          Message Jenny
           <textarea
             className="min-h-24 rounded-xl border border-border/80 bg-background px-3 py-2 text-sm"
             disabled={paused}
@@ -1638,7 +1638,7 @@ function CompactProjectRoom({
         </section>
 
         <details className="mt-4 rounded-xl border border-border/70 bg-background/60 p-3">
-          <summary className="cursor-pointer text-sm font-semibold">Safety controls and technical details</summary>
+          <summary className="cursor-pointer text-sm font-semibold">Advanced controls</summary>
           <section className="mt-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-sm font-semibold">Jenny memory storage</h3>

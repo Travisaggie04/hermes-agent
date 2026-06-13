@@ -641,7 +641,7 @@ describe('MissionControlView', () => {
     expect(getMissionControlGitHubBridgeStatus).toHaveBeenCalledTimes(1)
 
     expect(screen.getByText('Project report archive')).toBeTruthy()
-    expect(screen.getByText('Technical status, reports, and paused projects')).toBeTruthy()
+    expect(screen.getByText('Advanced status and reports')).toBeTruthy()
     expect(screen.getByText('Active Jenny OS Lane')).toBeTruthy()
     expect(screen.getByText('Mission Control/Jenny stability lane only. Display-only; lane state is derived from briefs, challenge reviews, lane drafts, and reports.')).toBeTruthy()
     expect(screen.getByText('display-only / no dispatch')).toBeTruthy()
@@ -662,7 +662,7 @@ describe('MissionControlView', () => {
     expect(screen.queryByText(/Local error guard smoke/i)).toBeNull()
     expect(screen.queryByText(/codex app-server startup failed/i)).toBeNull()
     expect(screen.getByText('Previous sessions')).toBeTruthy()
-    expect(screen.getByText('Safety controls and technical details')).toBeTruthy()
+    expect(screen.getByText('Advanced controls')).toBeTruthy()
     expect(screen.getByText('Jenny bridge')).toBeTruthy()
     expect(screen.getAllByText('manual-start only').length).toBeGreaterThanOrEqual(2)
     expect(screen.getAllByText('replied').length).toBeGreaterThan(0)
@@ -916,7 +916,7 @@ describe('MissionControlView', () => {
     await renderMissionControl()
 
     expect((await screen.findAllByRole('heading', { name: 'Hermes / Mission Control' })).length).toBeGreaterThan(0)
-    expect(screen.getByText('Message')).toBeTruthy()
+    expect(screen.getByText('Message Jenny')).toBeTruthy()
     expect(screen.getByText('Conversation')).toBeTruthy()
     expect(screen.getByText('Phone-safe packet')).toBeTruthy()
     expect(screen.getByText('Previous sessions')).toBeTruthy()
