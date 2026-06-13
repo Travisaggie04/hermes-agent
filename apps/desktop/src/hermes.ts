@@ -218,6 +218,8 @@ export interface MissionControlProjectBriefRecord {
 }
 
 export interface MissionControlChallengeReviewRecord {
+  blocking_verdicts?: string[]
+  challenge_categories?: string[]
   concerns?: string[]
   decision_state?: string
   project_id: string
@@ -230,6 +232,8 @@ export interface MissionControlChallengeReviewRecord {
 }
 
 export interface MissionControlChallengeReviewCreatePayload {
+  blocking_verdicts?: string[]
+  challenge_categories?: string[]
   concerns?: string[]
   decision_state?: string
   project_id: string

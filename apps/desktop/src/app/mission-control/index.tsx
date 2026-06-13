@@ -693,6 +693,8 @@ function buildPhoneSafeProjectPacket({
   status: ReturnType<typeof summarizeWorkspaceStatus>
 }): string {
   const readiness = projectReadinessLabel(brief, review)
+  const categories = review?.challenge_categories?.length ? review.challenge_categories.join(', ') : 'none recorded'
+  const verdicts = review?.blocking_verdicts?.length ? review.blocking_verdicts.join(', ') : 'none recorded'
   const packet = `Project room request:
 ${project.name}
 
@@ -704,6 +706,8 @@ ${compactText(brief?.outcome, 220) || 'missing project brief'}
 
 Challenge state:
 ${compactText(review?.decision_state, 60) || 'missing'} / ${compactText(review?.recommended_path, 240) || 'challenge review required before lane draft'}
+Categories: ${compactText(categories, 240)}
+Blocking verdicts: ${compactText(verdicts, 240)}
 
 Readiness:
 ${readiness.label}
@@ -905,6 +909,8 @@ export function MissionControlView() {
 
     try {
       await createMissionControlChallengeReview({
+        blocking_verdicts: ['requires_spec_update', 'blocks_lane_draft'],
+        challenge_categories: ['questions_required', 'missing_context'],
         concerns: ['request entered from Desktop project room requires Jenny challenge review'],
         decision_state: 'needs_spec_first',
         project_id: project.project_id,

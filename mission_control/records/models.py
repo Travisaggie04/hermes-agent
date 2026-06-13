@@ -450,6 +450,8 @@ class ChallengeReviewRecord:
     project_id: str
     request_summary: str
     decision_state: str = "needs_spec_first"
+    challenge_categories: tuple[str, ...] = ()
+    blocking_verdicts: tuple[str, ...] = ()
     recommended_path: str = ""
     concerns: tuple[str, ...] = ()
     questions: tuple[str, ...] = ()
@@ -464,6 +466,8 @@ class ChallengeReviewRecord:
     record_type: ClassVar[str] = "ChallengeReviewRecord"
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "challenge_categories", tuple(str(item) for item in _tuple(self.challenge_categories)))
+        object.__setattr__(self, "blocking_verdicts", tuple(str(item) for item in _tuple(self.blocking_verdicts)))
         object.__setattr__(self, "concerns", tuple(str(item) for item in _tuple(self.concerns)))
         object.__setattr__(self, "questions", tuple(str(item) for item in _tuple(self.questions)))
         object.__setattr__(self, "required_spec_updates", tuple(str(item) for item in _tuple(self.required_spec_updates)))
@@ -476,6 +480,8 @@ class ChallengeReviewRecord:
             "project_id": self.project_id,
             "request_summary": self.request_summary,
             "decision_state": self.decision_state,
+            "challenge_categories": list(self.challenge_categories),
+            "blocking_verdicts": list(self.blocking_verdicts),
             "recommended_path": self.recommended_path,
             "concerns": list(self.concerns),
             "questions": list(self.questions),
@@ -495,6 +501,8 @@ class ChallengeReviewRecord:
             project_id=_required(data, "project_id"),
             request_summary=_required(data, "request_summary"),
             decision_state=data.get("decision_state", "needs_spec_first"),
+            challenge_categories=data.get("challenge_categories") or (),
+            blocking_verdicts=data.get("blocking_verdicts") or (),
             recommended_path=data.get("recommended_path", ""),
             concerns=data.get("concerns") or (),
             questions=data.get("questions") or (),
