@@ -417,6 +417,28 @@ function jennyDeliveryStatus(
   return "Ready for your first message";
 }
 
+function jennyNextStep(
+  pendingCount: number,
+  responseCount: number,
+  hasRunnablePendingMessage: boolean,
+  bridgeStatus: JennyBridgePollerStatus,
+  githubBridgeStatus: GitHubBridgeStatus,
+): string {
+  if (bridgeStatus.last_error || githubBridgeStatus.last_error) {
+    return "Open safety details, check the bridge error, then refresh replies.";
+  }
+  if (hasRunnablePendingMessage) {
+    return "Tap Run Jenny once to get a reply for the latest message.";
+  }
+  if (pendingCount) {
+    return "A message is waiting; refresh replies or wait for the bridge.";
+  }
+  if (responseCount) {
+    return "Review Jenny's latest reply, then send the next bounded message.";
+  }
+  return "Type one bounded project message, then tap Send to Jenny.";
+}
+
 function lineList(value: string): string[] {
   return value
     .split(/\r?\n/)
@@ -1234,7 +1256,9 @@ function CompactProjectRoom({
   const latestPending = latestPendingGitHubBridgeMessage(githubBridgeMessages);
   const githubResponseCount = githubBridgeMessages.filter(message => message.status === "replied" || message.from_agent === "jenny").length;
   const pendingCount = pendingJennyMessageCount(bridgeRequests, bridgeResponses) + githubPendingCount;
-  const deliveryStatus = jennyDeliveryStatus(pendingCount, bridgeResponses.length + githubResponseCount, bridgeStatus, githubBridgeStatus);
+  const responseCount = bridgeResponses.length + githubResponseCount;
+  const deliveryStatus = jennyDeliveryStatus(pendingCount, responseCount, bridgeStatus, githubBridgeStatus);
+  const nextStep = jennyNextStep(pendingCount, responseCount, Boolean(latestPending), bridgeStatus, githubBridgeStatus);
   const chatMessages = [
     ...bridgeRequests.map(request => ({
       body: request.message,
@@ -1306,6 +1330,14 @@ function CompactProjectRoom({
             <div>
               <span className="font-semibold">Jenny: </span>
               <span className="text-muted-foreground">{deliveryStatus}</span>
+            </div>
+          </div>
+          <div className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
+            <div className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Next step</div>
+            <p className="mt-1 text-sm">{nextStep}</p>
+            <div className="mt-2 flex flex-wrap gap-2 text-[0.68rem] text-muted-foreground">
+              <span className="rounded-full border border-border/70 px-2 py-0.5">Pending {pendingCount}</span>
+              <span className="rounded-full border border-border/70 px-2 py-0.5">Replies {responseCount}</span>
             </div>
           </div>
           <details className="mt-2">
