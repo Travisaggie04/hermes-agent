@@ -131,6 +131,8 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "manual-start only",
         "worker/timer",
         "Deploy state",
+        "dashboardUpdateNotice",
+        "Desktop can be current while phone/web waits for a safe dashboard-only update.",
         "Accepted / deployed",
         "Desktop app",
         "separate worker-node update",
