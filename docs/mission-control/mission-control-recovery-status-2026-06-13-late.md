@@ -23,7 +23,7 @@ longer exposes paused-project queue buttons while the recovery lane is active.
 
 Latest accepted-live head after the current recovery UI sequence:
 
-- `594a2ebba641f9430e27647f69bcbd1c5f310989`
+- `4c674cb868d396b39b78a92b99db2cf193010133`
 
 ## Completed PRs
 
@@ -35,15 +35,18 @@ Latest accepted-live head after the current recovery UI sequence:
 | #136 | `83952716a2b69392dd216f614ad64b6732bf25ab` | Owner-facing wording simplified: `Message Jenny`, `About this project`, `Advanced controls`, and `Advanced status and reports`. |
 | #137 | `a1b8d3c2e476fd535bd02fa533050d0f31b9fba2` | Paused-project queue/audit controls removed from desktop and compact surfaces. |
 | #139 | `594a2ebba641f9430e27647f69bcbd1c5f310989` | Adds an owner-facing Jenny chat readiness chip for watching, waiting, replied, ready, and needs-attention states. |
+| #141 | `112361b51aa5803436208886a75180539308cbe3` | Keeps all five project rooms visible even when backend project records are partially projected. Existing records still override canonical project anchors. |
+| #142 | `82e142577f54d3cd3e2a728b33ac78827cb775cc` | Renames the owner-facing one-shot bridge action from `Run Jenny once` to `Get Jenny reply`. |
+| #143 | `4c674cb868d396b39b78a92b99db2cf193010133` | Adds plain owner-facing copy explaining that desktop can be current while phone/web waits for a safe dashboard-only update. |
 
 ## Local Desktop Status
 
-The local desktop app was rebuilt in place at PR #137:
+The local desktop app was rebuilt in place at PR #143:
 
 - path:
   `C:\Users\Travis\Documents\Codex\2026-06-12\how-do-we-connect-you-to\work\hermes-agent\apps\desktop\release-bridge\win-unpacked\Hermes.exe`
 - latest build stamp commit:
-  `594a2ebba641f9430e27647f69bcbd1c5f310989`
+  `4c674cb868d396b39b78a92b99db2cf193010133`
 
 Expected desktop behavior:
 
@@ -51,7 +54,11 @@ Expected desktop behavior:
 - Hermes / Mission Control active,
 - other four projects paused/read-only,
 - normal conversation hides smoke/error diagnostics,
-- primary controls are chat-like: message Jenny, send, run once, refresh,
+- primary controls are chat-like: message Jenny, send, get Jenny reply, refresh,
+- five project-room anchors remain visible even if the backend temporarily
+  returns only Hermes / Mission Control,
+- if accepted-live is ahead of the served dashboard, desktop shows plain
+  update-lag copy instead of requiring Travis to interpret commit IDs,
 - advanced guardrails remain collapsed behind advanced sections.
 
 ## Live Dashboard Status
@@ -65,19 +72,20 @@ Verified dashboard-only deployments completed through PR #136:
 - gateway runtime intentionally unchanged:
   `/home/jenny/.hermes/hermes-runtime-control-plane-af1eafe`
 
-PR #137/#139 dashboard runtime switch is still pending because direct Codex SSH
-hit a Tailscale browser re-auth challenge, and the sandbox cannot read Travis's
-private SSH key.
+PR #137/#139/#141/#142/#143 dashboard runtime switch is still pending. Codex
+fixed host-key verification with a repo-local known-hosts entry matching the
+previously accepted VPS fingerprint, but direct SSH still hits a Tailscale
+browser re-auth challenge.
 
 Fallback action already taken:
 
 - queued a GitHub bridge request to Jenny on PR #79,
 - superseding request id:
-  `codex-pr139-dashboard-deploy-20260613-232501`,
+  `codex-pr143-dashboard-deploy-head-update-20260614-001`,
 - supersedes earlier request:
-  `codex-pr137-dashboard-deploy-20260613-225736`,
+  `codex-pr139-dashboard-deploy-20260613-232501`,
 - request asks for dashboard-only runtime switch to
-  `594a2ebba641f9430e27647f69bcbd1c5f310989`, no gateway restart, no
+  `4c674cb868d396b39b78a92b99db2cf193010133`, no gateway restart, no
   dispatch/session-send, and exactly one `AcceptedBaselineRecord` only after
   successful validation.
 
@@ -110,6 +118,27 @@ PR #139 validation:
 - GitHub CI: clean,
 - local desktop app rebuilt in place.
 
+PR #141 validation:
+
+- local desktop type-check: passed,
+- targeted desktop ESLint: passed,
+- GitHub CI: clean,
+- local desktop app rebuilt in place.
+
+PR #142 validation:
+
+- local desktop type-check: passed,
+- targeted desktop ESLint: passed,
+- GitHub CI: clean,
+- local desktop app rebuilt in place.
+
+PR #143 validation:
+
+- local desktop type-check: passed,
+- targeted desktop ESLint: passed,
+- GitHub CI: clean,
+- local desktop app rebuilt in place.
+
 Local browser visual validation was attempted but blocked by the Windows
 sandbox browser runtime:
 
@@ -130,7 +159,8 @@ sandbox browser runtime:
 
 Primary next lane:
 
-- finish the latest accepted-live dashboard-only runtime switch.
+- finish the latest accepted-live dashboard-only runtime switch to
+  `4c674cb868d396b39b78a92b99db2cf193010133`.
 
 After that:
 
