@@ -55,6 +55,49 @@ const REAL_PROJECT_NAMES = [
   "Waha Work",
 ] as const;
 
+const CANONICAL_REAL_PROJECTS: ProjectRecord[] = [
+  {
+    current_goal: "Make Mission Control the primary Jenny workspace before resuming other projects.",
+    name: "Hermes / Mission Control",
+    next_recommended_lane: "Continue the Mission Control/Jenny recovery lane.",
+    project_id: "project-hermes-mission-control",
+    source_of_truth: "Mission Control recovery records",
+    status: "Active recovery lane",
+  },
+  {
+    current_goal: "Paused until Jenny/Mission Control is stable.",
+    name: "Long-form Video",
+    next_recommended_lane: "Resume with a read-only toolchain/proof plan after Jenny is stable.",
+    project_id: "project-long-form-video",
+    source_of_truth: "Mission Control project anchor",
+    status: "Paused",
+  },
+  {
+    current_goal: "Paused until Jenny/Mission Control is stable.",
+    name: "Shorts Video",
+    next_recommended_lane: "Resume with a read-only queue/status audit after Jenny is stable.",
+    project_id: "project-shorts-video",
+    source_of_truth: "Mission Control project anchor",
+    status: "Paused",
+  },
+  {
+    current_goal: "Paused until Jenny/Mission Control is stable.",
+    name: "Tool & Tally",
+    next_recommended_lane: "Resume with report-engine fixture recovery before checkout or outreach.",
+    project_id: "project-tool-tally",
+    source_of_truth: "Mission Control project anchor",
+    status: "Paused",
+  },
+  {
+    current_goal: "Paused until Jenny/Mission Control is stable.",
+    name: "Waha Work",
+    next_recommended_lane: "Resume only after isolated Waha approval gates are clear.",
+    project_id: "project-waha-work",
+    source_of_truth: "Mission Control project anchor",
+    status: "Paused",
+  },
+];
+
 const ACTIVE_OS_PROJECT_IDS = [HERMES_PROJECT_ID];
 
 const PAUSED_PROJECT_IDS = [
@@ -609,6 +652,15 @@ function isSmokeProject(project: ProjectRecord): boolean {
   return /smoke|support/i.test(`${project.project_id} ${project.name} ${project.status ?? ""}`);
 }
 
+function canonicalRealProjects(projects: ProjectRecord[]): ProjectRecord[] {
+  return CANONICAL_REAL_PROJECTS.map(canonical => {
+    const existing = projects.find(project => project.project_id === canonical.project_id)
+      ?? projects.find(project => project.name === canonical.name);
+
+    return existing ? { ...canonical, ...existing } : canonical;
+  });
+}
+
 function formatBytes(value: unknown): string {
   const bytes = typeof value === "number" && Number.isFinite(value) ? value : 0;
   if (bytes < 1024) return `${bytes} B`;
@@ -935,7 +987,7 @@ export default function MissionControlCompactPage() {
 
   const realProjects = useMemo(() => {
     if (!snapshot) return [];
-    return snapshot.projects.filter(isRealProject).sort((a, b) => projectRank(a) - projectRank(b));
+    return canonicalRealProjects(snapshot.projects.filter(isRealProject).sort((a, b) => projectRank(a) - projectRank(b)));
   }, [snapshot]);
   const activeProjects = useMemo(() => {
     const projects = realProjects.filter(project => ACTIVE_OS_PROJECT_IDS.includes(project.project_id));

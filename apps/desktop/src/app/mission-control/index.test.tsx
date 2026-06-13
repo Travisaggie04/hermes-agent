@@ -702,6 +702,37 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText('Primary project').length).toBeGreaterThanOrEqual(1)
   })
 
+  it('keeps all five project chat rooms visible when project records are partially projected', async () => {
+    getMissionControlProjects.mockResolvedValueOnce({
+      count: 1,
+      dispatch_enabled: false,
+      manual_copy_only: true,
+      projects: [
+        {
+          record: {
+            current_goal: 'Make desktop the main workspace.',
+            name: 'Hermes / Mission Control',
+            next_recommended_lane: 'Desktop read-only workspace v1',
+            project_id: 'project-hermes-mission-control',
+            source_of_truth: 'Mission Control records',
+            status: 'Live workspace'
+          },
+          record_type: 'ProjectRecord'
+        }
+      ],
+      send_to_jenny_enabled: false
+    })
+
+    await renderMissionControl()
+
+    expect(await screen.findByRole('region', { name: 'Project chat workspace' })).toBeTruthy()
+    expect(screen.getAllByText('5 projects').length).toBeGreaterThan(0)
+    for (const [, name] of realProjects) {
+      expect(screen.getAllByText(name).length).toBeGreaterThan(0)
+    }
+    expect(screen.getAllByText('Paused until Jenny is stable').length).toBe(4)
+  })
+
   it('renders a read-only project kanban lifecycle without queue mutation controls', async () => {
     await renderMissionControl()
 

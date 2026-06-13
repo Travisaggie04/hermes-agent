@@ -97,6 +97,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Queue for Jenny bridge",
         "Refresh replies",
         "projectRoomProjects",
+        "canonicalRealProjects",
         "projects={projectRoomProjects}",
         "Paused until Jenny is stable. Review context only; sending work to Jenny is disabled for this project.",
         "This project is visible for planning context only. Resume it after the Mission Control/Jenny recovery lane is stable.",
