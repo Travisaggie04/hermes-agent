@@ -866,10 +866,41 @@ def _project_state_artifact_links(report: dict[str, Any]) -> list[str]:
     return [str(item).strip() for item in report.get("changed_files", []) if str(item).strip()]
 
 
+def _project_report_contract(report: dict[str, Any], artifact_links: list[str]) -> dict[str, Any]:
+    if not report:
+        missing = ["report"]
+        state = "missing_report"
+    else:
+        missing = []
+        if not report.get("summary"):
+            missing.append("summary")
+        if not report.get("result"):
+            missing.append("result")
+        if not (report.get("risks") or report.get("blockers")):
+            missing.append("risks/blockers")
+        if not artifact_links:
+            missing.append("evidence")
+        if not report.get("tests"):
+            missing.append("tests")
+        if not report.get("next_recommended_lane"):
+            missing.append("next lane")
+        state = "complete" if not missing else "incomplete"
+
+    return {
+        "state": state,
+        "complete": not missing,
+        "missing_fields": missing,
+        "required_fields": ["summary", "result", "risks/blockers", "evidence", "tests", "next lane"],
+        "display_only": True,
+        "trusted_for_execution": False,
+    }
+
+
 def _project_state_missing_fields(
     *,
     lane: dict[str, Any],
     report: dict[str, Any],
+    report_contract: dict[str, Any],
     risks: list[str],
     artifact_links: list[str],
 ) -> list[str]:
@@ -884,6 +915,8 @@ def _project_state_missing_fields(
         missing.append("risks_blockers")
     if not artifact_links:
         missing.append("artifact_links")
+    if report_contract.get("complete") is not True:
+        missing.append("report_contract")
     return missing
 
 
@@ -921,6 +954,7 @@ def _project_state_projection(limit: int) -> list[dict[str, Any]]:
         report = report_item.get("record", {}) if report_item else {}
         risks = report.get("risks") or []
         artifact_links = _project_state_artifact_links(report)
+        report_contract = _project_report_contract(report, artifact_links)
         has_real_report = bool(report.get("summary") or report.get("result"))
         latest_activity_source = "report" if has_real_report else "lane" if lane else "project"
         latest_activity_at = (
@@ -953,9 +987,11 @@ def _project_state_projection(limit: int) -> list[dict[str, Any]]:
             "missing_state_fields": _project_state_missing_fields(
                 lane=lane,
                 report=report,
+                report_contract=report_contract,
                 risks=risks,
                 artifact_links=artifact_links,
             ),
+            "report_contract": report_contract,
             "artifact_links": artifact_links,
             "linked_session_count": session_group.get("linked_session_count", 0),
             "recent_sessions": recent_sessions,

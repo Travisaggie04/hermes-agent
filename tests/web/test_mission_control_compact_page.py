@@ -201,6 +201,8 @@ def test_compact_cards_show_project_state_freshness_and_artifacts() -> None:
         "missing state",
         "has_real_report",
         "missing_state_fields",
+        "report_contract",
+        "reportContractSummaryForState",
         "latest_activity_at",
         "artifact_links",
     ]:

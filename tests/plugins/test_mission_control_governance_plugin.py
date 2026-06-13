@@ -1130,7 +1130,15 @@ def test_workspace_project_state_projection_is_read_only_and_derived(plugin_api,
     assert hermes_state["latest_activity_at"] == "2026-06-10T10:40:00Z"
     assert hermes_state["latest_activity_source"] == "report"
     assert hermes_state["has_real_report"] is True
-    assert hermes_state["missing_state_fields"] == []
+    assert hermes_state["report_contract"] == {
+        "state": "incomplete",
+        "complete": False,
+        "missing_fields": ["tests"],
+        "required_fields": ["summary", "result", "risks/blockers", "evidence", "tests", "next lane"],
+        "display_only": True,
+        "trusted_for_execution": False,
+    }
+    assert hermes_state["missing_state_fields"] == ["report_contract"]
     assert hermes_state["artifact_links"] == ["reports/hermes/status.md"]
 
     empty_state = states["project-empty"]
@@ -1145,7 +1153,10 @@ def test_workspace_project_state_projection_is_read_only_and_derived(plugin_api,
         "latest_result",
         "risks_blockers",
         "artifact_links",
+        "report_contract",
     ]
+    assert empty_state["report_contract"]["state"] == "missing_report"
+    assert empty_state["report_contract"]["missing_fields"] == ["report"]
 
 
 def test_workspace_record_api_rejects_unsafe_oversized_and_malformed_payloads(client):
