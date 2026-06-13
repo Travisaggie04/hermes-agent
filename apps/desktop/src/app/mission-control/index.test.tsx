@@ -739,6 +739,21 @@ describe('MissionControlView', () => {
     expect(panel.querySelectorAll('button')).toHaveLength(0)
   })
 
+  it('shows paused project rooms but keeps their Jenny actions disabled', async () => {
+    await renderMissionControl()
+
+    fireEvent.click((await screen.findAllByRole('button', { name: /Long-form Video/ })).at(0)!)
+
+    expect(screen.getByRole('heading', { name: 'Long-form Video' })).toBeTruthy()
+    expect(screen.getAllByText('Paused').length).toBeGreaterThan(0)
+    expect(screen.getByText('Paused until Jenny is stable. Review context only; sending work to Jenny is disabled for this project.')).toBeTruthy()
+    expect(screen.getByText('This project is visible for planning context only. Resume it after the Mission Control/Jenny recovery lane is stable.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Send to Jenny' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Run Jenny once' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Save challenge draft' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Save read-only lane draft' })).toHaveProperty('disabled', true)
+  })
+
   it('shows real project state, fallback empty-state copy, and disabled safety flags', async () => {
     await renderMissionControl()
 
