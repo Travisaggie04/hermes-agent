@@ -58,7 +58,7 @@ def test_prompt_copy_text_is_project_specific() -> None:
 def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
     src = page_source()
     for expected in [
-        "Project Chat Rooms",
+        "Project chat workspace",
         "Projects",
         "Chat room",
         "Conversation",
@@ -83,6 +83,8 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Message",
         "Previous sessions",
         "Safety controls and technical details",
+        "Technical status, reports, and paused projects",
+        "Project report archive",
         "Copy phone-safe packet",
         "Save challenge draft",
         "Save read-only lane draft",

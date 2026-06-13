@@ -1350,7 +1350,7 @@ export function MissionControlView() {
       ) : null}
 
       <details className="mt-5 rounded-xl border border-border/70 bg-background/40 p-4">
-        <summary className="cursor-pointer text-sm font-semibold">Advanced status, paused projects, and reports</summary>
+        <summary className="cursor-pointer text-sm font-semibold">Technical status, reports, and paused projects</summary>
         <div className="mt-4 grid gap-5">
           <WorkspaceStatusPanel status={status} />
 
@@ -1374,8 +1374,8 @@ export function MissionControlView() {
         <summary className="cursor-pointer text-sm font-semibold">Project details and reports</summary>
         <div className="mt-3 mb-3 flex flex-wrap items-end justify-between gap-2">
           <div>
-            <h2 className="text-base font-semibold">Real project workspace</h2>
-            <p className="text-xs text-muted-foreground">Hermes / Mission Control is active. Other project cards are parked until Jenny is stable enough to run them.</p>
+            <h2 className="text-base font-semibold">Project report archive</h2>
+            <p className="text-xs text-muted-foreground">Detailed cards stay here for audit and source-of-truth review. Use the project chat above for normal work.</p>
           </div>
           <span className="text-xs text-muted-foreground">{activeProjects.length} active / {pausedProjects.length} paused</span>
         </div>
@@ -1612,7 +1612,7 @@ function ProjectRoomsWorkspace({
   ].sort((left, right) => String(left.time ?? '').localeCompare(String(right.time ?? ''))).slice(-8)
 
   return (
-    <section aria-label="Project Chat Rooms" className="mt-5 grid gap-4 rounded-xl border border-border/70 bg-background/50 p-4 xl:grid-cols-[16rem_minmax(0,1fr)]">
+    <section aria-label="Project chat workspace" className="mt-5 grid gap-4 rounded-xl border border-border/70 bg-background/50 p-4 xl:grid-cols-[16rem_minmax(0,1fr)]">
       <aside>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-semibold">Projects</h2>
