@@ -91,11 +91,13 @@ const REAL_PROJECT_NAMES = [
   'Waha Work'
 ]
 
-const TONIGHT_PROJECT_IDS = [
-  'project-hermes-mission-control',
+const ACTIVE_OS_PROJECT_IDS = [HERMES_PROJECT_ID]
+
+const PAUSED_PROJECT_IDS = [
   'project-shorts-video',
   'project-long-form-video',
-  'project-tool-tally'
+  'project-tool-tally',
+  'project-waha-work'
 ]
 
 const MAX_COPY_PROMPT_CHARS = 2000
@@ -895,10 +897,18 @@ export function MissionControlView() {
 
   const status = useMemo(() => summarizeWorkspaceStatus(snapshot.workspaceStatus), [snapshot.workspaceStatus])
   const realProjects = useMemo(() => sortRealProjects(snapshot.projects.filter(isRealProject)), [snapshot.projects])
+  const activeProjects = useMemo(() => {
+    const projects = realProjects.filter(project => ACTIVE_OS_PROJECT_IDS.includes(project.project_id))
+    return projects.length ? projects : realProjects
+  }, [realProjects])
+  const pausedProjects = useMemo(
+    () => realProjects.filter(project => PAUSED_PROJECT_IDS.includes(project.project_id) || !ACTIVE_OS_PROJECT_IDS.includes(project.project_id)),
+    [realProjects]
+  )
   const unassignedGroup = useMemo(() => unassignedSessionGroup(snapshot.projectSessionGroups), [snapshot.projectSessionGroups])
   const selectedProject = useMemo(
-    () => realProjects.find(project => project.project_id === selectedProjectId) ?? realProjects[0] ?? null,
-    [realProjects, selectedProjectId]
+    () => activeProjects.find(project => project.project_id === selectedProjectId) ?? activeProjects[0] ?? null,
+    [activeProjects, selectedProjectId]
   )
 
   const supportingProjects = useMemo(
@@ -1128,7 +1138,7 @@ export function MissionControlView() {
           <div>
             <h1 className="text-lg font-semibold tracking-tight">Mission Control</h1>
             <p className="max-w-3xl text-sm text-muted-foreground">
-              Native desktop project workspace. The five real projects are primary; smoke records are de-emphasized.
+              Jenny OS workspace. Focus is currently Hermes / Mission Control; other business projects are paused until Jenny is reliable here.
             </p>
           </div>
           <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
@@ -1165,7 +1175,7 @@ export function MissionControlView() {
           }}
           packet={packetForProject(selectedProject)}
           project={selectedProject}
-          projects={realProjects}
+          projects={activeProjects}
           report={
             stateForProject(selectedProject, snapshot.projectStates)?.latest_report ??
             stateForProject(selectedProject, snapshot.projectStates)?.latest_jenny_report ??
@@ -1185,11 +1195,11 @@ export function MissionControlView() {
           <WorkspaceStatusPanel status={status} />
 
           <ActiveLanesPanel
-            cards={realProjects.filter(project => TONIGHT_PROJECT_IDS.includes(project.project_id)).map(project => activeLaneCardFor(project, snapshot))}
+            cards={activeProjects.map(project => activeLaneCardFor(project, snapshot))}
             status={status}
           />
 
-          <ProjectKanbanBoard cards={realProjects.map(project => projectKanbanCardFor(project, snapshot))} />
+          <ProjectKanbanBoard cards={activeProjects.map(project => projectKanbanCardFor(project, snapshot))} />
 
       <ManualReportIngestion
         form={reportForm}
@@ -1205,17 +1215,17 @@ export function MissionControlView() {
         <div className="mt-3 mb-3 flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 className="text-base font-semibold">Real project workspace</h2>
-            <p className="text-xs text-muted-foreground">Primary cards for Travis’s active operating domains.</p>
+            <p className="text-xs text-muted-foreground">Hermes / Mission Control is active. Other project cards are parked until Jenny is stable enough to run them.</p>
           </div>
-          <span className="text-xs text-muted-foreground">{realProjects.length} of 5 real projects loaded</span>
+          <span className="text-xs text-muted-foreground">{activeProjects.length} active / {pausedProjects.length} paused</span>
         </div>
         <div className="grid gap-4 xl:grid-cols-2">
-          {realProjects.length === 0 ? (
+          {activeProjects.length === 0 ? (
             <div className="rounded-xl border border-border/70 p-4 text-sm text-muted-foreground">
               No real Mission Control ProjectRecord entries found yet.
             </div>
           ) : (
-            realProjects.map(project => {
+            activeProjects.map(project => {
               const state = stateForProject(project, snapshot.projectStates)
 
               return (
@@ -1269,6 +1279,21 @@ export function MissionControlView() {
         </section>
       ) : null}
         </div>
+        {pausedProjects.length ? (
+          <section className="mt-4 rounded-xl border border-dashed border-border/70 bg-muted/20 p-4">
+            <h3 className="text-sm font-semibold">Projects on hold</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              These records stay visible for audit context, but they are not active work until Jenny/Mission Control is reliable.
+            </p>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {pausedProjects.map(project => (
+                <div className="rounded-lg border border-border/60 bg-background/50 p-3 text-xs text-muted-foreground" key={project.project_id}>
+                  <span className="font-medium text-foreground/80">{project.name}</span> - on hold
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </details>
     </section>
   )
@@ -1282,12 +1307,12 @@ function ActiveLanesPanel({
   status: ReturnType<typeof summarizeWorkspaceStatus>
 }) {
   return (
-    <section aria-label="Tonight active lanes" className="mt-5 rounded-xl border border-border/70 bg-background/50 p-4">
+    <section aria-label="Active Jenny OS lane" className="mt-5 rounded-xl border border-border/70 bg-background/50 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold">Tonight / Active Lanes</h2>
+          <h2 className="text-base font-semibold">Active Jenny OS Lane</h2>
           <p className="text-xs text-muted-foreground">
-            Four-project overnight control board. Display-only; lane state is derived from briefs, challenge reviews, lane drafts, and reports.
+            Mission Control/Jenny stability lane only. Display-only; lane state is derived from briefs, challenge reviews, lane drafts, and reports.
           </p>
         </div>
         <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-xs text-sky-700 dark:text-sky-300">

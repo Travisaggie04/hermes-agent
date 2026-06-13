@@ -136,11 +136,13 @@ def test_compact_route_has_read_only_project_kanban_lifecycle() -> None:
 def test_compact_route_has_display_only_tonight_active_lanes() -> None:
     src = page_source()
     for expected in [
-        "Tonight / Active Lanes",
-        "Tonight active lanes compact",
-        "Four-project overnight board",
+        "Active Jenny OS Lane",
+        "Active Jenny OS lane compact",
+        "Mission Control/Jenny stability lane only",
         "Display-only; no dispatch, queue mutation, worker, or timer",
-        "TONIGHT_PROJECT_IDS",
+        "ACTIVE_OS_PROJECT_IDS",
+        "PAUSED_PROJECT_IDS",
+        "Projects on hold",
         "compactActiveLaneStage",
         "next safe lane",
         "latest evidence",
