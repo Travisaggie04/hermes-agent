@@ -80,6 +80,13 @@ const REAL_PROJECT_NAMES = [
   'Waha Work'
 ]
 
+const TONIGHT_PROJECT_IDS = [
+  'project-hermes-mission-control',
+  'project-shorts-video',
+  'project-long-form-video',
+  'project-tool-tally'
+]
+
 const MAX_COPY_PROMPT_CHARS = 2000
 const MAX_PHONE_SAFE_PACKET_CHARS = 1900
 
@@ -260,6 +267,18 @@ interface ProjectKanbanCard {
   project: MissionControlProjectRecord
   readiness: ReturnType<typeof projectReadinessLabel>
   report: MissionControlReportRecord | null
+}
+
+interface ActiveLaneCard {
+  brief: MissionControlProjectBriefRecord | null
+  currentGoal: string
+  latestEvidence: string
+  lane: MissionControlLaneRequestRecord | null
+  nextLane: string
+  project: MissionControlProjectRecord
+  readiness: ReturnType<typeof projectReadinessLabel>
+  review: MissionControlChallengeReviewRecord | null
+  status: string
 }
 
 const PROJECT_KANBAN_COLUMNS: ProjectKanbanColumn[] = [
@@ -588,6 +607,44 @@ function projectKanbanCardFor(project: MissionControlProjectRecord, snapshot: Mi
     readiness,
     report
   }
+}
+
+function activeLaneCardFor(project: MissionControlProjectRecord, snapshot: MissionControlSnapshot): ActiveLaneCard {
+  const state = stateForProject(project, snapshot.projectStates)
+  const brief = latestForProject(project.project_id, snapshot.projectBriefs)
+  const review = latestForProject(project.project_id, snapshot.challengeReviews)
+  const lane = state?.latest_lane_request ?? latestLaneForProject(project.project_id, snapshot.laneRequests)
+  const report = state?.latest_report ?? state?.latest_jenny_report ?? latestReportForProject(project.project_id, snapshot.reports)
+  const model = projectRenderModel(project, report, state)
+
+  return {
+    brief,
+    currentGoal: text(state?.current_goal ?? project.current_goal, 'No current goal recorded'),
+    latestEvidence: text(model.latestReportSummary === 'No report yet' ? model.latestResult : model.latestReportSummary, 'No evidence recorded'),
+    lane,
+    nextLane: model.nextLane,
+    project,
+    readiness: projectReadinessLabel(brief, review),
+    review,
+    status: text(state?.status ?? project.status, 'Status not recorded')
+  }
+}
+
+function activeLaneStage(card: ActiveLaneCard): string {
+  if (!card.brief) {
+    return 'needs brief'
+  }
+  if (!card.review) {
+    return 'needs challenge'
+  }
+  if (card.review.decision_state !== 'clear_and_safe') {
+    return `challenge: ${card.review.decision_state ?? 'unknown'}`
+  }
+  if (!card.lane) {
+    return 'ready for lane draft'
+  }
+
+  return card.lane.status ? `${card.lane.status} lane` : 'lane drafted'
 }
 
 function buildPhoneSafeProjectPacket({
@@ -970,6 +1027,11 @@ export function MissionControlView() {
 
       <WorkspaceStatusPanel status={status} />
 
+      <ActiveLanesPanel
+        cards={realProjects.filter(project => TONIGHT_PROJECT_IDS.includes(project.project_id)).map(project => activeLaneCardFor(project, snapshot))}
+        status={status}
+      />
+
       {selectedProject ? (
         <ProjectRoomsWorkspace
           bridgeRequests={snapshot.jennyBridgeRequests.filter(request => request.project_id === selectedProject.project_id)}
@@ -1077,6 +1139,58 @@ export function MissionControlView() {
           </div>
         </section>
       ) : null}
+    </section>
+  )
+}
+
+function ActiveLanesPanel({
+  cards,
+  status
+}: {
+  cards: ActiveLaneCard[]
+  status: ReturnType<typeof summarizeWorkspaceStatus>
+}) {
+  return (
+    <section aria-label="Tonight active lanes" className="mt-5 rounded-xl border border-border/70 bg-background/50 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold">Tonight / Active Lanes</h2>
+          <p className="text-xs text-muted-foreground">
+            Four-project overnight control board. Display-only; lane state is derived from briefs, challenge reviews, lane drafts, and reports.
+          </p>
+        </div>
+        <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-xs text-sky-700 dark:text-sky-300">
+          display-only / no dispatch
+        </span>
+      </div>
+
+      <div className="mt-3 grid gap-3 xl:grid-cols-4">
+        {cards.map(card => (
+          <article className="rounded-lg border border-border/70 bg-background/70 p-3 text-sm" key={card.project.project_id}>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 className="font-semibold leading-tight">{card.project.name}</h3>
+                <p className="mt-1 text-xs text-muted-foreground">{card.status}</p>
+              </div>
+              <span className="shrink-0 rounded-full border border-border/70 px-2 py-0.5 text-[0.68rem] text-muted-foreground">
+                {activeLaneStage(card)}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-2 text-xs">
+              <Field label="current goal" value={compactText(card.currentGoal, 160) || 'No current goal recorded'} />
+              <Field label="next safe lane" value={compactText(card.nextLane, 180) || 'No recommended lane recorded'} />
+              <Field label="latest evidence" value={compactText(card.latestEvidence, 160) || 'No evidence recorded'} />
+              <Field label="readiness" value={card.readiness.detail} />
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="mt-3 grid gap-2 text-xs text-muted-foreground md:grid-cols-3">
+        <div>Runtime guard: {status.guard}</div>
+        <div>Dispatch: {yesNo(status.dispatch)}</div>
+        <div>Active lane count: {status.activeLaneCount}</div>
+      </div>
     </section>
   )
 }
