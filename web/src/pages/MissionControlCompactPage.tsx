@@ -26,6 +26,14 @@ const REAL_PROJECT_IDS = [
   "project-tool-tally",
   "project-waha-work",
 ] as const;
+const HERMES_PROJECT_ID = "project-hermes-mission-control";
+const HERMES_UPDATE_LANE_REQUEST = [
+  "Start a safe Hermes update readiness lane for the VPS and laptop Hermes worker node.",
+  "Inventory the existing VPS-triggered laptop worker-node update path and current installed versions first.",
+  "Prepare a non-live VPS dashboard runtime at accepted-live and validate it before any dashboard-only switch.",
+  "Keep gateway update as a separate explicit lane.",
+  "Do not trigger the laptop worker-node update automatically, restart/switch gateway, dispatch, send sessions, use Waha/social/payment/customer actions, enable new background workers/timers/daemons/cron, or inspect/print secrets.",
+].join(" ");
 
 const REAL_PROJECT_NAMES = [
   "Hermes / Mission Control",
@@ -545,6 +553,26 @@ function buildPhoneSafeProjectPacket(projectView: ProjectViewModel, requestText:
   return packet.length <= 1900 ? packet : `${packet.slice(0, 1897).trim()}...`;
 }
 
+function buildHermesUpdateLanePacket(workspaceStatus: WorkspaceStatus): string {
+  return [
+    "Hermes update lane request:",
+    "",
+    HERMES_UPDATE_LANE_REQUEST,
+    "",
+    "Required safe sequence:",
+    "1. Read-only inventory of VPS dashboard/gateway runtime paths/heads and current package versions.",
+    "2. Read-only inventory of the existing VPS-triggered laptop worker-node update path and laptop installed version.",
+    "3. Prepare a non-live VPS dashboard runtime at accepted-live only after source and worker-node target are clear.",
+    "4. Validate markers, record compatibility, dashboard assets, and rollback path before any dashboard-only switch.",
+    "5. Keep gateway update and laptop worker-node update as separate explicit approval steps.",
+    "",
+    "Allowed: read-only inventory, non-live runtime preparation, tests/checks, report exact next approval.",
+    "Forbidden: laptop worker-node auto-update, gateway restart/switch, dispatch, session sending, Waha/social/payment/customer action, new background worker/timer/daemon/cron, secrets, in-place runtime mutation.",
+    "",
+    `Current Mission Control safety status: ${safetySummary(workspaceStatus)}`,
+  ].join("\n");
+}
+
 async function loadCompactSnapshot(): Promise<CompactSnapshot> {
   const [workspaceStatus, projects, projectBriefs, challengeReviews, laneRequests, reports, projectState, jennyBridgeOutbox, jennyBridgeInbox, jennyBridgePollerStatus, githubBridgeStatus] = await Promise.all([
     fetchJSON<WorkspaceStatus>(WORKSPACE_STATUS_URL),
@@ -658,6 +686,31 @@ export default function MissionControlCompactPage() {
       });
       await refreshSnapshot();
       setRoomMessage("Queued outbound Jenny bridge message. It is append-only and still requires Jenny polling/relay.");
+    } catch (err) {
+      setRoomMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRoomBusy(false);
+    }
+  }
+
+  async function queueHermesUpdateLane(projectView: ProjectViewModel) {
+    setRoomBusy(true);
+    setRoomMessage("");
+    setProjectRequest(HERMES_UPDATE_LANE_REQUEST);
+    try {
+      await fetchJSON(WORKSPACE_JENNY_BRIDGE_OUTBOX_CREATE_URL, {
+        body: JSON.stringify({
+          ack_key: `${projectView.project.project_id}:hermes-update:${Date.now()}`,
+          message: buildHermesUpdateLanePacket(snapshot?.workspaceStatus ?? {}),
+          project_id: projectView.project.project_id,
+          sender: "codex",
+          target_agent: "jenny",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      await refreshSnapshot();
+      setRoomMessage("Queued safe Hermes update lane. It is append-only and does not update the laptop worker node, switch runtimes, or restart gateway.");
     } catch (err) {
       setRoomMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -825,6 +878,7 @@ export default function MissionControlCompactPage() {
           githubBridgeStatus={snapshot?.githubBridgeStatus ?? {}}
           onCopyPacket={() => void copyPhoneSafePacket(selectedProjectView)}
           onQueueBridge={() => void queueJennyBridgeMessage(selectedProjectView)}
+          onQueueHermesUpdate={selectedProjectView.project.project_id === HERMES_PROJECT_ID ? () => void queueHermesUpdateLane(selectedProjectView) : undefined}
           onRefreshBridge={() => void refreshBridge()}
           onRequestChange={setProjectRequest}
           onSaveChallenge={() => void saveChallengeDraft(selectedProjectView)}
@@ -944,6 +998,7 @@ function CompactProjectRoom({
   message,
   onCopyPacket,
   onQueueBridge,
+  onQueueHermesUpdate,
   onRefreshBridge,
   onRequestChange,
   onSaveChallenge,
@@ -962,6 +1017,7 @@ function CompactProjectRoom({
   message: string;
   onCopyPacket: () => void;
   onQueueBridge: () => void;
+  onQueueHermesUpdate?: () => void;
   onRefreshBridge: () => void;
   onRequestChange: (value: string) => void;
   onSaveChallenge: () => void;
@@ -1052,6 +1108,21 @@ function CompactProjectRoom({
             Save read-only lane draft
           </button>
         </div>
+        {onQueueHermesUpdate ? (
+          <div className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold">Hermes update lane</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Queues a guarded VPS/laptop worker-node update checklist only. No runtime switch, restart, or laptop update happens here.
+                </p>
+              </div>
+              <button className="rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300" disabled={busy} onClick={onQueueHermesUpdate} type="button">
+                Start Hermes update lane
+              </button>
+            </div>
+          </div>
+        ) : null}
         {message ? <p className="mt-2 text-xs text-muted-foreground">{message}</p> : null}
 
         <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
