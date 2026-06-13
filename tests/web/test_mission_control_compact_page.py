@@ -75,6 +75,8 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "queueJennyBridgeMessage",
         "manual-start only",
         "worker/timer",
+        "latest report contract",
+        "reportContractSummary",
         "Phone-safe packet",
         "buildPhoneSafeProjectPacket",
         "WORKSPACE_CHALLENGE_REVIEWS_CREATE_URL",
@@ -103,6 +105,7 @@ def test_compact_route_has_read_only_project_kanban_lifecycle() -> None:
         "Evidence Review",
         "Accepted",
         "Blocked / Rollback",
+        "Contract:",
     ]:
         assert expected in src
     for forbidden in [
@@ -125,6 +128,7 @@ def test_compact_route_has_display_only_tonight_active_lanes() -> None:
         "compactActiveLaneStage",
         "next safe lane",
         "latest evidence",
+        "report contract",
     ]:
         assert expected in src
 

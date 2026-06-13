@@ -117,6 +117,34 @@ function reportArtifactLinks(report: MissionControlReportRecord | null, state: M
   return state?.artifact_links ?? report?.metadata?.artifact_links ?? report?.changed_files ?? []
 }
 
+function reportContractMissing(report: MissionControlReportRecord | null): string[] {
+  if (!report) {
+    return ['report']
+  }
+
+  const hasRisks = Boolean(report.risks?.length || report.blockers?.length)
+  const hasEvidence = Boolean(report.changed_files?.length || report.metadata?.artifact_links?.length)
+
+  return [
+    report.summary ? '' : 'summary',
+    report.result ? '' : 'result',
+    hasRisks ? '' : 'risks/blockers',
+    hasEvidence ? '' : 'evidence',
+    report.tests?.length ? '' : 'tests',
+    report.next_recommended_lane ? '' : 'next lane'
+  ].filter(Boolean)
+}
+
+function reportContractSummary(report: MissionControlReportRecord | null): string {
+  const missing = reportContractMissing(report)
+
+  if (missing.includes('report')) {
+    return 'No report yet'
+  }
+
+  return missing.length ? `Missing: ${missing.join(', ')}` : 'Complete'
+}
+
 function freshnessLabel(state: MissionControlProjectState | null): string {
   if (state?.has_real_report) {
     return 'Live report available'
@@ -277,6 +305,7 @@ interface ActiveLaneCard {
   nextLane: string
   project: MissionControlProjectRecord
   readiness: ReturnType<typeof projectReadinessLabel>
+  report: MissionControlReportRecord | null
   review: MissionControlChallengeReviewRecord | null
   status: string
 }
@@ -625,6 +654,7 @@ function activeLaneCardFor(project: MissionControlProjectRecord, snapshot: Missi
     nextLane: model.nextLane,
     project,
     readiness: projectReadinessLabel(brief, review),
+    report,
     review,
     status: text(state?.status ?? project.status, 'Status not recorded')
   }
@@ -1053,6 +1083,11 @@ export function MissionControlView() {
           packet={packetForProject(selectedProject)}
           project={selectedProject}
           projects={realProjects}
+          report={
+            stateForProject(selectedProject, snapshot.projectStates)?.latest_report ??
+            stateForProject(selectedProject, snapshot.projectStates)?.latest_jenny_report ??
+            latestReportForProject(selectedProject.project_id, snapshot.reports)
+          }
           request={projectRequest}
           review={latestForProject(selectedProject.project_id, snapshot.challengeReviews)}
           saving={projectRoomSaving}
@@ -1180,6 +1215,7 @@ function ActiveLanesPanel({
               <Field label="current goal" value={compactText(card.currentGoal, 160) || 'No current goal recorded'} />
               <Field label="next safe lane" value={compactText(card.nextLane, 180) || 'No recommended lane recorded'} />
               <Field label="latest evidence" value={compactText(card.latestEvidence, 160) || 'No evidence recorded'} />
+              <Field label="report contract" value={reportContractSummary(card.report)} />
               <Field label="readiness" value={card.readiness.detail} />
             </div>
           </article>
@@ -1213,6 +1249,7 @@ function ProjectRoomsWorkspace({
   project,
   projects,
   request,
+  report,
   review,
   saving,
   sessionGroup,
@@ -1235,6 +1272,7 @@ function ProjectRoomsWorkspace({
   project: MissionControlProjectRecord
   projects: MissionControlProjectRecord[]
   request: string
+  report: MissionControlReportRecord | null
   review: MissionControlChallengeReviewRecord | null
   saving: boolean
   sessionGroup: MissionControlProjectSessionGroup | null
@@ -1283,6 +1321,7 @@ function ProjectRoomsWorkspace({
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <Field label="current goal" value={state?.current_goal ?? project.current_goal} />
           <Field label="readiness" value={readiness.detail} />
+          <Field label="latest report contract" value={reportContractSummary(report)} />
           <Field label="project brief" value={compactText(brief?.outcome, 320) || 'No project brief recorded'} />
           <Field label="challenge review" value={review ? `${review.decision_state ?? 'unknown'} / ${review.recommended_path ?? 'No recommended path recorded'}` : 'No challenge review recorded'} />
         </div>
@@ -1492,6 +1531,9 @@ function ProjectKanbanCardView({ card }: { card: ProjectKanbanCard }) {
         </div>
         <div>
           <span className="font-medium text-foreground/70">Report:</span> {card.report?.summary ?? 'No report yet'}
+        </div>
+        <div>
+          <span className="font-medium text-foreground/70">Contract:</span> {reportContractSummary(card.report)}
         </div>
       </div>
     </article>
@@ -1783,6 +1825,7 @@ function ProjectCard({
       <Field label="freshness" value={freshnessLabel(state)} />
       <Field label="latest lane" value={lane ? `${lane.title}${lane.status ? ` (${lane.status})` : ''}${lane.objective ? ` — ${lane.objective}` : ''}` : 'No draft lane request recorded'} />
       <Field label="latest Jenny report summary" value={model.latestReportSummary} />
+      <Field label="report contract" value={reportContractSummary(report)} />
       <Field label="latest result" value={model.latestResult} />
       <Field label="risks/blockers" value={risksBlockers} />
       <Field label="last action time" value={`${model.latestActivityAt} (${model.latestActivitySource})`} />
