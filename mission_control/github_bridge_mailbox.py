@@ -29,6 +29,8 @@ DEFAULT_GITHUB_BRIDGE_REPO = "Travisaggie04/hermes-agent"
 DEFAULT_GITHUB_BRIDGE_ISSUE = 79
 DEFAULT_NOTIFY_SSH_TARGET = "jenny@100.115.125.111"
 DEFAULT_NOTIFY_REMOTE_RUNTIME = "/home/jenny/.hermes/hermes-runtime-github-bridge-mailbox-944411a"
+DEFAULT_HERMES_BIN = "/home/jenny/.local/bin/hermes"
+DEFAULT_MISSION_CONTROL_PROJECT_ID = "project-hermes-mission-control"
 PENDING_STATUSES = {"queued", "retry_requested"}
 REPLIED_STATUSES = {"replied", "closed"}
 DEFAULT_LIMIT = 25
@@ -558,6 +560,193 @@ def _run_ssh(args: list[str]) -> str:
     return result.stdout
 
 
+def _parse_utc(value: str) -> datetime | None:
+    raw = _bounded_text(value, max_chars=80)
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def clean_hermes_response(output: str) -> str:
+    text = (output or "").strip()
+    bad_markers = ["Hermes Agent", "Available Skills", "browser-cdp", "clarify:", "waha:"]
+    if not text:
+        return "I received the Mission Control message, but Hermes returned an empty response."
+    if any(marker in text[:2500] for marker in bad_markers):
+        return (
+            "I received the Mission Control message, but Hermes returned a non-chat startup "
+            "screen instead of a clean response."
+        )
+    return _bounded_text(text[-5000:], max_chars=4000)
+
+
+def mission_control_responder_prompt(record: GitHubBridgeMessageRecord) -> str:
+    return (
+        "You are Jenny inside Travis's Mission Control OS, replacing Discord for the Hermes / Mission Control project.\n"
+        "Act as a strong engineering orchestrator: challenge weak requests, name risks plainly, and give the next safe step.\n"
+        "Do not claim you deployed, restarted, switched runtimes, dispatched sessions, used Waha/social/payment actions, "
+        "started workers/timers/daemons, or inspected secrets unless the request includes explicit evidence that already happened.\n"
+        "Keep the reply concise and useful for the Mission Control chat.\n\n"
+        f"Project: {record.project_id}\n"
+        f"Request id: {record.request_id}\n"
+        f"Message from {record.from_agent or 'operator'}:\n{record.message}"
+    )
+
+
+def run_hermes_responder(
+    record: GitHubBridgeMessageRecord,
+    *,
+    hermes_bin: str = DEFAULT_HERMES_BIN,
+    profile_home: str = "",
+    cwd: str = "/home/jenny",
+    timeout_seconds: int = 240,
+    toolsets: str = "file,skills",
+) -> str:
+    env = {"HERMES_HOME": profile_home} if profile_home else None
+    prompt = mission_control_responder_prompt(record)
+    proc = subprocess.run(
+        [
+            hermes_bin,
+            "chat",
+            "-Q",
+            "-t",
+            toolsets,
+            "-q",
+            prompt,
+            "--source",
+            "mission-control-github-bridge",
+        ],
+        cwd=cwd,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=max(30, int(timeout_seconds)),
+        check=False,
+    )
+    return clean_hermes_response(proc.stdout)
+
+
+def _select_pending_message(
+    *,
+    path: Path | None,
+    repo: str,
+    issue_number: int,
+    project_id: str,
+    request_id: str = "",
+    not_before: str = "",
+) -> PendingGitHubBridgeMessage | None:
+    cutoff = _parse_utc(not_before)
+    pending = list_pending_messages(
+        path=path,
+        repo=repo,
+        issue_number=issue_number,
+        to_agent="jenny",
+        limit=DEFAULT_LIMIT,
+    )
+    filtered = []
+    for item in pending:
+        record = item.record
+        if project_id and record.project_id != project_id:
+            continue
+        if request_id and record.request_id != request_id:
+            continue
+        if cutoff is not None:
+            created_at = _parse_utc(record.created_at)
+            if created_at is None or created_at < cutoff:
+                continue
+        filtered.append(item)
+    return filtered[-1] if filtered else None
+
+
+def answer_pending_with_hermes(
+    *,
+    repo: str = DEFAULT_GITHUB_BRIDGE_REPO,
+    issue_number: int = DEFAULT_GITHUB_BRIDGE_ISSUE,
+    project_id: str = DEFAULT_MISSION_CONTROL_PROJECT_ID,
+    request_id: str = "",
+    not_before: str = "",
+    path: Path | None = None,
+    operator: str = "manual",
+    hermes_bin: str = DEFAULT_HERMES_BIN,
+    profile_home: str = "",
+    cwd: str = "/home/jenny",
+    timeout_seconds: int = 240,
+    run_hermes_fn: Any | None = None,
+    post_response_fn: Any | None = None,
+) -> dict[str, Any]:
+    selected = _select_pending_message(
+        path=path,
+        repo=repo,
+        issue_number=issue_number,
+        project_id=project_id,
+        request_id=request_id,
+        not_before=not_before,
+    )
+    if selected is None:
+        _idx, status_record = append_status(
+            status="hermes_answer_noop",
+            repo=repo,
+            issue_number=issue_number,
+            mode="manual_hermes_answer",
+            last_error="no matching pending Mission Control mailbox request",
+            operator=operator,
+            path=path,
+        )
+        return {**_inert_response_flags(), "answered": False, "status": status_record.to_dict()}
+
+    record = selected.record
+    append_status(
+        status="hermes_answer_started",
+        repo=repo,
+        issue_number=issue_number,
+        mode="manual_hermes_answer",
+        handled_request_id=record.request_id,
+        operator=operator,
+        path=path,
+    )
+    responder = run_hermes_fn or run_hermes_responder
+    response_text = responder(
+        record,
+        hermes_bin=hermes_bin,
+        profile_home=profile_home,
+        cwd=cwd,
+        timeout_seconds=timeout_seconds,
+    )
+    poster = post_response_fn or post_github_response
+    response = poster(
+        request_id=record.request_id,
+        project_id=record.project_id,
+        message=response_text,
+        repo=repo,
+        issue_number=issue_number,
+        path=path,
+        operator=operator,
+    )
+    _idx, status_record = append_status(
+        status="hermes_answer_completed",
+        repo=repo,
+        issue_number=issue_number,
+        mode="manual_hermes_answer",
+        handled_request_id=record.request_id,
+        pending_count=len(
+            list_pending_messages(path=path, repo=repo, issue_number=issue_number)
+        ),
+        operator=operator,
+        path=path,
+    )
+    return {
+        **_inert_response_flags(),
+        "answered": True,
+        "request": record.to_dict(),
+        "response": response,
+        "status": status_record.to_dict(),
+    }
+
+
 def poll_github_issue(*, repo: str, issue_number: int, path: Path | None = None, operator: str = "manual") -> dict[str, Any]:
     comments = _run_gh_api_json_lines(_github_issue_comments_args(repo, issue_number))
     return poll_comments(comments, repo=repo, issue_number=issue_number, path=path, operator=operator)
@@ -983,6 +1172,25 @@ def main(argv: list[str] | None = None) -> int:
     respond_parser.add_argument("--operator", default="manual")
     respond_parser.add_argument("--dry-run", action="store_true", help="Append local response record without posting GitHub comment")
 
+    answer_parser = subparsers.add_parser(
+        "answer-pending-with-hermes",
+        help="Run one foreground Hermes answer for one pending Mission Control mailbox request",
+    )
+    answer_parser.add_argument("--repo", default=DEFAULT_GITHUB_BRIDGE_REPO)
+    answer_parser.add_argument("--issue", type=int, default=DEFAULT_GITHUB_BRIDGE_ISSUE)
+    answer_parser.add_argument("--project-id", default=DEFAULT_MISSION_CONTROL_PROJECT_ID)
+    answer_parser.add_argument("--request-id", default="")
+    answer_parser.add_argument(
+        "--not-before",
+        default="",
+        help="Ignore pending requests created before this ISO timestamp",
+    )
+    answer_parser.add_argument("--operator", default="manual")
+    answer_parser.add_argument("--hermes-bin", default=DEFAULT_HERMES_BIN)
+    answer_parser.add_argument("--profile-home", default="")
+    answer_parser.add_argument("--cwd", default="/home/jenny")
+    answer_parser.add_argument("--timeout-seconds", type=int, default=240)
+
     watch_parser = subparsers.add_parser("watch", help="Foreground-only watch of a GitHub bridge issue")
     watch_parser.add_argument("--repo", default=DEFAULT_GITHUB_BRIDGE_REPO)
     watch_parser.add_argument("--issue", type=int, default=DEFAULT_GITHUB_BRIDGE_ISSUE)
@@ -1057,10 +1265,47 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "respond":
         if args.dry_run:
-            index, record, status_record = append_response(request_id=args.request_id, project_id=args.project_id, message=args.message, repo=args.repo, issue_number=args.issue, path=args.records, operator=args.operator)
-            payload = {"record_index": index, "record_type": record.record_type if record else "GitHubBridgeMailboxStatusRecord", "response": record.to_dict() if record else None, "status": status_record.to_dict()}
+            index, record, status_record = append_response(
+                request_id=args.request_id,
+                project_id=args.project_id,
+                message=args.message,
+                repo=args.repo,
+                issue_number=args.issue,
+                path=args.records,
+                operator=args.operator,
+            )
+            payload = {
+                "record_index": index,
+                "record_type": record.record_type if record else "GitHubBridgeMailboxStatusRecord",
+                "response": record.to_dict() if record else None,
+                "status": status_record.to_dict(),
+            }
         else:
-            payload = post_github_response(request_id=args.request_id, project_id=args.project_id, message=args.message, repo=args.repo, issue_number=args.issue, path=args.records, operator=args.operator)
+            payload = post_github_response(
+                request_id=args.request_id,
+                project_id=args.project_id,
+                message=args.message,
+                repo=args.repo,
+                issue_number=args.issue,
+                path=args.records,
+                operator=args.operator,
+            )
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    if args.command == "answer-pending-with-hermes":
+        payload = answer_pending_with_hermes(
+            repo=args.repo,
+            issue_number=args.issue,
+            project_id=args.project_id,
+            request_id=args.request_id,
+            not_before=args.not_before,
+            path=args.records,
+            operator=args.operator,
+            hermes_bin=args.hermes_bin,
+            profile_home=args.profile_home,
+            cwd=args.cwd,
+            timeout_seconds=args.timeout_seconds,
+        )
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
     if args.command == "watch":
