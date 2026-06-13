@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { sessionRoute } from '@/app/routes'
 import {
   createMissionControlChallengeReview,
+  createMissionControlGitHubBridgeRequest,
   createMissionControlJennyBridgeRequest,
   createMissionControlLaneRequest,
   createMissionControlReport,
@@ -21,6 +22,7 @@ import {
   getMissionControlReports,
   getMissionControlWorkspaceStatus,
   type MissionControlChallengeReviewRecord,
+  type MissionControlGitHubBridgeMessageRecord,
   type MissionControlGitHubBridgeStatusResponse,
   type MissionControlJennyBridgePollerStatusResponse,
   type MissionControlJennyBridgeRequestRecord,
@@ -230,6 +232,11 @@ function pendingJennyMessageCount(
   }).length
 }
 
+function bridgeRequestId(): string {
+  const fallback = Math.random().toString(16).slice(2, 14)
+  return `mission-control-chat-${globalThis.crypto?.randomUUID?.() ?? fallback}`
+}
+
 function jennyDeliveryStatus(
   pendingCount: number,
   responseCount: number,
@@ -243,7 +250,7 @@ function jennyDeliveryStatus(
     return pendingCount ? `${pendingCount} waiting while bridge is watching` : 'Bridge watching for replies'
   }
   if (pendingCount) {
-    return `${pendingCount} waiting for Jenny`
+    return `${pendingCount} sent; waiting for Jenny`
   }
   if (responseCount) {
     return 'Replies up to date'
@@ -1023,15 +1030,15 @@ export function MissionControlView() {
     setProjectRoomMessage('')
 
     try {
-      await createMissionControlJennyBridgeRequest({
-        ack_key: `${project.project_id}:${Date.now()}`,
+      await createMissionControlGitHubBridgeRequest({
+        from_agent: 'travis',
         message: packetForProject(project),
         project_id: project.project_id,
-        sender: 'codex',
-        target_agent: 'jenny'
+        request_id: bridgeRequestId(),
+        to_agent: 'jenny'
       })
       setSnapshot(await loadMissionControlSnapshot())
-      setProjectRoomMessage('Message sent to Jenny inbox. Use Refresh replies to check for her response.')
+      setProjectRoomMessage('Sent to Jenny mailbox. Replies refresh automatically; use Refresh replies if you want to check now.')
     } catch (err) {
       setProjectRoomMessage(String(err instanceof Error ? err.message : err))
     } finally {
@@ -1231,6 +1238,7 @@ export function MissionControlView() {
           bridgeResponses={snapshot.jennyBridgeResponses.filter(response => response.project_id === selectedProject.project_id)}
           bridgeStatus={snapshot.jennyBridgePollerStatus}
           brief={latestForProject(selectedProject.project_id, snapshot.projectBriefs)}
+          githubBridgeMessages={unwrapRecords(snapshot.githubBridgeStatus.recent_messages).filter(message => message.project_id === selectedProject.project_id)}
           githubBridgeStatus={snapshot.githubBridgeStatus}
           message={projectRoomMessage}
           onCopyPacket={() => void copyProjectRoomPacket(selectedProject)}
@@ -1430,6 +1438,7 @@ function ProjectRoomsWorkspace({
   bridgeResponses,
   bridgeStatus,
   githubBridgeStatus,
+  githubBridgeMessages,
   message,
   onCopyPacket,
   onQueueBridge,
@@ -1455,6 +1464,7 @@ function ProjectRoomsWorkspace({
   bridgeResponses: MissionControlJennyBridgeResponseRecord[]
   bridgeStatus: MissionControlJennyBridgePollerStatusResponse
   githubBridgeStatus: MissionControlGitHubBridgeStatusResponse
+  githubBridgeMessages: MissionControlGitHubBridgeMessageRecord[]
   message: string
   onCopyPacket: () => void
   onQueueBridge: () => void
@@ -1478,8 +1488,20 @@ function ProjectRoomsWorkspace({
   const readiness = projectReadinessLabel(brief, review)
   const sessions = state?.recent_sessions?.length ? state.recent_sessions : (sessionGroup?.sessions ?? [])
   const repliedRequestIds = new Set(bridgeResponses.map(response => response.request_id).filter(Boolean))
-  const pendingCount = pendingJennyMessageCount(bridgeRequests, bridgeResponses)
-  const deliveryStatus = jennyDeliveryStatus(pendingCount, bridgeResponses.length, bridgeStatus, githubBridgeStatus)
+  const githubResponseIds = new Set(
+    githubBridgeMessages
+      .filter(message => message.status === 'replied' || message.from_agent === 'jenny')
+      .map(message => message.request_id)
+      .filter(Boolean)
+  )
+  const githubPendingCount = githubBridgeMessages.filter(message =>
+    message.to_agent === 'jenny' &&
+    ['queued', 'retry_requested'].includes(message.status) &&
+    !githubResponseIds.has(message.request_id)
+  ).length
+  const githubResponseCount = githubBridgeMessages.filter(message => message.status === 'replied' || message.from_agent === 'jenny').length
+  const pendingCount = pendingJennyMessageCount(bridgeRequests, bridgeResponses) + githubPendingCount
+  const deliveryStatus = jennyDeliveryStatus(pendingCount, bridgeResponses.length + githubResponseCount, bridgeStatus, githubBridgeStatus)
   const chatMessages = [
     ...bridgeRequests.map(request => ({
       body: request.message,
@@ -1494,6 +1516,13 @@ function ProjectRoomsWorkspace({
       meta: chatStatusLabel(response.status ?? 'reply'),
       speaker: 'Jenny',
       time: response.created_at
+    })),
+    ...githubBridgeMessages.map(message => ({
+      body: message.message,
+      id: message.github_comment_id || message.request_id,
+      meta: chatStatusLabel(message.status),
+      speaker: message.from_agent === 'jenny' || message.status === 'replied' ? 'Jenny' : 'You',
+      time: message.created_at
     }))
   ].sort((left, right) => String(left.time ?? '').localeCompare(String(right.time ?? ''))).slice(-8)
 

@@ -15,6 +15,7 @@ const getMissionControlReports = vi.fn()
 const getMissionControlProjectState = vi.fn()
 const getMissionControlProjectSessions = vi.fn()
 const createMissionControlChallengeReview = vi.fn()
+const createMissionControlGitHubBridgeRequest = vi.fn()
 const createMissionControlJennyBridgeRequest = vi.fn()
 const createMissionControlLaneRequest = vi.fn()
 const createMissionControlReport = vi.fn()
@@ -22,6 +23,7 @@ const createMissionControlSessionProjectLink = vi.fn()
 
 vi.mock('@/hermes', () => ({
   createMissionControlChallengeReview: (payload: unknown) => createMissionControlChallengeReview(payload),
+  createMissionControlGitHubBridgeRequest: (payload: unknown) => createMissionControlGitHubBridgeRequest(payload),
   createMissionControlJennyBridgeRequest: (payload: unknown) => createMissionControlJennyBridgeRequest(payload),
   createMissionControlLaneRequest: (payload: unknown) => createMissionControlLaneRequest(payload),
   createMissionControlReport: (payload: unknown) => createMissionControlReport(payload),
@@ -130,6 +132,23 @@ beforeEach(() => {
       target_agent: 'jenny'
     },
     send_to_jenny_enabled: false,
+    stored: true
+  })
+  createMissionControlGitHubBridgeRequest.mockResolvedValue({
+    dispatch_enabled: false,
+    github_bridge_enabled: true,
+    manual_copy_only: false,
+    message: {
+      created_at: '2026-06-13T01:01:00Z',
+      from_agent: 'travis',
+      message: 'Project room request packet',
+      project_id: 'project-hermes-mission-control',
+      request_id: 'github-bridge-request-created',
+      status: 'queued',
+      to_agent: 'jenny'
+    },
+    record_type: 'GitHubBridgeMessageRecord',
+    send_to_jenny_enabled: true,
     stored: true
   })
   createMissionControlSessionProjectLink.mockResolvedValue({
@@ -487,6 +506,31 @@ beforeEach(() => {
     foreground_watch_running: true,
     model_routing_enabled: false,
     pending_count: 1,
+    recent_messages: [
+      {
+        record: {
+          created_at: '2026-06-13T01:00:00Z',
+          from_agent: 'travis',
+          message: 'Review the Mission Control room.',
+          project_id: 'project-hermes-mission-control',
+          request_id: 'github-bridge-request-1',
+          status: 'queued',
+          to_agent: 'jenny'
+        }
+      },
+      {
+        record: {
+          created_at: '2026-06-13T01:05:00Z',
+          from_agent: 'jenny',
+          message: 'I can see the Mission Control room request.',
+          project_id: 'project-hermes-mission-control',
+          request_id: 'github-bridge-request-1',
+          status: 'replied',
+          to_agent: 'travis'
+        }
+      }
+    ],
+    response_messages: [],
     send_to_jenny_enabled: false,
     session_send_enabled: false,
     status_records: [],
@@ -785,18 +829,20 @@ describe('MissionControlView', () => {
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Blocking verdicts:')
 
     fireEvent.click(screen.getByRole('button', { name: 'Send message to Jenny' }))
-    await waitFor(() => expect(createMissionControlJennyBridgeRequest).toHaveBeenCalledTimes(1))
-    expect(createMissionControlJennyBridgeRequest).toHaveBeenCalledWith(
+    await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(1))
+    expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
       expect.objectContaining({
+        from_agent: 'travis',
         message: expect.stringContaining('Project room request:'),
         project_id: 'project-hermes-mission-control',
-        sender: 'codex',
-        target_agent: 'jenny'
+        request_id: expect.stringContaining('mission-control-chat-'),
+        to_agent: 'jenny'
       })
     )
+    expect(createMissionControlJennyBridgeRequest).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Start Hermes update lane' }))
-    await waitFor(() => expect(createMissionControlJennyBridgeRequest).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(createMissionControlJennyBridgeRequest).toHaveBeenCalledTimes(1))
     expect(createMissionControlJennyBridgeRequest).toHaveBeenLastCalledWith(
       expect.objectContaining({
         ack_key: expect.stringContaining('project-hermes-mission-control:hermes-update:'),

@@ -65,7 +65,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Jenny status",
         "jennyDeliveryStatus",
         "projectRequestPreview",
-        "Message sent to Jenny inbox",
+        "Sent to Jenny mailbox",
         "Live reply refresh is on and read-only",
         "setInterval",
         "clearInterval",
@@ -92,6 +92,8 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "WORKSPACE_JENNY_BRIDGE_OUTBOX_CREATE_URL",
         "WORKSPACE_JENNY_BRIDGE_INBOX_URL",
         "WORKSPACE_JENNY_BRIDGE_POLLER_STATUS_URL",
+        "WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL",
+        "githubBridgeMessages",
         "queueJennyBridgeMessage",
         "manual-start only",
         "worker/timer",
@@ -206,6 +208,17 @@ def test_compact_challenge_draft_is_not_blocked_by_prior_challenge_review() -> N
     assert 'challenge_categories: ["questions_required", "missing_context"]' in challenge_draft
     assert "decision_state: \"needs_spec_first\"" in challenge_draft
     assert "laneDraftBlockMessage" not in challenge_draft
+
+
+def test_compact_chat_send_uses_github_mailbox_not_local_only_outbox() -> None:
+    src = page_source()
+    send_fn = function_source(src, "queueJennyBridgeMessage")
+    assert "WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL" in send_fn
+    assert "WORKSPACE_JENNY_BRIDGE_OUTBOX_CREATE_URL" not in send_fn
+    assert 'from_agent: "travis"' in send_fn
+    assert 'to_agent: "jenny"' in send_fn
+    assert "bridgeRequestId()" in send_fn
+    assert "Sent to Jenny mailbox" in send_fn
 
 
 def test_compact_cards_show_project_state_freshness_and_artifacts() -> None:
