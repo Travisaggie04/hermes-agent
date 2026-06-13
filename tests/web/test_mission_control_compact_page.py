@@ -176,6 +176,8 @@ def test_compact_challenge_draft_is_not_blocked_by_prior_challenge_review() -> N
     challenge_draft = function_source(src, "saveChallengeDraft")
     assert "Write one bounded request before saving a challenge draft." in challenge_draft
     assert "WORKSPACE_CHALLENGE_REVIEWS_CREATE_URL" in challenge_draft
+    assert 'blocking_verdicts: ["requires_spec_update", "blocks_lane_draft"]' in challenge_draft
+    assert 'challenge_categories: ["questions_required", "missing_context"]' in challenge_draft
     assert "decision_state: \"needs_spec_first\"" in challenge_draft
     assert "laneDraftBlockMessage" not in challenge_draft
 

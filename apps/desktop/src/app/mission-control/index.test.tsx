@@ -737,6 +737,8 @@ describe('MissionControlView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Copy phone-safe packet' }))
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1))
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Project room request:')
+    expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Categories:')
+    expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Blocking verdicts:')
 
     fireEvent.click(screen.getByRole('button', { name: 'Queue for Jenny bridge' }))
     await waitFor(() => expect(createMissionControlJennyBridgeRequest).toHaveBeenCalledTimes(1))
@@ -753,6 +755,8 @@ describe('MissionControlView', () => {
     await waitFor(() => expect(createMissionControlChallengeReview).toHaveBeenCalledTimes(1))
     expect(createMissionControlChallengeReview).toHaveBeenCalledWith(
       expect.objectContaining({
+        blocking_verdicts: ['requires_spec_update', 'blocks_lane_draft'],
+        challenge_categories: ['questions_required', 'missing_context'],
         decision_state: 'needs_spec_first',
         project_id: 'project-hermes-mission-control',
         request_summary: 'Make the visible Mission Control page show project rooms on laptop and phone.'

@@ -146,6 +146,8 @@ def test_challenge_review_record_round_trips_judgment_fields():
         project_id="project-hermes",
         request_summary="Make Jenny post automatically every day.",
         decision_state="wrong_approach_likely",
+        challenge_categories=("wrong_approach", "protected_surface"),
+        blocking_verdicts=("blocks_lane_draft", "requires_travis_approval"),
         recommended_path="Start with scheduled drafts and approval-gated posting.",
         concerns=("automation before observability",),
         questions=("Which platform fails first?",),
@@ -161,9 +163,12 @@ def test_challenge_review_record_round_trips_judgment_fields():
     data = record.to_dict()
 
     assert data["decision_state"] == "wrong_approach_likely"
+    assert data["challenge_categories"] == ["wrong_approach", "protected_surface"]
+    assert data["blocking_verdicts"] == ["blocks_lane_draft", "requires_travis_approval"]
     assert data["concerns"] == ["automation before observability"]
     assert ChallengeReviewRecord.from_dict(data) == record
     assert isinstance(ChallengeReviewRecord.from_dict(data).questions, tuple)
+    assert isinstance(ChallengeReviewRecord.from_dict(data).challenge_categories, tuple)
     assert RECORD_TYPES["ChallengeReviewRecord"] is ChallengeReviewRecord
 
 

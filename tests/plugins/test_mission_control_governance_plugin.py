@@ -223,6 +223,8 @@ def test_workspace_challenge_review_api_creates_lists_and_challenges_bad_directi
             "project_id": "project-shorts-video",
             "request_summary": "Make Jenny post automatically every day.",
             "decision_state": "wrong_approach_likely",
+            "challenge_categories": ["wrong_approach", "protected_surface"],
+            "blocking_verdicts": ["blocks_lane_draft", "requires_travis_approval"],
             "recommended_path": "Start with scheduled drafts, then approval-gated posting.",
             "concerns": ["automation before observability", "public posting needs approval"],
             "questions": ["Which platform is highest priority?"],
@@ -243,11 +245,15 @@ def test_workspace_challenge_review_api_creates_lists_and_challenges_bad_directi
     assert payload["stored"] is True
     assert payload["record_type"] == "ChallengeReviewRecord"
     assert payload["challenge_review"]["decision_state"] == "wrong_approach_likely"
+    assert payload["challenge_review"]["challenge_categories"] == ["wrong_approach", "protected_surface"]
+    assert payload["challenge_review"]["blocking_verdicts"] == ["blocks_lane_draft", "requires_travis_approval"]
     assert payload["challenge_review"]["recommended_path"] == "Start with scheduled drafts, then approval-gated posting."
 
     records = JsonlRecordStore(plugin_api.record_store_path()).read_all(ChallengeReviewRecord)
     assert len(records) == 1
     assert records[0].concerns == ("automation before observability", "public posting needs approval")
+    assert records[0].challenge_categories == ("wrong_approach", "protected_surface")
+    assert records[0].blocking_verdicts == ("blocks_lane_draft", "requires_travis_approval")
 
     listed = client.get(
         "/api/plugins/mission-control-governance/workspace/challenge-reviews?project_id=project-shorts-video"
@@ -256,6 +262,22 @@ def test_workspace_challenge_review_api_creates_lists_and_challenges_bad_directi
     listed_payload = listed.json()
     assert listed_payload["count"] == 1
     assert listed_payload["challenge_reviews"][0]["record"]["decision_state"] == "wrong_approach_likely"
+    assert listed_payload["challenge_reviews"][0]["record"]["challenge_categories"] == ["wrong_approach", "protected_surface"]
+
+
+def test_workspace_challenge_review_rejects_invalid_challenge_category(client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/challenge-reviews/create",
+        json={
+            "project_id": "project-hermes-mission-control",
+            "request_summary": "Do a vague unsafe thing.",
+            "decision_state": "needs_spec_first",
+            "challenge_categories": ["vibes_only"],
+        },
+    )
+
+    assert response.status_code == 422
+    assert "challenge_categories must contain only" in response.json()["detail"]
 
 
 def test_workspace_project_intake_rejects_invalid_challenge_state(client):

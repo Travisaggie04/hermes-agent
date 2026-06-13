@@ -141,6 +141,27 @@ CHALLENGE_DECISION_STATES = {
     "unsafe",
     "needs_approval",
 }
+CHALLENGE_REVIEW_CATEGORIES = {
+    "wrong_approach",
+    "missing_context",
+    "protected_surface",
+    "scope_split_required",
+    "questions_required",
+    "approval_required",
+    "evidence_missing",
+    "stale_state",
+    "report_contract_missing",
+}
+CHALLENGE_BLOCKING_VERDICTS = {
+    "blocks_lane_draft",
+    "requires_spec_update",
+    "requires_travis_approval",
+    "split_lane",
+    "read_only_only",
+    "stop_live_action",
+    "needs_report_contract",
+    "needs_fresh_evidence",
+}
 SAFE_APPROVAL_ACTION_CLASSES = {"read_only_lane", "read_only_design", "read_only_inspection", "pr_creation"}
 DANGEROUS_APPROVAL_ACTION_CLASSES = {
     "merge",
@@ -508,6 +529,17 @@ def _workspace_list(value: Any) -> tuple[str, ...]:
     if len(values) > MAX_WORKSPACE_LIST_ITEMS:
         raise HTTPException(status_code=422, detail="workspace list field has too many items")
     return tuple(_workspace_text(item, max_chars=240) for item in values if str(item).strip())
+
+
+def _workspace_enum_list(value: Any, allowed: set[str], field_name: str) -> tuple[str, ...]:
+    values = _workspace_list(value)
+    invalid = [item for item in values if item not in allowed]
+    if invalid:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{field_name} must contain only: {', '.join(sorted(allowed))}",
+        )
+    return values
 
 
 def _workspace_int(value: Any) -> int:
@@ -1216,6 +1248,16 @@ def _build_challenge_review_record(payload: dict[str, Any]) -> ChallengeReviewRe
         project_id=project_id,
         request_summary=request_summary,
         decision_state=decision_state,
+        challenge_categories=_workspace_enum_list(
+            payload.get("challenge_categories"),
+            CHALLENGE_REVIEW_CATEGORIES,
+            "challenge_categories",
+        ),
+        blocking_verdicts=_workspace_enum_list(
+            payload.get("blocking_verdicts"),
+            CHALLENGE_BLOCKING_VERDICTS,
+            "blocking_verdicts",
+        ),
         recommended_path=_workspace_text(payload.get("recommended_path"), max_chars=MAX_WORKSPACE_PROMPT_CHARS),
         concerns=_workspace_list(payload.get("concerns")),
         questions=_workspace_list(payload.get("questions")),
@@ -1231,6 +1273,8 @@ def _build_challenge_review_record(payload: dict[str, Any]) -> ChallengeReviewRe
             "send_to_jenny_enabled": False,
             "dispatch_enabled": False,
             "can_start_lane": decision_state == "clear_and_safe",
+            "challenge_category_options": sorted(CHALLENGE_REVIEW_CATEGORIES),
+            "blocking_verdict_options": sorted(CHALLENGE_BLOCKING_VERDICTS),
         },
     )
 

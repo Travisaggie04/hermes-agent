@@ -88,6 +88,8 @@ interface ProjectBriefRecord {
 }
 
 interface ChallengeReviewRecord {
+  blocking_verdicts?: string[];
+  challenge_categories?: string[];
   concerns?: string[];
   decision_state?: string;
   project_id?: string;
@@ -509,6 +511,8 @@ function buildPhoneSafeProjectPacket(projectView: ProjectViewModel, requestText:
   const request = compactText(requestText, 420) || "<write the request>";
   const brief = projectView.projectBrief;
   const review = projectView.challengeReview;
+  const categories = review?.challenge_categories?.length ? review.challenge_categories.join(", ") : "none recorded";
+  const verdicts = review?.blocking_verdicts?.length ? review.blocking_verdicts.join(", ") : "none recorded";
   const guard = compactText(projectView.project.mistakes_guards, 220) || "manual-copy only; no live action";
   const packet = [
     "Project room request:",
@@ -522,6 +526,8 @@ function buildPhoneSafeProjectPacket(projectView: ProjectViewModel, requestText:
     "",
     "Challenge state:",
     `${compactText(review?.decision_state, 60) || "missing"} / ${compactText(review?.recommended_path, 240) || "challenge review required before lane draft"}`,
+    `Categories: ${compactText(categories, 240)}`,
+    `Blocking verdicts: ${compactText(verdicts, 240)}`,
     "",
     "Readiness:",
     projectView.readinessLabel,
@@ -687,6 +693,8 @@ export default function MissionControlCompactPage() {
     try {
       await fetchJSON(WORKSPACE_CHALLENGE_REVIEWS_CREATE_URL, {
         body: JSON.stringify({
+          blocking_verdicts: ["requires_spec_update", "blocks_lane_draft"],
+          challenge_categories: ["questions_required", "missing_context"],
           concerns: ["request entered from compact project room requires Jenny challenge review"],
           decision_state: "needs_spec_first",
           project_id: projectView.project.project_id,
