@@ -13,7 +13,10 @@ work.
 - Accepted-live describe after PR #106:
   `v2026.5.16-1489-g98eca98f4`.
 - Local package version in `pyproject.toml`: `0.16.0`.
-- Desktop UI observed by Travis still displays `v0.16.0`.
+- Desktop UI observed by Travis still displays `v0.16.0` in the native app
+  footer. This is the installed laptop desktop app / worker-node version
+  signal; it is not changed by accepted-live merges or by a dashboard-only VPS
+  runtime switch.
 - Travis clarified that the laptop Hermes install is a worker node and that the
   VPS historically triggered the laptop Hermes update path.
 - Public repository tags are date-based; newest tag observed by API:
@@ -35,6 +38,7 @@ Inventory and update:
 
 1. Inventory current versions before changing anything:
    - laptop worker-node app/runtime version,
+   - native desktop footer version and build hash,
    - existing VPS-triggered worker-node update command/source,
    - VPS dashboard runtime head/path,
    - VPS gateway runtime head/path,

@@ -75,6 +75,7 @@ const HERMES_PROJECT_ID = 'project-hermes-mission-control'
 const HERMES_UPDATE_LANE_REQUEST = [
   'Start a safe Hermes update readiness lane for the VPS and laptop Hermes worker node.',
   'Inventory the existing VPS-triggered laptop worker-node update path and current installed versions first.',
+  'Treat the native laptop desktop app bottom-bar version as a separate installed worker-node version; accepted-live merges and dashboard-only deploys do not update that installed app.',
   'Prepare a non-live VPS dashboard runtime at accepted-live and validate it before any dashboard-only switch.',
   'Keep gateway update as a separate explicit lane.',
   'Do not trigger the laptop worker-node update automatically, restart/switch gateway, dispatch, send sessions, use Waha/social/payment/customer actions, enable new background workers/timers/daemons/cron, or inspect/print secrets.'
@@ -1446,7 +1447,7 @@ function ProjectRoomsWorkspace({
               <div>
                 <h3 className="text-sm font-semibold">Hermes update lane</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Starts a guarded update checklist for the VPS and laptop Hermes worker node. This queues a bridge request only; no runtime switch, restart, or laptop update happens here.
+                  Starts a guarded update checklist for the VPS and laptop Hermes worker node. The bottom-bar desktop app version is separate from accepted-live/dashboard deploys. This queues a bridge request only; no runtime switch, restart, or laptop update happens here.
                 </p>
               </div>
               <button className="rounded-md border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300" disabled={saving} onClick={onQueueHermesUpdate} type="button">
@@ -1749,6 +1750,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="accepted-live head" value={status.head.slice(0, 12)} />
       <StatusItem label="deployed head" value={status.deployedHead.slice(0, 12)} />
       <StatusItem label="latest merged PR" value={status.latestMergedPr || 'unknown'} />
+      <StatusItem className="md:col-span-3" label="desktop app install" tone="warn" value="separate laptop worker-node update; bottom-bar version is not changed by accepted-live/dashboard deploy" />
       <StatusItem className="md:col-span-3" label="stale warnings" tone={status.staleWarnings.length ? 'warn' : 'good'} value={status.staleWarnings.length ? status.staleWarnings.join(', ') : 'none'} />
     </div>
   )
