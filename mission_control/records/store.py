@@ -128,6 +128,8 @@ class JsonlRecordStore:
         if record_type not in RECORD_TYPES:
             raise UnknownRecordTypeError(str(record_type), line_number)
         record_data = entry.get("record")
+        if record_data is None and "record" not in entry:
+            record_data = {key: value for key, value in entry.items() if key != "record_type"}
         if not isinstance(record_data, dict):
             raise RecordDecodeError("record must be a JSON object", line_number)
         try:
