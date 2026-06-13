@@ -430,6 +430,17 @@ function latestPendingGitHubBridgeMessage(messages: GitHubBridgeMessageRecord[])
   return pending.length ? pending[pending.length - 1] : null;
 }
 
+function isDiagnosticChatMessage(message?: string): boolean {
+  const text = (message ?? "").toLowerCase();
+  return [
+    "codex app-server startup failed",
+    "error guard",
+    "local error",
+    "reply with one sentence",
+    "smoke",
+  ].some(marker => text.includes(marker));
+}
+
 function bridgeRequestId(): string {
   const fallback = Math.random().toString(16).slice(2, 14);
   return `mission-control-chat-${globalThis.crypto?.randomUUID?.() ?? fallback}`;
@@ -898,6 +909,7 @@ export default function MissionControlCompactPage() {
     () => realProjects.filter(project => PAUSED_PROJECT_IDS.includes(project.project_id) || !ACTIVE_OS_PROJECT_IDS.includes(project.project_id)),
     [realProjects],
   );
+  const projectRoomProjects = realProjects.length ? realProjects : activeProjects;
 
   const supportProjects = useMemo(() => {
     if (!snapshot) return [];
@@ -905,10 +917,10 @@ export default function MissionControlCompactPage() {
   }, [snapshot]);
 
   const selectedProjectView = useMemo(() => {
-    if (!snapshot || !activeProjects.length) return null;
-    const selected = activeProjects.find(project => project.project_id === selectedProjectId) ?? activeProjects[0];
+    if (!snapshot || !projectRoomProjects.length) return null;
+    const selected = projectRoomProjects.find(project => project.project_id === selectedProjectId) ?? projectRoomProjects[0];
     return viewModelForProject(snapshot, selected);
-  }, [activeProjects, selectedProjectId, snapshot]);
+  }, [projectRoomProjects, selectedProjectId, snapshot]);
 
   async function copyPrompt(projectView: ProjectViewModel) {
     const prompt = buildCompactNextLanePrompt(projectView, snapshot?.workspaceStatus ?? {});
@@ -1222,8 +1234,9 @@ export default function MissionControlCompactPage() {
             setRoomMessage("");
           }}
           packet={buildPhoneSafeProjectPacket(selectedProjectView, projectRequest, snapshot?.workspaceStatus ?? {})}
+          paused={!ACTIVE_OS_PROJECT_IDS.includes(selectedProjectView.project.project_id)}
           projectRequest={projectRequest}
-          projects={activeProjects}
+          projects={projectRoomProjects}
           selectedProjectView={selectedProjectView}
         />
       ) : null}
@@ -1376,6 +1389,7 @@ function CompactProjectRoom({
   onSaveLane,
   onSelectProject,
   packet,
+  paused,
   projectRequest,
   projects,
   selectedProjectView,
@@ -1399,6 +1413,7 @@ function CompactProjectRoom({
   onSaveLane: () => void;
   onSelectProject: (projectId: string) => void;
   packet: string;
+  paused: boolean;
   projectRequest: string;
   projects: ProjectRecord[];
   selectedProjectView: ProjectViewModel;
@@ -1406,40 +1421,43 @@ function CompactProjectRoom({
   const sessions = selectedProjectView.projectState?.recent_sessions ?? [];
   const review = selectedProjectView.challengeReview;
   const brief = selectedProjectView.projectBrief;
-  const repliedRequestIds = new Set(bridgeResponses.map(response => response.request_id).filter(Boolean));
+  const visibleBridgeRequests = bridgeRequests.filter(request => !isDiagnosticChatMessage(request.message));
+  const visibleBridgeResponses = bridgeResponses.filter(response => !isDiagnosticChatMessage(response.message));
+  const visibleGitHubBridgeMessages = githubBridgeMessages.filter(message => !isDiagnosticChatMessage(message.message));
+  const repliedRequestIds = new Set(visibleBridgeResponses.map(response => response.request_id).filter(Boolean));
   const githubResponseIds = new Set(
-    githubBridgeMessages
+    visibleGitHubBridgeMessages
       .filter(message => message.status === "replied" || message.from_agent === "jenny")
       .map(message => message.request_id)
       .filter(Boolean),
   );
-  const githubPendingCount = githubBridgeMessages.filter(message =>
+  const githubPendingCount = visibleGitHubBridgeMessages.filter(message =>
     message.to_agent === "jenny" &&
     ["queued", "retry_requested"].includes(message.status ?? "") &&
     !githubResponseIds.has(message.request_id),
   ).length;
-  const latestPending = latestPendingGitHubBridgeMessage(githubBridgeMessages);
-  const githubResponseCount = githubBridgeMessages.filter(message => message.status === "replied" || message.from_agent === "jenny").length;
-  const pendingCount = pendingJennyMessageCount(bridgeRequests, bridgeResponses) + githubPendingCount;
-  const responseCount = bridgeResponses.length + githubResponseCount;
+  const latestPending = latestPendingGitHubBridgeMessage(visibleGitHubBridgeMessages);
+  const githubResponseCount = visibleGitHubBridgeMessages.filter(message => message.status === "replied" || message.from_agent === "jenny").length;
+  const pendingCount = pendingJennyMessageCount(visibleBridgeRequests, visibleBridgeResponses) + githubPendingCount;
+  const responseCount = visibleBridgeResponses.length + githubResponseCount;
   const deliveryStatus = jennyDeliveryStatus(pendingCount, responseCount, bridgeStatus, githubBridgeStatus);
   const nextStep = jennyNextStep(pendingCount, responseCount, Boolean(latestPending), bridgeStatus, githubBridgeStatus);
   const chatMessages = [
-    ...bridgeRequests.map(request => ({
+    ...visibleBridgeRequests.map(request => ({
       body: request.message,
       id: request.request_id,
       meta: chatStatusLabel(request.bridge_state ?? (request.request_id && repliedRequestIds.has(request.request_id) ? "replied" : request.status ?? "queued")),
       speaker: "You",
       time: request.request_id,
     })),
-    ...bridgeResponses.map(response => ({
+    ...visibleBridgeResponses.map(response => ({
       body: response.message,
       id: response.response_id,
       meta: chatStatusLabel(response.status ?? "reply"),
       speaker: "Jenny",
       time: response.response_id,
     })),
-    ...githubBridgeMessages.map(message => ({
+    ...visibleGitHubBridgeMessages.map(message => ({
       body: message.message,
       id: message.github_comment_id || message.request_id,
       meta: chatStatusLabel(message.status),
@@ -1481,8 +1499,13 @@ function CompactProjectRoom({
             <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Chat room</p>
             <h2 className="mt-1 text-lg font-semibold leading-tight">{selectedProjectView.project.name}</h2>
           </div>
-          <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-700 dark:text-emerald-300">
-            {selectedProjectView.readinessLabel}
+          <span className={cn(
+            "rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold",
+            paused
+              ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+              : "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+          )}>
+            {paused ? "Paused" : selectedProjectView.readinessLabel}
           </span>
         </div>
 
@@ -1499,7 +1522,9 @@ function CompactProjectRoom({
           </div>
           <div className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
             <div className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Next step</div>
-            <p className="mt-1 text-sm">{nextStep}</p>
+            <p className="mt-1 text-sm">
+              {paused ? "Paused until Jenny is stable. Review context only; sending work to Jenny is disabled for this project." : nextStep}
+            </p>
             <div className="mt-2 flex flex-wrap gap-2 text-[0.68rem] text-muted-foreground">
               <span className="rounded-full border border-border/70 px-2 py-0.5">Pending {pendingCount}</span>
               <span className="rounded-full border border-border/70 px-2 py-0.5">Replies {responseCount}</span>
@@ -1551,19 +1576,20 @@ function CompactProjectRoom({
           Message
           <textarea
             className="min-h-24 rounded-xl border border-border/80 bg-background px-3 py-2 text-sm"
+            disabled={paused}
             onChange={event => onRequestChange(event.target.value)}
-            placeholder="Tell Jenny what you want to discuss or ask her to do next..."
+            placeholder={paused ? "This project is on hold until Jenny is stable." : "Tell Jenny what you want to discuss or ask her to do next..."}
             value={projectRequest}
           />
         </label>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          <button className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={busy} onClick={onQueueBridge} type="button">
+          <button className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={busy || paused} onClick={onQueueBridge} type="button">
             Send to Jenny
           </button>
           <button
             className="rounded-xl border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/15 disabled:opacity-60 dark:text-sky-300"
-            disabled={busy || !latestPending}
+            disabled={busy || paused || !latestPending}
             onClick={onRunJennyOnce}
             type="button"
           >
@@ -1573,7 +1599,11 @@ function CompactProjectRoom({
             Refresh replies
           </button>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">Live reply refresh is on and read-only. Jenny can reply through the bridge; work still waits for the normal approval gates.</p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {paused
+            ? "This project is visible for planning context only. Resume it after the Mission Control/Jenny recovery lane is stable."
+            : "Live reply refresh is on and read-only. Jenny can reply through the bridge; work still waits for the normal approval gates."}
+        </p>
         {onQueueHermesUpdate ? (
           <button className="mt-2 rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300" disabled={busy} onClick={onQueueHermesUpdate} type="button">
             Start Hermes update lane
@@ -1641,10 +1671,10 @@ function CompactProjectRoom({
             <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onCopyPacket} type="button">
               Copy phone-safe packet
             </button>
-            <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onSaveChallenge} type="button">
+            <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy || paused} onClick={onSaveChallenge} type="button">
               Save challenge draft
             </button>
-            <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onSaveLane} type="button">
+            <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy || paused} onClick={onSaveLane} type="button">
               Save read-only lane draft
             </button>
           </div>
@@ -1657,7 +1687,7 @@ function CompactProjectRoom({
             <p className="mt-2 text-xs text-muted-foreground">Record-backed outbox/inbox for Jenny relay. Use refresh to check replies. Direct send remains disabled.</p>
             <div className="mt-3 grid gap-2 rounded-lg border border-emerald-500/20 bg-background/70 p-2 text-xs sm:grid-cols-2">
               <CompactField label="manual relay" value={bridgeStatus.manual_start_only === false ? "disabled" : "manual-start only"} />
-              <CompactField label="pending" value={String(bridgeStatus.pending_count ?? bridgeRequests.filter(request => (request.bridge_state ?? request.status ?? "queued") !== "replied").length)} />
+              <CompactField label="pending" value={String(bridgeStatus.pending_count ?? visibleBridgeRequests.filter(request => (request.bridge_state ?? request.status ?? "queued") !== "replied").length)} />
               <CompactField label="last status" value={bridgeStatus.last_status ?? "idle"} />
               <CompactField label="last response" value={bridgeStatus.last_response_request_id || bridgeStatus.last_response_at || "none"} />
               <CompactField label="last error" value={bridgeStatus.last_error || "none"} />
@@ -1676,10 +1706,10 @@ function CompactProjectRoom({
               <CompactBridgeList
                 title="Outbound"
                 empty="No queued messages."
-                items={bridgeRequests}
+                items={visibleBridgeRequests}
                 renderItem={item => `${item.bridge_state ?? (item.request_id && repliedRequestIds.has(item.request_id) ? "replied" : item.status ?? "queued")} / ${item.message}`}
               />
-              <CompactBridgeList title="Replies" empty="No replies yet." items={bridgeResponses} renderItem={item => `${item.responder ?? "jenny"} / ${item.message}`} />
+              <CompactBridgeList title="Replies" empty="No replies yet." items={visibleBridgeResponses} renderItem={item => `${item.responder ?? "jenny"} / ${item.message}`} />
             </div>
           </div>
           <div className="mt-4 rounded-xl border border-border/70 bg-background p-3">
