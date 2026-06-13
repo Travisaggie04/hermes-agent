@@ -674,6 +674,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('daemon disabled / worker disabled / timer disabled')).toBeTruthy()
     expect(screen.getByText('deploy state')).toBeTruthy()
     expect(screen.getByText('merged not deployed')).toBeTruthy()
+    expect(screen.getByText(/Desktop can be current while phone\/web waits for a safe dashboard-only update/)).toBeTruthy()
     expect(screen.getByText('accepted-live head')).toBeTruthy()
     expect(screen.getByText('0f87620038d2')).toBeTruthy()
     expect(screen.getByText('deployed head')).toBeTruthy()

@@ -535,6 +535,15 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
   }
 }
 
+function dashboardUpdateNotice(status: ReturnType<typeof summarizeWorkspaceStatus>): string {
+  if (!status.deploymentNeeded) {
+    return ''
+  }
+
+  const latest = status.latestMergedPr ? ` PR #${status.latestMergedPr}` : ' the latest accepted-live changes'
+  return `Desktop can be current while phone/web waits for a safe dashboard-only update.${latest} is merged but not served by the dashboard yet.`
+}
+
 interface ProjectRenderModel {
   artifactLinks: string[]
   blockers: unknown
@@ -1190,6 +1199,7 @@ export function MissionControlView() {
   }, [selectedProjectId, snapshot.projects.length])
 
   const status = useMemo(() => summarizeWorkspaceStatus(snapshot.workspaceStatus), [snapshot.workspaceStatus])
+  const updateNotice = useMemo(() => dashboardUpdateNotice(status), [status])
   const realProjects = useMemo(() => canonicalRealProjects(sortRealProjects(snapshot.projects.filter(isRealProject))), [snapshot.projects])
   const activeProjects = useMemo(() => {
     const projects = realProjects.filter(project => ACTIVE_OS_PROJECT_IDS.includes(project.project_id))
@@ -1500,6 +1510,12 @@ export function MissionControlView() {
 
       {error ? <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
       {loading ? <div className="rounded-lg border border-border/70 p-4 text-sm text-muted-foreground">Loading Mission Control workspace…</div> : null}
+
+      {updateNotice ? (
+        <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+          {updateNotice}
+        </div>
+      ) : null}
 
       {selectedProject ? (
         <ProjectRoomsWorkspace

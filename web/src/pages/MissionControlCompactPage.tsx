@@ -1009,6 +1009,7 @@ export default function MissionControlCompactPage() {
     const selected = projectRoomProjects.find(project => project.project_id === selectedProjectId) ?? projectRoomProjects[0];
     return viewModelForProject(snapshot, selected);
   }, [projectRoomProjects, selectedProjectId, snapshot]);
+  const updateNotice = useMemo(() => snapshot ? dashboardUpdateNotice(snapshot.workspaceStatus) : "", [snapshot]);
 
   async function copyPrompt(projectView: ProjectViewModel) {
     const prompt = buildCompactNextLanePrompt(projectView, snapshot?.workspaceStatus ?? {});
@@ -1273,6 +1274,12 @@ export default function MissionControlCompactPage() {
 
       {loading ? <p className="mt-4 rounded-xl border border-border/70 p-3 text-sm text-muted-foreground">Loading compact Mission Control…</p> : null}
       {error ? <p className="mt-4 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</p> : null}
+
+      {updateNotice ? (
+        <p className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+          {updateNotice}
+        </p>
+      ) : null}
 
       {selectedProjectView ? (
         <CompactProjectRoom
@@ -1942,6 +1949,15 @@ function SafetyStrip({ status }: { status: WorkspaceStatus }) {
       <SafetyPill label="Desktop app" good={false} value="separate worker-node update" />
     </section>
   );
+}
+
+function dashboardUpdateNotice(status: WorkspaceStatus): string {
+  if (!status.deployment_gap?.dashboard_deploy_needed) {
+    return "";
+  }
+
+  const latest = status.deployment_gap?.latest_merged_pr ? ` PR #${status.deployment_gap.latest_merged_pr}` : " the latest accepted-live changes";
+  return `Desktop can be current while phone/web waits for a safe dashboard-only update.${latest} is merged but not served by the dashboard yet.`;
 }
 
 function SafetyPill({ good, label, value }: { good: boolean; label: string; value: string }) {
