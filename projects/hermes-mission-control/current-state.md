@@ -74,3 +74,12 @@ autonomous: unambiguous state, stronger challenge behavior, lane isolation,
 PR/deploy discipline, manual bridge reliability, and only then limited
 execution. The key decision is that "more autonomous" means better records,
 visibility, and stop conditions first; direct execution remains gated.
+
+## 2026-06-13 Legacy PR Triage
+
+See `docs/mission-control/legacy-open-pr-triage-2026-06-13.md`.
+
+Older open PRs #1-#8 and #18 should be treated as legacy backlog, not current
+ready-to-merge work. They are based on old stacked branches or old pre-current
+Mission Control foundations. Salvage useful ideas only through fresh branches
+from accepted-live, with current CI and protected-surface review.
