@@ -3,13 +3,15 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { listPackage } from '@electron/asar'
+import { extractFile, listPackage } from '@electron/asar'
 
 const DESKTOP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const PACKAGE_JSON = JSON.parse(fs.readFileSync(path.join(DESKTOP_ROOT, 'package.json'), 'utf8'))
 const MODE = process.argv[2] || 'help'
 const ARCH = process.arch === 'arm64' ? 'arm64' : 'x64'
-const RELEASE_ROOT = path.join(DESKTOP_ROOT, 'release')
+const RELEASE_ROOT = process.env.HERMES_DESKTOP_RELEASE_ROOT
+  ? path.resolve(process.env.HERMES_DESKTOP_RELEASE_ROOT)
+  : path.join(DESKTOP_ROOT, 'release')
 const PLATFORM = process.platform
 
 // Platform-specific packaged-app layout. The thin installer ships an Electron
@@ -64,6 +66,56 @@ const FRESH_SANDBOX_ROOT = path.join(os.tmpdir(), 'hermes-desktop-fresh-install'
 function die(message) {
   console.error(`\n${message}`)
   process.exit(1)
+}
+
+function asarPathCandidates(filePath) {
+  const withoutLeadingSlash = filePath.replace(/^[/\\]+/, '')
+  const withPlatformSeparator = withoutLeadingSlash.split(/[\\/]+/).join(path.sep)
+  const withForwardSlash = withoutLeadingSlash.split(/[\\/]+/).join('/')
+  const withBackslash = withoutLeadingSlash.split(/[\\/]+/).join('\\')
+
+  return [...new Set([filePath, withoutLeadingSlash, withPlatformSeparator, withForwardSlash, withBackslash])]
+}
+
+function extractAsarText(asarPath, filePath) {
+  for (const candidate of asarPathCandidates(filePath)) {
+    try {
+      return extractFile(asarPath, candidate).toString('utf8')
+    } catch {
+      // @electron/asar reports platform-specific package paths on Windows.
+    }
+  }
+  die(`Could not extract packaged renderer file from app.asar: ${filePath}`)
+}
+
+function validateMissionControlRendererText(rendererText) {
+  const markerGroups = [
+    ['Jenny Workspace', 'Project chat workspace', 'Message Jenny', 'Send to Jenny', 'Get Jenny reply'],
+    ['Hermes / Mission Control', 'Long-form Video', 'Shorts Video', 'Tool & Tally', 'Waha Work'],
+    ['Paused until Jenny is stable', 'Resume requirements', 'Jenny bridge guarded']
+  ]
+
+  for (const markers of markerGroups) {
+    for (const marker of markers) {
+      if (!rendererText.includes(marker)) {
+        die(`Packaged Mission Control renderer is missing marker: ${marker}`)
+      }
+    }
+  }
+}
+
+function validateMissionControlRendererMarkers(asarPath, normalizedFiles) {
+  const rendererFiles = normalizedFiles.filter(file => file.startsWith('dist/assets/') && file.endsWith('.js'))
+  validateMissionControlRendererText(rendererFiles.map(file => extractAsarText(asarPath, file)).join('\n'))
+}
+
+function validateUnpackedMissionControlRendererMarkers() {
+  const assetsDir = path.join(path.dirname(APP.unpackedDistIndex), 'assets')
+  const rendererFiles = fs
+    .readdirSync(assetsDir)
+    .filter(file => file.endsWith('.js'))
+    .map(file => path.join(assetsDir, file))
+  validateMissionControlRendererText(rendererFiles.map(file => fs.readFileSync(file, 'utf8')).join('\n'))
 }
 
 function run(command, args, options = {}) {
@@ -278,7 +330,7 @@ function launchFresh() {
 // Validate the packaged bundle matches the thin-installer architecture:
 //   - The Hermes Agent Python payload is NOT shipped (it's fetched at first
 //     launch via install.ps1's stage protocol).
-//   - install-stamp.json IS shipped in resources/ with a valid commit + branch.
+//   - install-stamp.json IS shipped in resources/ with a valid pinned commit.
 //   - native-deps/@homebridge/node-pty-prebuilt-multiarch/ IS shipped with
 //     the package.json + lib/ + at least one .node binary (the renderer's
 //     integrated terminal needs this; see Phase 1F.6).
@@ -299,7 +351,8 @@ function validateBundle() {
     )
   }
 
-  // Positive assertion: install-stamp.json carries a sane commit + branch
+  // Positive assertion: install-stamp.json carries a sane pinned commit. Detached
+  // accepted-live builds legitimately carry branch: null.
   const stampPath = path.join(APP.resourcesPath, 'install-stamp.json')
   if (!exists(stampPath)) {
     die(`Missing install-stamp.json (required for first-launch bootstrap pinning): ${stampPath}`)
@@ -313,8 +366,8 @@ function validateBundle() {
   if (!stamp.commit || typeof stamp.commit !== 'string' || stamp.commit.length < 7) {
     die(`install-stamp.json is missing a usable commit field: ${JSON.stringify(stamp)}`)
   }
-  if (!stamp.branch || typeof stamp.branch !== 'string') {
-    die(`install-stamp.json is missing the branch field: ${JSON.stringify(stamp)}`)
+  if (!Object.hasOwn(stamp, 'branch') || (stamp.branch !== null && typeof stamp.branch !== 'string')) {
+    die(`install-stamp.json has an invalid branch field: ${JSON.stringify(stamp)}`)
   }
 
   // Positive assertion: node-pty native deps shipped
@@ -343,6 +396,7 @@ function validateBundle() {
 
   // Renderer payload check (either unpacked or in the asar)
   if (exists(APP.unpackedDistIndex)) {
+    validateUnpackedMissionControlRendererMarkers()
     return { stamp, nodeBinaries }
   }
   if (!exists(APP.asarPath)) {
@@ -356,6 +410,7 @@ function validateBundle() {
   if (!normalized.includes('dist/index.html')) {
     die(`Missing renderer payload file in app.asar: ${APP.asarPath} (expected dist/index.html)`)
   }
+  validateMissionControlRendererMarkers(APP.asarPath, normalized)
   return { stamp, nodeBinaries }
 }
 
@@ -384,12 +439,16 @@ function help() {
   console.log(`Usage:
   npm run test:desktop:existing  # build packaged app, launch with normal PATH/existing Hermes
   npm run test:desktop:fresh     # build packaged app, launch with temp userData + HERMES_HOME
+  npm run test:desktop -- validate  # validate packaged app without launching it
   npm run test:desktop:dmg       # (macOS only) build DMG and open it
   npm run test:desktop:nsis      # (win32 only) build NSIS installer
   npm run test:desktop:all       # build installer, validate app payload, print paths
 
 Fast rerun (skip rebuild if the packaged app already exists):
   HERMES_DESKTOP_SKIP_BUILD=1 npm run test:desktop:fresh
+
+Validate an alternate package output directory:
+  HERMES_DESKTOP_RELEASE_ROOT=release-bridge HERMES_DESKTOP_SKIP_BUILD=1 npm run test:desktop -- validate
 `)
 }
 
@@ -400,6 +459,9 @@ if (MODE === 'existing') {
   const result = validateBundle()
   openApp()
   printArtifacts(result)
+} else if (MODE === 'validate') {
+  ensurePackagedApp()
+  printArtifacts(validateBundle())
 } else if (MODE === 'fresh') {
   ensurePackagedApp()
   const result = validateBundle()
