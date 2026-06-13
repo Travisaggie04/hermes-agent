@@ -74,3 +74,20 @@ fallback if local rigging blocks.
 Use `docs/mission-control/long-form-proof-plan-2026-06-12.md` as the concrete
 proof lane. It defines pass/fail criteria for the 10-15 second proof and keeps
 full episode production, publishing, scheduling, and hidden automation disabled.
+
+## 2026-06-13 Inventory Update
+
+See `docs/mission-control/long-form-proof-inventory-2026-06-13.md`.
+
+The latest read-only inventory found useful historical proof assets for the
+adult animated fee-machine direction, including rig-selection, Moho compositing,
+and HyperFrames scaffold packages. It also found that the historical 349-second
+mixed-media proof had serious OCR/safe-area and freeze/silence warnings, which
+supports keeping the next lane to a 10-15 second proof instead of restarting
+full long-form production.
+
+Observed local Windows tool state from Codex: DaVinci Resolve, Inkscape, and
+Cavalry exist in standard Program Files paths, but ffmpeg/ffprobe/Python are not
+on PATH from this shell, and Blender/Moho were not found in standard install
+paths. The next safe lane is a local tool preflight plus adult character rig
+acting gate before any render attempt.
