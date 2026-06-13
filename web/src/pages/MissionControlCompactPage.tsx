@@ -209,6 +209,7 @@ interface ProjectSessionRecord {
 
 interface WorkspaceStatus {
   accepted_baseline?: { head?: string; runtime_path?: string };
+  deployment_gap?: { accepted_live_head?: string; dashboard_deploy_needed?: boolean; deployed_head?: string; latest_merged_pr?: string; state?: string };
   lane?: { active_lane_count?: number };
   runtime_worktree_guard?: { decision_state?: string };
   safety?: { dispatch_in_gateway?: boolean };
@@ -1330,12 +1331,17 @@ function SafetyStrip({ status }: { status: WorkspaceStatus }) {
   const dispatch = status.safety?.dispatch_in_gateway;
   const activeLaneCount = status.lane?.active_lane_count ?? 0;
   const warnings = status.stale_context?.warnings ?? [];
+  const deployState = status.deployment_gap?.state ?? "unknown";
+  const acceptedLiveHead = status.deployment_gap?.accepted_live_head ?? status.accepted_baseline?.head ?? "";
+  const deployedHead = status.deployment_gap?.deployed_head ?? status.accepted_baseline?.head ?? "";
   return (
     <section className="mt-4 grid grid-cols-2 gap-2 text-xs" aria-label="Safety status">
       <SafetyPill label="Guard" good={guard === "pass"} value={guard} />
       <SafetyPill label="Dispatch" good={dispatch === false} value={dispatch === false ? "false" : "unknown"} />
       <SafetyPill label="Active lanes" good={activeLaneCount === 0} value={String(activeLaneCount)} />
       <SafetyPill label="Warnings" good={warnings.length === 0} value={warnings.length ? String(warnings.length) : "none"} />
+      <SafetyPill label="Deploy state" good={deployState === "deployed_and_accepted"} value={deployState.replaceAll("_", " ")} />
+      <SafetyPill label="Accepted / deployed" good={!status.deployment_gap?.dashboard_deploy_needed} value={`${acceptedLiveHead.slice(0, 8) || "unknown"} / ${deployedHead.slice(0, 8) || "unknown"}`} />
     </section>
   );
 }

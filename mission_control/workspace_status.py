@@ -98,6 +98,11 @@ _DEFAULT_STATUS: dict[str, Any] = {
         "rollback_used": False,
         "blocking_errors": (),
     },
+    "source_control": {
+        "branch": "",
+        "accepted_live_head": "",
+        "latest_merged_pr": "",
+    },
 }
 
 
@@ -173,6 +178,8 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         lane = {**lane, "max_active_lane": accepted_record.get("max_active_lane", lane.get("max_active_lane", 1))}
     pr_gate = _pr_gate_section(_section(source, "pr_gate"), defaults=_DEFAULT_STATUS["pr_gate"])
     deployment = _deployment_section(_section(source, "deployment"), defaults=_DEFAULT_STATUS["deployment"])
+    source_control = _source_control_section(_section(source, "source_control"), defaults=_DEFAULT_STATUS["source_control"])
+    deployment_gap = _deployment_gap_section(accepted, source_control)
     runtime_guard = evaluate_runtime_worktree_guard(_runtime_worktree_guard_input(_section(source, "runtime_worktree_guard"), accepted, rollback))
 
     warnings: list[str] = []
@@ -216,6 +223,8 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
             warnings.append("handoff_missing_target_head")
     if source.get("stale_discord_context") is True:
         warnings.append("stale_discord_context")
+    if deployment_gap["state"] == "merged_not_deployed":
+        warnings.append("accepted_live_head_not_deployed")
     warnings.extend(runtime_guard.get("blockers", ()))
 
     warnings = _dedupe_bounded(warnings)
@@ -233,6 +242,8 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         "activity": activity,
         "pr_gate": pr_gate,
         "deployment": deployment,
+        "source_control": source_control,
+        "deployment_gap": deployment_gap,
         "runtime_worktree_guard": runtime_guard,
         "latest_handoff": latest_handoff,
         "stale_context": {
@@ -493,6 +504,39 @@ def _deployment_section(section: dict[str, Any], *, defaults: dict[str, Any]) ->
         "target_head": _safe_sha(merged.get("target_head")),
         "rollback_used": _safe_bool(merged.get("rollback_used"), default=False),
         "blocking_errors": _dedupe_bounded(errors if isinstance(errors, list | tuple) else ()),
+    }
+
+
+def _source_control_section(section: dict[str, Any], *, defaults: dict[str, Any]) -> dict[str, Any]:
+    merged = _merge_dicts(defaults, section)
+    return {
+        "branch": _safe_text(merged.get("branch"), max_chars=120),
+        "accepted_live_head": _safe_sha(merged.get("accepted_live_head")),
+        "latest_merged_pr": _safe_text(merged.get("latest_merged_pr"), max_chars=20),
+        "display_only": True,
+        "trusted_for_execution": False,
+    }
+
+
+def _deployment_gap_section(accepted: dict[str, Any], source_control: dict[str, Any]) -> dict[str, Any]:
+    accepted_live_head = source_control.get("accepted_live_head") or ""
+    deployed_head = accepted.get("head") or ""
+    if not accepted_live_head:
+        state = "unknown"
+    elif deployed_head and accepted_live_head == deployed_head:
+        state = "deployed_and_accepted"
+    elif deployed_head:
+        state = "merged_not_deployed"
+    else:
+        state = "unknown"
+    return {
+        "state": state,
+        "accepted_live_head": accepted_live_head,
+        "deployed_head": deployed_head,
+        "latest_merged_pr": source_control.get("latest_merged_pr") or "",
+        "dashboard_deploy_needed": state == "merged_not_deployed",
+        "display_only": True,
+        "trusted_for_execution": False,
     }
 
 
