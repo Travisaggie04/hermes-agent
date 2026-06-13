@@ -496,12 +496,33 @@ export interface MissionControlGitHubBridgeStatusResponse {
   model_routing_enabled?: boolean
   pending_count?: number
   pending_messages?: Array<MissionControlRecordEnvelope<MissionControlGitHubBridgeMessageRecord>>
+  recent_messages?: Array<MissionControlRecordEnvelope<MissionControlGitHubBridgeMessageRecord>>
+  response_messages?: Array<MissionControlRecordEnvelope<MissionControlGitHubBridgeMessageRecord>>
   send_to_jenny_enabled?: boolean
   session_send_enabled?: boolean
   status_records?: Array<MissionControlRecordEnvelope<MissionControlGitHubBridgeMailboxStatusRecord>>
   stored?: boolean
   timer_enabled?: boolean
   worker_enabled?: boolean
+}
+
+export interface MissionControlGitHubBridgeRequestCreatePayload {
+  from_agent?: string
+  message: string
+  project_id: string
+  request_id?: string
+  to_agent?: string
+}
+
+export interface MissionControlGitHubBridgeRequestCreateResponse {
+  dispatch_enabled?: boolean
+  github_bridge_enabled?: boolean
+  manual_copy_only?: boolean
+  message?: MissionControlGitHubBridgeMessageRecord | null
+  record_index?: number
+  record_type?: string
+  send_to_jenny_enabled?: boolean
+  stored?: boolean
 }
 
 export interface MissionControlJennyBridgeRequestCreatePayload {
@@ -733,6 +754,16 @@ export function getMissionControlJennyBridgePollerStatus(): Promise<MissionContr
 export function getMissionControlGitHubBridgeStatus(): Promise<MissionControlGitHubBridgeStatusResponse> {
   return window.hermesDesktop.api<MissionControlGitHubBridgeStatusResponse>({
     path: `${MISSION_CONTROL_API}/workspace/github-bridge/status`
+  })
+}
+
+export function createMissionControlGitHubBridgeRequest(
+  payload: MissionControlGitHubBridgeRequestCreatePayload
+): Promise<MissionControlGitHubBridgeRequestCreateResponse> {
+  return window.hermesDesktop.api<MissionControlGitHubBridgeRequestCreateResponse>({
+    body: payload,
+    method: 'POST',
+    path: `${MISSION_CONTROL_API}/workspace/github-bridge/outbox/create`
   })
 }
 

@@ -17,6 +17,7 @@ const WORKSPACE_JENNY_BRIDGE_OUTBOX_CREATE_URL = "/api/plugins/mission-control-g
 const WORKSPACE_JENNY_BRIDGE_INBOX_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/inbox";
 const WORKSPACE_JENNY_BRIDGE_POLLER_STATUS_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/poller-status";
 const WORKSPACE_GITHUB_BRIDGE_STATUS_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/status";
+const WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/outbox/create";
 const WORKSPACE_PROJECT_STATE_URL = "/api/plugins/mission-control-governance/workspace/project-state";
 
 const REAL_PROJECT_IDS = [
@@ -175,9 +176,22 @@ interface GitHubBridgeStatus {
   foreground_watch_running?: boolean;
   model_routing_enabled?: boolean;
   pending_count?: number;
+  recent_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
+  response_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
   session_send_enabled?: boolean;
   timer_enabled?: boolean;
   worker_enabled?: boolean;
+}
+
+interface GitHubBridgeMessageRecord {
+  created_at?: string;
+  from_agent?: string;
+  github_comment_id?: string;
+  message: string;
+  project_id?: string;
+  request_id?: string;
+  status?: string;
+  to_agent?: string;
 }
 
 interface ProjectStateRecord {
@@ -361,6 +375,11 @@ function pendingJennyMessageCount(requests: JennyBridgeRequestRecord[], response
   }).length;
 }
 
+function bridgeRequestId(): string {
+  const fallback = Math.random().toString(16).slice(2, 14);
+  return `mission-control-chat-${globalThis.crypto?.randomUUID?.() ?? fallback}`;
+}
+
 function jennyDeliveryStatus(
   pendingCount: number,
   responseCount: number,
@@ -374,7 +393,7 @@ function jennyDeliveryStatus(
     return pendingCount ? `${pendingCount} waiting while bridge is watching` : "Bridge watching for replies";
   }
   if (pendingCount) {
-    return `${pendingCount} waiting for Jenny`;
+    return `${pendingCount} sent; waiting for Jenny`;
   }
   if (responseCount) {
     return "Replies up to date";
@@ -773,19 +792,19 @@ export default function MissionControlCompactPage() {
     setRoomBusy(true);
     setRoomMessage("");
     try {
-      await fetchJSON(WORKSPACE_JENNY_BRIDGE_OUTBOX_CREATE_URL, {
+      await fetchJSON(WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL, {
         body: JSON.stringify({
-          ack_key: `${projectView.project.project_id}:${Date.now()}`,
+          from_agent: "travis",
           message: buildPhoneSafeProjectPacket(projectView, projectRequest, snapshot?.workspaceStatus ?? {}),
           project_id: projectView.project.project_id,
-          sender: "codex",
-          target_agent: "jenny",
+          request_id: bridgeRequestId(),
+          to_agent: "jenny",
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
       await refreshSnapshot();
-      setRoomMessage("Message sent to Jenny inbox. Use Refresh replies to check for her response.");
+      setRoomMessage("Sent to Jenny mailbox. Replies refresh automatically; use Refresh replies if you want to check now.");
     } catch (err) {
       setRoomMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -966,6 +985,7 @@ export default function MissionControlCompactPage() {
           bridgeRequests={snapshot?.jennyBridgeRequests.filter(request => request.project_id === selectedProjectView.project.project_id) ?? []}
           bridgeResponses={snapshot?.jennyBridgeResponses.filter(response => response.project_id === selectedProjectView.project.project_id) ?? []}
           bridgeStatus={snapshot?.jennyBridgePollerStatus ?? {}}
+          githubBridgeMessages={unwrapRecords(snapshot?.githubBridgeStatus.recent_messages).filter(message => message.project_id === selectedProjectView.project.project_id)}
           githubBridgeStatus={snapshot?.githubBridgeStatus ?? {}}
           onCopyPacket={() => void copyPhoneSafePacket(selectedProjectView)}
           onQueueBridge={() => void queueJennyBridgeMessage(selectedProjectView)}
@@ -1113,6 +1133,7 @@ function CompactProjectRoom({
   bridgeResponses,
   bridgeStatus,
   githubBridgeStatus,
+  githubBridgeMessages,
   message,
   onCopyPacket,
   onQueueBridge,
@@ -1132,6 +1153,7 @@ function CompactProjectRoom({
   bridgeResponses: JennyBridgeResponseRecord[];
   bridgeStatus: JennyBridgePollerStatus;
   githubBridgeStatus: GitHubBridgeStatus;
+  githubBridgeMessages: GitHubBridgeMessageRecord[];
   message: string;
   onCopyPacket: () => void;
   onQueueBridge: () => void;
@@ -1150,8 +1172,20 @@ function CompactProjectRoom({
   const review = selectedProjectView.challengeReview;
   const brief = selectedProjectView.projectBrief;
   const repliedRequestIds = new Set(bridgeResponses.map(response => response.request_id).filter(Boolean));
-  const pendingCount = pendingJennyMessageCount(bridgeRequests, bridgeResponses);
-  const deliveryStatus = jennyDeliveryStatus(pendingCount, bridgeResponses.length, bridgeStatus, githubBridgeStatus);
+  const githubResponseIds = new Set(
+    githubBridgeMessages
+      .filter(message => message.status === "replied" || message.from_agent === "jenny")
+      .map(message => message.request_id)
+      .filter(Boolean),
+  );
+  const githubPendingCount = githubBridgeMessages.filter(message =>
+    message.to_agent === "jenny" &&
+    ["queued", "retry_requested"].includes(message.status ?? "") &&
+    !githubResponseIds.has(message.request_id),
+  ).length;
+  const githubResponseCount = githubBridgeMessages.filter(message => message.status === "replied" || message.from_agent === "jenny").length;
+  const pendingCount = pendingJennyMessageCount(bridgeRequests, bridgeResponses) + githubPendingCount;
+  const deliveryStatus = jennyDeliveryStatus(pendingCount, bridgeResponses.length + githubResponseCount, bridgeStatus, githubBridgeStatus);
   const chatMessages = [
     ...bridgeRequests.map(request => ({
       body: request.message,
@@ -1166,6 +1200,13 @@ function CompactProjectRoom({
       meta: chatStatusLabel(response.status ?? "reply"),
       speaker: "Jenny",
       time: response.response_id,
+    })),
+    ...githubBridgeMessages.map(message => ({
+      body: message.message,
+      id: message.github_comment_id || message.request_id,
+      meta: chatStatusLabel(message.status),
+      speaker: message.from_agent === "jenny" || message.status === "replied" ? "Jenny" : "You",
+      time: message.created_at,
     })),
   ].sort((left, right) => String(left.time ?? "").localeCompare(String(right.time ?? ""))).slice(-8);
 

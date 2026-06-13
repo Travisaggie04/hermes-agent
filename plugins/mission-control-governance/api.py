@@ -34,6 +34,7 @@ from mission_control.verifier_workflow import (
 from mission_control.workspace_status import build_workspace_status
 from mission_control.workspace_status_records import build_workspace_status_from_records
 from mission_control.lane_preflight import run_lane_start_preflight
+from mission_control.github_bridge_mailbox import post_github_message
 from mission_control.records.errors import RecordStoreError
 from mission_control.records.models import RECORD_TYPES
 from mission_control.kanban_linkage import linked_kanban_task_payload
@@ -782,6 +783,8 @@ def _github_bridge_mailbox_status_projection(limit: int = DEFAULT_RECORDS_LIMIT)
         "last_response_request_id": latest_response.get("request_id", ""),
         "last_error": latest_status.get("last_error", ""),
         "pending_messages": pending,
+        "response_messages": responses[-limit:],
+        "recent_messages": messages[-limit:],
         "status_records": statuses,
     }
 
@@ -3205,6 +3208,51 @@ async def workspace_github_bridge_status(limit: str | None = Query(default=None)
         "send_to_jenny_enabled": False,
         "dispatch_enabled": False,
         **projection,
+    }
+
+
+@router.post("/workspace/github-bridge/outbox/create")
+async def workspace_github_bridge_outbox_create(request: Request) -> dict[str, Any]:
+    payload = await _read_workspace_json_body(request)
+    request_id = _workspace_text(payload.get("request_id") or f"github-bridge-request-{uuid.uuid4().hex[:12]}", max_chars=120)
+    project_id = _workspace_text(payload.get("project_id"), max_chars=120)
+    message = _workspace_text(payload.get("message"), max_chars=MAX_WORKSPACE_PROMPT_CHARS)
+    from_agent = _workspace_text(payload.get("from_agent") or "travis", max_chars=40)
+    to_agent = _workspace_text(payload.get("to_agent") or "jenny", max_chars=40)
+    if not project_id:
+        raise HTTPException(status_code=400, detail="project_id is required")
+    if not message:
+        raise HTTPException(status_code=400, detail="message is required")
+
+    try:
+        result = post_github_message(
+            request_id=request_id,
+            project_id=project_id,
+            from_agent=from_agent,
+            to_agent=to_agent,
+            status="queued",
+            message=message,
+            path=record_store_path(),
+            operator="mission-control-ui",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"GitHub bridge send failed: {exc}") from exc
+
+    return {
+        **INERT_FLAGS,
+        "stored": True,
+        "display_only": False,
+        "manual_start_only": True,
+        "manual_copy_only": False,
+        "send_to_jenny_enabled": True,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "execution_enabled": False,
+        "worker_enabled": False,
+        "timer_enabled": False,
+        "daemon_enabled": False,
+        "github_bridge_enabled": True,
+        **result,
     }
 
 

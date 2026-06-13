@@ -563,6 +563,20 @@ def test_workspace_github_bridge_status_is_read_only_and_manual_only(plugin_api,
         )
     )
     store.append(
+        GitHubBridgeMessageRecord(
+            request_id="github-req-done",
+            project_id="project-hermes",
+            from_agent="jenny",
+            to_agent="travis",
+            status="replied",
+            message="Reviewed from Jenny.",
+            created_at="2026-06-13T00:00:30Z",
+            github_repo="Travisaggie04/hermes-agent",
+            github_issue_number=79,
+            github_comment_id="102",
+        )
+    )
+    store.append(
         GitHubBridgeMailboxStatusRecord(
             status_id="github-status-1",
             repo="Travisaggie04/hermes-agent",
@@ -597,7 +611,63 @@ def test_workspace_github_bridge_status_is_read_only_and_manual_only(plugin_api,
     assert payload["foreground_watch_running"] is True
     assert payload["last_status"] == "watch_poll_completed"
     assert payload["pending_messages"][0]["record"]["request_id"] == "github-req-open"
+    assert payload["recent_messages"][-1]["record"]["request_id"] == "github-req-done"
+    assert payload["response_messages"][0]["record"]["message"] == "Reviewed from Jenny."
     assert len(store.read_all()) == before
+
+
+def test_workspace_github_bridge_outbox_create_posts_one_mailbox_message(plugin_api, client, monkeypatch):
+    def fake_post_github_message(**kwargs):
+        record = GitHubBridgeMessageRecord(
+            request_id=kwargs["request_id"],
+            project_id=kwargs["project_id"],
+            from_agent=kwargs["from_agent"],
+            to_agent=kwargs["to_agent"],
+            status=kwargs["status"],
+            message=kwargs["message"],
+            created_at="2026-06-13T00:02:00Z",
+            github_repo="Travisaggie04/hermes-agent",
+            github_issue_number=79,
+            github_comment_id="103",
+        )
+        index = JsonlRecordStore(kwargs["path"]).append(record)
+        return {
+            "record_index": index,
+            "record_type": record.record_type,
+            "message": record.to_dict(),
+            "status": {"status": "message_posted", "manual_start_only": True},
+        }
+
+    monkeypatch.setattr(plugin_api, "post_github_message", fake_post_github_message)
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/github-bridge/outbox/create",
+        json={
+            "request_id": "github-req-ui",
+            "project_id": "project-hermes",
+            "from_agent": "travis",
+            "to_agent": "jenny",
+            "message": "Please review Mission Control chat bridge.",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stored"] is True
+    assert payload["send_to_jenny_enabled"] is True
+    assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["worker_enabled"] is False
+    assert payload["timer_enabled"] is False
+    assert payload["daemon_enabled"] is False
+    assert payload["github_bridge_enabled"] is True
+    assert payload["record_type"] == "GitHubBridgeMessageRecord"
+    assert payload["message"]["request_id"] == "github-req-ui"
+    assert payload["message"]["from_agent"] == "travis"
+    assert payload["message"]["to_agent"] == "jenny"
+    records = JsonlRecordStore(plugin_api.record_store_path()).read_all(GitHubBridgeMessageRecord)
+    assert [record.request_id for record in records] == ["github-req-ui"]
 
 
 def _assert_inert_workspace_payload(payload):
@@ -1983,6 +2053,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/jenny-bridge/pending": {"GET"},
         "/workspace/jenny-bridge/poller-status": {"GET"},
         "/workspace/github-bridge/status": {"GET"},
+        "/workspace/github-bridge/outbox/create": {"POST"},
         "/workspace/jenny-bridge/outbox/create": {"POST"},
         "/workspace/jenny-bridge/inbox": {"GET"},
         "/workspace/jenny-bridge/inbox/create": {"POST"},
