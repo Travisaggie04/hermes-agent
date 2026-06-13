@@ -467,6 +467,60 @@ function jennyDeliveryStatus(
   return "Ready for your first message";
 }
 
+function jennyConnectionState(
+  pendingCount: number,
+  responseCount: number,
+  bridgeStatus: JennyBridgePollerStatus,
+  githubBridgeStatus: GitHubBridgeStatus,
+): { detail: string; label: string; tone: "bad" | "good" | "idle" | "warn" } {
+  if (bridgeStatus.last_error || githubBridgeStatus.last_error) {
+    return {
+      detail: "Open advanced controls, check the bridge error, then refresh replies.",
+      label: "Jenny needs attention",
+      tone: "bad",
+    };
+  }
+  if (githubBridgeStatus.foreground_watch_running) {
+    return {
+      detail: pendingCount ? `${pendingCount} message${pendingCount === 1 ? "" : "s"} waiting while the bridge watches.` : "Bridge is watching for replies.",
+      label: "Jenny is watching",
+      tone: "good",
+    };
+  }
+  if (pendingCount) {
+    return {
+      detail: `${pendingCount} message${pendingCount === 1 ? "" : "s"} sent; waiting for Jenny.`,
+      label: "Waiting for Jenny",
+      tone: "warn",
+    };
+  }
+  if (responseCount) {
+    return {
+      detail: "Review the latest reply, then send the next bounded message.",
+      label: "Jenny replied",
+      tone: "good",
+    };
+  }
+  return {
+    detail: "Type one bounded project message to start.",
+    label: "Ready to message",
+    tone: "idle",
+  };
+}
+
+function jennyStatusToneClass(tone: "bad" | "good" | "idle" | "warn"): string {
+  if (tone === "bad") {
+    return "border-destructive/40 bg-destructive/10 text-destructive";
+  }
+  if (tone === "good") {
+    return "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+  }
+  if (tone === "warn") {
+    return "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  }
+  return "border-border/70 bg-muted/40 text-muted-foreground";
+}
+
 function jennyNextStep(
   pendingCount: number,
   responseCount: number,
@@ -1394,6 +1448,7 @@ function CompactProjectRoom({
   const pendingCount = pendingJennyMessageCount(visibleBridgeRequests, visibleBridgeResponses) + githubPendingCount;
   const responseCount = visibleBridgeResponses.length + githubResponseCount;
   const deliveryStatus = jennyDeliveryStatus(pendingCount, responseCount, bridgeStatus, githubBridgeStatus);
+  const connectionState = jennyConnectionState(pendingCount, responseCount, bridgeStatus, githubBridgeStatus);
   const nextStep = jennyNextStep(pendingCount, responseCount, Boolean(latestPending), bridgeStatus, githubBridgeStatus);
   const chatMessages = [
     ...visibleBridgeRequests.map(request => ({
@@ -1452,14 +1507,19 @@ function CompactProjectRoom({
             <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Chat room</p>
             <h2 className="mt-1 text-lg font-semibold leading-tight">{selectedProjectView.project.name}</h2>
           </div>
-          <span className={cn(
-            "rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold",
-            paused
-              ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-              : "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-          )}>
-            {paused ? "Paused" : selectedProjectView.readinessLabel}
-          </span>
+          <div className="flex flex-wrap justify-end gap-2">
+            <span className={cn("rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold", jennyStatusToneClass(connectionState.tone))}>
+              {connectionState.label}
+            </span>
+            <span className={cn(
+              "rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold",
+              paused
+                ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                : "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+            )}>
+              {paused ? "Paused" : selectedProjectView.readinessLabel}
+            </span>
+          </div>
         </div>
 
         <div className="mt-3 rounded-2xl border border-border/70 bg-background p-3 text-sm">
@@ -1470,7 +1530,7 @@ function CompactProjectRoom({
             </div>
             <div>
               <span className="font-semibold">Jenny: </span>
-              <span className="text-muted-foreground">{deliveryStatus}</span>
+              <span className="text-muted-foreground">{deliveryStatus}. {connectionState.detail}</span>
             </div>
           </div>
           <div className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
