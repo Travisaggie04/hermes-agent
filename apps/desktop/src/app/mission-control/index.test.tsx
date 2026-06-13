@@ -782,7 +782,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Paused until Jenny is stable. Review context only; sending work to Jenny is disabled for this project.')).toBeTruthy()
     expect(screen.getByText('This project is visible for planning context only. Resume it after the Mission Control/Jenny recovery lane is stable.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Send to Jenny' })).toHaveProperty('disabled', true)
-    expect(screen.getByRole('button', { name: 'Run Jenny once' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Get Jenny reply' })).toHaveProperty('disabled', true)
     expect(screen.getByRole('button', { name: 'Save challenge draft' })).toHaveProperty('disabled', true)
     expect(screen.getByRole('button', { name: 'Save read-only lane draft' })).toHaveProperty('disabled', true)
   })
@@ -1112,7 +1112,7 @@ describe('MissionControlView', () => {
 
     await renderMissionControl()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Run Jenny once' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Get Jenny reply' }))
     await waitFor(() => expect(answerMissionControlGitHubBridgeOnce).toHaveBeenCalledTimes(1))
     expect(answerMissionControlGitHubBridgeOnce).toHaveBeenCalledWith({
       project_id: 'project-hermes-mission-control',

@@ -421,7 +421,7 @@ function jennyNextStep(
     return 'Open safety details, check the bridge error, then refresh replies.'
   }
   if (hasRunnablePendingMessage) {
-    return 'Click Run Jenny once to get a reply for the latest message.'
+    return 'Click Get Jenny reply to ask Jenny for one response to the latest message.'
   }
   if (pendingCount) {
     return 'A message is waiting; refresh replies or wait for the bridge.'
@@ -1950,7 +1950,7 @@ function ProjectRoomsWorkspace({
             onClick={onRunJennyOnce}
             type="button"
           >
-            Run Jenny once
+            Get Jenny reply
           </button>
           <button className="rounded-md border border-border/80 px-4 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onRefreshBridge} type="button">
             Refresh replies
