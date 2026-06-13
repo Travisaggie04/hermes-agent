@@ -7,18 +7,16 @@ mutate production systems.
 
 ## Global Runtime Status
 
-Observed live status:
+Current source-of-truth status after the follow-up PRs:
 
 - accepted-live branch head:
-  `203605bb079007bd02e6836a88c3718a7c60e2c4`
-- live dashboard runtime:
-  `/home/jenny/.hermes/hermes-runtime-report-contract-7b3b1ba`
-- live gateway runtime:
-  `/home/jenny/.hermes/hermes-runtime-control-plane-af1eafe`
-- dashboard service: `active`
-- gateway service: `active`
-- Mission Control direct HTTP smoke:
-  `http://100.115.125.111:9119/mission-control` returned `200`
+  `90309f6c841378eaa4d08170ee0b2b94f42d25ac`
+- latest merged PR: #107, docs-only laptop Hermes worker-node update path
+  clarification.
+- live dashboard runtime for PR #106/#107: not verified from Codex after merge.
+- deploy request status: queued to Jenny through the GitHub bridge on PR #79.
+- direct Codex SSH status: blocked by sandbox access to Travis's private key
+  and Tailscale approval, so Codex did not perform a runtime switch.
 
 Dashboard-only runtime switches were used for visible Mission Control UI work.
 Gateway was not restarted or switched.
@@ -36,6 +34,16 @@ Gateway was not restarted or switched.
 | #95 | merged | Mission Control autonomy hardening backlog. |
 | #96 | merged and dashboard-deployed | Report-contract visibility in Mission Control UI. |
 | #97 | merged | Legacy open PR triage. |
+| #98 | merged | Four-project morning status. |
+| #99 | merged | Four-project day plan and lane packets. |
+| #100 | closed | Superseded legacy-record compatibility PR. |
+| #101 | merged | Mission Control room journal records. |
+| #102 | merged | Legacy Mission Control record-line compatibility. |
+| #103 | merged | Hermes version update readiness lane. |
+| #104 | merged | Hermes version inventory and Tool & Tally report-builder guardrail. |
+| #105 | merged | Typed challenge-review categories and blocking verdicts. |
+| #106 | merged; dashboard deploy queued | Guarded Hermes update lane button for desktop/compact Mission Control. |
+| #107 | merged | Laptop Hermes worker-node update-path clarification. |
 
 ## Protected Actions Not Taken
 
@@ -57,12 +65,17 @@ Project ID: `project-hermes-mission-control`
 Latest status:
 
 - Mission Control now has project rooms, Kanban, active-lanes, bridge status,
-  GitHub mailbox status, and report-contract visibility on the accepted
-  dashboard runtime.
-- The live dashboard runtime is:
-  `/home/jenny/.hermes/hermes-runtime-report-contract-7b3b1ba`.
-- The gateway remains on:
-  `/home/jenny/.hermes/hermes-runtime-control-plane-af1eafe`.
+  GitHub mailbox status, report-contract visibility, typed challenge-review
+  categories, room journal records, and a guarded Hermes update lane button in
+  accepted-live.
+- The guarded update lane button queues an append-only Jenny bridge request; it
+  does not update the laptop worker node, switch runtimes, restart gateway, or
+  dispatch/send sessions.
+- Travis clarified that the laptop Hermes install is a worker node and that the
+  VPS historically triggered laptop Hermes updates. Laptop worker-node update
+  is now a separate explicit approval lane.
+- The live dashboard runtime has not yet been verified as switched to PR
+  #106/#107 from Codex.
 
 Biggest blocker / uncertainty:
 
@@ -70,11 +83,18 @@ Biggest blocker / uncertainty:
   quality, lane isolation, and report-contract evidence are stronger.
 - Older open PRs #1-#8 and #18 are legacy backlog and should not be merged
   directly.
+- Codex can post GitHub bridge requests, but Jenny has not yet replied to the
+  dashboard deploy request for PR #106/#107. Direct Codex SSH to the VPS is
+  blocked from this sandbox.
 
 Recommended next lane:
 
-- Build Challenge Review categories and report-contract completeness checks as
-  visible guardrails before adding more automation.
+- Complete the bounded dashboard-only runtime switch for accepted-live
+  `90309f6c841378eaa4d08170ee0b2b94f42d25ac` so PR #106 is visible, without
+  touching gateway or triggering the laptop worker-node update.
+- Then build the next Mission Control guardrail: "merged but not deployed"
+  versus "deployed and accepted" status, or report-contract completeness
+  warnings.
 - If cleaning old PRs, run a separate legacy-PR closure/salvage lane.
 
 Forbidden actions:
@@ -90,7 +110,8 @@ Evidence:
 
 - `docs/mission-control/mission-control-autonomy-hardening-backlog-2026-06-13.md`
 - `docs/mission-control/legacy-open-pr-triage-2026-06-13.md`
-- PR #91, #95, #96, #97
+- `projects/hermes-mission-control/lanes/hermes-version-update-readiness-2026-06-13.md`
+- PR #91, #95, #96, #97, #101, #105, #106, #107
 
 ## Project 2 - Short-form Videos
 
@@ -250,7 +271,8 @@ Evidence:
 ## Next Best Work Order
 
 1. Hermes / Mission Control:
-   add Challenge Review categories and report-contract completeness warnings.
+   complete dashboard-only deploy of accepted-live, then add merged/deployed
+   status and report-contract completeness warnings.
 2. Tool & Tally:
    local-only report-engine fixture recovery.
 3. Shorts:

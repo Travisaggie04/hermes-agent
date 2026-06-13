@@ -12,11 +12,21 @@ Authoritative branch:
 
 Current accepted-live head observed from Codex:
 
-- `512d2f46d5b1be9bb8680578d6624ccbb15ad9e2`
+- `90309f6c841378eaa4d08170ee0b2b94f42d25ac`
 
-Latest accepted dashboard runtime from the prior run:
+Latest accepted dashboard runtime from the prior verified run:
 
 - `/home/jenny/.hermes/hermes-runtime-report-contract-7b3b1ba`
+
+Dashboard deploy note:
+
+- PR #106 added a guarded Hermes update lane button and PR #107 clarified that
+  the laptop Hermes install is a VPS-triggered worker node.
+- A dashboard-only runtime switch request for accepted-live
+  `90309f6c841378eaa4d08170ee0b2b94f42d25ac` has been queued to Jenny through
+  the GitHub bridge.
+- Codex has not verified that the live dashboard is on PR #106/#107 because
+  direct SSH is blocked from the sandbox and Jenny has not replied yet.
 
 Gateway runtime remains intentionally unchanged:
 
@@ -52,12 +62,21 @@ challenge behavior, evidence contracts, and tool policy.
 
 ### Plan
 
-1. Define Mission Control room contract.
-2. Add append-only journal/event schema.
-3. Add typed challenge-review categories and blocking verdicts.
-4. Add report-contract completeness warnings.
-5. Add tool-policy manifest with approval gates.
-6. Add regression checks for stale state, wrong-lane authority, missing
+Progress already merged:
+
+- append-only room journal records,
+- typed challenge-review categories and blocking verdicts,
+- guarded Hermes update lane button,
+- laptop Hermes worker-node update-path clarification.
+
+Remaining plan:
+
+1. Complete dashboard-only deployment of accepted-live so the update lane button
+   is visible.
+2. Add "merged but not deployed" versus "deployed and accepted" status.
+3. Add report-contract completeness warnings.
+4. Add tool-policy manifest with approval gates.
+5. Add regression checks for stale state, wrong-lane authority, missing
    challenge review, and missing evidence.
 
 ### Win Condition
@@ -169,6 +188,7 @@ Follow:
 No lane may use this plan to authorize:
 
 - gateway restart,
+- laptop worker-node update trigger,
 - dispatch/session-send,
 - Waha/social posting,
 - live scheduler activation,
