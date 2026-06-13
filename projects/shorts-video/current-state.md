@@ -77,3 +77,12 @@ Use `docs/mission-control/shorts-queue-reconciliation-plan-2026-06-12.md` as
 the current queue recovery plan. It keeps posting, scheduling, platform API
 sends, TikTok changes, and queue mutation disabled while explaining the current
 missing-slot mismatch and drafting the next 25-video slate.
+
+Latest read-only inventory:
+
+- `docs/mission-control/shorts-queue-inventory-2026-06-12.md`
+
+That inventory confirms the queue ledger has 138 records, Lane A has 50 eligible
+packages out of 202 scanned, and a no-write reconciler dry-run could fill 100
+next-five-day records across four platforms. Queue writes, posting, scheduling,
+and TikTok changes remain blocked.
