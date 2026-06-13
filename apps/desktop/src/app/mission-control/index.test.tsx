@@ -838,9 +838,9 @@ describe('MissionControlView', () => {
     const prompt = vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]
     expect(prompt.length).toBeLessThanOrEqual(2000)
     expect(prompt).toContain('PROJECT NEXT LANE')
-    expect(prompt).toContain('MANUAL COPY ONLY')
+    expect(prompt).toContain('REVIEW PACKET')
     expect(prompt).toContain('Forbidden actions:')
-    expect(prompt).toContain('Send to Jenny remains disabled')
+    expect(prompt).toContain('Direct session send remains disabled')
     expect(screen.getByText(/Project chat is record-backed/)).toBeTruthy()
   })
 

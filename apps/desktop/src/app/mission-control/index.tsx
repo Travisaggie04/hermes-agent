@@ -623,7 +623,7 @@ export function buildMissionControlCopyPrompt({
   const noHistory = model.latestReportSummary === 'No report yet' && model.latestResult === 'No result yet'
   const historyFallback = noHistory ? 'No prior report/result exists; start by verifying current state before acting.' : ''
 
-  const prompt = `PROJECT NEXT LANE — MANUAL COPY ONLY
+  const prompt = `PROJECT NEXT LANE — REVIEW PACKET
 
 Project: ${project.name}
 Objective: ${template.objective}
@@ -642,7 +642,7 @@ Stop conditions: ${template.stop}
 Expected report format: ${template.report}
 
 Safety: guard=${status.guard}; dispatch=${yesNo(status.dispatch)}; active_lane_count=${status.activeLaneCount}; stale_warnings=${status.staleWarnings.length ? status.staleWarnings.join(', ') : 'none'}.
-Send to Jenny remains disabled; paste manually only after review.`
+Use the guarded project chat to send this through the Jenny mailbox, or copy manually after review. Direct session send remains disabled.`
 
   return truncate(prompt, MAX_COPY_PROMPT_CHARS)
 }
@@ -864,7 +864,7 @@ Current goal:
 ${compactText(state?.current_goal ?? project.current_goal, 220) || 'not recorded'}
 
 Allowed: read approved context, report status, recommend next safe lane.
-Forbidden: no send path, live mutation, Waha, queue, model, social, payment, worker, timer, deploy, restart, runtime switch, config/state, or secrets unless separately approved.
+Forbidden: no direct session send, live mutation, Waha, queue, model, social, payment, worker, timer, deploy, restart, runtime switch, config/state, or secrets unless separately approved.
 
 Safety: guard=${status.guard}; dispatch=${yesNo(status.dispatch)}; active_lane_count=${status.activeLaneCount}; stale_warnings=${status.staleWarnings.length ? status.staleWarnings.join(', ') : 'none'}.
 
@@ -1279,7 +1279,7 @@ export function MissionControlView() {
 
     try {
       await createMissionControlSessionProjectLink(sessionLinkPayload(sessionLinkDialog))
-      setSessionLinkMessage('Session link record appended. Send to Jenny remains disabled.')
+      setSessionLinkMessage('Session link record appended. Direct session send remains disabled.')
       setSessionLinkDialog(null)
       setSnapshot(await loadMissionControlSnapshot())
     } catch (err) {
@@ -1997,7 +1997,7 @@ function ManualReportIngestion({
         <div>
           <h2 className="text-base font-semibold">Manual Jenny report ingestion</h2>
           <p className="text-xs text-muted-foreground">
-            Append-only report save for real project state. Send to Jenny remains disabled; this does not dispatch work.
+            Append-only report save for real project state. Direct session send remains disabled; this does not dispatch work.
           </p>
         </div>
         <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-xs text-blue-700 dark:text-blue-300">

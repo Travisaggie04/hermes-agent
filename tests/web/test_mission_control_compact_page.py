@@ -260,7 +260,7 @@ def test_send_dispatch_disabled_and_no_post_session_wiring() -> None:
     assert "Save Jenny report manually" in src
     assert "WORKSPACE_REPORTS_CREATE_URL" in src
     assert "method: \"POST\"" in src
-    assert "Send to Jenny disabled" in src
+    assert "Direct session send remains disabled" in src
     assert "Forbidden actions: no POST, session-send, dispatch" in src
     forbidden_runtime_fragments = [
         'fetchJSON<unknown>("/api/plugins/mission-control-governance/workspace/projects/create"',
