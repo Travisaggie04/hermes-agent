@@ -862,6 +862,8 @@ describe('MissionControlView', () => {
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Project room request:')
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Categories:')
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Blocking verdicts:')
+    expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Structured handoff:')
+    expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Challenge: question unclear, unsafe, or wrong-approach requests before implementation.')
 
     fireEvent.click(screen.getByRole('button', { name: 'Send to Jenny' }))
     await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(1))
@@ -872,6 +874,11 @@ describe('MissionControlView', () => {
         project_id: 'project-hermes-mission-control',
         request_id: expect.stringContaining('mission-control-chat-'),
         to_agent: 'jenny'
+      })
+    )
+    expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Structured handoff:')
       })
     )
     expect(createMissionControlJennyBridgeRequest).not.toHaveBeenCalled()

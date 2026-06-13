@@ -630,6 +630,18 @@ function safetySummary(status: WorkspaceStatus): string {
   return `guard=${guard}; dispatch=${dispatch}; active_lane_count=${activeLaneCount}; stale_warnings=${staleWarnings.length ? staleWarnings.join(", ") : "none"}`;
 }
 
+function structuredJennyHandoff(projectName: string): string {
+  return [
+    "Structured handoff:",
+    `Goal: answer the request for ${projectName} as a bounded engineering lane.`,
+    "Scope: use this project room context and approved repo/runtime evidence only.",
+    "Challenge: question unclear, unsafe, or wrong-approach requests before implementation.",
+    "Definition of done: state exact change, evidence, remaining risk, and next safe lane.",
+    "Validation: list checks run or why a check is blocked.",
+    "Report format: preflight, recommendation, work done, validation, risks, safety confirmation.",
+  ].join("\n");
+}
+
 function buildCompactNextLanePrompt(projectView: ProjectViewModel, workspaceStatus: WorkspaceStatus): string {
   const guidance = PROJECT_LANE_GUIDANCE[projectView.project.project_id] ?? "Read-only Mission Control status lane. Report current state and the next safe manual step.";
   return [
@@ -683,7 +695,7 @@ function buildPhoneSafeProjectPacket(projectView: ProjectViewModel, requestText:
     "",
     `Safety status: ${safetySummary(workspaceStatus)}`,
     "",
-    "Return: preflight, recommendation, risks, next lane, safety confirmation.",
+    structuredJennyHandoff(projectView.project.name),
   ].join("\n").trim();
   return packet.length <= 1900 ? packet : `${packet.slice(0, 1897).trim()}...`;
 }

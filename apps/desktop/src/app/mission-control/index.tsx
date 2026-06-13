@@ -815,6 +815,16 @@ function activeLaneStage(card: ActiveLaneCard): string {
   return card.lane.status ? `${card.lane.status} lane` : 'lane drafted'
 }
 
+function structuredJennyHandoff(projectName: string): string {
+  return `Structured handoff:
+Goal: answer the request for ${projectName} as a bounded engineering lane.
+Scope: use this project room context and approved repo/runtime evidence only.
+Challenge: question unclear, unsafe, or wrong-approach requests before implementation.
+Definition of done: state exact change, evidence, remaining risk, and next safe lane.
+Validation: list checks run or why a check is blocked.
+Report format: preflight, recommendation, work done, validation, risks, safety confirmation.`
+}
+
 function buildPhoneSafeProjectPacket({
   brief,
   project,
@@ -858,7 +868,7 @@ Forbidden: no send path, live mutation, Waha, queue, model, social, payment, wor
 
 Safety: guard=${status.guard}; dispatch=${yesNo(status.dispatch)}; active_lane_count=${status.activeLaneCount}; stale_warnings=${status.staleWarnings.length ? status.staleWarnings.join(', ') : 'none'}.
 
-Return: preflight, recommendation, risks, next lane, safety confirmation.`
+${structuredJennyHandoff(project.name)}`
 
   return truncate(packet.trim(), MAX_PHONE_SAFE_PACKET_CHARS)
 }
