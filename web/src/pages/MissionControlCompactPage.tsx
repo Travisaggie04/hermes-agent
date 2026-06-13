@@ -711,6 +711,20 @@ export default function MissionControlCompactPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!selectedProjectId && !snapshot?.projects.length) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      loadCompactSnapshot()
+        .then(nextSnapshot => setSnapshot(nextSnapshot))
+        .catch(err => setError(err instanceof Error ? err.message : String(err)));
+    }, 15000);
+
+    return () => window.clearInterval(timer);
+  }, [selectedProjectId, snapshot?.projects.length]);
+
   const realProjects = useMemo(() => {
     if (!snapshot) return [];
     return snapshot.projects.filter(isRealProject).sort((a, b) => projectRank(a) - projectRank(b));
@@ -1260,7 +1274,7 @@ function CompactProjectRoom({
             Refresh replies
           </button>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">Jenny can reply through the bridge. Work still waits for the normal approval gates.</p>
+        <p className="mt-2 text-xs text-muted-foreground">Live reply refresh is on and read-only. Jenny can reply through the bridge; work still waits for the normal approval gates.</p>
         {onQueueHermesUpdate ? (
           <button className="mt-2 rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300" disabled={busy} onClick={onQueueHermesUpdate} type="button">
             Start Hermes update lane
