@@ -1086,7 +1086,7 @@ export default function MissionControlCompactPage() {
       ) : null}
 
       <details className="mt-4 rounded-2xl border border-border/70 bg-card p-3">
-        <summary className="cursor-pointer text-sm font-semibold">Advanced status, paused projects, and reports</summary>
+        <summary className="cursor-pointer text-sm font-semibold">Technical status, reports, and paused projects</summary>
         <div className="mt-3 grid gap-4">
           {snapshot ? <SafetyStrip status={snapshot.workspaceStatus} /> : null}
 
@@ -1112,7 +1112,7 @@ export default function MissionControlCompactPage() {
         />
       ) : null}
 
-      <section className="mt-4 grid gap-3" aria-label="Five real Mission Control projects">
+      <section className="mt-4 grid gap-3" aria-label="Project report archive">
         {snapshot && realProjects.length !== 5 ? (
           <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
             {realProjects.length} of 5 real projects loaded. Check backend project records before using this as the daily workspace.
@@ -1296,7 +1296,7 @@ function CompactProjectRoom({
   ].sort((left, right) => String(left.time ?? "").localeCompare(String(right.time ?? ""))).slice(-8);
 
   return (
-    <section className="mt-4 grid gap-3 lg:grid-cols-[minmax(12rem,16rem)_1fr]" aria-label="Project Chat Rooms">
+    <section className="mt-4 grid gap-3 lg:grid-cols-[minmax(12rem,16rem)_1fr]" aria-label="Project chat workspace">
       <div className="rounded-2xl border border-border/70 bg-card p-3">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">Projects</h2>
