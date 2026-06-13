@@ -4176,6 +4176,34 @@ def test_workspace_status_preview_is_caller_supplied_and_stores_nothing(plugin_a
     assert plugin_api.record_store_path().exists() is False
 
 
+def test_workspace_status_preview_flags_accepted_live_ahead_of_deployed_dashboard(plugin_api, client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace-status/preview",
+        json={
+            "accepted_baseline": {
+                "head": "1111111111111111111111111111111111111111",
+                "runtime_path": "/home/jenny/.hermes/hermes-runtime-old",
+            },
+            "source_control": {
+                "branch": "accepted-live/approval-safety-5ad8906",
+                "accepted_live_head": "2222222222222222222222222222222222222222",
+                "latest_merged_pr": "108",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stored"] is False
+    assert payload["deployment_gap"]["state"] == "merged_not_deployed"
+    assert payload["deployment_gap"]["dashboard_deploy_needed"] is True
+    assert payload["deployment_gap"]["accepted_live_head"] == "2222222222222222222222222222222222222222"
+    assert payload["deployment_gap"]["deployed_head"] == "1111111111111111111111111111111111111111"
+    assert payload["deployment_gap"]["latest_merged_pr"] == "108"
+    assert "accepted_live_head_not_deployed" in payload["stale_context"]["warnings"]
+    assert plugin_api.record_store_path().exists() is False
+
+
 def test_workspace_status_has_no_action_routes(client):
     for path in (
         "/api/plugins/mission-control-governance/workspace-status/execute",

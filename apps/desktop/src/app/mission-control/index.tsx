@@ -258,9 +258,13 @@ function latestForProject<T extends { project_id?: string }>(projectId: string, 
 export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) {
   return {
     activeLaneCount: status.lane?.active_lane_count ?? 0,
+    deploymentGapState: status.deployment_gap?.state ?? 'unknown',
+    deploymentNeeded: status.deployment_gap?.dashboard_deploy_needed ?? false,
+    deployedHead: status.deployment_gap?.deployed_head ?? status.accepted_baseline?.head ?? 'unknown',
     dispatch: status.safety?.dispatch_in_gateway,
     guard: status.runtime_worktree_guard?.decision_state ?? 'unknown',
-    head: status.accepted_baseline?.head ?? 'unknown',
+    head: status.deployment_gap?.accepted_live_head ?? status.accepted_baseline?.head ?? 'unknown',
+    latestMergedPr: status.deployment_gap?.latest_merged_pr ?? '',
     runtime: status.accepted_baseline?.runtime_path ?? 'unknown',
     staleWarnings: status.stale_context?.warnings ?? []
   }
@@ -1710,13 +1714,17 @@ function ReportInput({
 }
 
 function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeWorkspaceStatus> }) {
+  const deploymentTone = status.deploymentGapState === 'deployed_and_accepted' ? 'good' : status.deploymentNeeded ? 'warn' : undefined
   return (
     <div className="grid gap-3 rounded-xl border border-border/70 bg-background/40 p-4 md:grid-cols-3">
       <StatusItem label="Runtime Worktree Guard" tone={status.guard === 'pass' ? 'good' : 'warn'} value={status.guard} />
       <StatusItem label="dispatch_in_gateway" tone={status.dispatch === false ? 'good' : 'warn'} value={yesNo(status.dispatch)} />
       <StatusItem label="active_lane_count" tone={status.activeLaneCount === 0 ? 'good' : 'warn'} value={String(status.activeLaneCount)} />
+      <StatusItem label="deploy state" tone={deploymentTone} value={status.deploymentGapState.replaceAll('_', ' ')} />
       <StatusItem className="md:col-span-2" label="accepted runtime" value={status.runtime} />
-      <StatusItem label="accepted head" value={status.head.slice(0, 12)} />
+      <StatusItem label="accepted-live head" value={status.head.slice(0, 12)} />
+      <StatusItem label="deployed head" value={status.deployedHead.slice(0, 12)} />
+      <StatusItem label="latest merged PR" value={status.latestMergedPr || 'unknown'} />
       <StatusItem className="md:col-span-3" label="stale warnings" tone={status.staleWarnings.length ? 'warn' : 'good'} value={status.staleWarnings.length ? status.staleWarnings.join(', ') : 'none'} />
     </div>
   )

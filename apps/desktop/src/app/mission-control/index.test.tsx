@@ -70,6 +70,13 @@ beforeEach(() => {
       head: '9f8863c0bf28dc0b7da702480b9b3337b983e7e8',
       runtime_path: '/home/jenny/.hermes/hermes-runtime-project-seed-9f8863c'
     },
+    deployment_gap: {
+      accepted_live_head: '0f87620038d220eb016612ba0b466c2407663743',
+      dashboard_deploy_needed: true,
+      deployed_head: '9f8863c0bf28dc0b7da702480b9b3337b983e7e8',
+      latest_merged_pr: '108',
+      state: 'merged_not_deployed'
+    },
     lane: { active_lane_count: 0 },
     runtime_worktree_guard: { decision_state: 'pass' },
     safety: { dispatch_in_gateway: false, send_to_jenny_enabled: false },
@@ -508,6 +515,12 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText('1').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('worker disabled / timer disabled')).toBeTruthy()
     expect(screen.getByText('daemon disabled / worker disabled / timer disabled')).toBeTruthy()
+    expect(screen.getByText('deploy state')).toBeTruthy()
+    expect(screen.getByText('merged not deployed')).toBeTruthy()
+    expect(screen.getByText('accepted-live head')).toBeTruthy()
+    expect(screen.getByText('0f87620038d2')).toBeTruthy()
+    expect(screen.getByText('deployed head')).toBeTruthy()
+    expect(screen.getByText('9f8863c0bf28')).toBeTruthy()
     expect(screen.getByText('Outbound to Jenny')).toBeTruthy()
     expect(screen.getByText('Jenny replies')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Refresh bridge' })).toBeTruthy()

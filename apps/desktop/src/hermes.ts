@@ -552,6 +552,7 @@ export interface MissionControlJennyBridgeResponseCreateResponse {
 
 export interface MissionControlWorkspaceStatus {
   accepted_baseline?: { head?: string; runtime_path?: string }
+  deployment_gap?: { dashboard_deploy_needed?: boolean; deployed_head?: string; accepted_live_head?: string; latest_merged_pr?: string; state?: string }
   lane?: { active_lane_count?: number; max_active_lane?: number }
   runtime_worktree_guard?: { decision_state?: string; reason?: string }
   safety?: { dispatch_in_gateway?: boolean; send_to_jenny_enabled?: boolean }
