@@ -276,6 +276,17 @@ function latestPendingGitHubBridgeMessage(messages: MissionControlGitHubBridgeMe
   return pending.length ? pending[pending.length - 1] : null
 }
 
+function isDiagnosticChatMessage(message?: string): boolean {
+  const text = (message ?? '').toLowerCase()
+  return [
+    'codex app-server startup failed',
+    'error guard',
+    'local error',
+    'reply with one sentence',
+    'smoke'
+  ].some(marker => text.includes(marker))
+}
+
 function bridgeRequestId(): string {
   const fallback = Math.random().toString(16).slice(2, 14)
   return `mission-control-chat-${globalThis.crypto?.randomUUID?.() ?? fallback}`
@@ -1105,10 +1116,11 @@ export function MissionControlView() {
     () => realProjects.filter(project => PAUSED_PROJECT_IDS.includes(project.project_id) || !ACTIVE_OS_PROJECT_IDS.includes(project.project_id)),
     [realProjects]
   )
+  const projectRoomProjects = realProjects.length ? realProjects : activeProjects
   const unassignedGroup = useMemo(() => unassignedSessionGroup(snapshot.projectSessionGroups), [snapshot.projectSessionGroups])
   const selectedProject = useMemo(
-    () => activeProjects.find(project => project.project_id === selectedProjectId) ?? activeProjects[0] ?? null,
-    [activeProjects, selectedProjectId]
+    () => projectRoomProjects.find(project => project.project_id === selectedProjectId) ?? projectRoomProjects[0] ?? null,
+    [projectRoomProjects, selectedProjectId]
   )
 
   const supportingProjects = useMemo(
@@ -1453,7 +1465,7 @@ export function MissionControlView() {
           }}
           packet={packetForProject(selectedProject)}
           project={selectedProject}
-          projects={activeProjects}
+          projects={projectRoomProjects}
           report={
             stateForProject(selectedProject, snapshot.projectStates)?.latest_report ??
             stateForProject(selectedProject, snapshot.projectStates)?.latest_jenny_report ??
@@ -1697,40 +1709,43 @@ function ProjectRoomsWorkspace({
 }) {
   const readiness = projectReadinessLabel(brief, review)
   const sessions = state?.recent_sessions?.length ? state.recent_sessions : (sessionGroup?.sessions ?? [])
-  const repliedRequestIds = new Set(bridgeResponses.map(response => response.request_id).filter(Boolean))
+  const visibleBridgeRequests = bridgeRequests.filter(request => !isDiagnosticChatMessage(request.message))
+  const visibleBridgeResponses = bridgeResponses.filter(response => !isDiagnosticChatMessage(response.message))
+  const visibleGitHubBridgeMessages = githubBridgeMessages.filter(message => !isDiagnosticChatMessage(message.message))
+  const repliedRequestIds = new Set(visibleBridgeResponses.map(response => response.request_id).filter(Boolean))
   const githubResponseIds = new Set(
-    githubBridgeMessages
+    visibleGitHubBridgeMessages
       .filter(message => message.status === 'replied' || message.from_agent === 'jenny')
       .map(message => message.request_id)
       .filter(Boolean)
   )
-  const githubPendingCount = githubBridgeMessages.filter(message =>
+  const githubPendingCount = visibleGitHubBridgeMessages.filter(message =>
     message.to_agent === 'jenny' &&
     ['queued', 'retry_requested'].includes(message.status) &&
     !githubResponseIds.has(message.request_id)
   ).length
-  const latestPending = latestPendingGitHubBridgeMessage(githubBridgeMessages)
-  const githubResponseCount = githubBridgeMessages.filter(message => message.status === 'replied' || message.from_agent === 'jenny').length
-  const pendingCount = pendingJennyMessageCount(bridgeRequests, bridgeResponses) + githubPendingCount
-  const responseCount = bridgeResponses.length + githubResponseCount
+  const latestPending = latestPendingGitHubBridgeMessage(visibleGitHubBridgeMessages)
+  const githubResponseCount = visibleGitHubBridgeMessages.filter(message => message.status === 'replied' || message.from_agent === 'jenny').length
+  const pendingCount = pendingJennyMessageCount(visibleBridgeRequests, visibleBridgeResponses) + githubPendingCount
+  const responseCount = visibleBridgeResponses.length + githubResponseCount
   const deliveryStatus = jennyDeliveryStatus(pendingCount, responseCount, bridgeStatus, githubBridgeStatus)
   const nextStep = jennyNextStep(pendingCount, responseCount, Boolean(latestPending), bridgeStatus, githubBridgeStatus)
   const chatMessages = [
-    ...bridgeRequests.map(request => ({
+    ...visibleBridgeRequests.map(request => ({
       body: request.message,
       id: request.request_id,
       meta: chatStatusLabel(request.bridge_state ?? (request.request_id && repliedRequestIds.has(request.request_id) ? 'replied' : request.status ?? 'queued')),
       speaker: 'You',
       time: request.created_at
     })),
-    ...bridgeResponses.map(response => ({
+    ...visibleBridgeResponses.map(response => ({
       body: response.message,
       id: response.response_id,
       meta: chatStatusLabel(response.status ?? 'reply'),
       speaker: 'Jenny',
       time: response.created_at
     })),
-    ...githubBridgeMessages.map(message => ({
+    ...visibleGitHubBridgeMessages.map(message => ({
       body: message.message,
       id: message.github_comment_id || message.request_id,
       meta: chatStatusLabel(message.status),
@@ -1996,7 +2011,7 @@ function ProjectRoomsWorkspace({
               </p>
               <div className="mt-3 grid gap-2 rounded-md border border-emerald-500/20 bg-background/60 p-2 text-xs md:grid-cols-2">
                 <Field label="manual relay" value={bridgeStatus.manual_start_only === false ? 'disabled' : 'manual-start only'} />
-                <Field label="pending" value={String(bridgeStatus.pending_count ?? bridgeRequests.filter(request => (request.bridge_state ?? request.status ?? 'queued') !== 'replied').length)} />
+                <Field label="pending" value={String(bridgeStatus.pending_count ?? visibleBridgeRequests.filter(request => (request.bridge_state ?? request.status ?? 'queued') !== 'replied').length)} />
                 <Field label="last status" value={bridgeStatus.last_status ?? 'idle'} />
                 <Field label="last response" value={bridgeStatus.last_response_request_id || bridgeStatus.last_response_at || 'none'} />
                 <Field label="last error" value={bridgeStatus.last_error || 'none'} />
@@ -2012,7 +2027,7 @@ function ProjectRoomsWorkspace({
                 <Field label="daemon/worker/timer" value={`daemon ${githubBridgeStatus.daemon_enabled ? 'enabled' : 'disabled'} / worker ${githubBridgeStatus.worker_enabled ? 'enabled' : 'disabled'} / timer ${githubBridgeStatus.timer_enabled ? 'enabled' : 'disabled'}`} />
               </div>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <BridgeList empty="No queued bridge messages." items={bridgeRequests} renderItem={request => (
+                <BridgeList empty="No queued bridge messages." items={visibleBridgeRequests} renderItem={request => (
                   <>
                     <div className="font-medium text-foreground/90">
                       {request.bridge_state ?? (request.request_id && repliedRequestIds.has(request.request_id) ? 'replied' : request.status ?? 'queued')} / {request.target_agent ?? 'jenny'}
@@ -2020,7 +2035,7 @@ function ProjectRoomsWorkspace({
                     <div className="mt-1 line-clamp-3 text-muted-foreground">{request.message}</div>
                   </>
                 )} title="Outbound to Jenny" />
-                <BridgeList empty="No bridge replies yet." items={bridgeResponses} renderItem={response => (
+                <BridgeList empty="No bridge replies yet." items={visibleBridgeResponses} renderItem={response => (
                   <>
                     <div className="font-medium text-foreground/90">{response.responder ?? 'jenny'} / {response.status ?? 'received'}</div>
                     <div className="mt-1 line-clamp-3 text-muted-foreground">{response.message}</div>
