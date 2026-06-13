@@ -803,24 +803,6 @@ function buildHermesStorageCleanupLanePacket(workspaceStatus: WorkspaceStatus): 
   ].join("\n");
 }
 
-function buildPausedProjectProofLanePacket(project: ProjectRecord, workspaceStatus: WorkspaceStatus): string {
-  const guidance = PROJECT_LANE_GUIDANCE[project.project_id] ?? "Read-only Mission Control status lane. Report current state and the next safe manual step.";
-  return [
-    "Paused project audit/proof lane request:",
-    "",
-    `Project: ${project.name}`,
-    "Mode: bounded audit/proof only. Hermes / Mission Control remains the active recovery lane.",
-    "",
-    `Guidance: ${guidance}`,
-    "Allowed: read approved project context, report current status, identify blockers, and recommend one safe next proof lane.",
-    "Forbidden: production, posting, payments, outreach, public launch, customer delivery, account changes, dispatch, session sending, workers, timers, deploys, restarts, runtime switches, or secrets.",
-    "Definition of done: return a concise audit/proof report with evidence, gaps, risks, and the next approval needed.",
-    "",
-    "Do not resume production, posting, payment, outreach, public launch, customer delivery, or deploy work from this request.",
-    `Current Mission Control safety status: ${safetySummary(workspaceStatus)}`,
-  ].join("\n");
-}
-
 async function loadCompactSnapshot(): Promise<CompactSnapshot> {
   const [workspaceStatus, projects, projectBriefs, challengeReviews, laneRequests, reports, projectState, jennyBridgeOutbox, jennyBridgeInbox, jennyBridgePollerStatus, githubBridgeStatus, memoryStorage] = await Promise.all([
     fetchJSON<WorkspaceStatus>(WORKSPACE_STATUS_URL),
@@ -1038,30 +1020,6 @@ export default function MissionControlCompactPage() {
       });
       await refreshSnapshot();
       setRoomMessage("Queued safe Hermes storage cleanup lane. It is append-only and does not delete, move, upload, restart, or switch anything.");
-    } catch (err) {
-      setRoomMessage(err instanceof Error ? err.message : String(err));
-    } finally {
-      setRoomBusy(false);
-    }
-  }
-
-  async function queuePausedProjectProofLane(project: ProjectRecord) {
-    setRoomBusy(true);
-    setRoomMessage("");
-    try {
-      await fetchJSON(WORKSPACE_JENNY_BRIDGE_OUTBOX_CREATE_URL, {
-        body: JSON.stringify({
-          ack_key: `${project.project_id}:paused-proof:${Date.now()}`,
-          message: buildPausedProjectProofLanePacket(project, snapshot?.workspaceStatus ?? {}),
-          project_id: project.project_id,
-          sender: "codex",
-          target_agent: "jenny",
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
-      await refreshSnapshot();
-      setRoomMessage(`Queued bounded audit/proof lane for ${project.name}. It does not resume production or enable execution.`);
     } catch (err) {
       setRoomMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1301,13 +1259,8 @@ export default function MissionControlCompactPage() {
           <div className="mt-2 grid gap-2">
             {pausedProjects.map(project => (
               <div className="rounded-lg border border-border/60 bg-background/50 p-2 text-xs text-muted-foreground" key={project.project_id || project.name}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium text-foreground/80">{project.name}</span>
-                  <button className="rounded-md border border-border/70 px-2 py-1 text-[0.68rem] font-semibold text-foreground/80 hover:bg-muted disabled:opacity-60" disabled={roomBusy} onClick={() => void queuePausedProjectProofLane(project)} type="button">
-                    Queue audit/proof lane
-                  </button>
-                </div>
-                <p className="mt-1">On hold. This only queues a bounded review packet; no production, posting, payment, outreach, or deploy is enabled.</p>
+                <div className="font-medium text-foreground/80">{project.name}</div>
+                <p className="mt-1">On hold. No work can be queued from this panel until the Mission Control/Jenny recovery lane is stable.</p>
               </div>
             ))}
           </div>
