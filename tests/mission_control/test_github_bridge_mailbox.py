@@ -113,6 +113,33 @@ def test_poll_comments_dedupes_new_request_comments_by_request_id(tmp_path: Path
     assert [message.message for message in messages] == ["First."]
 
 
+def test_poll_comments_tolerates_legacy_raw_baseline_records(tmp_path: Path):
+    records = tmp_path / "records.jsonl"
+    records.write_text(
+        json.dumps(
+            {
+                "record_type": "AcceptedBaselineRecord",
+                "baseline_id": "accepted-pr91-active-lanes-479762d",
+                "head": "479762d7afe76ceda71f69253b157094b6ad61da",
+                "runtime_path": "/home/jenny/.hermes/hermes-runtime-active-lanes-479762d",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = poll_comments(
+        [_comment(101, _body(request_id="req-after-legacy-baseline"))],
+        repo="Travisaggie04/hermes-agent",
+        issue_number=79,
+        path=records,
+    )
+
+    messages = JsonlRecordStore(records).read_all(GitHubBridgeMessageRecord)
+    assert result["new_message_count"] == 1
+    assert [message.request_id for message in messages] == ["req-after-legacy-baseline"]
+
+
 def test_pending_projection_excludes_replied_requests(tmp_path: Path):
     records = tmp_path / "records.jsonl"
     poll_comments(

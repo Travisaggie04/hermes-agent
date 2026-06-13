@@ -3,7 +3,15 @@ import json
 import pytest
 
 from mission_control.records.errors import RecordDecodeError, UnknownRecordTypeError
-from mission_control.records.models import ApprovalSlice, ArtifactRef, GoalContract, JennyReportRecord, LaneRequestRecord, ProjectRecord
+from mission_control.records.models import (
+    AcceptedBaselineRecord,
+    ApprovalSlice,
+    ArtifactRef,
+    GoalContract,
+    JennyReportRecord,
+    LaneRequestRecord,
+    ProjectRecord,
+)
 from mission_control.records.store import JsonlRecordStore
 
 
@@ -68,6 +76,36 @@ def test_jsonl_store_appends_and_reads_workspace_records(tmp_path):
     assert store.append(report) == 3
     assert store.read_all(JennyReportRecord) == (report,)
     assert store.read_latest(record_class=JennyReportRecord, limit=1) == ((2, report),)
+
+
+def test_jsonl_store_reads_legacy_top_level_records(tmp_path):
+    path = tmp_path / "records.jsonl"
+    path.write_text(
+        json.dumps(
+            {
+                "record_type": "AcceptedBaselineRecord",
+                "baseline_id": "accepted-pr91-active-lanes-479762d",
+                "head": "479762d7afe76ceda71f69253b157094b6ad61da",
+                "runtime_path": "/home/jenny/.hermes/hermes-runtime-active-lanes-479762d",
+                "rollback_head": "7bbaa8314880a29bc1acef3c2b34cea4b1eb6c63",
+                "rollback_runtime_path": "/home/jenny/.hermes/hermes-runtime-github-bridge-gh245-7bbaa83",
+                "dispatch_in_gateway": False,
+                "active_kanban": 0,
+                "max_active_lane": 1,
+                "issue": "PR #91 active lanes runtime switch",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    store = JsonlRecordStore(path)
+
+    records = store.read_all(AcceptedBaselineRecord)
+
+    assert len(records) == 1
+    assert records[0].baseline_id == "accepted-pr91-active-lanes-479762d"
+    assert records[0].head == "479762d7afe76ceda71f69253b157094b6ad61da"
+    assert records[0].runtime_path == "/home/jenny/.hermes/hermes-runtime-active-lanes-479762d"
 
 
 def test_jsonl_store_missing_file_reads_empty_tuple(tmp_path):
