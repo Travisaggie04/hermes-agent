@@ -584,6 +584,28 @@ beforeEach(() => {
           status: 'replied',
           to_agent: 'travis'
         }
+      },
+      {
+        record: {
+          created_at: '2026-06-13T01:06:00Z',
+          from_agent: 'travis',
+          message: 'Local error guard smoke. This should not post a reply.',
+          project_id: 'project-hermes-mission-control',
+          request_id: 'github-bridge-diagnostic-1',
+          status: 'queued',
+          to_agent: 'jenny'
+        }
+      },
+      {
+        record: {
+          created_at: '2026-06-13T01:07:00Z',
+          from_agent: 'jenny',
+          message: 'Error: codex app-server startup failed: initialize timed out.',
+          project_id: 'project-hermes-mission-control',
+          request_id: 'github-bridge-diagnostic-2',
+          status: 'replied',
+          to_agent: 'travis'
+        }
       }
     ],
     response_messages: [],
@@ -626,6 +648,8 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText('next safe lane').length).toBeGreaterThan(0)
     expect(screen.getByRole('region', { name: 'Project chat workspace' })).toBeTruthy()
     expect(screen.getByText('Projects')).toBeTruthy()
+    expect(screen.getAllByText('5 projects').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Paused until Jenny is stable').length).toBe(4)
     expect(screen.getByText('Chat room')).toBeTruthy()
     expect(screen.getAllByRole('heading', { name: 'Hermes / Mission Control' }).length).toBeGreaterThan(0)
     expect(screen.getByText('Conversation')).toBeTruthy()
@@ -635,6 +659,8 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Review Jenny\'s latest reply, then send the next bounded message.')).toBeTruthy()
     expect(screen.getAllByText('Pending 0').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Replies 2').length).toBeGreaterThan(0)
+    expect(screen.queryByText(/Local error guard smoke/i)).toBeNull()
+    expect(screen.queryByText(/codex app-server startup failed/i)).toBeNull()
     expect(screen.getByText('Previous sessions')).toBeTruthy()
     expect(screen.getByText('Safety controls and technical details')).toBeTruthy()
     expect(screen.getByText('Jenny bridge')).toBeTruthy()
