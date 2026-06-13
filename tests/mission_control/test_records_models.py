@@ -22,6 +22,8 @@ from mission_control.records.models import (
     ProjectBriefRecord,
     ProjectRecord,
     RECORD_TYPES,
+    RoomContractRecord,
+    RoomJournalEventRecord,
     StartGateCheck,
     TaskControlEnvelope,
 )
@@ -49,6 +51,65 @@ def test_project_record_round_trips_workspace_fields():
     assert data["metadata"] == {"source": "unit-test"}
     assert ProjectRecord.from_dict(data) == record
     assert RECORD_TYPES["ProjectRecord"] is ProjectRecord
+
+
+def test_room_contract_record_round_trips_source_of_truth_paths():
+    record = RoomContractRecord(
+        room_id="room-hermes-mission-control",
+        project_id="project-hermes-mission-control",
+        title="Hermes / Mission Control",
+        status="active",
+        brief_path="projects/hermes-mission-control/current-state.md",
+        facts_path="projects/hermes-mission-control/facts",
+        specs_path="projects/hermes-mission-control/specs",
+        decisions_path="projects/hermes-mission-control/decisions",
+        reports_path="projects/hermes-mission-control/reports",
+        mailbox_path="projects/hermes-mission-control/mailbox",
+        journal_path="projects/hermes-mission-control/journal",
+        owner="travis",
+        allowed_actions=("docs", "schemas"),
+        forbidden_actions=("dispatch", "gateway restart"),
+        stop_conditions=("protected surface",),
+        created_at="2026-06-13T05:00:00Z",
+        updated_at="2026-06-13T05:01:00Z",
+        metadata={"source": "unit-test"},
+    )
+
+    data = record.to_dict()
+
+    assert data["room_id"] == "room-hermes-mission-control"
+    assert data["allowed_actions"] == ["docs", "schemas"]
+    assert data["forbidden_actions"] == ["dispatch", "gateway restart"]
+    assert RoomContractRecord.from_dict(data) == record
+    assert isinstance(RoomContractRecord.from_dict(data).stop_conditions, tuple)
+    assert RECORD_TYPES["RoomContractRecord"] is RoomContractRecord
+
+
+def test_room_journal_event_record_forces_inert_append_only_flags():
+    record = RoomJournalEventRecord(
+        event_id="event-001",
+        room_id="room-hermes-mission-control",
+        project_id="project-hermes-mission-control",
+        event_type="challenge_passed",
+        summary="Challenge review cleared a read-only lane.",
+        event_time="2026-06-13T05:00:00Z",
+        actor="jenny",
+        source="challenge-review",
+        artifact_refs=("docs/mission-control/example.md",),
+        parent_event_ids=("event-000",),
+        append_only=False,
+        trusted_for_execution=True,
+        metadata={"decision_state": "clear_and_safe"},
+    )
+
+    data = record.to_dict()
+
+    assert data["append_only"] is True
+    assert data["trusted_for_execution"] is False
+    assert data["artifact_refs"] == ["docs/mission-control/example.md"]
+    assert RoomJournalEventRecord.from_dict(data) == record
+    assert isinstance(RoomJournalEventRecord.from_dict(data).artifact_refs, tuple)
+    assert RECORD_TYPES["RoomJournalEventRecord"] is RoomJournalEventRecord
 
 
 def test_project_brief_record_round_trips_project_intake_fields():

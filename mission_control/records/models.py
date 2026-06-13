@@ -242,6 +242,142 @@ class ProjectRecord:
 
 
 @dataclass(frozen=True)
+class RoomContractRecord:
+    room_id: str
+    project_id: str
+    title: str
+    status: str = "active"
+    brief_path: str = ""
+    facts_path: str = ""
+    specs_path: str = ""
+    decisions_path: str = ""
+    reports_path: str = ""
+    mailbox_path: str = ""
+    journal_path: str = ""
+    owner: str = ""
+    allowed_actions: tuple[str, ...] = ()
+    forbidden_actions: tuple[str, ...] = ()
+    stop_conditions: tuple[str, ...] = ()
+    created_at: str = ""
+    updated_at: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "RoomContractRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "allowed_actions", tuple(str(item) for item in _tuple(self.allowed_actions)))
+        object.__setattr__(self, "forbidden_actions", tuple(str(item) for item in _tuple(self.forbidden_actions)))
+        object.__setattr__(self, "stop_conditions", tuple(str(item) for item in _tuple(self.stop_conditions)))
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "room_id": self.room_id,
+            "project_id": self.project_id,
+            "title": self.title,
+            "status": self.status,
+            "brief_path": self.brief_path,
+            "facts_path": self.facts_path,
+            "specs_path": self.specs_path,
+            "decisions_path": self.decisions_path,
+            "reports_path": self.reports_path,
+            "mailbox_path": self.mailbox_path,
+            "journal_path": self.journal_path,
+            "owner": self.owner,
+            "allowed_actions": list(self.allowed_actions),
+            "forbidden_actions": list(self.forbidden_actions),
+            "stop_conditions": list(self.stop_conditions),
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> RoomContractRecord:
+        return cls(
+            room_id=_required(data, "room_id"),
+            project_id=_required(data, "project_id"),
+            title=_required(data, "title"),
+            status=data.get("status", "active"),
+            brief_path=data.get("brief_path", ""),
+            facts_path=data.get("facts_path", ""),
+            specs_path=data.get("specs_path", ""),
+            decisions_path=data.get("decisions_path", ""),
+            reports_path=data.get("reports_path", ""),
+            mailbox_path=data.get("mailbox_path", ""),
+            journal_path=data.get("journal_path", ""),
+            owner=data.get("owner", ""),
+            allowed_actions=data.get("allowed_actions") or (),
+            forbidden_actions=data.get("forbidden_actions") or (),
+            stop_conditions=data.get("stop_conditions") or (),
+            created_at=data.get("created_at", ""),
+            updated_at=data.get("updated_at", ""),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
+class RoomJournalEventRecord:
+    event_id: str
+    room_id: str
+    project_id: str
+    event_type: str
+    summary: str
+    event_time: str = ""
+    actor: str = ""
+    source: str = ""
+    artifact_refs: tuple[str, ...] = ()
+    parent_event_ids: tuple[str, ...] = ()
+    append_only: bool = True
+    trusted_for_execution: bool = False
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "RoomJournalEventRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "artifact_refs", tuple(str(item) for item in _tuple(self.artifact_refs)))
+        object.__setattr__(self, "parent_event_ids", tuple(str(item) for item in _tuple(self.parent_event_ids)))
+        object.__setattr__(self, "append_only", True)
+        object.__setattr__(self, "trusted_for_execution", False)
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "event_id": self.event_id,
+            "room_id": self.room_id,
+            "project_id": self.project_id,
+            "event_type": self.event_type,
+            "summary": self.summary,
+            "event_time": self.event_time,
+            "actor": self.actor,
+            "source": self.source,
+            "artifact_refs": list(self.artifact_refs),
+            "parent_event_ids": list(self.parent_event_ids),
+            "append_only": True,
+            "trusted_for_execution": False,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> RoomJournalEventRecord:
+        return cls(
+            event_id=_required(data, "event_id"),
+            room_id=_required(data, "room_id"),
+            project_id=_required(data, "project_id"),
+            event_type=_required(data, "event_type"),
+            summary=_required(data, "summary"),
+            event_time=data.get("event_time", ""),
+            actor=data.get("actor", ""),
+            source=data.get("source", ""),
+            artifact_refs=data.get("artifact_refs") or (),
+            parent_event_ids=data.get("parent_event_ids") or (),
+            append_only=True,
+            trusted_for_execution=False,
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
 class ProjectBriefRecord:
     brief_id: str
     project_id: str
@@ -2028,6 +2164,8 @@ RECORD_TYPES = {
         EvidenceCard,
         GoalContract,
         ProjectRecord,
+        RoomContractRecord,
+        RoomJournalEventRecord,
         ProjectBriefRecord,
         LaneRequestRecord,
         JennyReportRecord,
