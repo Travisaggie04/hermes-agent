@@ -71,6 +71,14 @@ const REAL_PROJECT_IDS = [
   'project-tool-tally',
   'project-waha-work'
 ]
+const HERMES_PROJECT_ID = 'project-hermes-mission-control'
+const HERMES_UPDATE_LANE_REQUEST = [
+  'Start a safe Hermes update readiness lane for the VPS and laptop Hermes worker node.',
+  'Inventory the existing VPS-triggered laptop worker-node update path and current installed versions first.',
+  'Prepare a non-live VPS dashboard runtime at accepted-live and validate it before any dashboard-only switch.',
+  'Keep gateway update as a separate explicit lane.',
+  'Do not trigger the laptop worker-node update automatically, restart/switch gateway, dispatch, send sessions, use Waha/social/payment/customer actions, enable new background workers/timers/daemons/cron, or inspect/print secrets.'
+].join(' ')
 
 const REAL_PROJECT_NAMES = [
   'Hermes / Mission Control',
@@ -725,6 +733,26 @@ Return: preflight, recommendation, risks, next lane, safety confirmation.`
   return truncate(packet.trim(), MAX_PHONE_SAFE_PACKET_CHARS)
 }
 
+function buildHermesUpdateLanePacket(status: ReturnType<typeof summarizeWorkspaceStatus>): string {
+  return [
+    'Hermes update lane request:',
+    '',
+    HERMES_UPDATE_LANE_REQUEST,
+    '',
+    'Required safe sequence:',
+    '1. Read-only inventory of VPS dashboard/gateway runtime paths/heads and current package versions.',
+    '2. Read-only inventory of the existing VPS-triggered laptop worker-node update path and laptop installed version.',
+    '3. Prepare a non-live VPS dashboard runtime at accepted-live only after source and worker-node target are clear.',
+    '4. Validate markers, record compatibility, dashboard assets, and rollback path before any dashboard-only switch.',
+    '5. Keep gateway update and laptop worker-node update as separate explicit approval steps.',
+    '',
+    'Allowed: read-only inventory, non-live runtime preparation, tests/checks, report exact next approval.',
+    'Forbidden: laptop worker-node auto-update, gateway restart/switch, dispatch, session sending, Waha/social/payment/customer action, new background worker/timer/daemon/cron, secrets, in-place runtime mutation.',
+    '',
+    `Current Mission Control safety status: guard=${status.guard}; dispatch=${yesNo(status.dispatch)}; active_lane_count=${status.activeLaneCount}.`
+  ].join('\n')
+}
+
 async function loadMissionControlSnapshot(): Promise<MissionControlSnapshot> {
   const [
     workspaceStatus,
@@ -890,6 +918,28 @@ export function MissionControlView() {
       })
       setSnapshot(await loadMissionControlSnapshot())
       setProjectRoomMessage('Queued outbound Jenny bridge message. It is append-only and still requires Jenny polling/relay.')
+    } catch (err) {
+      setProjectRoomMessage(String(err instanceof Error ? err.message : err))
+    } finally {
+      setProjectRoomSaving(false)
+    }
+  }
+
+  async function queueHermesUpdateLane(project: MissionControlProjectRecord) {
+    setProjectRoomSaving(true)
+    setProjectRoomMessage('')
+    setProjectRequest(HERMES_UPDATE_LANE_REQUEST)
+
+    try {
+      await createMissionControlJennyBridgeRequest({
+        ack_key: `${project.project_id}:hermes-update:${Date.now()}`,
+        message: buildHermesUpdateLanePacket(status),
+        project_id: project.project_id,
+        sender: 'codex',
+        target_agent: 'jenny'
+      })
+      setSnapshot(await loadMissionControlSnapshot())
+      setProjectRoomMessage('Queued safe Hermes update lane. It is append-only and does not update the laptop worker node, switch runtimes, or restart gateway.')
     } catch (err) {
       setProjectRoomMessage(String(err instanceof Error ? err.message : err))
     } finally {
@@ -1078,6 +1128,7 @@ export function MissionControlView() {
           message={projectRoomMessage}
           onCopyPacket={() => void copyProjectRoomPacket(selectedProject)}
           onQueueBridge={() => void queueJennyBridgeRequest(selectedProject)}
+          onQueueHermesUpdate={selectedProject.project_id === HERMES_PROJECT_ID ? () => void queueHermesUpdateLane(selectedProject) : undefined}
           onRefreshBridge={() => void refreshMissionControlSnapshot('Refreshed bridge inbox/outbox.')}
           onRequestChange={setProjectRequest}
           onSaveChallenge={() => void saveChallengeDraft(selectedProject)}
@@ -1246,6 +1297,7 @@ function ProjectRoomsWorkspace({
   message,
   onCopyPacket,
   onQueueBridge,
+  onQueueHermesUpdate,
   onRefreshBridge,
   onRequestChange,
   onSaveChallenge,
@@ -1269,6 +1321,7 @@ function ProjectRoomsWorkspace({
   message: string
   onCopyPacket: () => void
   onQueueBridge: () => void
+  onQueueHermesUpdate?: () => void
   onRefreshBridge: () => void
   onRequestChange: (value: string) => void
   onSaveChallenge: () => void
@@ -1359,6 +1412,21 @@ function ProjectRoomsWorkspace({
             Save read-only lane draft
           </button>
         </div>
+        {onQueueHermesUpdate ? (
+          <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold">Hermes update lane</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Starts a guarded update checklist for the VPS and laptop Hermes worker node. This queues a bridge request only; no runtime switch, restart, or laptop update happens here.
+                </p>
+              </div>
+              <button className="rounded-md border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300" disabled={saving} onClick={onQueueHermesUpdate} type="button">
+                Start Hermes update lane
+              </button>
+            </div>
+          </div>
+        ) : null}
         {message ? <p className="mt-2 text-sm text-muted-foreground">{message}</p> : null}
 
         <div className="mt-4 grid gap-3 xl:grid-cols-2">

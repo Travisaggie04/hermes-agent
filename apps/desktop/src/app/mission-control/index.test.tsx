@@ -514,6 +514,8 @@ describe('MissionControlView', () => {
     expect(screen.getByText(/replied \/ jenny/)).toBeTruthy()
     expect(screen.getByText('Project Kanban')).toBeTruthy()
     expect(screen.getByText('Project Room: Hermes / Mission Control')).toBeTruthy()
+    expect(screen.getByText('Hermes update lane')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Start Hermes update lane' })).toBeTruthy()
     expect(screen.getAllByText('report contract').length).toBeGreaterThan(0)
     expect(screen.getByText('latest report contract')).toBeTruthy()
     expect(screen.getAllByText(/Missing:.*evidence.*tests/).length).toBeGreaterThan(0)
@@ -750,6 +752,19 @@ describe('MissionControlView', () => {
         target_agent: 'jenny'
       })
     )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Hermes update lane' }))
+    await waitFor(() => expect(createMissionControlJennyBridgeRequest).toHaveBeenCalledTimes(2))
+    expect(createMissionControlJennyBridgeRequest).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        ack_key: expect.stringContaining('project-hermes-mission-control:hermes-update:'),
+        message: expect.stringContaining('Hermes update lane request:'),
+        project_id: 'project-hermes-mission-control',
+        sender: 'codex',
+        target_agent: 'jenny'
+      })
+    )
+    expect(createMissionControlJennyBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('gateway update as a separate explicit lane')
 
     fireEvent.click(screen.getByRole('button', { name: 'Save challenge draft' }))
     await waitFor(() => expect(createMissionControlChallengeReview).toHaveBeenCalledTimes(1))
