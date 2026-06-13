@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { sessionRoute } from '@/app/routes'
 import {
+  answerMissionControlGitHubBridgeOnce,
   createMissionControlChallengeReview,
   createMissionControlGitHubBridgeRequest,
   createMissionControlJennyBridgeRequest,
@@ -230,6 +231,21 @@ function pendingJennyMessageCount(
     const state = request.bridge_state ?? request.status ?? 'queued'
     return state !== 'replied' && !(request.request_id && repliedRequestIds.has(request.request_id))
   }).length
+}
+
+function latestPendingGitHubBridgeMessage(messages: MissionControlGitHubBridgeMessageRecord[]): MissionControlGitHubBridgeMessageRecord | null {
+  const repliedRequestIds = new Set(
+    messages
+      .filter(message => message.status === 'replied' || message.from_agent === 'jenny')
+      .map(message => message.request_id)
+      .filter(Boolean)
+  )
+  const pending = messages.filter(message =>
+    message.to_agent === 'jenny' &&
+    ['queued', 'retry_requested'].includes(message.status ?? '') &&
+    !repliedRequestIds.has(message.request_id)
+  )
+  return pending.length ? pending[pending.length - 1] : null
 }
 
 function bridgeRequestId(): string {
@@ -1046,6 +1062,37 @@ export function MissionControlView() {
     }
   }
 
+  async function runJennyOnce(project: MissionControlProjectRecord) {
+    const pending = latestPendingGitHubBridgeMessage(
+      unwrapRecords(snapshot.githubBridgeStatus.recent_messages).filter(message => message.project_id === project.project_id)
+    )
+    if (!pending?.request_id) {
+      setProjectRoomMessage('Send Jenny a project message first; there is no pending request to answer.')
+
+      return
+    }
+
+    setProjectRoomSaving(true)
+    setProjectRoomMessage('Jenny is answering one pending message...')
+
+    try {
+      const result = await answerMissionControlGitHubBridgeOnce({
+        project_id: project.project_id,
+        request_id: pending.request_id
+      })
+      setSnapshot(await loadMissionControlSnapshot())
+      setProjectRoomMessage(
+        result.answered
+          ? 'Jenny replied to the latest pending project message.'
+          : `Jenny did not reply: ${String((result.status as { last_error?: unknown } | undefined)?.last_error ?? 'no matching pending request')}`
+      )
+    } catch (err) {
+      setProjectRoomMessage(String(err instanceof Error ? err.message : err))
+    } finally {
+      setProjectRoomSaving(false)
+    }
+  }
+
   async function queueHermesUpdateLane(project: MissionControlProjectRecord) {
     setProjectRoomSaving(true)
     setProjectRoomMessage('')
@@ -1247,6 +1294,7 @@ export function MissionControlView() {
           onQueueHermesUpdate={selectedProject.project_id === HERMES_PROJECT_ID ? () => void queueHermesUpdateLane(selectedProject) : undefined}
           onRefreshBridge={() => void refreshMissionControlSnapshot('Refreshed bridge inbox/outbox.')}
           onRequestChange={setProjectRequest}
+          onRunJennyOnce={() => void runJennyOnce(selectedProject)}
           onSaveChallenge={() => void saveChallengeDraft(selectedProject)}
           onSaveLane={() => void saveReadOnlyLaneDraft(selectedProject)}
           onSelectProject={projectId => {
@@ -1445,6 +1493,7 @@ function ProjectRoomsWorkspace({
   onQueueHermesUpdate,
   onRefreshBridge,
   onRequestChange,
+  onRunJennyOnce,
   onOpenSession,
   onSaveChallenge,
   onSaveLane,
@@ -1471,6 +1520,7 @@ function ProjectRoomsWorkspace({
   onQueueHermesUpdate?: () => void
   onRefreshBridge: () => void
   onRequestChange: (value: string) => void
+  onRunJennyOnce: () => void
   onOpenSession: (session: MissionControlProjectSession) => void
   onSaveChallenge: () => void
   onSaveLane: () => void
@@ -1499,6 +1549,7 @@ function ProjectRoomsWorkspace({
     ['queued', 'retry_requested'].includes(message.status) &&
     !githubResponseIds.has(message.request_id)
   ).length
+  const latestPending = latestPendingGitHubBridgeMessage(githubBridgeMessages)
   const githubResponseCount = githubBridgeMessages.filter(message => message.status === 'replied' || message.from_agent === 'jenny').length
   const pendingCount = pendingJennyMessageCount(bridgeRequests, bridgeResponses) + githubPendingCount
   const deliveryStatus = jennyDeliveryStatus(pendingCount, bridgeResponses.length + githubResponseCount, bridgeStatus, githubBridgeStatus)
@@ -1628,6 +1679,14 @@ function ProjectRoomsWorkspace({
         <div className="mt-3 flex flex-wrap gap-2">
           <button className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={saving} onClick={onQueueBridge} type="button">
             Send message to Jenny
+          </button>
+          <button
+            className="rounded-md border border-sky-500/40 bg-sky-500/10 px-4 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/15 disabled:opacity-60 dark:text-sky-300"
+            disabled={saving || !latestPending}
+            onClick={onRunJennyOnce}
+            type="button"
+          >
+            Run Jenny once
           </button>
           <button className="rounded-md border border-border/80 px-4 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onRefreshBridge} type="button">
             Refresh replies

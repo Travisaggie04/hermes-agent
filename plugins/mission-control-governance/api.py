@@ -34,7 +34,7 @@ from mission_control.verifier_workflow import (
 from mission_control.workspace_status import build_workspace_status
 from mission_control.workspace_status_records import build_workspace_status_from_records
 from mission_control.lane_preflight import run_lane_start_preflight
-from mission_control.github_bridge_mailbox import post_github_message
+from mission_control.github_bridge_mailbox import answer_pending_with_hermes, post_github_message
 from mission_control.records.errors import RecordStoreError
 from mission_control.records.models import RECORD_TYPES
 from mission_control.kanban_linkage import linked_kanban_task_payload
@@ -3237,6 +3237,44 @@ async def workspace_github_bridge_outbox_create(request: Request) -> dict[str, A
         )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"GitHub bridge send failed: {exc}") from exc
+
+    return {
+        **INERT_FLAGS,
+        "stored": True,
+        "display_only": False,
+        "manual_start_only": True,
+        "manual_copy_only": False,
+        "send_to_jenny_enabled": True,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "execution_enabled": False,
+        "worker_enabled": False,
+        "timer_enabled": False,
+        "daemon_enabled": False,
+        "github_bridge_enabled": True,
+        **result,
+    }
+
+
+@router.post("/workspace/github-bridge/answer-once")
+async def workspace_github_bridge_answer_once(request: Request) -> dict[str, Any]:
+    payload = await _read_workspace_json_body(request)
+    project_id = _workspace_text(payload.get("project_id"), max_chars=120)
+    request_id = _workspace_text(payload.get("request_id"), max_chars=120)
+    if not project_id:
+        raise HTTPException(status_code=400, detail="project_id is required")
+    if not request_id:
+        raise HTTPException(status_code=400, detail="request_id is required")
+
+    try:
+        result = answer_pending_with_hermes(
+            project_id=project_id,
+            request_id=request_id,
+            path=record_store_path(),
+            operator="mission-control-ui",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"GitHub bridge answer failed: {exc}") from exc
 
     return {
         **INERT_FLAGS,

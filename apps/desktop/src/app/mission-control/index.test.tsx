@@ -16,12 +16,14 @@ const getMissionControlProjectState = vi.fn()
 const getMissionControlProjectSessions = vi.fn()
 const createMissionControlChallengeReview = vi.fn()
 const createMissionControlGitHubBridgeRequest = vi.fn()
+const answerMissionControlGitHubBridgeOnce = vi.fn()
 const createMissionControlJennyBridgeRequest = vi.fn()
 const createMissionControlLaneRequest = vi.fn()
 const createMissionControlReport = vi.fn()
 const createMissionControlSessionProjectLink = vi.fn()
 
 vi.mock('@/hermes', () => ({
+  answerMissionControlGitHubBridgeOnce: (payload: unknown) => answerMissionControlGitHubBridgeOnce(payload),
   createMissionControlChallengeReview: (payload: unknown) => createMissionControlChallengeReview(payload),
   createMissionControlGitHubBridgeRequest: (payload: unknown) => createMissionControlGitHubBridgeRequest(payload),
   createMissionControlJennyBridgeRequest: (payload: unknown) => createMissionControlJennyBridgeRequest(payload),
@@ -150,6 +152,33 @@ beforeEach(() => {
     record_type: 'GitHubBridgeMessageRecord',
     send_to_jenny_enabled: true,
     stored: true
+  })
+  answerMissionControlGitHubBridgeOnce.mockResolvedValue({
+    answered: true,
+    dispatch_enabled: false,
+    manual_start_only: true,
+    request: {
+      created_at: '2026-06-13T01:06:00Z',
+      from_agent: 'travis',
+      message: 'Second request.',
+      project_id: 'project-hermes-mission-control',
+      request_id: 'github-bridge-request-2',
+      status: 'queued',
+      to_agent: 'jenny'
+    },
+    response: {
+      created_at: '2026-06-13T01:07:00Z',
+      from_agent: 'jenny',
+      message: 'Jenny answered the second request.',
+      project_id: 'project-hermes-mission-control',
+      request_id: 'github-bridge-request-2',
+      status: 'replied',
+      to_agent: 'travis'
+    },
+    send_to_jenny_enabled: true,
+    stored: true,
+    worker_enabled: false,
+    timer_enabled: false
   })
   createMissionControlSessionProjectLink.mockResolvedValue({
     dispatch_enabled: false,
@@ -528,6 +557,17 @@ beforeEach(() => {
           status: 'replied',
           to_agent: 'travis'
         }
+      },
+      {
+        record: {
+          created_at: '2026-06-13T01:06:00Z',
+          from_agent: 'travis',
+          message: 'Second request.',
+          project_id: 'project-hermes-mission-control',
+          request_id: 'github-bridge-request-2',
+          status: 'queued',
+          to_agent: 'jenny'
+        }
       }
     ],
     response_messages: [],
@@ -840,6 +880,14 @@ describe('MissionControlView', () => {
       })
     )
     expect(createMissionControlJennyBridgeRequest).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run Jenny once' }))
+    await waitFor(() => expect(answerMissionControlGitHubBridgeOnce).toHaveBeenCalledTimes(1))
+    expect(answerMissionControlGitHubBridgeOnce).toHaveBeenCalledWith({
+      project_id: 'project-hermes-mission-control',
+      request_id: 'github-bridge-request-2'
+    })
+    expect(await screen.findByText('Jenny replied to the latest pending project message.')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Start Hermes update lane' }))
     await waitFor(() => expect(createMissionControlJennyBridgeRequest).toHaveBeenCalledTimes(1))
