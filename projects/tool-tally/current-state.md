@@ -66,9 +66,11 @@ Forbidden tonight:
 
 ## First Recommended Work
 
-Run `projects/tool-tally/lanes/read-only-recovery-audit-2026-06-12.md` and
-define safety gates for report generation, checkout, and outreach before any
-live reactivation.
+Start with
+`projects/tool-tally/lanes/report-engine-fixture-recovery-2026-06-13.md`.
+The report builder is protected: do not refactor, replace, simplify, or alter
+report scoring/templates/artifact naming until a fixture/golden-output baseline
+exists and a before/after diff proves the change is safe.
 
 Use `docs/mission-control/tool-tally-recovery-plan-2026-06-12.md` as the current
 recovery order. It keeps checkout, payment writes, customer delivery, and
@@ -78,6 +80,7 @@ pass.
 Latest read-only inventory:
 
 - `docs/mission-control/tool-tally-report-engine-inventory-2026-06-12.md`
+- `docs/mission-control/tool-tally-report-builder-fixture-start-2026-06-13.md`
 
 That inventory confirms the current recovery worktree is still focused on
 paid-order-to-report-job conversion, report package building, PDF quality, and
