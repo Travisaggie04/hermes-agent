@@ -53,6 +53,10 @@ class PendingGitHubBridgeMessage:
     record: GitHubBridgeMessageRecord
 
 
+class HermesResponderError(RuntimeError):
+    """Raised when Hermes did not return a usable chat response."""
+
+
 def record_store_path() -> Path:
     return get_hermes_home() / "mission-control" / "records.jsonl"
 
@@ -583,6 +587,34 @@ def clean_hermes_response(output: str) -> str:
     return _bounded_text(text[-5000:], max_chars=4000)
 
 
+def hermes_response_error(output: str, returncode: int = 0) -> str:
+    text = (output or "").strip()
+    if returncode != 0:
+        return compactTextForError(text) or f"Hermes responder exited with code {returncode}"
+    if not text:
+        return "Hermes responder returned an empty response"
+    lower = text.lower()
+    failure_markers = [
+        "codex app-server startup failed",
+        "app-server method 'initialize' timed out",
+        "api call failed",
+        "quota exhausted",
+    ]
+    if text.startswith("Error:") or any(marker in lower for marker in failure_markers):
+        return compactTextForError(text)
+    if any(marker in text[:2500] for marker in ["Hermes Agent", "Available Skills", "browser-cdp", "clarify:", "waha:"]):
+        return "Hermes responder returned the startup screen instead of a chat response"
+    return ""
+
+
+def compactTextForError(value: str, max_chars: int = 700) -> str:
+    normalized = str(value or "").replace("\r", "\n").strip()
+    normalized = " ".join(part.strip() for part in normalized.splitlines() if part.strip())
+    if not normalized:
+        return ""
+    return normalized[:max_chars].rstrip()
+
+
 def mission_control_responder_prompt(record: GitHubBridgeMessageRecord) -> str:
     return (
         "You are Jenny inside Travis's Mission Control OS, replacing Discord for the Hermes / Mission Control project.\n"
@@ -628,6 +660,8 @@ def run_hermes_responder(
         timeout=max(30, int(timeout_seconds)),
         check=False,
     )
+    if error := hermes_response_error(proc.stdout, proc.returncode):
+        raise HermesResponderError(error)
     return clean_hermes_response(proc.stdout)
 
 
@@ -710,13 +744,37 @@ def answer_pending_with_hermes(
         path=path,
     )
     responder = run_hermes_fn or run_hermes_responder
-    response_text = responder(
-        record,
-        hermes_bin=hermes_bin,
-        profile_home=profile_home,
-        cwd=cwd,
-        timeout_seconds=timeout_seconds,
-    )
+    try:
+        response_text = responder(
+            record,
+            hermes_bin=hermes_bin,
+            profile_home=profile_home,
+            cwd=cwd,
+            timeout_seconds=timeout_seconds,
+        )
+        if error := hermes_response_error(response_text):
+            raise HermesResponderError(error)
+    except Exception as exc:
+        _idx, status_record = append_status(
+            status="hermes_answer_error",
+            repo=repo,
+            issue_number=issue_number,
+            mode="manual_hermes_answer",
+            handled_request_id=record.request_id,
+            last_error=compactTextForError(str(exc)) or "Hermes responder failed",
+            pending_count=len(
+                list_pending_messages(path=path, repo=repo, issue_number=issue_number)
+            ),
+            operator=operator,
+            path=path,
+        )
+        return {
+            **_inert_response_flags(),
+            "answered": False,
+            "request": record.to_dict(),
+            "response": None,
+            "status": status_record.to_dict(),
+        }
     poster = post_response_fn or post_github_response
     response = poster(
         request_id=record.request_id,
