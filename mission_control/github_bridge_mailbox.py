@@ -601,7 +601,7 @@ def run_hermes_responder(
     *,
     hermes_bin: str = DEFAULT_HERMES_BIN,
     profile_home: str = "",
-    cwd: str = "/home/jenny",
+    cwd: str = "",
     timeout_seconds: int = 240,
     toolsets: str = "file,skills",
 ) -> str:
@@ -620,7 +620,7 @@ def run_hermes_responder(
             "--source",
             "mission-control-github-bridge",
         ],
-        cwd=cwd,
+        cwd=cwd or str(Path.cwd()),
         env=env,
         text=True,
         stdout=subprocess.PIPE,
@@ -674,7 +674,7 @@ def answer_pending_with_hermes(
     operator: str = "manual",
     hermes_bin: str = DEFAULT_HERMES_BIN,
     profile_home: str = "",
-    cwd: str = "/home/jenny",
+    cwd: str = "",
     timeout_seconds: int = 240,
     run_hermes_fn: Any | None = None,
     post_response_fn: Any | None = None,
@@ -1193,7 +1193,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional Hermes executable override; empty uses the active runtime module",
     )
     answer_parser.add_argument("--profile-home", default="")
-    answer_parser.add_argument("--cwd", default="/home/jenny")
+    answer_parser.add_argument(
+        "--cwd",
+        default="",
+        help="Responder working directory; empty uses the active runtime checkout",
+    )
     answer_parser.add_argument("--timeout-seconds", type=int, default=240)
 
     watch_parser = subparsers.add_parser("watch", help="Foreground-only watch of a GitHub bridge issue")
