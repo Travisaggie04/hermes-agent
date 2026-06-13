@@ -63,3 +63,14 @@ Forbidden without explicit approval:
 
 Build the next narrow Mission Control UI or bridge-hardening PR after preserving
 the four-project authority inventory and lane packets.
+
+## 2026-06-13 Hardening Update
+
+See
+`docs/mission-control/mission-control-autonomy-hardening-backlog-2026-06-13.md`.
+
+The latest hardening backlog defines staged gates for making Jenny more
+autonomous: unambiguous state, stronger challenge behavior, lane isolation,
+PR/deploy discipline, manual bridge reliability, and only then limited
+execution. The key decision is that "more autonomous" means better records,
+visibility, and stop conditions first; direct execution remains gated.
