@@ -332,7 +332,7 @@ def test_clean_hermes_response_blocks_startup_screen_noise():
     )
 
 
-def test_run_hermes_responder_defaults_to_active_runtime_module(monkeypatch):
+def test_run_hermes_responder_defaults_to_active_runtime_module(monkeypatch, tmp_path: Path):
     seen: dict[str, object] = {}
 
     class Result:
@@ -355,10 +355,14 @@ def test_run_hermes_responder_defaults_to_active_runtime_module(monkeypatch):
         github_issue_number=79,
     )
 
-    assert run_hermes_responder(record, cwd="/tmp") == "Runtime Jenny response."
+    monkeypatch.chdir(tmp_path)
+
+    assert run_hermes_responder(record) == "Runtime Jenny response."
     args = seen["args"]
+    kwargs = seen["kwargs"]
     assert args[:3] == [sys.executable, "-m", "hermes_cli.main"]
     assert "/home/jenny/.local/bin/hermes" not in args
+    assert kwargs["cwd"] == str(tmp_path)
 
 
 def test_send_posts_one_bridge_message_and_records_status(tmp_path: Path, monkeypatch):
