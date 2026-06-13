@@ -23,7 +23,7 @@ longer exposes paused-project queue buttons while the recovery lane is active.
 
 Latest accepted-live head after the current recovery UI sequence:
 
-- `a1b8d3c2e476fd535bd02fa533050d0f31b9fba2`
+- `594a2ebba641f9430e27647f69bcbd1c5f310989`
 
 ## Completed PRs
 
@@ -34,6 +34,7 @@ Latest accepted-live head after the current recovery UI sequence:
 | #135 | `7860e8d6a00648d4ea84e6e4b4d943a89cd8eddc` | Compact/phone project rooms match desktop paused-project behavior. |
 | #136 | `83952716a2b69392dd216f614ad64b6732bf25ab` | Owner-facing wording simplified: `Message Jenny`, `About this project`, `Advanced controls`, and `Advanced status and reports`. |
 | #137 | `a1b8d3c2e476fd535bd02fa533050d0f31b9fba2` | Paused-project queue/audit controls removed from desktop and compact surfaces. |
+| #139 | `594a2ebba641f9430e27647f69bcbd1c5f310989` | Adds an owner-facing Jenny chat readiness chip for watching, waiting, replied, ready, and needs-attention states. |
 
 ## Local Desktop Status
 
@@ -41,8 +42,8 @@ The local desktop app was rebuilt in place at PR #137:
 
 - path:
   `C:\Users\Travis\Documents\Codex\2026-06-12\how-do-we-connect-you-to\work\hermes-agent\apps\desktop\release-bridge\win-unpacked\Hermes.exe`
-- build stamp commit:
-  `a1b8d3c2e476fd535bd02fa533050d0f31b9fba2`
+- latest build stamp commit:
+  `594a2ebba641f9430e27647f69bcbd1c5f310989`
 
 Expected desktop behavior:
 
@@ -64,16 +65,19 @@ Verified dashboard-only deployments completed through PR #136:
 - gateway runtime intentionally unchanged:
   `/home/jenny/.hermes/hermes-runtime-control-plane-af1eafe`
 
-PR #137 dashboard runtime switch is still pending because direct Codex SSH hit a
-Tailscale browser re-auth challenge, and the sandbox cannot read Travis's
+PR #137/#139 dashboard runtime switch is still pending because direct Codex SSH
+hit a Tailscale browser re-auth challenge, and the sandbox cannot read Travis's
 private SSH key.
 
 Fallback action already taken:
 
 - queued a GitHub bridge request to Jenny on PR #79,
-- request id:
+- superseding request id:
+  `codex-pr139-dashboard-deploy-20260613-232501`,
+- supersedes earlier request:
   `codex-pr137-dashboard-deploy-20260613-225736`,
-- request asks for dashboard-only runtime switch, no gateway restart, no
+- request asks for dashboard-only runtime switch to
+  `594a2ebba641f9430e27647f69bcbd1c5f310989`, no gateway restart, no
   dispatch/session-send, and exactly one `AcceptedBaselineRecord` only after
   successful validation.
 
@@ -99,6 +103,13 @@ PR #137 validation:
 - GitHub CI: clean,
 - local desktop app rebuilt in place.
 
+PR #139 validation:
+
+- local desktop type-check: passed,
+- targeted desktop ESLint: passed,
+- GitHub CI: clean,
+- local desktop app rebuilt in place.
+
 Local browser visual validation was attempted but blocked by the Windows
 sandbox browser runtime:
 
@@ -106,8 +117,9 @@ sandbox browser runtime:
 
 ## Remaining Blockers
 
-1. Complete PR #137 dashboard-only runtime switch after SSH/Tailscale access is
-   available or Jenny processes the GitHub bridge request.
+1. Complete latest accepted-live dashboard-only runtime switch after
+   SSH/Tailscale access is available or Jenny processes the GitHub bridge
+   request.
 2. Do not resume Tool & Tally, Shorts, Long-form, or Waha from Mission Control
    until Jenny/Mission Control recovery is stable enough to run project work
    through the new OS surface.
@@ -118,7 +130,7 @@ sandbox browser runtime:
 
 Primary next lane:
 
-- finish the PR #137 dashboard-only runtime switch.
+- finish the latest accepted-live dashboard-only runtime switch.
 
 After that:
 
