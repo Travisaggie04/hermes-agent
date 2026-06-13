@@ -964,6 +964,30 @@ describe('MissionControlView', () => {
     expect(createMissionControlJennyBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('Stop before deleting, pruning, moving, or uploading anything')
   })
 
+  it('queues paused project audit proof lanes without resuming production work', async () => {
+    await renderMissionControl()
+
+    const pausedButtons = await screen.findAllByRole('button', { name: 'Queue audit/proof lane' })
+    expect(pausedButtons.length).toBeGreaterThanOrEqual(4)
+
+    fireEvent.click(pausedButtons[0])
+
+    await waitFor(() => expect(createMissionControlJennyBridgeRequest).toHaveBeenCalledTimes(1))
+    expect(createMissionControlJennyBridgeRequest).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        ack_key: expect.stringContaining('project-long-form-video:paused-proof:'),
+        message: expect.stringContaining('Paused project audit/proof lane request:'),
+        project_id: 'project-long-form-video',
+        sender: 'codex',
+        target_agent: 'jenny'
+      })
+    )
+    const message = createMissionControlJennyBridgeRequest.mock.calls.at(-1)?.[0].message
+    expect(message).toContain('Hermes / Mission Control remains the active recovery lane')
+    expect(message).toContain('Do not resume production, posting, payments, outreach, public launch')
+    expect(message).toContain('runtime switches, or secrets')
+  })
+
   it('runs Jenny once for the latest pending GitHub bridge request only', async () => {
     getMissionControlGitHubBridgeStatus.mockResolvedValue({
       count: 1,

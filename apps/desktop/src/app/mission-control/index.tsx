@@ -940,6 +940,29 @@ function buildHermesStorageCleanupLanePacket(status: ReturnType<typeof summarize
   ].join('\n')
 }
 
+function buildPausedProjectProofLanePacket(
+  project: MissionControlProjectRecord,
+  status: ReturnType<typeof summarizeWorkspaceStatus>
+): string {
+  const template = templateForProject(project)
+  return [
+    'Paused project audit/proof lane request:',
+    '',
+    `Project: ${project.name}`,
+    'Mode: bounded audit/proof only. Hermes / Mission Control remains the active recovery lane.',
+    '',
+    `Objective: ${template.objective}`,
+    `Allowed: ${template.allowed}`,
+    `Forbidden: ${template.forbidden}`,
+    `Preflight: ${template.preflight}`,
+    `Definition of done: ${template.report}`,
+    `Stop conditions: ${template.stop}`,
+    '',
+    'Do not resume production, posting, payments, outreach, public launch, customer delivery, account changes, dispatch, session sending, workers, timers, deploys, restarts, runtime switches, or secrets.',
+    `Current Mission Control safety status: guard=${status.guard}; dispatch=${yesNo(status.dispatch)}; active_lane_count=${status.activeLaneCount}.`
+  ].join('\n')
+}
+
 async function loadMissionControlSnapshot(): Promise<MissionControlSnapshot> {
   const [
     workspaceStatus,
@@ -1212,6 +1235,27 @@ export function MissionControlView() {
       })
       setSnapshot(await loadMissionControlSnapshot())
       setProjectRoomMessage('Queued safe Hermes storage cleanup lane. It is append-only and does not delete, move, upload, restart, or switch anything.')
+    } catch (err) {
+      setProjectRoomMessage(String(err instanceof Error ? err.message : err))
+    } finally {
+      setProjectRoomSaving(false)
+    }
+  }
+
+  async function queuePausedProjectProofLane(project: MissionControlProjectRecord) {
+    setProjectRoomSaving(true)
+    setProjectRoomMessage('')
+
+    try {
+      await createMissionControlJennyBridgeRequest({
+        ack_key: `${project.project_id}:paused-proof:${Date.now()}`,
+        message: buildPausedProjectProofLanePacket(project, status),
+        project_id: project.project_id,
+        sender: 'codex',
+        target_agent: 'jenny'
+      })
+      setSnapshot(await loadMissionControlSnapshot())
+      setProjectRoomMessage(`Queued bounded audit/proof lane for ${project.name}. It does not resume production or enable execution.`)
     } catch (err) {
       setProjectRoomMessage(String(err instanceof Error ? err.message : err))
     } finally {
@@ -1522,7 +1566,13 @@ export function MissionControlView() {
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               {pausedProjects.map(project => (
                 <div className="rounded-lg border border-border/60 bg-background/50 p-3 text-xs text-muted-foreground" key={project.project_id}>
-                  <span className="font-medium text-foreground/80">{project.name}</span> - on hold
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium text-foreground/80">{project.name}</span>
+                    <button className="rounded-md border border-border/70 px-2 py-1 text-[0.68rem] font-semibold text-foreground/80 hover:bg-muted disabled:opacity-60" disabled={projectRoomSaving} onClick={() => void queuePausedProjectProofLane(project)} type="button">
+                      Queue audit/proof lane
+                    </button>
+                  </div>
+                  <p className="mt-1">On hold. This only queues a bounded review packet; no production, posting, payment, outreach, or deploy is enabled.</p>
                 </div>
               ))}
             </div>
