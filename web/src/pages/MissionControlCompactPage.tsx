@@ -30,6 +30,7 @@ const HERMES_PROJECT_ID = "project-hermes-mission-control";
 const HERMES_UPDATE_LANE_REQUEST = [
   "Start a safe Hermes update readiness lane for the VPS and laptop Hermes worker node.",
   "Inventory the existing VPS-triggered laptop worker-node update path and current installed versions first.",
+  "Treat the native laptop desktop app bottom-bar version as a separate installed worker-node version; accepted-live merges and dashboard-only deploys do not update that installed app.",
   "Prepare a non-live VPS dashboard runtime at accepted-live and validate it before any dashboard-only switch.",
   "Keep gateway update as a separate explicit lane.",
   "Do not trigger the laptop worker-node update automatically, restart/switch gateway, dispatch, send sessions, use Waha/social/payment/customer actions, enable new background workers/timers/daemons/cron, or inspect/print secrets.",
@@ -1140,7 +1141,7 @@ function CompactProjectRoom({
               <div>
                 <h3 className="text-sm font-semibold">Hermes update lane</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Queues a guarded VPS/laptop worker-node update checklist only. No runtime switch, restart, or laptop update happens here.
+                  Queues a guarded VPS/laptop worker-node update checklist only. The bottom-bar desktop app version is separate from accepted-live/dashboard deploys. No runtime switch, restart, or laptop update happens here.
                 </p>
               </div>
               <button className="rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300" disabled={busy} onClick={onQueueHermesUpdate} type="button">
@@ -1367,6 +1368,7 @@ function SafetyStrip({ status }: { status: WorkspaceStatus }) {
       <SafetyPill label="Warnings" good={warnings.length === 0} value={warnings.length ? String(warnings.length) : "none"} />
       <SafetyPill label="Deploy state" good={deployState === "deployed_and_accepted"} value={deployState.replaceAll("_", " ")} />
       <SafetyPill label="Accepted / deployed" good={!status.deployment_gap?.dashboard_deploy_needed} value={`${acceptedLiveHead.slice(0, 8) || "unknown"} / ${deployedHead.slice(0, 8) || "unknown"}`} />
+      <SafetyPill label="Desktop app" good={false} value="separate worker-node update" />
     </section>
   );
 }

@@ -41,6 +41,9 @@ Mission Control should provide:
 - Laptop Hermes role: worker node. Travis clarified that the VPS historically
   triggered laptop Hermes updates, so laptop updates must be treated as a
   worker-node update trigger with separate inventory, rollback, and approval.
+- Native desktop footer version/build is a separate installed app signal. A
+  current accepted-live branch or dashboard-only runtime switch does not update
+  the laptop footer version; that requires the separate worker-node update lane.
 
 ## Tonight's Lane
 

@@ -8,6 +8,7 @@ record mutation, dispatch/session-send, Waha action, or gateway change.
 ## Local Accepted-Live Checkout
 
 - Branch: `accepted-live/approval-safety-5ad8906`
+- Head after PR #110: `de4e0c7926f3a9e64b130d4cb5f643f22d69032c`
 - Head after PR #106: `98eca98f4f83a14a77a03972c24108591cf27261`
 - Description after PR #106: `v2026.5.16-1489-g98eca98f4`
 - `pyproject.toml` package version: `0.16.0`
@@ -47,6 +48,10 @@ restart or switch either service.
 
 - The desktop footer showing `v0.16.0` is consistent with the CLI/runtime
   package version, not necessarily the Electron desktop package version.
+- A current accepted-live branch or dashboard-only deploy does not update the
+  native laptop desktop app shown in the footer. That footer belongs to the
+  installed laptop app / worker-node path and must be updated through the
+  separate VPS-triggered worker-node update lane.
 - The laptop worker-node updater may be using an installer/update channel that
   is separate from GitHub Releases. That channel still needs to be identified
   before changing laptop or VPS versions.
