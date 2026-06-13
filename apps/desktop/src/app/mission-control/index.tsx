@@ -1244,7 +1244,7 @@ export function MissionControlView() {
         tests: lineList(reportForm.tests)
       })
       setReportForm({ ...emptyReportForm, projectId: reportForm.projectId })
-      setReportMessage('Jenny report saved manually. Send to Jenny is still disabled.')
+      setReportMessage('Jenny report saved manually. Use project chat for guarded Jenny messages.')
       setSnapshot(await loadMissionControlSnapshot())
     } catch (err) {
       setReportMessage(String(err instanceof Error ? err.message : err))
