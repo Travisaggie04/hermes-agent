@@ -333,6 +333,55 @@ function compactText(value: string | string[] | undefined, maxChars: number): st
   return normalized.length > maxChars ? `${normalized.slice(0, Math.max(0, maxChars - 3)).trim()}...` : normalized;
 }
 
+function projectRequestPreview(value: string, maxChars: number): string {
+  const requestMatch = value.match(/Request:\s*([\s\S]*?)(?:\n\s*\nCurrent brief:|\n\s*\nChallenge state:|$)/i);
+  return compactText(requestMatch?.[1] ?? value, maxChars);
+}
+
+function chatStatusLabel(value: string | undefined): string {
+  switch (value) {
+    case "queued":
+      return "sent";
+    case "replied":
+      return "replied";
+    case "retry_requested":
+      return "retry requested";
+    case "response_appended":
+      return "reply received";
+    default:
+      return value || "sent";
+  }
+}
+
+function pendingJennyMessageCount(requests: JennyBridgeRequestRecord[], responses: JennyBridgeResponseRecord[]): number {
+  const repliedRequestIds = new Set(responses.map(response => response.request_id).filter(Boolean));
+  return requests.filter(request => {
+    const state = request.bridge_state ?? request.status ?? "queued";
+    return state !== "replied" && !(request.request_id && repliedRequestIds.has(request.request_id));
+  }).length;
+}
+
+function jennyDeliveryStatus(
+  pendingCount: number,
+  responseCount: number,
+  bridgeStatus: JennyBridgePollerStatus,
+  githubBridgeStatus: GitHubBridgeStatus,
+): string {
+  if (bridgeStatus.last_error || githubBridgeStatus.last_error) {
+    return "Jenny bridge needs attention";
+  }
+  if (githubBridgeStatus.foreground_watch_running) {
+    return pendingCount ? `${pendingCount} waiting while bridge is watching` : "Bridge watching for replies";
+  }
+  if (pendingCount) {
+    return `${pendingCount} waiting for Jenny`;
+  }
+  if (responseCount) {
+    return "Replies up to date";
+  }
+  return "Ready for your first message";
+}
+
 function lineList(value: string): string[] {
   return value
     .split(/\r?\n/)
@@ -722,7 +771,7 @@ export default function MissionControlCompactPage() {
         method: "POST",
       });
       await refreshSnapshot();
-      setRoomMessage("Queued outbound Jenny bridge message. It is append-only and still requires Jenny polling/relay.");
+      setRoomMessage("Message sent to Jenny inbox. Use Refresh replies to check for her response.");
     } catch (err) {
       setRoomMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1087,18 +1136,20 @@ function CompactProjectRoom({
   const review = selectedProjectView.challengeReview;
   const brief = selectedProjectView.projectBrief;
   const repliedRequestIds = new Set(bridgeResponses.map(response => response.request_id).filter(Boolean));
+  const pendingCount = pendingJennyMessageCount(bridgeRequests, bridgeResponses);
+  const deliveryStatus = jennyDeliveryStatus(pendingCount, bridgeResponses.length, bridgeStatus, githubBridgeStatus);
   const chatMessages = [
     ...bridgeRequests.map(request => ({
       body: request.message,
       id: request.request_id,
-      meta: request.bridge_state ?? (request.request_id && repliedRequestIds.has(request.request_id) ? "replied" : request.status ?? "queued"),
+      meta: chatStatusLabel(request.bridge_state ?? (request.request_id && repliedRequestIds.has(request.request_id) ? "replied" : request.status ?? "queued")),
       speaker: "You",
       time: request.request_id,
     })),
     ...bridgeResponses.map(response => ({
       body: response.message,
       id: response.response_id,
-      meta: response.status ?? "reply",
+      meta: chatStatusLabel(response.status ?? "reply"),
       speaker: "Jenny",
       time: response.response_id,
     })),
@@ -1140,7 +1191,7 @@ function CompactProjectRoom({
           </span>
         </div>
 
-        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border border-border/70 bg-background p-2 text-xs">
             <div className="font-semibold">Current goal</div>
             <p className="mt-1 text-muted-foreground">{compactText(selectedProjectView.currentGoal, 150)}</p>
@@ -1152,6 +1203,10 @@ function CompactProjectRoom({
           <div className="rounded-xl border border-border/70 bg-background p-2 text-xs">
             <div className="font-semibold">Last update</div>
             <p className="mt-1 text-muted-foreground">{compactText(selectedProjectView.latestReport, 150)}</p>
+          </div>
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-2 text-xs">
+            <div className="font-semibold">Jenny status</div>
+            <p className="mt-1 text-muted-foreground">{deliveryStatus}</p>
           </div>
         </div>
 
@@ -1174,12 +1229,14 @@ function CompactProjectRoom({
                     <span className="font-semibold">{chat.speaker}</span>
                     <span className="text-muted-foreground">{chat.meta}</span>
                   </div>
-                  <p className="whitespace-pre-wrap break-words">{compactText(chat.body, 750)}</p>
+                  <p className="whitespace-pre-wrap break-words">
+                    {chat.speaker === "You" ? projectRequestPreview(chat.body, 750) : compactText(chat.body, 750)}
+                  </p>
                 </article>
               ))
             ) : (
               <p className="rounded-xl border border-dashed border-border/70 p-3 text-sm text-muted-foreground">
-                Start by writing a bounded request below. Mission Control will queue it for Jenny without dispatching work automatically.
+                Ask Jenny a bounded question or give her one safe next task below.
               </p>
             )}
           </div>
@@ -1203,7 +1260,7 @@ function CompactProjectRoom({
             Refresh replies
           </button>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">Messages are record-backed bridge requests. Dispatch, session-send, workers, and timers remain disabled.</p>
+        <p className="mt-2 text-xs text-muted-foreground">Jenny can reply through the bridge. Work still waits for the normal approval gates.</p>
         {onQueueHermesUpdate ? (
           <button className="mt-2 rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300" disabled={busy} onClick={onQueueHermesUpdate} type="button">
             Start Hermes update lane

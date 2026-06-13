@@ -199,6 +199,58 @@ function compactText(value: string | string[] | null | undefined, maxChars: numb
   return normalized.length > maxChars ? `${normalized.slice(0, Math.max(0, maxChars - 3)).trim()}...` : normalized
 }
 
+function projectRequestPreview(value: string, maxChars: number): string {
+  const requestMatch = value.match(/Request:\s*([\s\S]*?)(?:\n\s*\nCurrent brief:|\n\s*\nChallenge state:|$)/i)
+  return compactText(requestMatch?.[1] ?? value, maxChars)
+}
+
+function chatStatusLabel(value: string | undefined): string {
+  switch (value) {
+    case 'queued':
+      return 'sent'
+    case 'replied':
+      return 'replied'
+    case 'retry_requested':
+      return 'retry requested'
+    case 'response_appended':
+      return 'reply received'
+    default:
+      return value || 'sent'
+  }
+}
+
+function pendingJennyMessageCount(
+  requests: MissionControlJennyBridgeRequestRecord[],
+  responses: MissionControlJennyBridgeResponseRecord[]
+): number {
+  const repliedRequestIds = new Set(responses.map(response => response.request_id).filter(Boolean))
+  return requests.filter(request => {
+    const state = request.bridge_state ?? request.status ?? 'queued'
+    return state !== 'replied' && !(request.request_id && repliedRequestIds.has(request.request_id))
+  }).length
+}
+
+function jennyDeliveryStatus(
+  pendingCount: number,
+  responseCount: number,
+  bridgeStatus: MissionControlJennyBridgePollerStatusResponse,
+  githubBridgeStatus: MissionControlGitHubBridgeStatusResponse
+): string {
+  if (bridgeStatus.last_error || githubBridgeStatus.last_error) {
+    return 'Jenny bridge needs attention'
+  }
+  if (githubBridgeStatus.foreground_watch_running) {
+    return pendingCount ? `${pendingCount} waiting while bridge is watching` : 'Bridge watching for replies'
+  }
+  if (pendingCount) {
+    return `${pendingCount} waiting for Jenny`
+  }
+  if (responseCount) {
+    return 'Replies up to date'
+  }
+  return 'Ready for your first message'
+}
+
 function unwrapRecords<T>(items: Array<{ record?: T } | T> | undefined): T[] {
   if (!Array.isArray(items)) {
     return []
@@ -959,7 +1011,7 @@ export function MissionControlView() {
         target_agent: 'jenny'
       })
       setSnapshot(await loadMissionControlSnapshot())
-      setProjectRoomMessage('Queued outbound Jenny bridge message. It is append-only and still requires Jenny polling/relay.')
+      setProjectRoomMessage('Message sent to Jenny inbox. Use Refresh replies to check for her response.')
     } catch (err) {
       setProjectRoomMessage(String(err instanceof Error ? err.message : err))
     } finally {
@@ -1406,18 +1458,20 @@ function ProjectRoomsWorkspace({
   const readiness = projectReadinessLabel(brief, review)
   const sessions = state?.recent_sessions?.length ? state.recent_sessions : (sessionGroup?.sessions ?? [])
   const repliedRequestIds = new Set(bridgeResponses.map(response => response.request_id).filter(Boolean))
+  const pendingCount = pendingJennyMessageCount(bridgeRequests, bridgeResponses)
+  const deliveryStatus = jennyDeliveryStatus(pendingCount, bridgeResponses.length, bridgeStatus, githubBridgeStatus)
   const chatMessages = [
     ...bridgeRequests.map(request => ({
       body: request.message,
       id: request.request_id,
-      meta: request.bridge_state ?? (request.request_id && repliedRequestIds.has(request.request_id) ? 'replied' : request.status ?? 'queued'),
+      meta: chatStatusLabel(request.bridge_state ?? (request.request_id && repliedRequestIds.has(request.request_id) ? 'replied' : request.status ?? 'queued')),
       speaker: 'You',
       time: request.created_at
     })),
     ...bridgeResponses.map(response => ({
       body: response.message,
       id: response.response_id,
-      meta: response.status ?? 'reply',
+      meta: chatStatusLabel(response.status ?? 'reply'),
       speaker: 'Jenny',
       time: response.created_at
     }))
@@ -1459,7 +1513,7 @@ function ProjectRoomsWorkspace({
           </span>
         </div>
 
-        <div className="mt-3 grid gap-2 text-xs md:grid-cols-3">
+        <div className="mt-3 grid gap-2 text-xs md:grid-cols-4">
           <div className="rounded-lg border border-border/70 bg-background/70 p-2">
             <div className="font-semibold text-foreground/90">Current goal</div>
             <p className="mt-1 text-muted-foreground">{compactText(state?.current_goal ?? project.current_goal, 160) || 'No current goal recorded.'}</p>
@@ -1471,6 +1525,10 @@ function ProjectRoomsWorkspace({
           <div className="rounded-lg border border-border/70 bg-background/70 p-2">
             <div className="font-semibold text-foreground/90">Last update</div>
             <p className="mt-1 text-muted-foreground">{compactText(report?.summary || report?.result, 160) || 'No update recorded yet.'}</p>
+          </div>
+          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2">
+            <div className="font-semibold text-foreground/90">Jenny status</div>
+            <p className="mt-1 text-muted-foreground">{deliveryStatus}</p>
           </div>
         </div>
 
@@ -1495,12 +1553,14 @@ function ProjectRoomsWorkspace({
                     <span className="font-semibold">{chat.speaker}</span>
                     <span className="text-muted-foreground">{chat.meta}</span>
                   </div>
-                  <p className="whitespace-pre-wrap break-words text-foreground/90">{compactText(chat.body, 900)}</p>
+                  <p className="whitespace-pre-wrap break-words text-foreground/90">
+                    {chat.speaker === 'You' ? projectRequestPreview(chat.body, 900) : compactText(chat.body, 900)}
+                  </p>
                 </article>
               ))
             ) : (
               <div className="rounded-lg border border-dashed border-border/70 p-4 text-sm text-muted-foreground">
-                Start by writing a bounded request below. Mission Control will queue it for Jenny without dispatching work automatically.
+                Ask Jenny a bounded question or give her one safe next task below.
               </div>
             )}
           </div>
@@ -1524,7 +1584,7 @@ function ProjectRoomsWorkspace({
             Refresh replies
           </button>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">Messages are record-backed bridge requests. Dispatch, session-send, workers, and timers remain disabled.</p>
+        <p className="mt-2 text-xs text-muted-foreground">Jenny can reply through the bridge. Work still waits for the normal approval gates.</p>
         {message ? <p className="mt-2 text-sm text-muted-foreground">{message}</p> : null}
 
         <section className="mt-4 rounded-xl border border-border/70 bg-background/60 p-3">
