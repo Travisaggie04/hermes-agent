@@ -106,6 +106,49 @@ const REAL_PROJECT_NAMES = [
   'Waha Work'
 ]
 
+const CANONICAL_REAL_PROJECTS: MissionControlProjectRecord[] = [
+  {
+    current_goal: 'Make Mission Control the primary Jenny workspace before resuming other projects.',
+    name: 'Hermes / Mission Control',
+    next_recommended_lane: 'Continue the Mission Control/Jenny recovery lane.',
+    project_id: 'project-hermes-mission-control',
+    source_of_truth: 'Mission Control recovery records',
+    status: 'Active recovery lane'
+  },
+  {
+    current_goal: 'Paused until Jenny/Mission Control is stable.',
+    name: 'Long-form Video',
+    next_recommended_lane: 'Resume with a read-only toolchain/proof plan after Jenny is stable.',
+    project_id: 'project-long-form-video',
+    source_of_truth: 'Mission Control project anchor',
+    status: 'Paused'
+  },
+  {
+    current_goal: 'Paused until Jenny/Mission Control is stable.',
+    name: 'Shorts Video',
+    next_recommended_lane: 'Resume with a read-only queue/status audit after Jenny is stable.',
+    project_id: 'project-shorts-video',
+    source_of_truth: 'Mission Control project anchor',
+    status: 'Paused'
+  },
+  {
+    current_goal: 'Paused until Jenny/Mission Control is stable.',
+    name: 'Tool & Tally',
+    next_recommended_lane: 'Resume with report-engine fixture recovery before checkout or outreach.',
+    project_id: 'project-tool-tally',
+    source_of_truth: 'Mission Control project anchor',
+    status: 'Paused'
+  },
+  {
+    current_goal: 'Paused until Jenny/Mission Control is stable.',
+    name: 'Waha Work',
+    next_recommended_lane: 'Resume only after isolated Waha approval gates are clear.',
+    project_id: 'project-waha-work',
+    source_of_truth: 'Mission Control project anchor',
+    status: 'Paused'
+  }
+]
+
 const ACTIVE_OS_PROJECT_IDS = [HERMES_PROJECT_ID]
 
 const PAUSED_PROJECT_IDS = [
@@ -411,6 +454,15 @@ function sortRealProjects(projects: MissionControlProjectRecord[]): MissionContr
     const bIndex = REAL_PROJECT_IDS.includes(b.project_id) ? REAL_PROJECT_IDS.indexOf(b.project_id) : REAL_PROJECT_NAMES.indexOf(b.name)
 
     return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex)
+  })
+}
+
+function canonicalRealProjects(projects: MissionControlProjectRecord[]): MissionControlProjectRecord[] {
+  return CANONICAL_REAL_PROJECTS.map(canonical => {
+    const existing = projects.find(project => project.project_id === canonical.project_id)
+      ?? projects.find(project => project.name === canonical.name)
+
+    return existing ? { ...canonical, ...existing } : canonical
   })
 }
 
@@ -1138,7 +1190,7 @@ export function MissionControlView() {
   }, [selectedProjectId, snapshot.projects.length])
 
   const status = useMemo(() => summarizeWorkspaceStatus(snapshot.workspaceStatus), [snapshot.workspaceStatus])
-  const realProjects = useMemo(() => sortRealProjects(snapshot.projects.filter(isRealProject)), [snapshot.projects])
+  const realProjects = useMemo(() => canonicalRealProjects(sortRealProjects(snapshot.projects.filter(isRealProject))), [snapshot.projects])
   const activeProjects = useMemo(() => {
     const projects = realProjects.filter(project => ACTIVE_OS_PROJECT_IDS.includes(project.project_id))
     return projects.length ? projects : realProjects
