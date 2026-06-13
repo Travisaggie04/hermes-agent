@@ -1260,10 +1260,10 @@ function CompactProjectRoom({
   ].sort((left, right) => String(left.time ?? "").localeCompare(String(right.time ?? ""))).slice(-8);
 
   return (
-    <section className="mt-4 grid gap-3 lg:grid-cols-[minmax(12rem,18rem)_1fr]" aria-label="Project Rooms">
+    <section className="mt-4 grid gap-3 lg:grid-cols-[minmax(12rem,16rem)_1fr]" aria-label="Project Chat Rooms">
       <div className="rounded-2xl border border-border/70 bg-card p-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold">Project Rooms</h2>
+          <h2 className="text-sm font-semibold">Projects</h2>
           <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{projects.length}</span>
         </div>
         <div className="mt-3 grid gap-2">
@@ -1278,7 +1278,9 @@ function CompactProjectRoom({
               type="button"
             >
               <span className="block font-semibold">{project.name}</span>
-              <span className="mt-0.5 block text-[0.68rem] text-muted-foreground">{project.project_id}</span>
+              <span className="mt-0.5 block text-[0.68rem] text-muted-foreground">
+                {project.project_id === HERMES_PROJECT_ID ? "Active recovery lane" : "Paused until Jenny is stable"}
+              </span>
             </button>
           ))}
         </div>
@@ -1287,31 +1289,33 @@ function CompactProjectRoom({
       <article className="rounded-2xl border border-border/70 bg-card p-3" data-testid="compact-project-room">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Project Chat</p>
-            <h2 className="mt-1 text-lg font-semibold leading-tight">Chat with Jenny: {selectedProjectView.project.name}</h2>
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Chat room</p>
+            <h2 className="mt-1 text-lg font-semibold leading-tight">{selectedProjectView.project.name}</h2>
           </div>
           <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-700 dark:text-emerald-300">
             {selectedProjectView.readinessLabel}
           </span>
         </div>
 
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-border/70 bg-background p-2 text-xs">
-            <div className="font-semibold">Current goal</div>
-            <p className="mt-1 text-muted-foreground">{compactText(selectedProjectView.currentGoal, 150)}</p>
+        <div className="mt-3 rounded-2xl border border-border/70 bg-background p-3 text-sm">
+          <div className="grid gap-2">
+            <div>
+              <span className="font-semibold">Goal: </span>
+              <span className="text-muted-foreground">{compactText(selectedProjectView.currentGoal, 180)}</span>
+            </div>
+            <div>
+              <span className="font-semibold">Jenny: </span>
+              <span className="text-muted-foreground">{deliveryStatus}</span>
+            </div>
           </div>
-          <div className="rounded-xl border border-border/70 bg-background p-2 text-xs">
-            <div className="font-semibold">Readiness</div>
-            <p className="mt-1 text-muted-foreground">{selectedProjectView.readinessDetail}</p>
-          </div>
-          <div className="rounded-xl border border-border/70 bg-background p-2 text-xs">
-            <div className="font-semibold">Last update</div>
-            <p className="mt-1 text-muted-foreground">{compactText(selectedProjectView.latestReport, 150)}</p>
-          </div>
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-2 text-xs">
-            <div className="font-semibold">Jenny status</div>
-            <p className="mt-1 text-muted-foreground">{deliveryStatus}</p>
-          </div>
+          <details className="mt-2">
+            <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">Project context</summary>
+            <div className="mt-2 grid gap-2 text-xs">
+              <CompactField label="readiness" value={selectedProjectView.readinessDetail} />
+              <CompactField label="last update" value={compactText(selectedProjectView.latestReport, 220)} />
+              <CompactField label="report contract" value={selectedProjectView.reportContract} />
+            </div>
+          </details>
         </div>
 
         <section className="mt-4 rounded-2xl border border-border/70 bg-background p-3" aria-label="Project chat transcript">
@@ -1319,7 +1323,7 @@ function CompactProjectRoom({
             <h3 className="text-sm font-semibold">Conversation</h3>
             <span className="text-[0.68rem] text-muted-foreground">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
           </div>
-          <div className="mt-3 grid max-h-96 gap-3 overflow-auto pr-1">
+          <div className="mt-3 grid min-h-72 max-h-96 gap-3 overflow-auto pr-1">
             {chatMessages.length ? (
               chatMessages.map(chat => (
                 <article
@@ -1347,7 +1351,7 @@ function CompactProjectRoom({
         </section>
 
         <label className="mt-4 grid gap-1 text-sm font-medium">
-          Message Jenny about this project
+          Message
           <textarea
             className="min-h-24 rounded-xl border border-border/80 bg-background px-3 py-2 text-sm"
             onChange={event => onRequestChange(event.target.value)}
@@ -1358,7 +1362,7 @@ function CompactProjectRoom({
 
         <div className="mt-3 flex flex-wrap gap-2">
           <button className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={busy} onClick={onQueueBridge} type="button">
-            Send message to Jenny
+            Send to Jenny
           </button>
           <button
             className="rounded-xl border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/15 disabled:opacity-60 dark:text-sky-300"
@@ -1402,7 +1406,7 @@ function CompactProjectRoom({
         </section>
 
         <details className="mt-4 rounded-xl border border-border/70 bg-background/60 p-3">
-          <summary className="cursor-pointer text-sm font-semibold">Advanced controls and guardrails</summary>
+          <summary className="cursor-pointer text-sm font-semibold">Safety controls and technical details</summary>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             <CompactField label="project brief" value={compactText(brief?.outcome, 320) || "No project brief recorded"} />
             <CompactField label="challenge review" value={review ? `${review.decision_state ?? "unknown"} / ${review.recommended_path ?? "No recommended path recorded"}` : "No challenge review recorded"} />
