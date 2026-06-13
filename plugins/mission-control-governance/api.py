@@ -1208,6 +1208,84 @@ def _project_sessions_projection(limit: int) -> dict[str, Any]:
     }
 
 
+def _safe_file_level(path: Path, char_limit: int) -> dict[str, Any]:
+    try:
+        if not path.exists():
+            return {
+                "path": str(path),
+                "exists": False,
+                "bytes": 0,
+                "chars": 0,
+                "lines": 0,
+                "limit_chars": char_limit,
+                "percent_used": 0,
+            }
+        raw = path.read_text(encoding="utf-8", errors="replace")
+        chars = len(raw)
+        percent = int(round((chars / char_limit) * 100)) if char_limit > 0 else 0
+        return {
+            "path": str(path),
+            "exists": True,
+            "bytes": path.stat().st_size,
+            "chars": chars,
+            "lines": len(raw.splitlines()),
+            "limit_chars": char_limit,
+            "percent_used": percent,
+        }
+    except Exception as exc:
+        return {
+            "path": str(path),
+            "exists": False,
+            "bytes": 0,
+            "chars": 0,
+            "lines": 0,
+            "limit_chars": char_limit,
+            "percent_used": 0,
+            "error": str(exc),
+        }
+
+
+def _profile_memory_storage_projection() -> dict[str, Any]:
+    errors: list[dict[str, str]] = []
+    try:
+        from hermes_cli import profiles as profiles_mod
+    except Exception as exc:
+        return {"profiles": [], "errors": [{"profile": "all", "error": str(exc)}]}
+
+    try:
+        targets = [(info.name, Path(info.path)) for info in profiles_mod.list_profiles()]
+    except Exception as exc:
+        errors.append({"profile": "all", "error": str(exc)})
+        targets = [("default", profiles_mod.get_profile_dir("default"))]
+    if not targets:
+        targets = [("default", profiles_mod.get_profile_dir("default"))]
+
+    profiles: list[dict[str, Any]] = []
+    total_memory_bytes = 0
+    total_user_bytes = 0
+    for profile_name, home in targets:
+        memory_file = _safe_file_level(Path(home) / "memories" / "MEMORY.md", 2200)
+        user_file = _safe_file_level(Path(home) / "memories" / "USER.md", 1375)
+        total_memory_bytes += int(memory_file.get("bytes") or 0)
+        total_user_bytes += int(user_file.get("bytes") or 0)
+        profiles.append({
+            "profile": profile_name,
+            "home": str(home),
+            "memory": memory_file,
+            "user": user_file,
+            "total_bytes": int(memory_file.get("bytes") or 0) + int(user_file.get("bytes") or 0),
+        })
+
+    return {
+        "profiles": profiles,
+        "profile_count": len(profiles),
+        "total_memory_bytes": total_memory_bytes,
+        "total_user_bytes": total_user_bytes,
+        "total_bytes": total_memory_bytes + total_user_bytes,
+        "errors": errors,
+    }
+
+
 def _build_project_record(payload: dict[str, Any]) -> ProjectRecord:
     name = _workspace_text(payload.get("name"), max_chars=120)
     if not name:
@@ -2617,6 +2695,19 @@ async def workspace_status() -> dict[str, Any]:
         "dry_run_only": True,
         "display_only": True,
         **status,
+    }
+
+
+@router.get("/workspace/profile-memory-storage")
+async def workspace_profile_memory_storage() -> dict[str, Any]:
+    return {
+        **INERT_FLAGS,
+        "dispatch_enabled": False,
+        "display_only": True,
+        "dry_run_only": True,
+        "stored": False,
+        "source": "profile_memory_storage_projection",
+        **_profile_memory_storage_projection(),
     }
 
 
