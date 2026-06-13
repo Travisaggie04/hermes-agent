@@ -300,3 +300,6 @@ Follow-up completed:
 - `docs/mission-control/overnight-audit-findings-2026-06-12.md` records the
   first read-only findings from the Shorts queue, Long-form proof history, and
   Tool & Tally recovery state.
+- `docs/mission-control/four-project-morning-status-2026-06-13.md` consolidates
+  the current morning status, biggest blockers, next lanes, forbidden actions,
+  and evidence paths for all four projects.
