@@ -514,6 +514,9 @@ describe('MissionControlView', () => {
     expect(screen.getByText(/replied \/ jenny/)).toBeTruthy()
     expect(screen.getByText('Project Kanban')).toBeTruthy()
     expect(screen.getByText('Project Room: Hermes / Mission Control')).toBeTruthy()
+    expect(screen.getAllByText('report contract').length).toBeGreaterThan(0)
+    expect(screen.getByText('latest report contract')).toBeTruthy()
+    expect(screen.getAllByText(/Missing:.*evidence.*tests/).length).toBeGreaterThan(0)
     expect(screen.getByText('5 of 5 real projects loaded')).toBeTruthy()
 
     for (const [, name] of realProjects) {

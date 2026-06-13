@@ -107,6 +107,7 @@ interface ReportRecord {
   result?: string;
   risks?: string[];
   summary?: string;
+  tests?: string[];
   next_recommended_lane?: string;
 }
 
@@ -233,6 +234,7 @@ interface ProjectViewModel {
   projectBrief?: ProjectBriefRecord;
   projectState?: ProjectStateRecord;
   project: ProjectRecord;
+  report?: ReportRecord;
   readinessDetail: string;
   readinessLabel: string;
   challengeReview?: ChallengeReviewRecord;
@@ -317,6 +319,31 @@ function lineList(value: string): string[] {
 
 function artifactText(state: ProjectStateRecord | undefined, report: ReportRecord | undefined): string {
   return listText(state?.artifact_links ?? report?.metadata?.artifact_links ?? report?.changed_files, "No artifact/report links recorded");
+}
+
+function reportContractMissing(report: ReportRecord | undefined): string[] {
+  if (!report) {
+    return ["report"];
+  }
+
+  const hasRisks = Boolean(report.risks?.length || report.blockers?.length);
+  const hasEvidence = Boolean(report.changed_files?.length || report.metadata?.artifact_links?.length);
+  return [
+    report.summary ? "" : "summary",
+    report.result ? "" : "result",
+    hasRisks ? "" : "risks/blockers",
+    hasEvidence ? "" : "evidence",
+    report.tests?.length ? "" : "tests",
+    report.next_recommended_lane ? "" : "next lane",
+  ].filter(Boolean);
+}
+
+function reportContractSummary(report: ReportRecord | undefined): string {
+  const missing = reportContractMissing(report);
+  if (missing.includes("report")) {
+    return "No report yet";
+  }
+  return missing.length ? `Missing: ${missing.join(", ")}` : "Complete";
 }
 
 function projectRank(project: ProjectRecord): number {
@@ -441,6 +468,7 @@ function viewModelForProject(snapshot: CompactSnapshot, project: ProjectRecord):
     projectBrief,
     projectState: state,
     project,
+    report,
     readinessDetail: readiness.detail,
     readinessLabel: readiness.label,
     challengeReview,
@@ -889,6 +917,7 @@ function CompactActiveLanes({ projectViews, status }: { projectViews: ProjectVie
             </div>
             <CompactField label="next safe lane" value={projectView.nextLane} />
             <CompactField label="latest evidence" value={projectView.latestReport} />
+            <CompactField label="report contract" value={reportContractSummary(projectView.report)} />
             <CompactField label="readiness" value={projectView.readinessDetail} />
           </article>
         ))}
@@ -978,6 +1007,7 @@ function CompactProjectRoom({
         <div className="mt-3 grid gap-2 md:grid-cols-2">
           <CompactField label="current goal" value={selectedProjectView.currentGoal} />
           <CompactField label="readiness" value={selectedProjectView.readinessDetail} />
+          <CompactField label="latest report contract" value={reportContractSummary(selectedProjectView.report)} />
           <CompactField label="latest report/result" value={`${selectedProjectView.latestReport} / ${selectedProjectView.latestResult}`} />
           <CompactField label="next recommended lane" value={selectedProjectView.nextLane} />
           <CompactField label="project brief" value={compactText(brief?.outcome, 320) || "No project brief recorded"} />
@@ -1148,6 +1178,7 @@ function CompactProjectKanban({ projectViews }: { projectViews: ProjectViewModel
                       <div className="mt-1 text-[0.68rem] text-muted-foreground">{projectView.readinessLabel}</div>
                       <div className="mt-2 text-[0.68rem] leading-snug text-muted-foreground">Lane: {projectView.latestLane}</div>
                       <div className="mt-1 text-[0.68rem] leading-snug text-muted-foreground">Next: {projectView.nextLane}</div>
+                      <div className="mt-1 text-[0.68rem] leading-snug text-muted-foreground">Contract: {reportContractSummary(projectView.report)}</div>
                     </article>
                   ))
                 ) : (
