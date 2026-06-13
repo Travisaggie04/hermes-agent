@@ -550,7 +550,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Jenny replies')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Refresh bridge' })).toBeTruthy()
     expect(screen.getByText(/replied \/ jenny/)).toBeTruthy()
-    expect(screen.getByText('Jenny can reply through the bridge. Work still waits for the normal approval gates.')).toBeTruthy()
+    expect(screen.getByText('Live reply refresh is on and read-only. Jenny can reply through the bridge; work still waits for the normal approval gates.')).toBeTruthy()
     expect(screen.getByText('Project Kanban')).toBeTruthy()
     expect(screen.getByText('Chat with Jenny: Hermes / Mission Control')).toBeTruthy()
     expect(screen.getByText('Hermes update lane')).toBeTruthy()

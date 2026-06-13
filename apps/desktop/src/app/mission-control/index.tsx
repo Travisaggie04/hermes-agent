@@ -915,6 +915,14 @@ export function MissionControlView() {
     }
   }
 
+  async function refreshMissionControlSnapshotQuietly() {
+    try {
+      setSnapshot(await loadMissionControlSnapshot())
+    } catch (err) {
+      setError(String(err instanceof Error ? err.message : err))
+    }
+  }
+
   useEffect(() => {
     let cancelled = false
 
@@ -946,6 +954,18 @@ export function MissionControlView() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!selectedProjectId && !snapshot.projects.length) {
+      return
+    }
+
+    const timer = window.setInterval(() => {
+      void refreshMissionControlSnapshotQuietly()
+    }, 15000)
+
+    return () => window.clearInterval(timer)
+  }, [selectedProjectId, snapshot.projects.length])
 
   const status = useMemo(() => summarizeWorkspaceStatus(snapshot.workspaceStatus), [snapshot.workspaceStatus])
   const realProjects = useMemo(() => sortRealProjects(snapshot.projects.filter(isRealProject)), [snapshot.projects])
@@ -1584,7 +1604,9 @@ function ProjectRoomsWorkspace({
             Refresh replies
           </button>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">Jenny can reply through the bridge. Work still waits for the normal approval gates.</p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Live reply refresh is on and read-only. Jenny can reply through the bridge; work still waits for the normal approval gates.
+        </p>
         {message ? <p className="mt-2 text-sm text-muted-foreground">{message}</p> : null}
 
         <section className="mt-4 rounded-xl border border-border/70 bg-background/60 p-3">
