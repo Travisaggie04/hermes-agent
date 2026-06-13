@@ -1435,6 +1435,31 @@ function CompactActiveLanes({ projectViews, status }: { projectViews: ProjectVie
   );
 }
 
+function CompactPausedProjectResumeChecklist() {
+  const requirements = [
+    "Project brief is current",
+    "Jenny challenge review clears the approach",
+    "Allowed and forbidden actions are explicit",
+    "Travis approval is recorded before work resumes",
+  ];
+
+  return (
+    <section className="mt-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+      <h3 className="font-semibold text-amber-800 dark:text-amber-200">Resume requirements</h3>
+      <p className="mt-1 text-xs text-muted-foreground">
+        This project is on hold. Jenny cannot receive work here until these checks are true.
+      </p>
+      <ul className="mt-3 grid gap-2 text-xs text-muted-foreground">
+        {requirements.map(requirement => (
+          <li className="rounded-xl border border-amber-500/20 bg-background px-3 py-2" key={requirement}>
+            {requirement}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function CompactProjectRoom({
   busy,
   bridgeRequests,
@@ -1676,6 +1701,7 @@ function CompactProjectRoom({
             ? "This project is visible for planning context only. Resume it after the Mission Control/Jenny recovery lane is stable."
             : "Live reply refresh is on and read-only. Jenny can reply through the bridge; work still waits for the normal approval gates."}
         </p>
+        {paused ? <CompactPausedProjectResumeChecklist /> : null}
         {onQueueHermesUpdate ? (
           <button className="mt-2 rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300" disabled={busy} onClick={onQueueHermesUpdate} type="button">
             Start Hermes update lane
