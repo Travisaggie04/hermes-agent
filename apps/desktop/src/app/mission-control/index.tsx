@@ -1573,7 +1573,7 @@ export function MissionControlView() {
       ) : null}
 
       <details className="mt-5 rounded-xl border border-border/70 bg-background/40 p-4">
-        <summary className="cursor-pointer text-sm font-semibold">Advanced status and reports</summary>
+        <summary className="cursor-pointer text-sm font-semibold">Safety details and reports</summary>
         <div className="mt-4 grid gap-5">
           <WorkspaceStatusPanel status={status} />
 
@@ -1941,7 +1941,7 @@ function ProjectRoomsWorkspace({
             </div>
           </div>
           <details className="mt-2">
-            <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">About this project</summary>
+            <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">Project context</summary>
             <div className="mt-2 grid gap-2 text-xs md:grid-cols-3">
               <Field label="readiness" value={readiness.detail} />
               <Field label="last update" value={compactText(report?.summary || report?.result, 220) || 'No update recorded yet.'} />
@@ -2044,7 +2044,7 @@ function ProjectRoomsWorkspace({
         </section>
 
         <details className="mt-4 rounded-xl border border-border/70 bg-background/40 p-3">
-          <summary className="cursor-pointer text-sm font-semibold">Advanced controls</summary>
+          <summary className="cursor-pointer text-sm font-semibold">Safety and maintenance</summary>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <Field label="project brief" value={compactText(brief?.outcome, 320) || 'No project brief recorded'} />
             <Field label="challenge review" value={review ? `${review.decision_state ?? 'unknown'} / ${review.recommended_path ?? 'No recommended path recorded'}` : 'No challenge review recorded'} />
