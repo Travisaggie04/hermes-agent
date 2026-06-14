@@ -1854,27 +1854,27 @@ export default function MissionControlCompactPage() {
   }
 
   return (
-    <main className="box-border min-h-screen w-[100dvw] max-w-[100dvw] overflow-x-hidden bg-[#0e0b12] px-2 py-2 text-[#f7efe4] sm:px-3" data-testid="mission-control-compact-route">
-      <header className="sticky top-0 z-10 -mx-2 overflow-hidden border-b border-[#f7efe4]/10 bg-[#120d17]/95 px-3 pb-3 pt-2 backdrop-blur sm:-mx-3 sm:px-4">
+    <main className="box-border min-h-screen w-full max-w-[100vw] overflow-x-clip bg-[#0e0b12] px-2 py-2 text-[#f7efe4] sm:px-3" data-testid="mission-control-compact-route">
+      <header className="sticky top-0 z-10 mx-0 max-w-full overflow-hidden border-b border-[#f7efe4]/10 bg-[#120d17]/95 px-3 pb-3 pt-2 backdrop-blur sm:px-4">
         <p className="max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782] [overflow-wrap:anywhere]">
           <span className="font-serif text-lg italic text-[#d4a574]">IV.</span>
           <span className="ml-2">Agent · Jenny</span>
         </p>
-        <div className="mt-2 flex min-w-0 items-start justify-between gap-2">
+        <div className="mt-2 grid min-w-0 gap-2 sm:flex sm:items-start sm:justify-between">
           <div className="min-w-0">
             <h1 className="text-3xl font-semibold leading-tight text-[#fff8ed]">Jenny</h1>
             <p className="mt-1 text-xs text-[#a89782]">Mission Control, project rooms, guarded replies, and live bridge activity.</p>
             <p className="sr-only">Chat with Jenny first; safety and project records stay collapsed below.</p>
           </div>
-          <span className="shrink-0 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-300">
+          <span className="w-fit rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-300">
             guarded
           </span>
         </div>
-        <div className="mt-3 flex min-w-0 gap-2 overflow-x-auto pb-1">
+        <div className="mt-3 flex min-w-0 flex-wrap gap-2 pb-1">
           {["Chat", "Talk", "Studio", "Sessions", "Workspace", "MCPs", "Control"].map((tab, index) => (
             <span
               className={cn(
-                "shrink-0 rounded-full border px-3 py-1.5 text-xs",
+                "rounded-full border px-3 py-1.5 text-xs",
                 index === 0 ? "border-blue-400/60 bg-blue-500/10 text-blue-200" : "border-[#f7efe4]/10 bg-[#15101a]/60 text-[#c9b8a2]",
               )}
               key={tab}
@@ -2304,14 +2304,14 @@ function CompactProjectRoom({
       aria-label="Project chat workspace"
     >
       <div className="min-w-0 max-w-full overflow-hidden border-b border-[#f3ebda]/10 bg-[#1c1622]/90 px-2 py-2">
-        <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1">
+        <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[auto_repeat(5,minmax(0,1fr))]">
           <span className="sr-only">Local studio</span>
-          <span className="shrink-0 text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-[#a59783]">Projects</span>
+          <span className="self-center text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-[#a59783] sm:pr-1">Projects</span>
           <span className="sr-only">{projects.length} projects</span>
           {projects.map(project => (
             <button
               className={cn(
-                "max-w-[11rem] shrink-0 rounded-full border px-3 py-1.5 text-left text-xs transition hover:border-[#d4a574]/30 hover:bg-[#251d2c]/70",
+                "min-w-0 max-w-full rounded-full border px-3 py-1.5 text-left text-xs transition hover:border-[#d4a574]/30 hover:bg-[#251d2c]/70",
                 project.project_id === selectedProjectView.project.project_id ? "border-[#d4a574]/50 bg-[#2e2436]/80" : "border-[#f3ebda]/10 bg-transparent",
               )}
               key={project.project_id}
@@ -2328,13 +2328,13 @@ function CompactProjectRoom({
       </div>
 
       <article className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden p-2" data-testid="compact-project-room">
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-[#f3ebda]/10 pb-2">
+        <div className="grid min-w-0 gap-2 border-b border-[#f3ebda]/10 pb-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-2">
             <span className="sr-only">IV. — Jenny workspace</span>
             <h2 className="max-w-full truncate text-lg font-semibold leading-tight text-[#f3ebda]">{selectedProjectView.project.name}</h2>
             <span className="hidden max-w-[30rem] truncate text-xs text-[#a59783] md:inline">{compactText(selectedProjectView.currentGoal, 120)}</span>
           </div>
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex min-w-0 flex-wrap gap-2 sm:justify-end">
             <span className={cn("rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold", jennyStatusToneClass(connectionState.tone))}>
               {connectionState.label}
             </span>
@@ -2357,9 +2357,9 @@ function CompactProjectRoom({
             Room status
             <span className="sr-only">Next step</span>
           </summary>
-            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <div className="mt-2 grid min-w-0 gap-1 sm:flex sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1">
               <span className="font-semibold text-[#f3ebda]">Goal</span>
-              <span className="min-w-0 flex-1 truncate text-[#a59783]">{compactText(selectedProjectView.currentGoal, 180)}</span>
+              <span className="min-w-0 text-[#a59783] [overflow-wrap:anywhere] sm:flex-1 sm:truncate">{compactText(selectedProjectView.currentGoal, 180)}</span>
               <span className="font-semibold text-[#f3ebda]">Jenny:</span>
               <span className="text-[#a59783] [overflow-wrap:anywhere]">{deliveryStatus}. {connectionState.detail}</span>
               <span className="rounded-full border border-[#f3ebda]/10 bg-[#15101a]/60 px-2 py-0.5 text-[#a59783]">Pending {pendingCount}</span>
@@ -2378,9 +2378,9 @@ function CompactProjectRoom({
 
         <details className="mt-2 min-w-0 max-w-full overflow-hidden rounded-md border border-[#60a5fa]/25 bg-[#60a5fa]/10 px-3 py-2" aria-label="Jenny activity">
           <summary className="cursor-pointer text-sm font-semibold text-[#f3ebda]">Jenny activity</summary>
-          <div className="flex min-w-0 items-center justify-between gap-2">
+          <div className="grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
             <h3 className="sr-only">Jenny activity</h3>
-            <span className="text-right text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere]">
+            <span className="text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere] sm:text-right">
               {runActive ? "refreshing every 2.5s" : "recent bridge status"}
             </span>
           </div>
@@ -2393,9 +2393,9 @@ function CompactProjectRoom({
             {activityItems.length ? (
               activityItems.map(item => (
                 <article className="rounded-xl border border-[#60a5fa]/20 bg-[#15101a]/70 p-2 text-xs" key={item.status_id ?? `${item.status}:${item.created_at}`}>
-                  <div className="flex min-w-0 items-center justify-between gap-2">
+                  <div className="grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
                     <span className="font-semibold text-[#f3ebda] [overflow-wrap:anywhere]">{jennyActivityLabel(item.status)}</span>
-                    <span className="text-right text-[#a59783] [overflow-wrap:anywhere]">{item.created_at || "time unknown"}</span>
+                    <span className="min-w-0 text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{item.created_at || "time unknown"}</span>
                   </div>
                   <p className="mt-1 text-[#a59783] [overflow-wrap:anywhere]">{jennyActivityDetail(item)}</p>
                 </article>
@@ -2409,16 +2409,16 @@ function CompactProjectRoom({
         </details>
 
         <section className="mt-2 flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#251d2c]/70 p-2" aria-label="Project chat transcript">
-          <div className="flex min-w-0 items-center justify-between gap-2">
+          <div className="grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
             <h3 className="text-sm font-semibold text-[#f3ebda]">Conversation</h3>
-            <span className="text-right text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere]">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
+            <span className="text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
           </div>
           <div className="mt-2 grid min-h-0 min-w-0 flex-1 content-start gap-2 overflow-y-auto overflow-x-hidden pr-1">
             {runActive ? (
               <article className="min-w-0 max-w-full justify-self-start rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm text-[#f3ebda] [overflow-wrap:anywhere] sm:max-w-[88%]">
-                <div className="mb-1 flex min-w-0 items-center justify-between gap-3 text-[0.68rem]">
+                <div className="mb-1 grid min-w-0 gap-1 text-[0.68rem] sm:flex sm:items-center sm:justify-between sm:gap-3">
                   <span className="font-semibold">Jenny</span>
-                  <span className="min-w-0 text-right text-sky-300 [overflow-wrap:anywhere]">{runCopy.label}</span>
+                  <span className="min-w-0 text-sky-300 [overflow-wrap:anywhere] sm:text-right">{runCopy.label}</span>
                 </div>
                 <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                   {runCopy.detail}
@@ -2434,9 +2434,9 @@ function CompactProjectRoom({
                   )}
                   key={`${chat.speaker}:${chat.id}`}
                 >
-                  <div className="mb-1 flex min-w-0 items-center justify-between gap-3 text-[0.68rem]">
+                  <div className="mb-1 grid min-w-0 gap-1 text-[0.68rem] sm:flex sm:items-center sm:justify-between sm:gap-3">
                     <span className="font-semibold">{chat.speaker}</span>
-                    <span className="min-w-0 text-right text-[#a59783] [overflow-wrap:anywhere]">{chat.meta}</span>
+                    <span className="min-w-0 text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chat.meta}</span>
                   </div>
                   <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                     {chat.speaker === "You" ? projectRequestPreview(chat.body, 750) : compactText(chat.body, 750)}
@@ -2501,13 +2501,13 @@ function CompactProjectRoom({
             />
           </label>
 
-          <div className="mt-2 flex min-w-0 flex-wrap gap-2">
-            <button className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={busy || paused} onClick={onQueueBridge} type="button">
+          <div className="mt-2 grid min-w-0 gap-2 sm:flex sm:flex-wrap">
+            <button className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300 sm:w-auto" disabled={busy || paused} onClick={onQueueBridge} type="button">
               Send to Jenny
             </button>
             {requestIntake.state !== "ready" ? (
               <button
-                className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/15 disabled:opacity-60 dark:text-amber-300"
+                className="w-full rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/15 disabled:opacity-60 dark:text-amber-300 sm:w-auto"
                 disabled={busy || paused}
                 onClick={() => onRequestChange(specFirstComposerText)}
                 type="button"
@@ -2516,14 +2516,14 @@ function CompactProjectRoom({
               </button>
             ) : null}
             <button
-              className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/15 disabled:opacity-60 dark:text-sky-300"
+              className="w-full rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/15 disabled:opacity-60 dark:text-sky-300 sm:w-auto"
               disabled={busy || paused || !latestPending}
               onClick={onRunJennyOnce}
               type="button"
             >
               Get Jenny reply
             </button>
-            <button className="rounded-lg border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onRefreshBridge} type="button">
+            <button className="w-full rounded-lg border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60 sm:w-auto" disabled={busy} onClick={onRefreshBridge} type="button">
               Refresh replies
             </button>
           </div>
@@ -2546,12 +2546,12 @@ function CompactProjectRoom({
         </div>
 
         {onQueueHermesUpdate ? (
-          <button className="mt-2 rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300" disabled={busy} onClick={onQueueHermesUpdate} type="button">
+          <button className="mt-2 w-full rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300 sm:w-auto" disabled={busy} onClick={onQueueHermesUpdate} type="button">
             Start Hermes update lane
           </button>
         ) : null}
         {onQueueStorageCleanup ? (
-          <button className="mt-2 rounded-xl border border-sky-500/40 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/10 disabled:opacity-60 dark:text-sky-300" disabled={busy} onClick={onQueueStorageCleanup} type="button">
+          <button className="mt-2 w-full rounded-xl border border-sky-500/40 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/10 disabled:opacity-60 dark:text-sky-300 sm:w-auto" disabled={busy} onClick={onQueueStorageCleanup} type="button">
             Start storage cleanup lane
           </button>
         ) : null}
@@ -2559,9 +2559,9 @@ function CompactProjectRoom({
 
         <details className="mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background p-3">
           <summary className="cursor-pointer text-sm font-semibold">Previous sessions</summary>
-          <div className="flex min-w-0 items-center justify-between gap-2">
+          <div className="grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
             <h3 className="sr-only">Previous sessions</h3>
-            <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{sessions.length} linked</span>
+            <span className="w-fit rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{sessions.length} linked</span>
           </div>
           <div className="mt-2 grid min-w-0 gap-2">
             {sessions.length ? (
@@ -2597,9 +2597,9 @@ function CompactProjectRoom({
         <details className="mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/60 p-3">
           <summary className="cursor-pointer text-sm font-semibold">Safety and maintenance</summary>
           <section className="mt-3 max-w-full overflow-hidden rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
-            <div className="flex min-w-0 items-center justify-between gap-2">
+            <div className="grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
               <h3 className="text-sm font-semibold">Jenny memory storage</h3>
-              <span className="min-w-0 text-right text-[0.68rem] text-violet-700 [overflow-wrap:anywhere] dark:text-violet-300">
+              <span className="min-w-0 text-[0.68rem] text-violet-700 [overflow-wrap:anywhere] dark:text-violet-300 sm:text-right">
                 {memoryStorage.profile_count ?? memoryStorage.profiles?.length ?? 0} profiles / {formatBytes(memoryStorage.total_bytes)}
               </span>
             </div>
@@ -2638,9 +2638,9 @@ function CompactProjectRoom({
           </div>
           <div className="sr-only">Queue for Jenny bridge</div>
           <div className="mt-4 max-w-full overflow-hidden rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
-            <div className="flex min-w-0 items-center justify-between gap-2">
+            <div className="grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
               <h3 className="text-sm font-semibold">Jenny bridge</h3>
-              <span className="rounded-full border border-emerald-500/30 px-2 py-0.5 text-[0.65rem] text-emerald-700 dark:text-emerald-300">no dispatch</span>
+              <span className="w-fit rounded-full border border-emerald-500/30 px-2 py-0.5 text-[0.65rem] text-emerald-700 dark:text-emerald-300">no dispatch</span>
             </div>
             <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">Record-backed outbox/inbox for Jenny relay. Use refresh to check replies. Direct send remains disabled.</p>
             <div className="mt-3 grid min-w-0 gap-2 rounded-lg border border-emerald-500/20 bg-background/70 p-2 text-xs sm:grid-cols-2">
@@ -2674,9 +2674,9 @@ function CompactProjectRoom({
             </div>
           </div>
           <div className="mt-4 max-w-full overflow-hidden rounded-xl border border-border/70 bg-background p-3">
-            <div className="flex min-w-0 items-center justify-between gap-2">
+            <div className="grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
               <h3 className="text-sm font-semibold">Phone-safe packet</h3>
-              <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{packet.length} / 1900</span>
+              <span className="w-fit rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{packet.length} / 1900</span>
             </div>
             <pre className="mt-2 max-h-64 max-w-full overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{packet}</pre>
           </div>
