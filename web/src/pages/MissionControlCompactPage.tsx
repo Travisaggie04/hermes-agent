@@ -474,7 +474,7 @@ function compactText(value: string | string[] | undefined, maxChars: number): st
 }
 
 function projectRequestPreview(value: string, maxChars: number): string {
-  const requestMatch = value.match(/Request:\s*([\s\S]*?)(?:\n\s*\nCurrent brief:|\n\s*\nChallenge state:|$)/i);
+  const requestMatch = value.match(/Request:\s*([\s\S]*?)(?:\n\s*\nRequest intake:|\n\s*\nCurrent brief:|\n\s*\nChallenge state:|$)/i);
   return compactText(requestMatch?.[1] ?? value, maxChars);
 }
 
@@ -1627,7 +1627,7 @@ export default function MissionControlCompactPage() {
   }
 
   return (
-    <main className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#0e0b12] px-2 py-2 text-[#f7efe4] sm:px-3" data-testid="mission-control-compact-route">
+    <main className="box-border min-h-screen w-[100dvw] max-w-[100dvw] overflow-x-hidden bg-[#0e0b12] px-2 py-2 text-[#f7efe4] sm:px-3" data-testid="mission-control-compact-route">
       <header className="sticky top-0 z-10 -mx-2 overflow-hidden border-b border-[#f7efe4]/10 bg-[#120d17]/95 px-3 pb-3 pt-2 backdrop-blur sm:-mx-3 sm:px-4">
         <p className="max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782] [overflow-wrap:anywhere]">
           <span className="font-serif text-lg italic text-[#d4a574]">IV.</span>
@@ -1668,8 +1668,8 @@ export default function MissionControlCompactPage() {
       ) : null}
 
       {selectedProjectView ? (
-        <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="xl:order-2">
+        <div className="mt-3 grid min-w-0 max-w-full gap-3 overflow-hidden xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="order-2 min-w-0 max-w-full overflow-hidden xl:order-2">
             <CompactLiveActivityRail
               bridgeStatus={snapshot?.jennyBridgePollerStatus ?? {}}
               githubBridgeStatus={snapshot?.githubBridgeStatus ?? {}}
@@ -1677,7 +1677,7 @@ export default function MissionControlCompactPage() {
               jennyRunProgress={jennyRunProgress}
             />
           </div>
-          <div className="xl:order-1">
+          <div className="order-1 min-w-0 max-w-full overflow-hidden xl:order-1">
             <CompactProjectRoom
               busy={roomBusy}
               message={roomMessage}
@@ -1914,7 +1914,7 @@ function CompactLiveActivityRail({
         />
       </div>
 
-      <div className="mt-3 grid min-w-0 gap-2 text-xs">
+      <div className="mt-3 grid min-w-0 max-w-full gap-2 overflow-hidden text-xs">
         <CompactField label="bridge" value={bridgeStatus.last_status || "idle"} />
         <CompactField label="mailbox" value={githubBridgeStatus.mode || "manual"} />
         <CompactField label="pending" value={String(visiblePendingCount)} />
@@ -1932,10 +1932,10 @@ function CompactLiveActivityRail({
           ) : null}
           {activityItems.length ? (
             activityItems.map(item => (
-              <article className="rounded-xl border border-[#f7efe4]/10 bg-[#100b15]/80 p-2 text-xs" key={item.status_id ?? `${item.status}:${item.created_at}`}>
-                <div className="flex min-w-0 items-center justify-between gap-2">
-                  <span className="font-semibold text-[#fff8ed] [overflow-wrap:anywhere]">{jennyActivityLabel(item.status)}</span>
-                  <span className="text-right text-[#a89782] [overflow-wrap:anywhere]">{item.created_at || "time unknown"}</span>
+              <article className="max-w-full overflow-hidden rounded-xl border border-[#f7efe4]/10 bg-[#100b15]/80 p-2 text-xs" key={item.status_id ?? `${item.status}:${item.created_at}`}>
+                <div className="grid min-w-0 max-w-full gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
+                  <span className="min-w-0 font-semibold text-[#fff8ed] [overflow-wrap:anywhere]">{jennyActivityLabel(item.status)}</span>
+                  <span className="min-w-0 text-[#a89782] [overflow-wrap:anywhere] sm:text-right">{item.created_at || "time unknown"}</span>
                 </div>
                 <p className="mt-1 leading-relaxed text-[#c9b8a2] [overflow-wrap:anywhere]">{jennyActivityDetail(item)}</p>
               </article>
@@ -2066,7 +2066,7 @@ function CompactProjectRoom({
       className="mt-2 flex h-[calc(100vh-5rem)] min-h-[34rem] min-w-0 max-w-full flex-col overflow-hidden rounded-md border border-[#d4a574]/20 bg-[#15101a] shadow-[0_20px_70px_rgba(0,0,0,0.35)]"
       aria-label="Project chat workspace"
     >
-      <div className="border-b border-[#f3ebda]/10 bg-[#1c1622]/90 px-2 py-2">
+      <div className="min-w-0 max-w-full overflow-hidden border-b border-[#f3ebda]/10 bg-[#1c1622]/90 px-2 py-2">
         <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1">
           <span className="sr-only">Local studio</span>
           <span className="shrink-0 text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-[#a59783]">Projects</span>
@@ -2074,14 +2074,14 @@ function CompactProjectRoom({
           {projects.map(project => (
             <button
               className={cn(
-                "shrink-0 rounded-full border px-3 py-1.5 text-left text-xs transition hover:border-[#d4a574]/30 hover:bg-[#251d2c]/70",
+                "max-w-[11rem] shrink-0 rounded-full border px-3 py-1.5 text-left text-xs transition hover:border-[#d4a574]/30 hover:bg-[#251d2c]/70",
                 project.project_id === selectedProjectView.project.project_id ? "border-[#d4a574]/50 bg-[#2e2436]/80" : "border-[#f3ebda]/10 bg-transparent",
               )}
               key={project.project_id}
               onClick={() => onSelectProject(project.project_id)}
               type="button"
             >
-              <span className="font-semibold text-[#f3ebda]">{project.name}</span>
+              <span className="block truncate font-semibold text-[#f3ebda]">{project.name}</span>
               <span className="sr-only">
                 {project.project_id === HERMES_PROJECT_ID ? "Active recovery lane" : "Paused until Jenny is stable"}
               </span>
