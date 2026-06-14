@@ -654,7 +654,7 @@ beforeEach(() => {
         record: {
           created_at: '2026-06-13T01:00:00Z',
           from_agent: 'travis',
-          message: 'Review the Mission Control room.',
+          message: 'Hermes / Mission Control Request: Review the Mission Control room. Current brief: Replace Discord as Travis primary workspace. Challenge state: clear_and_safe / start record-only manual-copy. Allowed: read approved context. Forbidden: no direct session send.',
           project_id: 'project-hermes-mission-control',
           request_id: 'github-bridge-request-1',
           status: 'queued',
@@ -1117,6 +1117,8 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText('Lane draft ok').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Use a bounded read-only workspace usability lane/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Request intake: Needs request/).length).toBeGreaterThan(0)
+    expect(screen.getByText('Review the Mission Control room.')).toBeTruthy()
+    expect(screen.queryByText(/Current brief: Replace Discord as Travis primary workspace/)).toBeNull()
 
     const composer = screen.getByPlaceholderText('Tell Jenny what you want to discuss or ask her to do next...')
     fireEvent.click(screen.getByRole('button', { name: 'Use spec-first prompt' }))
@@ -1157,6 +1159,9 @@ describe('MissionControlView', () => {
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Blocking verdicts:')
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Structured handoff:')
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Challenge: question unclear, unsafe, or wrong-approach requests before implementation.')
+    expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Evidence contract:')
+    expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Recommendation: one-sentence next lane.')
+    expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('if evidence is missing, say "not proven"')
 
     fireEvent.click(screen.getByRole('button', { name: 'Send to Jenny' }))
     await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(1))
@@ -1177,6 +1182,11 @@ describe('MissionControlView', () => {
     expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
       expect.objectContaining({
         message: expect.stringContaining('Structured handoff:')
+      })
+    )
+    expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Evidence contract:')
       })
     )
     expect(createMissionControlJennyBridgeRequest).not.toHaveBeenCalled()
