@@ -103,12 +103,16 @@ Jenny is stable enough to resume project work through the new OS surface.
 
 ## 2026-06-14 Early Recovery Update
 
-The recovery status document now tracks accepted-live through PR #151. Current
+The recovery status document now tracks accepted-live through PR #153. Current
 local desktop `release-bridge` is rebuilt and validated at
-`f0ce9ca5125c42137fb0ac5f9985369d983d746b`.
+`58853d442654e69014fa4fbc95e3bd837cd87fe6`.
 
 The remaining visible gap is the bounded dashboard-only runtime switch on the
 VPS so phone/web surfaces catch up to the current accepted-live Mission Control
 UI. That request is queued to Jenny through the GitHub bridge. Gateway restart,
 laptop worker-node update, dispatch/session-send, Waha/social/payment/customer
 actions, workers/timers/daemons, and broad cleanup remain out of scope.
+
+PR #153 also hides Codex/operator bridge packets from the owner-facing project
+chat, so Mission Control should continue moving toward a clean project chat
+surface while retaining technical guardrails behind advanced controls.
