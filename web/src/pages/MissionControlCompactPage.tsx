@@ -567,6 +567,14 @@ function buildJennyReplyReviewPrompt(action: "accept" | "evidence" | "safer-plan
 
 type JennyReplyReviewDecision = "accepted" | "needs_evidence" | "needs_safer_plan";
 
+interface ProjectChatMessage {
+  body: string;
+  id: string;
+  meta: string;
+  speaker: "Jenny" | "You";
+  time?: string;
+}
+
 function jennyReplyReviewDecisionLabel(decision: string | undefined): string {
   switch (decision) {
     case "accepted":
@@ -588,6 +596,80 @@ function latestReplyReviewByResponseId(reviews: JennyReplyReviewRecord[]): Map<s
     }
   }
   return map;
+}
+
+function latestReviewedJennyReply(
+  chatMessages: ProjectChatMessage[],
+  reviewsByResponseId: Map<string, JennyReplyReviewRecord>,
+): JennyReplyReviewRecord | null {
+  for (const chat of [...chatMessages].reverse()) {
+    if (chat.speaker !== "Jenny") {
+      continue;
+    }
+    const review = reviewsByResponseId.get(chat.id);
+    if (review) {
+      return review;
+    }
+  }
+  return null;
+}
+
+function jennyReplyReviewStatus(review: JennyReplyReviewRecord | null): { detail: string; label: string; nextStep: string | null; tone: "accepted" | "blocked" | "none" | "warn" } {
+  if (!review) {
+    return {
+      detail: "No Jenny reply has been accepted or challenged yet.",
+      label: "Reply not reviewed",
+      nextStep: null,
+      tone: "none",
+    };
+  }
+
+  if (review.decision === "accepted") {
+    return {
+      detail: "Travis accepted the latest reviewed Jenny reply. Continue with the next bounded lane.",
+      label: "Reply accepted",
+      nextStep: null,
+      tone: "accepted",
+    };
+  }
+
+  if (review.decision === "needs_evidence") {
+    return {
+      detail: "Travis marked the latest reviewed Jenny reply as needing stronger evidence.",
+      label: "Needs evidence",
+      nextStep: "Ask Jenny for exact files, commands, checks, CI/runtime status, and remaining risks before relying on that reply.",
+      tone: "warn",
+    };
+  }
+
+  if (review.decision === "needs_safer_plan") {
+    return {
+      detail: "Travis marked the latest reviewed Jenny reply as needing a safer plan.",
+      label: "Needs safer plan",
+      nextStep: "Challenge Jenny for unsafe assumptions, missing approvals, rollback concerns, and the smallest safer next lane.",
+      tone: "blocked",
+    };
+  }
+
+  return {
+    detail: "The latest reply review decision is unknown. Treat the reply as not accepted.",
+    label: "Review unclear",
+    nextStep: "Ask Jenny to restate the evidence, risks, and next safe lane before proceeding.",
+    tone: "warn",
+  };
+}
+
+function jennyReplyReviewStatusClass(tone: "accepted" | "blocked" | "none" | "warn"): string {
+  switch (tone) {
+    case "accepted":
+      return "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    case "blocked":
+      return "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300";
+    case "warn":
+      return "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+    default:
+      return "border-[#f3ebda]/10 bg-[#15101a]/60 text-[#a59783]";
+  }
 }
 
 interface JennyRunProgress {
@@ -2167,36 +2249,39 @@ function CompactProjectRoom({
   const responseCount = visibleBridgeResponses.length + githubResponseCount;
   const deliveryStatus = jennyDeliveryStatus(pendingCount, responseCount, bridgeStatus, githubBridgeStatus);
   const connectionState = jennyConnectionState(pendingCount, responseCount, bridgeStatus, githubBridgeStatus);
-  const nextStep = jennyNextStep(pendingCount, responseCount, Boolean(latestPending), bridgeStatus, githubBridgeStatus);
+  const bridgeNextStep = jennyNextStep(pendingCount, responseCount, Boolean(latestPending), bridgeStatus, githubBridgeStatus);
   const activityItems = jennyActivityItems(githubBridgeStatus);
   const requestIntake = assessProjectRequest(projectRequest, review);
   const specFirstComposerText = buildSpecFirstComposerText(selectedProjectView.project.name, projectRequest, requestIntake);
   const latestReviewByResponseId = latestReplyReviewByResponseId(replyReviews);
   const runActive = isJennyRunActive(jennyRunProgress);
   const runCopy = jennyRunProgressCopy(jennyRunProgress, jennyRunElapsedSeconds);
-  const chatMessages = [
+  const chatMessages: ProjectChatMessage[] = [
     ...visibleBridgeRequests.map(request => ({
       body: request.message,
       id: request.request_id || request.ack_key || request.created_at || "bridge-request",
       meta: chatStatusLabel(request.bridge_state ?? (request.request_id && repliedRequestIds.has(request.request_id) ? "replied" : request.status ?? "queued")),
-      speaker: "You",
+      speaker: "You" as const,
       time: request.request_id,
     })),
     ...visibleBridgeResponses.map(response => ({
       body: response.message,
       id: response.response_id || response.request_id || response.created_at || "bridge-response",
       meta: chatStatusLabel(response.status ?? "reply"),
-      speaker: "Jenny",
+      speaker: "Jenny" as const,
       time: response.response_id,
     })),
     ...visibleGitHubBridgeMessages.map(message => ({
       body: message.message,
       id: message.github_comment_id || message.request_id || message.created_at || "github-message",
       meta: chatStatusLabel(message.status),
-      speaker: message.from_agent === "jenny" || message.status === "replied" ? "Jenny" : "You",
+      speaker: message.from_agent === "jenny" || message.status === "replied" ? "Jenny" as const : "You" as const,
       time: message.created_at,
     })),
   ].sort((left, right) => String(left.time ?? "").localeCompare(String(right.time ?? ""))).slice(-8);
+  const latestReplyReview = latestReviewedJennyReply(chatMessages, latestReviewByResponseId);
+  const replyReviewStatus = jennyReplyReviewStatus(latestReplyReview);
+  const nextStep = replyReviewStatus.nextStep ?? bridgeNextStep;
 
   return (
     <section
@@ -2246,6 +2331,9 @@ function CompactProjectRoom({
             )}>
               {paused ? "Paused" : selectedProjectView.readinessLabel}
             </span>
+            <span className={cn("rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold", jennyReplyReviewStatusClass(replyReviewStatus.tone))}>
+              {replyReviewStatus.label}
+            </span>
           </div>
         </div>
 
@@ -2267,6 +2355,7 @@ function CompactProjectRoom({
             </p>
             <div className="mt-2 grid gap-2 text-xs">
               <CompactField label="readiness" value={selectedProjectView.readinessDetail} />
+              <CompactField label="reply review" value={replyReviewStatus.detail} />
               <CompactField label="last update" value={compactText(selectedProjectView.latestReport, 220)} />
               <CompactField label="report contract" value={selectedProjectView.reportContract} />
             </div>

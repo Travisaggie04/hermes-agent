@@ -805,7 +805,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText(/Bridge watching for replies/)).toBeTruthy()
     expect(screen.getByText(/Bridge is watching for replies/)).toBeTruthy()
     expect(screen.getByText('Next step')).toBeTruthy()
-    expect(screen.getByText('Review Jenny\'s latest reply, then send the next bounded message.')).toBeTruthy()
+    expect(screen.getByText(/Ask Jenny for exact files, commands, checks, CI\/runtime status/)).toBeTruthy()
     expect(screen.getAllByText('Pending 0').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Replies 2').length).toBeGreaterThan(0)
     expect(screen.queryByText(/Local error guard smoke/i)).toBeNull()
@@ -1127,6 +1127,8 @@ describe('MissionControlView', () => {
     expect(screen.getAllByRole('button', { name: 'Ask for evidence' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'Challenge plan' }).length).toBeGreaterThan(0)
     expect(screen.getAllByText('Reviewed: needs evidence').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Needs evidence').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Ask Jenny for exact files, commands, checks, CI\/runtime status/).length).toBeGreaterThan(0)
     fireEvent.click(screen.getAllByRole('button', { name: 'Ask for evidence' })[0])
     await waitFor(() => expect(createMissionControlJennyReplyReview).toHaveBeenCalledTimes(1))
     expect(createMissionControlJennyReplyReview).toHaveBeenCalledWith(
