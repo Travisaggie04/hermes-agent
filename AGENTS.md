@@ -1051,9 +1051,10 @@ def profile_env(tmp_path, monkeypatch):
 
 ## Testing
 
-**ALWAYS use `scripts/run_tests.sh`** — do not call `pytest` directly. The script enforces
+**ALWAYS use `scripts/run_tests.sh`** on POSIX/Git Bash or `scripts/run_tests.ps1`
+on native Windows — do not call `pytest` directly. The wrapper enforces
 hermetic environment parity with CI (unset credential vars, TZ=UTC, LANG=C.UTF-8,
-`-n auto` xdist workers, in-tree subprocess-isolation plugin). Direct `pytest`
+repo-local temp dirs, per-file subprocess isolation). Direct `pytest`
 on a 16+ core developer machine with API keys set diverges from CI in ways
 that have caused multiple "works locally, fails in CI" incidents (and the reverse).
 
@@ -1063,6 +1064,10 @@ scripts/run_tests.sh tests/gateway/                   # one directory
 scripts/run_tests.sh tests/agent/test_foo.py::test_x  # one test
 scripts/run_tests.sh -v --tb=long                     # pass-through pytest flags
 scripts/run_tests.sh --no-isolate tests/foo/          # disable subprocess isolation (faster, for debugging)
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_tests.ps1 tests/gateway/
 ```
 
 ### Subprocess-per-test isolation

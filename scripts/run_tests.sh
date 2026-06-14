@@ -22,6 +22,10 @@
 #   scripts/run_tests.sh tests/foo.py -- --tb=long  # path + pytest args
 #   scripts/run_tests.sh -- -v --tb=long            # pytest args only
 #
+# Native Windows contributors should use scripts/run_tests.ps1. This
+# Bash wrapper supports POSIX/Git-Bash venv layouts; WSL with only a
+# Windows .venv cannot safely bridge Python path semantics.
+#
 # Everything after a literal '--' is passed through to each per-file
 # pytest invocation. Positional path arguments before '--' override
 # the default discovery root (tests/).
@@ -33,20 +37,23 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # ── Activate venv ───────────────────────────────────────────────────────────
-VENV=""
-for candidate in "$REPO_ROOT/.venv" "$REPO_ROOT/venv" "$HOME/.hermes/hermes-agent/venv"; do
-  if [ -f "$candidate/bin/activate" ]; then
-    VENV="$candidate"
+PYTHON=""
+for candidate in "$REPO_ROOT/.venv/bin/python" "$REPO_ROOT/venv/bin/python" "$HOME/.hermes/hermes-agent/venv/bin/python"; do
+  if [ -x "$candidate" ]; then
+    PYTHON="$candidate"
     break
   fi
 done
 
-if [ -z "$VENV" ]; then
+if [ -z "$PYTHON" ]; then
+  if [ -f "$REPO_ROOT/.venv/Scripts/python.exe" ] || [ -f "$REPO_ROOT/venv/Scripts/python.exe" ]; then
+    echo "error: found a Windows virtualenv but no POSIX Python for this Bash shell." >&2
+    echo "       Run native Windows tests with: powershell -ExecutionPolicy Bypass -File scripts/run_tests.ps1" >&2
+    exit 1
+  fi
   echo "error: no virtualenv found in $REPO_ROOT/.venv or $REPO_ROOT/venv" >&2
   exit 1
 fi
-
-PYTHON="$VENV/bin/python"
 
 
 # ── Live-gateway plugin (computed before we drop env) ───────────────────────
@@ -65,13 +72,20 @@ echo "▶ running per-file parallel test suite via run_tests_parallel.py"
 echo "  (TZ=UTC LANG=C.UTF-8 PYTHONHASHSEED=0; clean env)"
 
 cd "$REPO_ROOT"
+TEST_TMP="$REPO_ROOT/.codex-tmp/pytest"
+mkdir -p "$TEST_TMP"
 
 exec env -i \
   PATH="$PATH" \
   HOME="$HOME" \
+  TMPDIR="$TEST_TMP" \
+  TMP="$TEST_TMP" \
+  TEMP="$TEST_TMP" \
   TZ=UTC \
   LANG=C.UTF-8 \
   LC_ALL=C.UTF-8 \
+  PYTHONUTF8=1 \
+  PYTHONIOENCODING=utf-8 \
   PYTHONHASHSEED=0 \
   ${EXTRA_PYTHONPATH:+PYTHONPATH="$EXTRA_PYTHONPATH"} \
   ${EXTRA_PYTEST_PLUGINS:+PYTEST_PLUGINS="$EXTRA_PYTEST_PLUGINS"} \

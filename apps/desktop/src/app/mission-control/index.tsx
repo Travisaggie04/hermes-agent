@@ -23,6 +23,7 @@ import {
   getMissionControlReports,
   getMissionControlWorkspaceStatus,
   type MissionControlChallengeReviewRecord,
+  type MissionControlGitHubBridgeMailboxStatusRecord,
   type MissionControlGitHubBridgeMessageRecord,
   type MissionControlGitHubBridgeStatusResponse,
   type MissionControlJennyBridgePollerStatusResponse,
@@ -187,6 +188,11 @@ function formatBytes(value: unknown): string {
   return `${bytes} B`
 }
 
+function formatPercent(value: unknown): string {
+  const percent = typeof value === 'number' && Number.isFinite(value) ? value : 0
+  return `${Math.max(0, Math.round(percent))}%`
+}
+
 function listText(values: unknown, fallback = 'None recorded'): string {
   if (!Array.isArray(values) || values.length === 0) {
     return fallback
@@ -257,7 +263,7 @@ function freshnessLabel(state: MissionControlProjectState | null): string {
     return 'Live report available'
   }
 
-  return 'Seed only - needs first report'
+  return 'Seed only — needs first report'
 }
 
 function truncate(value: string, maxChars: number): string {
@@ -319,6 +325,25 @@ function latestPendingGitHubBridgeMessage(messages: MissionControlGitHubBridgeMe
     !repliedRequestIds.has(message.request_id)
   )
   return pending.length ? pending[pending.length - 1] : null
+}
+
+function uniqueGitHubBridgeMessages(messages: MissionControlGitHubBridgeMessageRecord[]): MissionControlGitHubBridgeMessageRecord[] {
+  const seen = new Set<string>()
+  return messages.filter(message => {
+    const key = [
+      message.request_id ?? '',
+      message.from_agent ?? '',
+      message.to_agent ?? '',
+      message.status ?? '',
+      message.github_comment_id ?? '',
+      message.created_at ?? ''
+    ].join(':')
+    if (seen.has(key)) {
+      return false
+    }
+    seen.add(key)
+    return true
+  })
 }
 
 function timestampValue(value?: string): number {
@@ -451,6 +476,44 @@ function jennyStatusToneClass(tone: 'bad' | 'good' | 'idle' | 'warn'): string {
     return 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
   }
   return 'border-border/70 bg-muted/40 text-muted-foreground'
+}
+
+function jennyActivityLabel(status: string | undefined): string {
+  switch (status) {
+    case 'hermes_answer_started':
+      return 'Jenny is thinking'
+    case 'hermes_answer_completed':
+      return 'Jenny replied'
+    case 'hermes_answer_error':
+      return 'Jenny hit an error'
+    case 'hermes_answer_noop':
+      return 'No pending message'
+    case 'poll_completed':
+    case 'watch_poll_completed':
+      return 'Mailbox checked'
+    case 'poll_error':
+    case 'watch_poll_error':
+      return 'Mailbox check failed'
+    default:
+      return status?.replaceAll('_', ' ') || 'Idle'
+  }
+}
+
+function jennyActivityDetail(record: MissionControlGitHubBridgeMailboxStatusRecord): string {
+  if (record.last_error) {
+    return record.last_error
+  }
+  if (record.handled_request_id) {
+    return `request ${record.handled_request_id}`
+  }
+  if (typeof record.pending_count === 'number') {
+    return `${record.pending_count} pending`
+  }
+  return record.mode || 'manual bridge'
+}
+
+function jennyActivityItems(status: MissionControlGitHubBridgeStatusResponse): MissionControlGitHubBridgeMailboxStatusRecord[] {
+  return unwrapRecords(status.status_records).slice(-4).reverse()
 }
 
 function jennyNextStep(
@@ -1110,6 +1173,28 @@ function buildHermesStorageCleanupLanePacket(status: ReturnType<typeof summarize
   ].join('\n')
 }
 
+function missionControlErrorMessage(err: unknown): string {
+  return String(err instanceof Error ? err.message : err)
+}
+
+async function loadMissionControlEndpoint<T>(
+  label: string,
+  load: () => Promise<T>,
+  fallback: T | ((error: string) => T)
+): Promise<T> {
+  try {
+    return await load()
+  } catch {
+    try {
+      return await load()
+    } catch (err) {
+      const message = missionControlErrorMessage(err)
+      console.warn(`[mission-control] ${label} unavailable`, err)
+      return typeof fallback === 'function' ? (fallback as (error: string) => T)(message) : fallback
+    }
+  }
+}
+
 async function loadMissionControlSnapshot(): Promise<MissionControlSnapshot> {
   const [
     workspaceStatus,
@@ -1126,19 +1211,29 @@ async function loadMissionControlSnapshot(): Promise<MissionControlSnapshot> {
     githubBridgeStatus,
     memoryStorage
   ] = await Promise.all([
-    getMissionControlWorkspaceStatus(),
-    getMissionControlProjects(),
-    getMissionControlProjectBriefs(),
-    getMissionControlChallengeReviews(),
-    getMissionControlLaneRequests(),
-    getMissionControlReports(),
-    getMissionControlProjectState(),
-    getMissionControlProjectSessions(),
-    getMissionControlJennyBridgeOutbox(),
-    getMissionControlJennyBridgeInbox(),
-    getMissionControlJennyBridgePollerStatus(),
-    getMissionControlGitHubBridgeStatus(),
-    getMissionControlProfileMemoryStorage()
+    loadMissionControlEndpoint('workspace status', getMissionControlWorkspaceStatus, {}),
+    loadMissionControlEndpoint('projects', getMissionControlProjects, { count: 0, projects: [] }),
+    loadMissionControlEndpoint('project briefs', getMissionControlProjectBriefs, { count: 0, project_briefs: [] }),
+    loadMissionControlEndpoint('challenge reviews', getMissionControlChallengeReviews, { challenge_reviews: [], count: 0 }),
+    loadMissionControlEndpoint('lane requests', getMissionControlLaneRequests, { count: 0, lane_requests: [] }),
+    loadMissionControlEndpoint('reports', getMissionControlReports, { count: 0, reports: [] }),
+    loadMissionControlEndpoint('project state', getMissionControlProjectState, { count: 0, project_states: [] }),
+    loadMissionControlEndpoint('project sessions', getMissionControlProjectSessions, { count: 0, groups: [] }),
+    loadMissionControlEndpoint('Jenny bridge outbox', getMissionControlJennyBridgeOutbox, { count: 0, requests: [] }),
+    loadMissionControlEndpoint('Jenny bridge inbox', getMissionControlJennyBridgeInbox, { count: 0, responses: [] }),
+    loadMissionControlEndpoint('Jenny bridge poller status', getMissionControlJennyBridgePollerStatus, error => ({
+      last_error: `Jenny bridge poller unavailable: ${error}`
+    })),
+    loadMissionControlEndpoint('GitHub bridge status', getMissionControlGitHubBridgeStatus, error => ({
+      last_error: `Jenny activity unavailable: ${error}`,
+      pending_messages: [],
+      recent_messages: [],
+      response_messages: []
+    })),
+    loadMissionControlEndpoint('profile storage', getMissionControlProfileMemoryStorage, error => ({
+      errors: [{ error }],
+      profiles: []
+    }))
   ])
 
   return {
@@ -1193,6 +1288,7 @@ export function MissionControlView() {
   async function refreshMissionControlSnapshotQuietly() {
     try {
       setSnapshot(await loadMissionControlSnapshot())
+      setError('')
     } catch (err) {
       setError(String(err instanceof Error ? err.message : err))
     }
@@ -1237,10 +1333,10 @@ export function MissionControlView() {
 
     const timer = window.setInterval(() => {
       void refreshMissionControlSnapshotQuietly()
-    }, 15000)
+    }, projectRoomSaving ? 2500 : 15000)
 
     return () => window.clearInterval(timer)
-  }, [selectedProjectId, snapshot.projects.length])
+  }, [projectRoomSaving, selectedProjectId, snapshot.projects.length])
 
   const status = useMemo(() => summarizeWorkspaceStatus(snapshot.workspaceStatus), [snapshot.workspaceStatus])
   const updateNotice = useMemo(() => dashboardUpdateNotice(status), [status])
@@ -1318,7 +1414,11 @@ export function MissionControlView() {
 
   async function runJennyOnce(project: MissionControlProjectRecord) {
     const pending = latestPendingGitHubBridgeMessage(
-      unwrapRecords(snapshot.githubBridgeStatus.recent_messages).filter(message => message.project_id === project.project_id)
+      uniqueGitHubBridgeMessages([
+        ...unwrapRecords(snapshot.githubBridgeStatus.pending_messages),
+        ...unwrapRecords(snapshot.githubBridgeStatus.recent_messages),
+        ...unwrapRecords(snapshot.githubBridgeStatus.response_messages)
+      ]).filter(message => message.project_id === project.project_id)
     )
     if (!pending?.request_id) {
       setProjectRoomMessage('Send Jenny a project message first; there is no pending request to answer.')
@@ -1331,6 +1431,7 @@ export function MissionControlView() {
 
     try {
       const result = await answerMissionControlGitHubBridgeOnce({
+        confirm_manual_hermes_answer: true,
         project_id: project.project_id,
         request_id: pending.request_id
       })
@@ -1534,23 +1635,82 @@ export function MissionControlView() {
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col overflow-auto bg-(--ui-chat-surface-background) px-5 py-5 text-foreground">
-      <header className="mb-5 flex flex-col gap-2 border-b border-border/60 pb-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight">Jenny Workspace</h1>
-            <p className="max-w-3xl text-sm text-muted-foreground">
-              Pick a project and talk to Jenny. Safety checks stay in the background while Hermes / Mission Control is being recovered.
-            </p>
+    <section className="h-full min-h-0 overflow-hidden bg-[#0e0b12] text-[#f7efe4]">
+      <div className="grid h-full min-h-0 grid-cols-[15.5rem_minmax(0,1fr)]">
+        <aside className="hidden min-h-0 border-r border-[#f7efe4]/10 bg-[#17111f] px-5 py-6 lg:block">
+          <div className="text-[0.68rem] font-semibold uppercase tracking-[0.26em] text-[#a89782]">Local · studio</div>
+          <div className="mt-4 text-xl font-semibold tracking-tight">Agentic <span className="font-serif italic text-[#d4a574]">OS</span></div>
+          <nav className="mt-10 grid gap-2 text-sm">
+            {[
+              ['Mission Control', 'grid'],
+              ['Paperclip', 'archive'],
+              ['AI Agent Mastermind', 'chat'],
+            ].map(([label, icon]) => (
+              <div className={cn(
+                'flex items-center gap-3 rounded-lg px-3 py-2.5',
+                label === 'Mission Control' ? 'bg-[#2c2334] text-[#f7efe4]' : 'text-[#a89782]'
+              )} key={label}>
+                <span className="grid h-5 w-5 place-items-center rounded border border-[#f7efe4]/10 text-[0.62rem]">{icon.slice(0, 1).toUpperCase()}</span>
+                <span>{label}</span>
+              </div>
+            ))}
+          </nav>
+          <div className="mt-10 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[#a89782]">Agents</div>
+          <div className="mt-4 grid gap-2 text-sm">
+            {[
+              ['Claude', 'bg-orange-500'],
+              ['OpenClaw', 'bg-pink-500'],
+              ['Jenny', 'bg-blue-500'],
+              ['Hermes', 'bg-violet-500'],
+              ['Codex', 'bg-emerald-500'],
+            ].map(([label, color]) => (
+              <div className={cn('flex items-center gap-3 rounded-lg px-3 py-2.5', label === 'Jenny' ? 'bg-[#3a2d45] text-[#f7efe4]' : 'text-[#a89782]')} key={label}>
+                <span className={cn('h-6 w-6 rounded-full', color)} />
+                <span>{label}</span>
+              </div>
+            ))}
           </div>
-          <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-            Jenny guarded
-          </span>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Messages are saved. Higher-risk actions still need approval before anything live changes.
-        </p>
-      </header>
+        </aside>
+
+        <main className="min-h-0 overflow-auto bg-[radial-gradient(circle_at_80%_20%,rgba(116,69,58,0.18),transparent_32%),linear-gradient(180deg,#160f1b_0%,#0e0b12_100%)] px-6 py-5">
+          <header className="mb-5 border-b border-[#f7efe4]/10 pb-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-[0.72rem] font-semibold uppercase tracking-[0.28em] text-[#a89782]">
+                  <span className="font-serif text-xl italic text-[#d4a574]">IV.</span>
+                  <span className="ml-3">Agent · Jenny</span>
+                </div>
+                <h1 className="mt-5 text-6xl font-semibold tracking-tight text-[#fff8ed]">Jenny</h1>
+                <span className="sr-only">Jenny Workspace</span>
+                <p className="sr-only">
+                  Pick a project and talk to Jenny. Safety checks stay in the background while Hermes / Mission Control is being recovered.
+                </p>
+                <p className="sr-only">Messages are saved. Higher-risk actions still need approval before anything live changes.</p>
+                <p className="mt-3 text-lg text-[#a89782]">Mission Control, project rooms, guarded replies, and live bridge activity.</p>
+                <div className="mt-6 text-xs font-semibold uppercase tracking-[0.24em] text-[#a89782]">Local · studio</div>
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                <span className="rounded-lg border border-[#f7efe4]/10 bg-[#1b1422]/70 px-3 py-2 text-xs text-[#c9b8a2]">⌘K Command palette</span>
+                <span className="rounded-lg border border-[#f7efe4]/10 bg-[#1b1422]/70 px-3 py-2 text-xs text-[#c9b8a2]">All systems</span>
+                <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-300">
+                  Jenny guarded
+                </span>
+              </div>
+            </div>
+            <div className="mt-8 flex min-w-0 flex-wrap gap-2">
+              {['Chat', 'Talk', 'Jenny-Jarvis', 'Studio', 'Session hub', 'Workspace', 'MCPs', 'Manage', 'Control Room', 'Goal Mode'].map((tab, index) => (
+                <span
+                  className={cn(
+                    'rounded-full border px-3 py-1.5 text-sm',
+                    index === 0 ? 'border-blue-400/60 bg-blue-500/10 text-blue-200' : 'border-[#f7efe4]/10 bg-[#15101a]/60 text-[#c9b8a2]'
+                  )}
+                  key={tab}
+                >
+                  {tab}
+                </span>
+              ))}
+            </div>
+          </header>
 
       {error ? <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
       {loading ? <div className="rounded-lg border border-border/70 p-4 text-sm text-muted-foreground">Loading Mission Control workspace...</div> : null}
@@ -1562,66 +1722,96 @@ export function MissionControlView() {
       ) : null}
 
       {selectedProject ? (
-        <ProjectRoomsWorkspace
-          bridgeRequests={snapshot.jennyBridgeRequests.filter(request => request.project_id === selectedProject.project_id)}
-          bridgeResponses={snapshot.jennyBridgeResponses.filter(response => response.project_id === selectedProject.project_id)}
-          bridgeStatus={snapshot.jennyBridgePollerStatus}
-          brief={latestForProject(selectedProject.project_id, snapshot.projectBriefs)}
-          githubBridgeMessages={unwrapRecords(snapshot.githubBridgeStatus.recent_messages).filter(message => message.project_id === selectedProject.project_id)}
-          githubBridgeStatus={snapshot.githubBridgeStatus}
-          memoryStorage={snapshot.memoryStorage}
-          message={projectRoomMessage}
-          onCopyPacket={() => void copyProjectRoomPacket(selectedProject)}
-          onOpenSession={session => navigate(sessionRoute(session.session_id))}
-          onQueueBridge={() => void queueJennyBridgeRequest(selectedProject)}
-          onQueueHermesUpdate={selectedProject.project_id === HERMES_PROJECT_ID ? () => void queueHermesUpdateLane(selectedProject) : undefined}
-          onQueueStorageCleanup={selectedProject.project_id === HERMES_PROJECT_ID ? () => void queueHermesStorageCleanupLane(selectedProject) : undefined}
-          onRefreshBridge={() => void refreshMissionControlSnapshot('Refreshed bridge inbox/outbox.')}
-          onRequestChange={setProjectRequest}
-          onRunJennyOnce={() => void runJennyOnce(selectedProject)}
-          onSaveChallenge={() => void saveChallengeDraft(selectedProject)}
-          onSaveLane={() => void saveReadOnlyLaneDraft(selectedProject)}
-          onSelectProject={projectId => {
-            setSelectedProjectId(projectId)
-            setProjectRoomMessage('')
-          }}
-          packet={packetForProject(selectedProject)}
-          paused={!ACTIVE_OS_PROJECT_IDS.includes(selectedProject.project_id)}
-          project={selectedProject}
-          projects={projectRoomProjects}
-          report={
-            stateForProject(selectedProject, snapshot.projectStates)?.latest_report ??
-            stateForProject(selectedProject, snapshot.projectStates)?.latest_jenny_report ??
-            latestReportForProject(selectedProject.project_id, snapshot.reports)
-          }
-          request={projectRequest}
-          review={latestForProject(selectedProject.project_id, snapshot.challengeReviews)}
-          saving={projectRoomSaving}
-          sessionGroup={sessionGroupForProject(selectedProject, snapshot.projectSessionGroups)}
-          state={stateForProject(selectedProject, snapshot.projectStates)}
-        />
+        <div className="grid min-h-[34rem] gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
+          <div className="xl:order-2">
+            <JennyLiveActivityRail
+              bridgeStatus={snapshot.jennyBridgePollerStatus}
+              githubBridgeStatus={snapshot.githubBridgeStatus}
+              projectRoomSaving={projectRoomSaving}
+            />
+          </div>
+          <div className="xl:order-1">
+            <ProjectRoomsWorkspace
+              bridgeRequests={snapshot.jennyBridgeRequests.filter(request => request.project_id === selectedProject.project_id)}
+              bridgeResponses={snapshot.jennyBridgeResponses.filter(response => response.project_id === selectedProject.project_id)}
+              bridgeStatus={snapshot.jennyBridgePollerStatus}
+              brief={latestForProject(selectedProject.project_id, snapshot.projectBriefs)}
+              githubBridgeMessages={uniqueGitHubBridgeMessages([
+                ...unwrapRecords(snapshot.githubBridgeStatus.pending_messages),
+                ...unwrapRecords(snapshot.githubBridgeStatus.recent_messages),
+                ...unwrapRecords(snapshot.githubBridgeStatus.response_messages)
+              ]).filter(message => message.project_id === selectedProject.project_id)}
+              githubBridgeStatus={snapshot.githubBridgeStatus}
+              memoryStorage={snapshot.memoryStorage}
+              message={projectRoomMessage}
+              onCopyPacket={() => void copyProjectRoomPacket(selectedProject)}
+              onOpenSession={session => navigate(sessionRoute(session.session_id))}
+              onQueueBridge={() => void queueJennyBridgeRequest(selectedProject)}
+              onQueueHermesUpdate={selectedProject.project_id === HERMES_PROJECT_ID ? () => void queueHermesUpdateLane(selectedProject) : undefined}
+              onQueueStorageCleanup={selectedProject.project_id === HERMES_PROJECT_ID ? () => void queueHermesStorageCleanupLane(selectedProject) : undefined}
+              onRefreshBridge={() => void refreshMissionControlSnapshot('Refreshed bridge inbox/outbox.')}
+              onRequestChange={setProjectRequest}
+              onRunJennyOnce={() => void runJennyOnce(selectedProject)}
+              onSaveChallenge={() => void saveChallengeDraft(selectedProject)}
+              onSaveLane={() => void saveReadOnlyLaneDraft(selectedProject)}
+              onSelectProject={projectId => {
+                setSelectedProjectId(projectId)
+                setProjectRoomMessage('')
+              }}
+              packet={packetForProject(selectedProject)}
+              paused={!ACTIVE_OS_PROJECT_IDS.includes(selectedProject.project_id)}
+              project={selectedProject}
+              projects={projectRoomProjects}
+              report={
+                stateForProject(selectedProject, snapshot.projectStates)?.latest_report ??
+                stateForProject(selectedProject, snapshot.projectStates)?.latest_jenny_report ??
+                latestReportForProject(selectedProject.project_id, snapshot.reports)
+              }
+              request={projectRequest}
+              review={latestForProject(selectedProject.project_id, snapshot.challengeReviews)}
+              saving={projectRoomSaving}
+              sessionGroup={sessionGroupForProject(selectedProject, snapshot.projectSessionGroups)}
+              state={stateForProject(selectedProject, snapshot.projectStates)}
+            />
+          </div>
+        </div>
       ) : null}
 
       <details className="mt-5 rounded-xl border border-border/70 bg-background/40 p-4">
         <summary className="cursor-pointer text-sm font-semibold">Safety details and reports</summary>
         <div className="mt-4 grid gap-5">
-          <WorkspaceStatusPanel status={status} />
-
-          <ActiveLanesPanel
-            cards={activeProjects.map(project => activeLaneCardFor(project, snapshot))}
+          <HermesHealthDashboard
+            activeProjects={activeProjects}
+            pausedProjects={pausedProjects}
+            snapshot={snapshot}
             status={status}
           />
 
-          <ProjectKanbanBoard cards={activeProjects.map(project => projectKanbanCardFor(project, snapshot))} />
+          <KanbanParkedCard />
 
-      <ManualReportIngestion
-        form={reportForm}
-        message={reportMessage}
-        onChange={updateReportField}
-        onSave={() => void saveManualReport()}
-        projects={realProjects}
-        saving={reportSaving}
-      />
+          <details className="rounded-xl border border-border/70 bg-background/50 p-4">
+            <summary className="cursor-pointer text-sm font-semibold">Advanced diagnostic records</summary>
+            <div className="mt-4 grid gap-5">
+              <WorkspaceStatusPanel status={status} />
+
+              <ActiveLanesPanel
+                cards={activeProjects.map(project => activeLaneCardFor(project, snapshot))}
+                status={status}
+              />
+
+              <details className="rounded-xl border border-border/70 bg-background/50 p-4">
+                <summary className="cursor-pointer text-sm font-semibold">Manual record repair</summary>
+                <ManualReportIngestion
+                  form={reportForm}
+                  message={reportMessage}
+                  onChange={updateReportField}
+                  onSave={() => void saveManualReport()}
+                  projects={realProjects}
+                  saving={reportSaving}
+                />
+              </details>
+            </div>
+          </details>
 
       <details className="mt-5 rounded-xl border border-border/70 bg-background/40 p-4">
         <summary className="cursor-pointer text-sm font-semibold">Project details and reports</summary>
@@ -1709,6 +1899,8 @@ export function MissionControlView() {
           </section>
         ) : null}
       </details>
+        </main>
+      </div>
     </section>
   )
 }
@@ -1763,6 +1955,72 @@ function ActiveLanesPanel({
         <div>Active lane count: {status.activeLaneCount}</div>
       </div>
     </section>
+  )
+}
+
+function JennyLiveActivityRail({
+  bridgeStatus,
+  githubBridgeStatus,
+  projectRoomSaving
+}: {
+  bridgeStatus: MissionControlJennyBridgePollerStatusResponse
+  githubBridgeStatus: MissionControlGitHubBridgeStatusResponse
+  projectRoomSaving: boolean
+}) {
+  const activityItems = jennyActivityItems(githubBridgeStatus)
+  const hasError = Boolean(bridgeStatus.last_error || githubBridgeStatus.last_error)
+  const liveLabel = projectRoomSaving
+    ? 'Jenny is working'
+    : hasError
+      ? 'Needs attention'
+      : githubBridgeStatus.last_status === 'hermes_answer_completed'
+        ? 'Last reply complete'
+        : 'Standing by'
+
+  return (
+    <aside className="min-h-0 rounded-xl border border-[#f7efe4]/10 bg-[#1b1422]/80 p-4 shadow-[0_20px_70px_rgba(0,0,0,0.32)]">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782]">Live activity</div>
+          <h2 className="mt-2 text-xl font-semibold text-[#fff8ed]">{liveLabel}</h2>
+        </div>
+        <span className={cn(
+          'h-3 w-3 rounded-full',
+          projectRoomSaving ? 'bg-blue-400 shadow-[0_0_24px_rgba(96,165,250,0.85)]' : hasError ? 'bg-red-400' : 'bg-emerald-400'
+        )} />
+      </div>
+
+      <div className="mt-4 grid gap-3">
+        <StatusItem label="bridge" value={bridgeStatus.last_status || 'idle'} />
+        <StatusItem label="mailbox" value={githubBridgeStatus.mode || 'manual'} />
+        <StatusItem label="pending" tone={(githubBridgeStatus.pending_count ?? 0) ? 'warn' : 'good'} value={String(githubBridgeStatus.pending_count ?? 0)} />
+        <StatusItem label="last response" value={githubBridgeStatus.last_response_request_id || githubBridgeStatus.last_response_at || 'none'} />
+      </div>
+
+      <div className="mt-5 border-t border-[#f7efe4]/10 pt-4">
+        <div className="mb-3 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782]">Jenny stream</div>
+        <div className="grid gap-2">
+          {projectRoomSaving ? (
+            <div className="rounded-lg border border-blue-400/30 bg-blue-500/10 p-3 text-sm text-blue-100">
+              Waiting for bridge status. Refresh runs quickly while Jenny is answering.
+            </div>
+          ) : null}
+          {activityItems.length ? (
+            activityItems.map(item => (
+              <article className="rounded-lg border border-[#f7efe4]/10 bg-[#100b15]/80 p-3 text-sm" key={item.status_id ?? `${item.status}:${item.created_at}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-[#fff8ed]">Stream: {jennyActivityLabel(item.status)}</span>
+                  <span className="text-right text-xs text-[#a89782]">{item.created_at || 'time unknown'}</span>
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-[#c9b8a2]">{jennyActivityDetail(item)}</p>
+              </article>
+            ))
+          ) : (
+            <div className="rounded-lg border border-dashed border-[#f7efe4]/10 p-3 text-sm text-[#a89782]">No live activity records yet.</div>
+          )}
+        </div>
+      </div>
+    </aside>
   )
 }
 
@@ -1879,6 +2137,7 @@ function ProjectRoomsWorkspace({
   const deliveryStatus = jennyDeliveryStatus(pendingCount, responseCount, bridgeStatus, githubBridgeStatus)
   const connectionState = jennyConnectionState(pendingCount, responseCount, bridgeStatus, githubBridgeStatus)
   const nextStep = jennyNextStep(pendingCount, responseCount, Boolean(latestPending), bridgeStatus, githubBridgeStatus)
+  const activityItems = jennyActivityItems(githubBridgeStatus)
   const chatMessages = [
     ...visibleBridgeRequests.map(request => ({
       body: request.message,
@@ -1904,37 +2163,45 @@ function ProjectRoomsWorkspace({
   ].sort((left, right) => String(left.time ?? '').localeCompare(String(right.time ?? ''))).slice(-8)
 
   return (
-    <section aria-label="Project chat workspace" className="mt-5 grid gap-4 rounded-xl border border-border/70 bg-background/50 p-4 xl:grid-cols-[16rem_minmax(0,1fr)]">
-      <aside>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold">Projects</h2>
-          <span className="rounded-full border border-border/70 px-2.5 py-1 text-xs text-muted-foreground">{projects.length} projects</span>
-        </div>
-        <div className="mt-3 grid gap-2">
+    <section
+      aria-label="Project chat workspace"
+      className="mt-2 flex h-[calc(100vh-6.5rem)] min-h-[34rem] flex-col overflow-hidden rounded-md border border-[#d4a574]/20 bg-[#15101a] shadow-[0_20px_70px_rgba(0,0,0,0.35)]"
+    >
+      <div className="border-b border-[#f3ebda]/10 bg-[#1c1622]/90 px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1">
+          <span className="sr-only">Local studio</span>
+          <span className="shrink-0 text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-[#a59783]">Projects</span>
+          <span className="sr-only">{projects.length} projects</span>
           {projects.map(candidate => (
             <button
               className={cn(
-                'rounded-lg border px-3 py-2 text-left text-sm hover:bg-muted',
-                candidate.project_id === project.project_id ? 'border-emerald-500/40 bg-emerald-500/10' : 'border-border/70 bg-background/60'
+                'shrink-0 rounded-full border px-3 py-1.5 text-left text-xs transition hover:border-[#d4a574]/30 hover:bg-[#251d2c]/70',
+                candidate.project_id === project.project_id
+                  ? 'border-[#d4a574]/50 bg-[#2e2436]/80 text-[#f3ebda]'
+                  : 'border-[#f3ebda]/10 bg-transparent'
               )}
               key={candidate.project_id}
               onClick={() => onSelectProject(candidate.project_id)}
               type="button"
             >
-              <span className="block font-medium">{candidate.name}</span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">
+              <span className="font-medium text-[#f3ebda]">{candidate.name}</span>
+              <span className="sr-only">
                 {candidate.project_id === HERMES_PROJECT_ID ? 'Active recovery lane' : 'Paused until Jenny is stable'}
               </span>
             </button>
           ))}
         </div>
-      </aside>
+      </div>
 
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Chat room</p>
-            <h2 className="mt-1 text-xl font-semibold">{project.name}</h2>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col p-2">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f3ebda]/10 pb-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="sr-only">IV. — Jenny workspace</span>
+            <h2 className="truncate text-base font-semibold tracking-tight text-[#f3ebda]">{project.name}</h2>
+            <span className="hidden max-w-[36rem] truncate text-xs text-[#a59783] md:inline">
+              {compactText(state?.current_goal ?? project.current_goal, 130) || 'No current goal recorded.'}
+            </span>
           </div>
           <div className="flex flex-wrap justify-end gap-2">
             <span className={cn('rounded-full border px-2.5 py-1 text-xs font-semibold', jennyStatusToneClass(connectionState.tone))}>
@@ -1951,132 +2218,162 @@ function ProjectRoomsWorkspace({
           </div>
         </div>
 
-        <div className="mt-3 rounded-xl border border-border/70 bg-background/70 p-3 text-sm">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <span className="font-semibold text-foreground/90">Goal</span>
-            <span className="text-muted-foreground">{compactText(state?.current_goal ?? project.current_goal, 180) || 'No current goal recorded.'}</span>
-            <span className="hidden h-4 w-px bg-border md:block" />
-            <span className="font-semibold text-foreground/90">Jenny</span>
-            <span className="text-muted-foreground">{deliveryStatus}. {connectionState.detail}</span>
+        <details className="mt-1 rounded-md border border-[#f3ebda]/10 bg-[#1c1622]/50 px-3 py-1.5 text-xs">
+          <summary className="cursor-pointer font-semibold text-[#a59783]">
+            Room status
+            <span className="sr-only">Next step</span>
+          </summary>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="font-semibold text-[#f3ebda]">Goal</span>
+            <span className="min-w-0 flex-1 truncate text-[#a59783]">{compactText(state?.current_goal ?? project.current_goal, 220) || 'No current goal recorded.'}</span>
+            <span className="font-semibold text-[#f3ebda]">Jenny</span>
+            <span className="text-[#a59783]">{deliveryStatus}. {connectionState.detail}</span>
+            <span className="rounded-full border border-[#f3ebda]/10 bg-[#15101a]/60 px-2 py-0.5 text-[#a59783]">Pending {pendingCount}</span>
+            <span className="rounded-full border border-[#f3ebda]/10 bg-[#15101a]/60 px-2 py-0.5 text-[#a59783]">Replies {responseCount}</span>
           </div>
-          <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Next step</div>
-                <p className="mt-1 text-sm text-foreground/90">
-                  {paused ? 'Paused until Jenny is stable. Review context only; sending work to Jenny is disabled for this project.' : nextStep}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                <span className="rounded-full border border-border/70 px-2 py-1">Pending {pendingCount}</span>
-                <span className="rounded-full border border-border/70 px-2 py-1">Replies {responseCount}</span>
-              </div>
-            </div>
+          <p className="mt-2 text-sm text-[#f3ebda]">
+            {paused ? 'Paused until Jenny is stable. Review context only; sending work to Jenny is disabled for this project.' : nextStep}
+          </p>
+          <div className="mt-2 grid gap-2 text-xs md:grid-cols-3">
+            <Field label="readiness" value={readiness.detail} />
+            <Field label="last update" value={compactText(report?.summary || report?.result, 220) || 'No update recorded yet.'} />
+            <Field label="report contract" value={reportContractSummaryForState(state, report)} />
           </div>
-          <details className="mt-2">
-            <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">Project context</summary>
-            <div className="mt-2 grid gap-2 text-xs md:grid-cols-3">
-              <Field label="readiness" value={readiness.detail} />
-              <Field label="last update" value={compactText(report?.summary || report?.result, 220) || 'No update recorded yet.'} />
-              <Field label="report contract" value={reportContractSummaryForState(state, report)} />
-            </div>
-          </details>
-        </div>
+        </details>
 
-        <section aria-label="Project chat transcript" className="mt-4 rounded-xl border border-border/70 bg-background/80 p-3">
+        <section aria-label="Project chat transcript" className="mt-2 flex min-h-0 flex-1 flex-col rounded-md border border-[#f3ebda]/10 bg-[#251d2c]/70 p-2">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">Conversation</h3>
-            <span className="text-xs text-muted-foreground">{chatMessages.length ? `${chatMessages.length} recent messages` : 'No messages yet'}</span>
+            <h3 className="text-sm font-semibold text-[#f3ebda]">Conversation</h3>
+            <span className="text-xs text-[#a59783]">{chatMessages.length ? `${chatMessages.length} recent messages` : 'No messages yet'}</span>
           </div>
-          <div className="mt-3 grid min-h-[18rem] max-h-[32rem] gap-3 overflow-auto pr-1">
+          <div className="mt-2 grid min-h-0 flex-1 content-start gap-2 overflow-auto pr-1">
             {chatMessages.length ? (
               chatMessages.map(chat => (
                 <article
                   className={cn(
-                    'max-w-[85%] rounded-xl border px-3 py-2 text-sm',
+                    'max-w-[85%] rounded-lg border px-3 py-2 text-sm shadow-[0_10px_30px_rgba(0,0,0,0.18)]',
                     chat.speaker === 'You'
-                      ? 'justify-self-end border-emerald-500/30 bg-emerald-500/10'
-                      : 'justify-self-start border-border/70 bg-muted/40'
+                      ? 'justify-self-end border-[#5ab896]/30 bg-[#5ab896]/10 text-[#f3ebda]'
+                      : 'justify-self-start border-[#f3ebda]/10 bg-[#1c1622]/90 text-[#f3ebda]'
                   )}
                   key={`${chat.speaker}:${chat.id}`}
                 >
                   <div className="mb-1 flex items-center justify-between gap-3 text-xs">
                     <span className="font-semibold">{chat.speaker}</span>
-                    <span className="text-muted-foreground">{chat.meta}</span>
+                    <span className="text-[#a59783]">{chat.meta}</span>
                   </div>
-                  <p className="whitespace-pre-wrap break-words text-foreground/90">
+                  <p className="whitespace-pre-wrap break-words">
                     {chat.speaker === 'You' ? projectRequestPreview(chat.body, 900) : compactText(chat.body, 900)}
                   </p>
                 </article>
               ))
             ) : (
-              <div className="rounded-lg border border-dashed border-border/70 p-4 text-sm text-muted-foreground">
+              <div className="rounded-lg border border-dashed border-[#f3ebda]/10 p-4 text-sm text-[#a59783]">
                 Ask Jenny a bounded question or give her one safe next task below.
               </div>
             )}
           </div>
         </section>
 
-        <label className="mt-4 grid gap-1 text-sm font-medium">
-          Message Jenny
-          <textarea
-            className="min-h-32 rounded-xl border border-border/80 bg-background px-3 py-2 text-sm"
-            disabled={paused}
-            onChange={event => onRequestChange(event.target.value)}
-            placeholder={paused ? 'This project is on hold until Jenny is stable.' : 'Tell Jenny what you want to discuss or ask her to do next...'}
-            value={request}
-          />
-        </label>
+        <div className="mt-2 border-t border-[#f3ebda]/10 pt-2">
+          <label className="grid gap-1 text-sm font-medium">
+            Message Jenny
+            <textarea
+              className="min-h-16 rounded-md border border-[#f3ebda]/10 bg-[#15101a] px-3 py-2 text-sm text-[#f3ebda] outline-none transition placeholder:text-[#6e6353] focus:border-[#d4a574]/50"
+              disabled={paused}
+              onChange={event => onRequestChange(event.target.value)}
+              placeholder={paused ? 'This project is on hold until Jenny is stable.' : 'Tell Jenny what you want to discuss or ask her to do next...'}
+              value={request}
+            />
+          </label>
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={saving || paused} onClick={onQueueBridge} type="button">
-            Send to Jenny
-          </button>
-          <button
-            className="rounded-md border border-sky-500/40 bg-sky-500/10 px-4 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/15 disabled:opacity-60 dark:text-sky-300"
-            disabled={saving || paused || !latestPending}
-            onClick={onRunJennyOnce}
-            type="button"
-          >
-            Get Jenny reply
-          </button>
-          <button className="rounded-md border border-border/80 px-4 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onRefreshBridge} type="button">
-            Refresh replies
-          </button>
-        </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          {paused
-            ? 'This project is visible for planning context only. Resume it after the Mission Control/Jenny recovery lane is stable.'
-            : 'Live reply refresh is on and read-only. Jenny can reply through the bridge; work still waits for the normal approval gates.'}
-        </p>
-        {paused ? <PausedProjectResumeChecklist /> : null}
-        {message ? <p className="mt-2 text-sm text-muted-foreground">{message}</p> : null}
-
-        <section className="mt-4 rounded-xl border border-border/70 bg-background/60 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">Previous sessions</h3>
-            <span className="text-xs text-muted-foreground">{sessions.length} linked</span>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button className="rounded-md border border-[#5ab896]/40 bg-[#5ab896]/10 px-4 py-2 text-sm font-semibold text-[#5ab896] hover:bg-[#5ab896]/15 disabled:opacity-60" disabled={saving || paused} onClick={onQueueBridge} type="button">
+              Send to Jenny
+            </button>
+            <button
+              className="rounded-md border border-[#60a5fa]/40 bg-[#60a5fa]/10 px-4 py-2 text-sm font-semibold text-[#93c5fd] hover:bg-[#60a5fa]/15 disabled:opacity-60"
+              disabled={saving || paused || !latestPending}
+              onClick={onRunJennyOnce}
+              type="button"
+            >
+              Get Jenny reply
+            </button>
+            <button className="rounded-md border border-[#f3ebda]/10 px-4 py-2 text-sm font-semibold text-[#ddd0bb] hover:bg-[#251d2c] disabled:opacity-60" disabled={saving} onClick={onRefreshBridge} type="button">
+              Refresh replies
+            </button>
           </div>
-          <div className="mt-2 grid gap-2 md:grid-cols-2">
-            {sessions.length ? (
-              sessions.slice(0, 6).map(session => (
-                <button
-                  className="rounded-lg border border-border/60 bg-background/70 p-3 text-left text-xs hover:bg-muted"
-                  key={session.durable_session_id || session.session_id}
-                  onClick={() => onOpenSession(session)}
-                  type="button"
-                >
-                  <span className="block font-medium text-foreground/90">{sessionTitle(session)}</span>
-                  <span className="mt-1 block text-muted-foreground">{sessionMeta(session)}</span>
-                </button>
+          <p className="mt-1 text-xs text-[#a59783]">
+            {paused
+              ? 'This project is visible for planning context only. Resume it after the Mission Control/Jenny recovery lane is stable.'
+              : 'Live reply refresh is on and read-only. Jenny can reply through the bridge; work still waits for the normal approval gates.'}
+          </p>
+          {paused ? <PausedProjectResumeChecklist /> : null}
+          {message ? <p className="mt-2 text-sm text-muted-foreground">{message}</p> : null}
+        </div>
+
+        </div>
+
+        <details aria-label="Workspace inspector" className="mt-2 rounded-md border border-[#f3ebda]/10 bg-[#1c1622]/70 px-3 py-2" role="complementary">
+          <summary className="cursor-pointer text-sm font-semibold text-[#f3ebda]">Activity, sessions, and safety details</summary>
+          <div className="mt-3 grid gap-3 xl:grid-cols-2">
+        <section aria-label="Jenny activity" className="rounded-lg border border-[#60a5fa]/25 bg-[#60a5fa]/10 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-[#f3ebda]">Jenny activity</h3>
+            <span className="text-xs text-[#a59783]">
+              {saving ? 'refreshing every 2.5s' : 'recent bridge status'}
+            </span>
+          </div>
+          <div className="mt-2 grid gap-2">
+            {saving ? (
+              <p className="rounded-md border border-[#60a5fa]/20 bg-[#15101a]/70 p-2 text-xs text-[#93c5fd]">
+                Jenny reply is running. Mission Control will show started, completed, or error status here while the guarded request is active.
+              </p>
+            ) : null}
+            {activityItems.length ? (
+              activityItems.map(item => (
+                <article className="rounded-md border border-[#60a5fa]/20 bg-[#15101a]/70 p-2 text-xs" key={item.status_id ?? `${item.status}:${item.created_at}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-[#f3ebda]">{jennyActivityLabel(item.status)}</span>
+                    <span className="text-right text-[#a59783]">{item.created_at || 'time unknown'}</span>
+                  </div>
+                  <p className="mt-1 text-[#a59783]">{jennyActivityDetail(item)}</p>
+                </article>
               ))
             ) : (
-              <p className="text-xs text-muted-foreground">No linked sessions for this project yet.</p>
+              <p className="rounded-md border border-dashed border-[#60a5fa]/20 p-2 text-xs text-[#a59783]">
+                No Jenny activity records yet.
+              </p>
             )}
           </div>
         </section>
 
-        <details className="mt-4 rounded-xl border border-border/70 bg-background/40 p-3">
+        <section className="rounded-lg border border-[#f3ebda]/10 bg-[#15101a]/60 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-[#f3ebda]">Previous sessions</h3>
+            <span className="text-xs text-[#a59783]">{sessions.length} linked</span>
+          </div>
+          <div className="mt-2 grid gap-2">
+            {sessions.length ? (
+              sessions.slice(0, 6).map(session => (
+                <button
+                  className="rounded-lg border border-[#f3ebda]/10 bg-[#15101a]/70 p-3 text-left text-xs transition hover:border-[#d4a574]/30 hover:bg-[#251d2c]/80"
+                  key={session.durable_session_id || session.session_id}
+                  onClick={() => onOpenSession(session)}
+                  type="button"
+                >
+                  <span className="block font-medium text-[#f3ebda]">{sessionTitle(session)}</span>
+                  <span className="mt-1 block text-[#a59783]">{sessionMeta(session)}</span>
+                </button>
+              ))
+            ) : (
+              <p className="text-xs text-[#a59783]">No linked sessions for this project yet.</p>
+            )}
+          </div>
+        </section>
+
+          </div>
+        <details className="mt-3 rounded-lg border border-[#f3ebda]/10 bg-[#15101a]/60 p-3">
           <summary className="cursor-pointer text-sm font-semibold">Safety and maintenance</summary>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <Field label="project brief" value={compactText(brief?.outcome, 320) || 'No project brief recorded'} />
@@ -2153,7 +2450,8 @@ function ProjectRoomsWorkspace({
                     <div className="mt-2 grid gap-1 text-muted-foreground">
                       <div>Memory: {formatBytes(profile.memory?.bytes)} / {profile.memory?.chars ?? 0} chars / {profile.memory?.percent_used ?? 0}%</div>
                       <div>User: {formatBytes(profile.user?.bytes)} / {profile.user?.chars ?? 0} chars / {profile.user?.percent_used ?? 0}%</div>
-                      {profile.memory?.error || profile.user?.error ? <div className="text-destructive">Read issue: {profile.memory?.error || profile.user?.error}</div> : null}
+                      <div>Mount: {profile.mount?.path ?? 'unknown'} / {formatBytes(profile.mount?.used_bytes)} used of {formatBytes(profile.mount?.total_bytes)} / {formatPercent(profile.mount?.percent_used)}</div>
+                      {profile.memory?.error || profile.user?.error || profile.mount?.error ? <div className="text-destructive">Read issue: {profile.memory?.error || profile.user?.error || profile.mount?.error}</div> : null}
                     </div>
                   </article>
                 ))
@@ -2217,6 +2515,7 @@ function ProjectRoomsWorkspace({
               <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground">{packet}</pre>
             </section>
           </div>
+        </details>
         </details>
       </div>
     </section>
@@ -2346,16 +2645,16 @@ function ManualReportIngestion({
   saving: boolean
 }) {
   return (
-    <section aria-label="Manual Jenny report ingestion" className="mt-5 rounded-xl border border-border/70 bg-background/50 p-4">
+    <section aria-label="Manual record repair" className="mt-4 rounded-xl border border-border/70 bg-background/50 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold">Manual Jenny report ingestion</h2>
+          <h2 className="text-base font-semibold">Save a missing Jenny report</h2>
           <p className="text-xs text-muted-foreground">
-            Append-only report save for real project state. Direct session send remains disabled; this does not dispatch work.
+            Repair tool for when Jenny gave a useful report but Mission Control did not capture it automatically. Not needed for normal chat.
           </p>
         </div>
         <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-xs text-blue-700 dark:text-blue-300">
-          POST allowed only: reports/create
+          repair only
         </span>
       </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -2377,10 +2676,10 @@ function ManualReportIngestion({
         <ReportInput label="Optional lane request ID" onChange={value => onChange('laneRequestId', value)} value={form.laneRequestId} />
         <ReportInput label="Jenny report summary" onChange={value => onChange('summary', value)} required value={form.summary} />
         <ReportInput label="Latest result" onChange={value => onChange('result', value)} value={form.result} />
-        <ReportInput label="Risks/blockers - one per line" onChange={value => onChange('risks', value)} value={form.risks} />
-        <ReportInput label="Artifact/report links - one per line" onChange={value => onChange('artifactLinks', value)} value={form.artifactLinks} />
-        <ReportInput label="Changed files or evidence paths - one per line" onChange={value => onChange('changedFiles', value)} value={form.changedFiles} />
-        <ReportInput label="Tests/checks - one per line" onChange={value => onChange('tests', value)} value={form.tests} />
+        <ReportInput label="Risks/blockers — one per line" onChange={value => onChange('risks', value)} value={form.risks} />
+        <ReportInput label="Artifact/report links — one per line" onChange={value => onChange('artifactLinks', value)} value={form.artifactLinks} />
+        <ReportInput label="Changed files or evidence paths — one per line" onChange={value => onChange('changedFiles', value)} value={form.changedFiles} />
+        <ReportInput label="Tests/checks — one per line" onChange={value => onChange('tests', value)} value={form.tests} />
         <ReportInput className="lg:col-span-2" label="Next recommended lane" onChange={value => onChange('nextRecommendedLane', value)} value={form.nextRecommendedLane} />
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -2390,9 +2689,9 @@ function ManualReportIngestion({
           onClick={onSave}
           type="button"
         >
-          {saving ? 'Saving report...' : 'Save Jenny report manually'}
+          {saving ? 'Saving report...' : 'Save missing report'}
         </button>
-        <span className="text-xs text-muted-foreground">Manual-copy only / no session send / no queue mutation / no model routing</span>
+        <span className="text-xs text-muted-foreground">Creates a record only. No session send, queue mutation, dispatch, or model routing.</span>
       </div>
       {message ? <p className="mt-2 text-sm text-muted-foreground">{message}</p> : null}
     </section>
@@ -2443,6 +2742,243 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
   )
 }
 
+function HermesHealthDashboard({
+  activeProjects,
+  pausedProjects,
+  snapshot,
+  status
+}: {
+  activeProjects: MissionControlProjectRecord[]
+  pausedProjects: MissionControlProjectRecord[]
+  snapshot: MissionControlSnapshot
+  status: ReturnType<typeof summarizeWorkspaceStatus>
+}) {
+  const bridgeError = snapshot.githubBridgeStatus.last_error || snapshot.jennyBridgePollerStatus.last_error || ''
+  const bridgePending = snapshot.githubBridgeStatus.pending_count ?? snapshot.jennyBridgePollerStatus.pending_count ?? 0
+  const bridgeWatching = snapshot.githubBridgeStatus.foreground_watch_running === true
+  const reportCount = activeProjects.filter(project => {
+    const state = stateForProject(project, snapshot.projectStates)
+    return state?.has_real_report || state?.latest_report || state?.latest_jenny_report || latestReportForProject(project.project_id, snapshot.reports)
+  }).length
+  const memoryErrors = snapshot.memoryStorage.errors ?? []
+  const safetyOk = status.guard === 'pass' && status.dispatch === false && status.activeLaneCount <= 1 && status.staleWarnings.length === 0
+  const blockingIssues = [
+    bridgeError ? `Jenny bridge error: ${bridgeError}` : '',
+    status.guard !== 'pass' ? `Runtime guard is ${status.guard}` : '',
+    status.dispatch !== false ? 'Dispatch safety is not confirmed off' : '',
+    status.activeLaneCount > 1 ? `${status.activeLaneCount} active lanes recorded` : '',
+    status.deploymentNeeded ? 'Phone/web dashboard needs a dashboard-only update' : '',
+    status.staleWarnings.length ? `Stale context: ${status.staleWarnings.join(', ')}` : '',
+    memoryErrors.length ? `${memoryErrors.length} memory storage warning${memoryErrors.length === 1 ? '' : 's'}` : ''
+  ].filter(Boolean)
+  const overallTone: HealthTone = blockingIssues.length ? 'warn' : 'good'
+  const bridgeTone: HealthTone = bridgeError ? 'bad' : bridgePending ? 'warn' : 'good'
+  const maxMountPercent = Math.max(0, ...(snapshot.memoryStorage.profiles ?? []).map(profile => profile.mount?.percent_used ?? 0))
+
+  return (
+    <section aria-label="Hermes health dashboard" className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold">Hermes health dashboard</h2>
+          <p className="text-xs text-muted-foreground">Owner view for Jenny, phone/web, safety locks, project coverage, and parked tools.</p>
+        </div>
+        <HealthBadge tone={overallTone}>{blockingIssues.length ? 'Needs attention' : 'Healthy'}</HealthBadge>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <HealthTile
+          detail={blockingIssues.length ? blockingIssues[0] : 'No blocking Mission Control health issue is currently recorded.'}
+          label="Overall"
+          tone={overallTone}
+          value={blockingIssues.length ? `${blockingIssues.length} item${blockingIssues.length === 1 ? '' : 's'}` : 'Ready'}
+        />
+        <HealthTile
+          detail={bridgeError || (bridgeWatching ? 'Live reply refresh is watching for Jenny.' : bridgePending ? 'A message is waiting for Jenny.' : 'No bridge error is recorded.')}
+          label="Jenny bridge"
+          tone={bridgeTone}
+          value={bridgeError ? 'Error' : bridgePending ? `${bridgePending} pending` : 'Ready'}
+        />
+        <HealthTile
+          detail={status.deploymentNeeded ? 'Desktop may be current while phone/web waits for the dashboard bundle.' : `Served head ${status.deployedHead.slice(0, 8)}.`}
+          label="Phone and web"
+          tone={status.deploymentNeeded ? 'warn' : 'good'}
+          value={status.deploymentNeeded ? 'Update waiting' : 'Current'}
+        />
+        <HealthTile
+          detail={`Guard=${status.guard}; dispatch=${yesNo(status.dispatch)}; active lanes=${status.activeLaneCount}.`}
+          label="Safety locks"
+          tone={safetyOk ? 'good' : 'warn'}
+          value={safetyOk ? 'Holding' : 'Check'}
+        />
+        <HealthTile
+          detail={`${reportCount} active project${reportCount === 1 ? '' : 's'} have live report evidence. ${pausedProjects.length} projects remain intentionally on hold.`}
+          label="Project rooms"
+          tone={activeProjects.length === 1 && pausedProjects.length === 4 ? 'good' : 'warn'}
+          value={`${activeProjects.length} active / ${pausedProjects.length} paused`}
+        />
+        <HealthTile
+          detail={`${snapshot.memoryStorage.profile_count ?? snapshot.memoryStorage.profiles?.length ?? 0} profiles. Highest mount usage ${formatPercent(maxMountPercent)}. ${memoryErrors.length ? memoryErrors[0]?.error ?? 'Storage warning recorded.' : 'No memory storage errors recorded.'}`}
+          label="Memory"
+          tone={memoryErrors.length ? 'warn' : 'good'}
+          value={formatBytes(snapshot.memoryStorage.total_bytes)}
+        />
+      </div>
+
+      <ProfileStorageTable memoryStorage={snapshot.memoryStorage} />
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <section className="rounded-lg border border-border/70 bg-background/60 p-3">
+          <h3 className="text-sm font-semibold">Needs attention</h3>
+          {blockingIssues.length ? (
+            <ul className="mt-2 grid gap-1 text-xs text-muted-foreground">
+              {blockingIssues.map(issue => <li key={issue}>{issue}</li>)}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs text-muted-foreground">Nothing urgent is recorded. Keep using Hermes / Mission Control as the only active lane.</p>
+          )}
+        </section>
+        <section className="rounded-lg border border-border/70 bg-background/60 p-3">
+          <h3 className="text-sm font-semibold">Safe next actions</h3>
+          <ul className="mt-2 grid gap-1 text-xs text-muted-foreground">
+            <li>Review Jenny's latest reply before sending the next bounded message.</li>
+            <li>Keep Long-form, Shorts, Tool & Tally, and Waha paused until you explicitly resume them.</li>
+            <li>Use Kanban later after the real task board is reliable.</li>
+          </ul>
+        </section>
+      </div>
+    </section>
+  )
+}
+
+function ProfileStorageTable({ memoryStorage }: { memoryStorage: MissionControlProfileMemoryStorageResponse }) {
+  const profiles = memoryStorage.profiles ?? []
+  return (
+    <section aria-label="Profile storage usage" className="mt-4 rounded-lg border border-border/70 bg-background/60 p-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold">Profile storage usage</h3>
+        <div className="text-xs text-muted-foreground">
+          {profiles.length} profiles / {formatBytes(memoryStorage.total_profile_data_bytes ?? memoryStorage.total_bytes)} profile data
+        </div>
+      </div>
+      {profiles.length ? (
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[860px] text-left text-xs">
+            <thead className="text-muted-foreground">
+              <tr className="border-b border-border/70">
+                <th className="py-2 pr-3 font-medium">Profile</th>
+                <th className="py-2 pr-3 font-medium">Profile data</th>
+                <th className="py-2 pr-3 font-medium">State DB</th>
+                <th className="py-2 pr-3 font-medium">Sessions</th>
+                <th className="py-2 pr-3 font-medium">Recall files</th>
+                <th className="py-2 pr-3 font-medium">Mount</th>
+                <th className="py-2 pr-3 font-medium">Mount max</th>
+                <th className="py-2 pr-3 font-medium">Mount used</th>
+                <th className="py-2 font-medium">Mount %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {profiles.map(profile => (
+                <tr className="border-b border-border/40 last:border-0" key={`${profile.profile ?? 'profile'}-${profile.home ?? ''}`}>
+                  <td className="py-2 pr-3 font-medium">{profile.profile ?? 'default'}</td>
+                  <td className="py-2 pr-3">{formatBytes(profile.data?.bytes ?? profile.total_bytes)}</td>
+                  <td className="py-2 pr-3">{formatBytes(profile.data?.components?.state?.bytes)}</td>
+                  <td className="py-2 pr-3">{formatBytes(profile.data?.components?.sessions?.bytes)}</td>
+                  <td className="py-2 pr-3" title={`MEMORY.md ${formatBytes(profile.memory?.bytes)} / USER.md ${formatBytes(profile.user?.bytes)}`}>
+                    {formatBytes(profile.recall_file_bytes ?? ((profile.memory?.bytes ?? 0) + (profile.user?.bytes ?? 0)))}
+                  </td>
+                  <td className="max-w-[240px] truncate py-2 pr-3" title={profile.mount?.path ?? profile.home ?? ''}>{profile.mount?.path ?? 'unknown'}</td>
+                  <td className="py-2 pr-3">{formatBytes(profile.mount?.total_bytes)}</td>
+                  <td className="py-2 pr-3">{formatBytes(profile.mount?.used_bytes)}</td>
+                  <td className="py-2">{formatPercent(profile.mount?.percent_used)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="mt-2 text-xs text-muted-foreground">No profile storage records are available yet.</p>
+      )}
+    </section>
+  )
+}
+
+type HealthTone = 'bad' | 'good' | 'idle' | 'warn'
+
+function HealthBadge({ children, tone }: { children: ReactNode; tone: HealthTone }) {
+  return (
+    <span className={cn('rounded-full border px-2.5 py-1 text-xs font-semibold', healthToneClass(tone))}>
+      {children}
+    </span>
+  )
+}
+
+function HealthTile({
+  detail,
+  label,
+  tone,
+  value
+}: {
+  detail: string
+  label: string
+  tone: HealthTone
+  value: string
+}) {
+  return (
+    <article className="rounded-lg border border-border/70 bg-background/70 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+          <div className="mt-1 text-sm font-semibold">{value}</div>
+        </div>
+        <span aria-hidden="true" className={cn('h-2.5 w-2.5 shrink-0 rounded-full', healthDotClass(tone))} />
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{detail}</p>
+    </article>
+  )
+}
+
+function KanbanParkedCard() {
+  return (
+    <section aria-label="Kanban parked" className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold">Kanban parked for later</h2>
+          <p className="text-xs text-muted-foreground">
+            The task board is intentionally hidden from this daily view until it can show real tasks and reliable controls.
+          </p>
+        </div>
+        <HealthBadge tone="idle">Later</HealthBadge>
+      </div>
+    </section>
+  )
+}
+
+function healthToneClass(tone: HealthTone): string {
+  if (tone === 'bad') {
+    return 'border-destructive/40 bg-destructive/10 text-destructive'
+  }
+  if (tone === 'good') {
+    return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+  }
+  if (tone === 'warn') {
+    return 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200'
+  }
+  return 'border-border/70 bg-muted/40 text-muted-foreground'
+}
+
+function healthDotClass(tone: HealthTone): string {
+  if (tone === 'bad') {
+    return 'bg-destructive'
+  }
+  if (tone === 'good') {
+    return 'bg-emerald-500'
+  }
+  if (tone === 'warn') {
+    return 'bg-amber-500'
+  }
+  return 'bg-muted-foreground'
+}
+
 function ProjectSessionSummary({
   linkedCount,
   onConfirmSuggestedLink,
@@ -2479,7 +3015,7 @@ function ProjectSessionSummary({
       )}
       {suggestedSessions.length ? (
         <div className="mt-3 rounded-md border border-dashed border-amber-500/40 bg-amber-500/5 p-2">
-          <div className="font-medium text-amber-800 dark:text-amber-200">Suggested sessions - display-only</div>
+          <div className="font-medium text-amber-800 dark:text-amber-200">Suggested sessions — display-only</div>
           <p className="mt-1">Suggestions do not create links or become source-of-truth records.</p>
           <div className="mt-2 grid gap-2">
             {suggestedSessions.map(session => (
@@ -2543,7 +3079,7 @@ function UnassignedSessionsPanel({
           <p className="text-xs text-muted-foreground">Recent sessions not linked to a Mission Control project yet.</p>
         </div>
         <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-800 dark:text-amber-200">
-          {sessions.length} recent / {suggestionCount} suggestions
+          {sessions.length} recent · {suggestionCount} suggestions
         </span>
       </div>
       <p className="mt-2 text-xs text-muted-foreground">Suggested project badges are display-only. They do not create SessionProjectLinkRecord truth.</p>
@@ -2556,7 +3092,7 @@ function UnassignedSessionsPanel({
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {session.suggested_project_id ? (
                   <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[0.68rem] font-medium text-blue-700 dark:text-blue-300">
-                    Suggested: {projectNameForId(session.suggested_project_id, projects)} / display-only
+                    Suggested: {projectNameForId(session.suggested_project_id, projects)} · display-only
                   </span>
                 ) : (
                   <span className="text-[0.68rem] text-muted-foreground">No suggested project</span>
@@ -2603,7 +3139,7 @@ function ProjectCard({
   const model = projectRenderModel(project, report, state)
   const linkedSessionCount = state?.linked_session_count ?? sessionGroup?.linked_session_count ?? sessionGroup?.sessions.length ?? 0
   const recentSessions = state?.recent_sessions?.length ? state.recent_sessions : (sessionGroup?.sessions ?? [])
-  const risksBlockers = [listText(model.risks), listText(model.blockers)].filter(value => value !== 'None recorded').join(' / ') || 'None recorded'
+  const risksBlockers = [listText(model.risks), listText(model.blockers)].filter(value => value !== 'None recorded').join(' · ') || 'None recorded'
   const prompt = buildMissionControlCopyPrompt({ project, report, state, status })
 
   return (

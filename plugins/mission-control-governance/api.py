@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+import time
 import uuid
 from datetime import datetime, timezone
 from json import JSONDecodeError
@@ -192,6 +195,8 @@ RUN_LANE_TYPES = {
 }
 BROAD_APPROVAL_VALUES = {"*", "all", "any", "global", "everything", "unlimited"}
 JENNY_BRIDGE_PENDING_STATUSES = {"queued", "retry_requested"}
+PROFILE_STORAGE_CACHE_SECONDS = 60
+_PROFILE_STORAGE_CACHE: dict[str, Any] = {"expires_at": 0.0, "payload": None}
 
 PROJECT_ONBOARDING_TEMPLATES = (
     {
@@ -1245,7 +1250,141 @@ def _safe_file_level(path: Path, char_limit: int) -> dict[str, Any]:
         }
 
 
+def _mount_point_for_path(path: Path) -> str:
+    try:
+        resolved = path.resolve(strict=False)
+    except Exception:
+        resolved = path.absolute()
+    if os.name == "nt":
+        return Path(resolved.anchor or resolved.drive or str(resolved)).as_posix()
+
+    best = Path("/")
+    try:
+        mounts = Path("/proc/mounts").read_text(encoding="utf-8", errors="replace").splitlines()
+    except Exception:
+        mounts = []
+    for line in mounts:
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        mount = Path(parts[1].replace("\\040", " "))
+        try:
+            resolved.relative_to(mount)
+        except ValueError:
+            continue
+        if len(mount.parts) > len(best.parts):
+            best = mount
+    return str(best)
+
+
+def _profile_mount_usage(path: Path) -> dict[str, Any]:
+    mount_path = _mount_point_for_path(path)
+    try:
+        usage_path = path
+        while not usage_path.exists() and usage_path.parent != usage_path:
+            usage_path = usage_path.parent
+        usage = shutil.disk_usage(usage_path)
+    except Exception as exc:
+        return {
+            "path": mount_path,
+            "total_bytes": 0,
+            "used_bytes": 0,
+            "free_bytes": 0,
+            "percent_used": 0,
+            "error": str(exc),
+        }
+    percent_used = int(round((usage.used / usage.total) * 100)) if usage.total > 0 else 0
+    return {
+        "path": mount_path,
+        "total_bytes": int(usage.total),
+        "used_bytes": int(usage.used),
+        "free_bytes": int(usage.free),
+        "percent_used": percent_used,
+    }
+
+
+def _path_disk_usage_bytes(path: Path) -> int:
+    if not path.exists():
+        return 0
+    try:
+        if path.is_file() or path.is_symlink():
+            return int(path.stat().st_size)
+        total = 0
+        try:
+            total += int(path.lstat().st_size)
+        except OSError:
+            pass
+        for root, dirs, files in os.walk(path):
+            for name in files:
+                try:
+                    total += int((Path(root) / name).lstat().st_size)
+                except OSError:
+                    continue
+            for name in dirs:
+                try:
+                    total += int((Path(root) / name).lstat().st_size)
+                except OSError:
+                    continue
+        return total
+    except Exception:
+        return 0
+
+
+def _safe_storage_level(path: Path) -> dict[str, Any]:
+    try:
+        return {
+            "path": str(path),
+            "exists": path.exists(),
+            "bytes": _path_disk_usage_bytes(path),
+        }
+    except Exception as exc:
+        return {
+            "path": str(path),
+            "exists": False,
+            "bytes": 0,
+            "error": str(exc),
+        }
+
+
+def _sum_storage_levels(levels: list[dict[str, Any]]) -> int:
+    return sum(int(level.get("bytes") or 0) for level in levels)
+
+
+def _profile_data_storage(profile_name: str, home: Path) -> dict[str, Any]:
+    if profile_name == "default":
+        components = {
+            "state": _safe_storage_level(home / "state.db"),
+            "sessions": _safe_storage_level(home / "sessions"),
+            "memories": _safe_storage_level(home / "memories"),
+        }
+        return {
+            "path": str(home),
+            "scope": "default_profile_state_sessions_memories",
+            "exists": home.exists(),
+            "bytes": _sum_storage_levels(list(components.values())),
+            "components": components,
+        }
+
+    components = {
+        "state": _safe_storage_level(home / "state.db"),
+        "sessions": _safe_storage_level(home / "sessions"),
+        "memories": _safe_storage_level(home / "memories"),
+    }
+    return {
+        "path": str(home),
+        "scope": "profile_directory",
+        "exists": home.exists(),
+        "bytes": _path_disk_usage_bytes(home),
+        "components": components,
+    }
+
+
 def _profile_memory_storage_projection() -> dict[str, Any]:
+    now = time.monotonic()
+    cached = _PROFILE_STORAGE_CACHE.get("payload")
+    if cached is not None and now < float(_PROFILE_STORAGE_CACHE.get("expires_at") or 0):
+        return cached
+
     errors: list[dict[str, str]] = []
     try:
         from hermes_cli import profiles as profiles_mod
@@ -1261,29 +1400,45 @@ def _profile_memory_storage_projection() -> dict[str, Any]:
         targets = [("default", profiles_mod.get_profile_dir("default"))]
 
     profiles: list[dict[str, Any]] = []
+    total_profile_data_bytes = 0
     total_memory_bytes = 0
     total_user_bytes = 0
+    mount_errors: list[dict[str, str]] = []
     for profile_name, home in targets:
         memory_file = _safe_file_level(Path(home) / "memories" / "MEMORY.md", 2200)
         user_file = _safe_file_level(Path(home) / "memories" / "USER.md", 1375)
+        recall_file_bytes = int(memory_file.get("bytes") or 0) + int(user_file.get("bytes") or 0)
+        profile_data = _profile_data_storage(profile_name, Path(home))
+        mount = _profile_mount_usage(Path(home))
+        if mount.get("error"):
+            mount_errors.append({"profile": profile_name, "error": str(mount["error"])})
+        total_profile_data_bytes += int(profile_data.get("bytes") or 0)
         total_memory_bytes += int(memory_file.get("bytes") or 0)
         total_user_bytes += int(user_file.get("bytes") or 0)
         profiles.append({
             "profile": profile_name,
             "home": str(home),
+            "data": profile_data,
             "memory": memory_file,
+            "mount": mount,
+            "recall_file_bytes": recall_file_bytes,
             "user": user_file,
-            "total_bytes": int(memory_file.get("bytes") or 0) + int(user_file.get("bytes") or 0),
+            "total_bytes": int(profile_data.get("bytes") or 0),
         })
 
-    return {
+    payload = {
         "profiles": profiles,
         "profile_count": len(profiles),
+        "total_profile_data_bytes": total_profile_data_bytes,
         "total_memory_bytes": total_memory_bytes,
+        "total_recall_file_bytes": total_memory_bytes + total_user_bytes,
         "total_user_bytes": total_user_bytes,
-        "total_bytes": total_memory_bytes + total_user_bytes,
-        "errors": errors,
+        "total_bytes": total_profile_data_bytes,
+        "errors": [*errors, *mount_errors],
     }
+    _PROFILE_STORAGE_CACHE["payload"] = payload
+    _PROFILE_STORAGE_CACHE["expires_at"] = now + PROFILE_STORAGE_CACHE_SECONDS
+    return payload
 
 
 def _build_project_record(payload: dict[str, Any]) -> ProjectRecord:
@@ -3352,10 +3507,13 @@ async def workspace_github_bridge_answer_once(request: Request) -> dict[str, Any
     payload = await _read_workspace_json_body(request)
     project_id = _workspace_text(payload.get("project_id"), max_chars=120)
     request_id = _workspace_text(payload.get("request_id"), max_chars=120)
+    confirmed = payload.get("confirm_manual_hermes_answer") is True
     if not project_id:
         raise HTTPException(status_code=400, detail="project_id is required")
     if not request_id:
         raise HTTPException(status_code=400, detail="request_id is required")
+    if not confirmed:
+        raise HTTPException(status_code=400, detail="confirm_manual_hermes_answer is required")
 
     try:
         result = answer_pending_with_hermes(
@@ -3372,6 +3530,8 @@ async def workspace_github_bridge_answer_once(request: Request) -> dict[str, Any
         "stored": True,
         "display_only": False,
         "manual_start_only": True,
+        "manual_hermes_answer_enabled": True,
+        "requires_explicit_manual_confirmation": True,
         "manual_copy_only": False,
         "send_to_jenny_enabled": True,
         "dispatch_enabled": False,

@@ -107,7 +107,10 @@ def _path_matches(candidate: Path, runtime_path: str) -> bool:
     if not runtime_path:
         return False
     protected = Path(runtime_path).expanduser().resolve()
-    return candidate == protected
+    try:
+        return candidate == protected or candidate.is_relative_to(protected)
+    except ValueError:
+        return False
 
 
 def _active_exception_context(explicit: str | None = None) -> str | None:
@@ -136,7 +139,7 @@ def evaluate_runtime_mutation(
     if baseline is None:
         return RuntimeMutationDecision(allowed=True, action=normalized_action, cwd=str(current))
 
-    if _path_matches(git_top, baseline.runtime_path):
+    if _path_matches(current, baseline.runtime_path) or _path_matches(git_top, baseline.runtime_path):
         if context:
             return RuntimeMutationDecision(
                 allowed=True,
@@ -157,7 +160,7 @@ def evaluate_runtime_mutation(
             reason=f"{blocker}: refusing {normalized_action} inside accepted live runtime {baseline.runtime_path}",
         )
 
-    if _path_matches(git_top, baseline.rollback_runtime_path):
+    if _path_matches(current, baseline.rollback_runtime_path) or _path_matches(git_top, baseline.rollback_runtime_path):
         if context:
             return RuntimeMutationDecision(
                 allowed=True,

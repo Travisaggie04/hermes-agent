@@ -234,11 +234,23 @@ interface GitHubBridgeStatus {
   foreground_watch_running?: boolean;
   model_routing_enabled?: boolean;
   pending_count?: number;
+  pending_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
   recent_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
   response_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
   session_send_enabled?: boolean;
+  status_records?: Array<WrappedRecord<GitHubBridgeMailboxStatusRecord> | GitHubBridgeMailboxStatusRecord>;
   timer_enabled?: boolean;
   worker_enabled?: boolean;
+}
+
+interface GitHubBridgeMailboxStatusRecord {
+  created_at?: string;
+  handled_request_id?: string;
+  last_error?: string;
+  mode?: string;
+  pending_count?: number;
+  status?: string;
+  status_id?: string;
 }
 
 interface GitHubBridgeMessageRecord {
@@ -310,10 +322,31 @@ interface MemoryFileLevel {
   percent_used?: number;
 }
 
+interface ProfileMountUsage {
+  error?: string;
+  free_bytes?: number;
+  path?: string;
+  percent_used?: number;
+  total_bytes?: number;
+  used_bytes?: number;
+}
+
+interface ProfileStorageLevel {
+  bytes?: number;
+  components?: Record<string, ProfileStorageLevel>;
+  error?: string;
+  exists?: boolean;
+  path?: string;
+  scope?: string;
+}
+
 interface ProfileMemoryStorageRecord {
+  data?: ProfileStorageLevel;
   home?: string;
   memory?: MemoryFileLevel;
+  mount?: ProfileMountUsage;
   profile?: string;
+  recall_file_bytes?: number;
   total_bytes?: number;
   user?: MemoryFileLevel;
 }
@@ -325,6 +358,8 @@ interface ProfileMemoryStorage {
   stored?: boolean;
   total_bytes?: number;
   total_memory_bytes?: number;
+  total_profile_data_bytes?: number;
+  total_recall_file_bytes?: number;
   total_user_bytes?: number;
 }
 
@@ -455,6 +490,44 @@ function chatStatusLabel(value: string | undefined): string {
   }
 }
 
+function jennyActivityLabel(status: string | undefined): string {
+  switch (status) {
+    case "hermes_answer_started":
+      return "Jenny is thinking";
+    case "hermes_answer_completed":
+      return "Jenny replied";
+    case "hermes_answer_error":
+      return "Jenny hit an error";
+    case "hermes_answer_noop":
+      return "No pending message";
+    case "poll_completed":
+    case "watch_poll_completed":
+      return "Mailbox checked";
+    case "poll_error":
+    case "watch_poll_error":
+      return "Mailbox check failed";
+    default:
+      return status?.replaceAll("_", " ") || "Idle";
+  }
+}
+
+function jennyActivityDetail(record: GitHubBridgeMailboxStatusRecord): string {
+  if (record.last_error) {
+    return record.last_error;
+  }
+  if (record.handled_request_id) {
+    return `request ${record.handled_request_id}`;
+  }
+  if (typeof record.pending_count === "number") {
+    return `${record.pending_count} pending`;
+  }
+  return record.mode || "manual bridge";
+}
+
+function jennyActivityItems(status: GitHubBridgeStatus): GitHubBridgeMailboxStatusRecord[] {
+  return unwrapRecords(status.status_records).slice(-4).reverse();
+}
+
 function pendingJennyMessageCount(requests: JennyBridgeRequestRecord[], responses: JennyBridgeResponseRecord[]): number {
   const repliedRequestIds = new Set(responses.map(response => response.request_id).filter(Boolean));
   return requests.filter(request => {
@@ -476,6 +549,25 @@ function latestPendingGitHubBridgeMessage(messages: GitHubBridgeMessageRecord[])
     !repliedRequestIds.has(message.request_id),
   );
   return pending.length ? pending[pending.length - 1] : null;
+}
+
+function uniqueGitHubBridgeMessages(messages: GitHubBridgeMessageRecord[]): GitHubBridgeMessageRecord[] {
+  const seen = new Set<string>();
+  return messages.filter(message => {
+    const key = [
+      message.request_id ?? "",
+      message.from_agent ?? "",
+      message.to_agent ?? "",
+      message.status ?? "",
+      message.github_comment_id ?? "",
+      message.created_at ?? "",
+    ].join(":");
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 function timestampValue(value?: string): number {
@@ -725,6 +817,11 @@ function formatBytes(value: unknown): string {
   return `${bytes} B`;
 }
 
+function formatPercent(value: unknown): string {
+  const percent = typeof value === "number" && Number.isFinite(value) ? value : 0;
+  return `${Math.max(0, Math.round(percent))}%`;
+}
+
 function latestForProject<T extends { project_id?: string }>(projectId: string, values: T[]): T | undefined {
   return [...values].reverse().find(value => value.project_id === projectId);
 }
@@ -821,7 +918,7 @@ function viewModelForProject(snapshot: CompactSnapshot, project: ProjectRecord):
     artifactLinks: artifactText(state, report),
     blockers: listText(blockerValues, "No blockers recorded"),
     currentGoal: text(state?.current_goal ?? project.current_goal, "No current goal recorded"),
-    freshness: state?.has_real_report ? "Live report available" : "Seed only - needs first report",
+    freshness: state?.has_real_report ? "Live report available" : "Seed only — needs first report",
     latestActivity: text(state?.latest_activity_at, "No activity time recorded"),
     latestLane: text(state?.latest_lane_title ?? lane?.title, "No lane recorded"),
     latestLaneRequest: lane,
@@ -960,20 +1057,52 @@ function buildHermesStorageCleanupLanePacket(workspaceStatus: WorkspaceStatus): 
   ].join("\n");
 }
 
+function missionControlErrorMessage(err: unknown): string {
+  return String(err instanceof Error ? err.message : err);
+}
+
+async function loadMissionControlEndpoint<T>(
+  label: string,
+  load: () => Promise<T>,
+  fallback: T | ((error: string) => T),
+): Promise<T> {
+  try {
+    return await load();
+  } catch {
+    try {
+      return await load();
+    } catch (err) {
+      const message = missionControlErrorMessage(err);
+      console.warn(`[mission-control] ${label} unavailable`, err);
+      return typeof fallback === "function" ? (fallback as (error: string) => T)(message) : fallback;
+    }
+  }
+}
+
 async function loadCompactSnapshot(): Promise<CompactSnapshot> {
   const [workspaceStatus, projects, projectBriefs, challengeReviews, laneRequests, reports, projectState, jennyBridgeOutbox, jennyBridgeInbox, jennyBridgePollerStatus, githubBridgeStatus, memoryStorage] = await Promise.all([
-    fetchJSON<WorkspaceStatus>(WORKSPACE_STATUS_URL),
-    fetchJSON<{ projects?: Array<WrappedRecord<ProjectRecord> | ProjectRecord> }>(WORKSPACE_PROJECTS_URL),
-    fetchJSON<{ project_briefs?: Array<WrappedRecord<ProjectBriefRecord> | ProjectBriefRecord> }>(WORKSPACE_PROJECT_BRIEFS_URL),
-    fetchJSON<{ challenge_reviews?: Array<WrappedRecord<ChallengeReviewRecord> | ChallengeReviewRecord> }>(WORKSPACE_CHALLENGE_REVIEWS_URL),
-    fetchJSON<{ lane_requests?: Array<WrappedRecord<LaneRequestRecord> | LaneRequestRecord> }>(WORKSPACE_LANE_REQUESTS_URL),
-    fetchJSON<{ reports?: Array<WrappedRecord<ReportRecord> | ReportRecord> }>(WORKSPACE_REPORTS_URL),
-    fetchJSON<{ project_states?: ProjectStateRecord[] }>(WORKSPACE_PROJECT_STATE_URL),
-    fetchJSON<{ requests?: Array<WrappedRecord<JennyBridgeRequestRecord> | JennyBridgeRequestRecord> }>(WORKSPACE_JENNY_BRIDGE_OUTBOX_URL),
-    fetchJSON<{ responses?: Array<WrappedRecord<JennyBridgeResponseRecord> | JennyBridgeResponseRecord> }>(WORKSPACE_JENNY_BRIDGE_INBOX_URL),
-    fetchJSON<JennyBridgePollerStatus>(WORKSPACE_JENNY_BRIDGE_POLLER_STATUS_URL),
-    fetchJSON<GitHubBridgeStatus>(WORKSPACE_GITHUB_BRIDGE_STATUS_URL),
-    fetchJSON<ProfileMemoryStorage>(WORKSPACE_PROFILE_MEMORY_STORAGE_URL),
+    loadMissionControlEndpoint("workspace status", () => fetchJSON<WorkspaceStatus>(WORKSPACE_STATUS_URL), {}),
+    loadMissionControlEndpoint("projects", () => fetchJSON<{ projects?: Array<WrappedRecord<ProjectRecord> | ProjectRecord> }>(WORKSPACE_PROJECTS_URL), { projects: [] }),
+    loadMissionControlEndpoint("project briefs", () => fetchJSON<{ project_briefs?: Array<WrappedRecord<ProjectBriefRecord> | ProjectBriefRecord> }>(WORKSPACE_PROJECT_BRIEFS_URL), { project_briefs: [] }),
+    loadMissionControlEndpoint("challenge reviews", () => fetchJSON<{ challenge_reviews?: Array<WrappedRecord<ChallengeReviewRecord> | ChallengeReviewRecord> }>(WORKSPACE_CHALLENGE_REVIEWS_URL), { challenge_reviews: [] }),
+    loadMissionControlEndpoint("lane requests", () => fetchJSON<{ lane_requests?: Array<WrappedRecord<LaneRequestRecord> | LaneRequestRecord> }>(WORKSPACE_LANE_REQUESTS_URL), { lane_requests: [] }),
+    loadMissionControlEndpoint("reports", () => fetchJSON<{ reports?: Array<WrappedRecord<ReportRecord> | ReportRecord> }>(WORKSPACE_REPORTS_URL), { reports: [] }),
+    loadMissionControlEndpoint("project state", () => fetchJSON<{ project_states?: ProjectStateRecord[] }>(WORKSPACE_PROJECT_STATE_URL), { project_states: [] }),
+    loadMissionControlEndpoint("Jenny bridge outbox", () => fetchJSON<{ requests?: Array<WrappedRecord<JennyBridgeRequestRecord> | JennyBridgeRequestRecord> }>(WORKSPACE_JENNY_BRIDGE_OUTBOX_URL), { requests: [] }),
+    loadMissionControlEndpoint("Jenny bridge inbox", () => fetchJSON<{ responses?: Array<WrappedRecord<JennyBridgeResponseRecord> | JennyBridgeResponseRecord> }>(WORKSPACE_JENNY_BRIDGE_INBOX_URL), { responses: [] }),
+    loadMissionControlEndpoint("Jenny bridge poller status", () => fetchJSON<JennyBridgePollerStatus>(WORKSPACE_JENNY_BRIDGE_POLLER_STATUS_URL), error => ({
+      last_error: `Jenny bridge poller unavailable: ${error}`,
+    })),
+    loadMissionControlEndpoint("GitHub bridge status", () => fetchJSON<GitHubBridgeStatus>(WORKSPACE_GITHUB_BRIDGE_STATUS_URL), error => ({
+      last_error: `Jenny activity unavailable: ${error}`,
+      pending_messages: [],
+      recent_messages: [],
+      response_messages: [],
+    })),
+    loadMissionControlEndpoint("profile storage", () => fetchJSON<ProfileMemoryStorage>(WORKSPACE_PROFILE_MEMORY_STORAGE_URL), error => ({
+      errors: [{ error }],
+      profiles: [],
+    })),
   ]);
 
   return {
@@ -1030,12 +1159,15 @@ export default function MissionControlCompactPage() {
 
     const timer = window.setInterval(() => {
       loadCompactSnapshot()
-        .then(nextSnapshot => setSnapshot(nextSnapshot))
+        .then(nextSnapshot => {
+          setSnapshot(nextSnapshot);
+          setError("");
+        })
         .catch(err => setError(err instanceof Error ? err.message : String(err)));
-    }, 15000);
+    }, roomBusy ? 2500 : 15000);
 
     return () => window.clearInterval(timer);
-  }, [selectedProjectId, snapshot?.projects.length]);
+  }, [roomBusy, selectedProjectId, snapshot?.projects.length]);
 
   const realProjects = useMemo(() => {
     if (!snapshot) return [];
@@ -1109,7 +1241,11 @@ export default function MissionControlCompactPage() {
 
   async function runJennyOnce(projectView: ProjectViewModel) {
     const pending = latestPendingGitHubBridgeMessage(
-      unwrapRecords(snapshot?.githubBridgeStatus.recent_messages).filter(message => message.project_id === projectView.project.project_id),
+      uniqueGitHubBridgeMessages([
+        ...unwrapRecords(snapshot?.githubBridgeStatus.pending_messages),
+        ...unwrapRecords(snapshot?.githubBridgeStatus.recent_messages),
+        ...unwrapRecords(snapshot?.githubBridgeStatus.response_messages),
+      ]).filter(message => message.project_id === projectView.project.project_id),
     );
     if (!pending?.request_id) {
       setRoomMessage("Send Jenny a project message first; there is no pending request to answer.");
@@ -1121,6 +1257,7 @@ export default function MissionControlCompactPage() {
     try {
       const result = await fetchJSON<{ answered?: boolean; status?: { last_error?: string } }>(WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL, {
         body: JSON.stringify({
+          confirm_manual_hermes_answer: true,
           project_id: projectView.project.project_id,
           request_id: pending.request_id,
         }),
@@ -1310,17 +1447,34 @@ export default function MissionControlCompactPage() {
   }
 
   return (
-    <main className="min-h-screen w-full max-w-full overflow-x-hidden bg-background px-3 py-4 text-foreground sm:px-5" data-testid="mission-control-compact-route">
-      <header className="sticky top-0 z-10 -mx-3 overflow-hidden border-b border-border/70 bg-background/95 px-3 pb-3 pt-1 backdrop-blur sm:-mx-5 sm:px-5">
-        <p className="max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground [overflow-wrap:anywhere]">Mission Control compact</p>
-        <div className="mt-1 flex min-w-0 items-start justify-between gap-2">
+    <main className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#0e0b12] px-2 py-2 text-[#f7efe4] sm:px-3" data-testid="mission-control-compact-route">
+      <header className="sticky top-0 z-10 -mx-2 overflow-hidden border-b border-[#f7efe4]/10 bg-[#120d17]/95 px-3 pb-3 pt-2 backdrop-blur sm:-mx-3 sm:px-4">
+        <p className="max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782] [overflow-wrap:anywhere]">
+          <span className="font-serif text-lg italic text-[#d4a574]">IV.</span>
+          <span className="ml-2">Agent · Jenny</span>
+        </p>
+        <div className="mt-2 flex min-w-0 items-start justify-between gap-2">
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold leading-tight">Jenny OS workspace</h1>
-            <p className="mt-1 max-w-full text-xs text-muted-foreground [overflow-wrap:anywhere]">Hermes / Mission Control is active. Shorts, long-form, Tool & Tally, and Waha are on hold until Jenny is stable here.</p>
+            <h1 className="text-3xl font-semibold leading-tight text-[#fff8ed]">Jenny</h1>
+            <p className="mt-1 text-xs text-[#a89782]">Mission Control, project rooms, guarded replies, and live bridge activity.</p>
+            <p className="sr-only">Chat with Jenny first; safety and project records stay collapsed below.</p>
           </div>
-          <span className="shrink-0 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-700 dark:text-emerald-300">
-            Jenny guarded
+          <span className="shrink-0 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-300">
+            guarded
           </span>
+        </div>
+        <div className="mt-3 flex min-w-0 gap-2 overflow-x-auto pb-1">
+          {["Chat", "Talk", "Studio", "Sessions", "Workspace", "MCPs", "Control"].map((tab, index) => (
+            <span
+              className={cn(
+                "shrink-0 rounded-full border px-3 py-1.5 text-xs",
+                index === 0 ? "border-blue-400/60 bg-blue-500/10 text-blue-200" : "border-[#f7efe4]/10 bg-[#15101a]/60 text-[#c9b8a2]",
+              )}
+              key={tab}
+            >
+              {tab}
+            </span>
+          ))}
         </div>
       </header>
 
@@ -1334,67 +1488,94 @@ export default function MissionControlCompactPage() {
       ) : null}
 
       {selectedProjectView ? (
-        <CompactProjectRoom
-          busy={roomBusy}
-          message={roomMessage}
-          bridgeRequests={snapshot?.jennyBridgeRequests.filter(request => request.project_id === selectedProjectView.project.project_id) ?? []}
-          bridgeResponses={snapshot?.jennyBridgeResponses.filter(response => response.project_id === selectedProjectView.project.project_id) ?? []}
-          bridgeStatus={snapshot?.jennyBridgePollerStatus ?? {}}
-          githubBridgeMessages={unwrapRecords(snapshot?.githubBridgeStatus.recent_messages).filter(message => message.project_id === selectedProjectView.project.project_id)}
-          githubBridgeStatus={snapshot?.githubBridgeStatus ?? {}}
-          memoryStorage={snapshot?.memoryStorage ?? {}}
-          onCopyPacket={() => void copyPhoneSafePacket(selectedProjectView)}
-          onQueueBridge={() => void queueJennyBridgeMessage(selectedProjectView)}
-          onQueueHermesUpdate={selectedProjectView.project.project_id === HERMES_PROJECT_ID ? () => void queueHermesUpdateLane(selectedProjectView) : undefined}
-          onQueueStorageCleanup={selectedProjectView.project.project_id === HERMES_PROJECT_ID ? () => void queueHermesStorageCleanupLane(selectedProjectView) : undefined}
-          onRefreshBridge={() => void refreshBridge()}
-          onRequestChange={setProjectRequest}
-          onRunJennyOnce={() => void runJennyOnce(selectedProjectView)}
-          onSaveChallenge={() => void saveChallengeDraft(selectedProjectView)}
-          onSaveLane={() => void saveReadOnlyLaneDraft(selectedProjectView)}
-          onOpenSession={session => {
-            if (session.session_id) {
-              navigate(compactSessionRoute(session.session_id));
-            }
-          }}
-          onSelectProject={projectId => {
-            setSelectedProjectId(projectId);
-            setRoomMessage("");
-          }}
-          packet={buildPhoneSafeProjectPacket(selectedProjectView, projectRequest, snapshot?.workspaceStatus ?? {})}
-          paused={!ACTIVE_OS_PROJECT_IDS.includes(selectedProjectView.project.project_id)}
-          projectRequest={projectRequest}
-          projects={projectRoomProjects}
-          selectedProjectView={selectedProjectView}
-        />
+        <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="xl:order-2">
+            <CompactLiveActivityRail
+              bridgeStatus={snapshot?.jennyBridgePollerStatus ?? {}}
+              githubBridgeStatus={snapshot?.githubBridgeStatus ?? {}}
+              roomBusy={roomBusy}
+            />
+          </div>
+          <div className="xl:order-1">
+            <CompactProjectRoom
+              busy={roomBusy}
+              message={roomMessage}
+              bridgeRequests={snapshot?.jennyBridgeRequests.filter(request => request.project_id === selectedProjectView.project.project_id) ?? []}
+              bridgeResponses={snapshot?.jennyBridgeResponses.filter(response => response.project_id === selectedProjectView.project.project_id) ?? []}
+              bridgeStatus={snapshot?.jennyBridgePollerStatus ?? {}}
+              githubBridgeMessages={uniqueGitHubBridgeMessages([
+                ...unwrapRecords(snapshot?.githubBridgeStatus.pending_messages),
+                ...unwrapRecords(snapshot?.githubBridgeStatus.recent_messages),
+                ...unwrapRecords(snapshot?.githubBridgeStatus.response_messages),
+              ]).filter(message => message.project_id === selectedProjectView.project.project_id)}
+              githubBridgeStatus={snapshot?.githubBridgeStatus ?? {}}
+              memoryStorage={snapshot?.memoryStorage ?? {}}
+              onCopyPacket={() => void copyPhoneSafePacket(selectedProjectView)}
+              onQueueBridge={() => void queueJennyBridgeMessage(selectedProjectView)}
+              onQueueHermesUpdate={selectedProjectView.project.project_id === HERMES_PROJECT_ID ? () => void queueHermesUpdateLane(selectedProjectView) : undefined}
+              onQueueStorageCleanup={selectedProjectView.project.project_id === HERMES_PROJECT_ID ? () => void queueHermesStorageCleanupLane(selectedProjectView) : undefined}
+              onRefreshBridge={() => void refreshBridge()}
+              onRequestChange={setProjectRequest}
+              onRunJennyOnce={() => void runJennyOnce(selectedProjectView)}
+              onSaveChallenge={() => void saveChallengeDraft(selectedProjectView)}
+              onSaveLane={() => void saveReadOnlyLaneDraft(selectedProjectView)}
+              onOpenSession={session => {
+                if (session.session_id) {
+                  navigate(compactSessionRoute(session.session_id));
+                }
+              }}
+              onSelectProject={projectId => {
+                setSelectedProjectId(projectId);
+                setRoomMessage("");
+              }}
+              packet={buildPhoneSafeProjectPacket(selectedProjectView, projectRequest, snapshot?.workspaceStatus ?? {})}
+              paused={!ACTIVE_OS_PROJECT_IDS.includes(selectedProjectView.project.project_id)}
+              projectRequest={projectRequest}
+              projects={projectRoomProjects}
+              selectedProjectView={selectedProjectView}
+            />
+          </div>
+        </div>
       ) : null}
 
       <details className="mt-4 max-w-full overflow-hidden rounded-2xl border border-border/70 bg-card p-3">
         <summary className="cursor-pointer text-sm font-semibold">Safety details and reports</summary>
         <div className="mt-3 grid gap-4">
-          {snapshot ? <SafetyStrip status={snapshot.workspaceStatus} /> : null}
-
           {snapshot ? (
-            <CompactActiveLanes
-              projectViews={activeProjects.map(project => viewModelForProject(snapshot, project))}
-              status={snapshot.workspaceStatus}
+            <CompactHermesHealthDashboard
+              activeProjectViews={activeProjects.map(project => viewModelForProject(snapshot, project))}
+              pausedProjects={pausedProjects}
+              snapshot={snapshot}
             />
           ) : null}
 
-          {snapshot ? (
-            <CompactProjectKanban projectViews={activeProjects.map(project => viewModelForProject(snapshot, project))} />
-          ) : null}
+          <CompactKanbanParkedCard />
 
-      {snapshot ? (
-        <CompactReportIngestion
-          form={reportForm}
-          message={reportMessage}
-          onChange={updateReportField}
-          onSave={() => void saveManualReport()}
-          projects={realProjects}
-          saving={savingReport}
-        />
-      ) : null}
+          {snapshot ? (
+            <details className="rounded-2xl border border-border/70 bg-background p-3">
+              <summary className="cursor-pointer text-sm font-semibold">Advanced diagnostic records</summary>
+              <div className="mt-3 grid gap-3">
+                <SafetyStrip status={snapshot.workspaceStatus} />
+
+                <CompactActiveLanes
+                  projectViews={activeProjects.map(project => viewModelForProject(snapshot, project))}
+                  status={snapshot.workspaceStatus}
+                />
+
+                <details className="rounded-2xl border border-border/70 bg-card p-3">
+                  <summary className="cursor-pointer text-sm font-semibold">Manual record repair</summary>
+                  <CompactReportIngestion
+                    form={reportForm}
+                    message={reportMessage}
+                    onChange={updateReportField}
+                    onSave={() => void saveManualReport()}
+                    projects={realProjects}
+                    saving={savingReport}
+                  />
+                </details>
+              </div>
+            </details>
+          ) : null}
 
       <section className="mt-4 grid max-w-full gap-3 overflow-hidden" aria-label="Project report archive">
         {snapshot && realProjects.length !== 5 ? (
@@ -1517,6 +1698,68 @@ function CompactPausedProjectResumeChecklist() {
   );
 }
 
+function CompactLiveActivityRail({
+  bridgeStatus,
+  githubBridgeStatus,
+  roomBusy,
+}: {
+  bridgeStatus: JennyBridgePollerStatus;
+  githubBridgeStatus: GitHubBridgeStatus;
+  roomBusy: boolean;
+}) {
+  const activityItems = jennyActivityItems(githubBridgeStatus);
+  const hasError = Boolean(bridgeStatus.last_error || githubBridgeStatus.last_error);
+  const liveLabel = roomBusy ? "Jenny is working" : hasError ? "Needs attention" : githubBridgeStatus.last_status === "hermes_answer_completed" ? "Last reply complete" : "Standing by";
+
+  return (
+    <aside className="max-w-full overflow-hidden rounded-2xl border border-[#f7efe4]/10 bg-[#1b1422]/80 p-3 shadow-[0_20px_70px_rgba(0,0,0,0.32)]">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782]">Live activity</div>
+          <h2 className="mt-1 text-lg font-semibold text-[#fff8ed]">{liveLabel}</h2>
+        </div>
+        <span
+          className={cn(
+            "mt-1 h-3 w-3 shrink-0 rounded-full",
+            roomBusy ? "bg-blue-400 shadow-[0_0_24px_rgba(96,165,250,0.85)]" : hasError ? "bg-red-400" : "bg-emerald-400",
+          )}
+        />
+      </div>
+
+      <div className="mt-3 grid min-w-0 gap-2 text-xs">
+        <CompactField label="bridge" value={bridgeStatus.last_status || "idle"} />
+        <CompactField label="mailbox" value={githubBridgeStatus.mode || "manual"} />
+        <CompactField label="pending" value={String(githubBridgeStatus.pending_count ?? 0)} />
+        <CompactField label="last response" value={githubBridgeStatus.last_response_request_id || githubBridgeStatus.last_response_at || "none"} />
+      </div>
+
+      <div className="mt-4 border-t border-[#f7efe4]/10 pt-3">
+        <div className="mb-2 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782]">Jenny stream</div>
+        <div className="grid gap-2">
+          {roomBusy ? (
+            <p className="rounded-xl border border-blue-400/30 bg-blue-500/10 p-2 text-xs text-blue-100 [overflow-wrap:anywhere]">
+              Waiting for bridge status. Refresh runs quickly while Jenny is answering.
+            </p>
+          ) : null}
+          {activityItems.length ? (
+            activityItems.map(item => (
+              <article className="rounded-xl border border-[#f7efe4]/10 bg-[#100b15]/80 p-2 text-xs" key={item.status_id ?? `${item.status}:${item.created_at}`}>
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <span className="font-semibold text-[#fff8ed] [overflow-wrap:anywhere]">{jennyActivityLabel(item.status)}</span>
+                  <span className="text-right text-[#a89782] [overflow-wrap:anywhere]">{item.created_at || "time unknown"}</span>
+                </div>
+                <p className="mt-1 leading-relaxed text-[#c9b8a2] [overflow-wrap:anywhere]">{jennyActivityDetail(item)}</p>
+              </article>
+            ))
+          ) : (
+            <p className="rounded-xl border border-dashed border-[#f7efe4]/10 p-2 text-xs text-[#a89782]">No live activity records yet.</p>
+          )}
+        </div>
+      </div>
+    </aside>
+  );
+}
+
 function CompactProjectRoom({
   busy,
   bridgeRequests,
@@ -1596,6 +1839,7 @@ function CompactProjectRoom({
   const deliveryStatus = jennyDeliveryStatus(pendingCount, responseCount, bridgeStatus, githubBridgeStatus);
   const connectionState = jennyConnectionState(pendingCount, responseCount, bridgeStatus, githubBridgeStatus);
   const nextStep = jennyNextStep(pendingCount, responseCount, Boolean(latestPending), bridgeStatus, githubBridgeStatus);
+  const activityItems = jennyActivityItems(githubBridgeStatus);
   const chatMessages = [
     ...visibleBridgeRequests.map(request => ({
       body: request.message,
@@ -1621,25 +1865,27 @@ function CompactProjectRoom({
   ].sort((left, right) => String(left.time ?? "").localeCompare(String(right.time ?? ""))).slice(-8);
 
   return (
-    <section className="mt-4 grid min-w-0 max-w-full gap-3 overflow-x-hidden lg:grid-cols-[minmax(12rem,16rem)_1fr]" aria-label="Project chat workspace">
-      <div className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-border/70 bg-card p-3">
-        <div className="flex min-w-0 items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold">Projects</h2>
-          <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{projects.length}</span>
-        </div>
-        <div className="mt-3 grid min-w-0 gap-2">
+    <section
+      className="mt-2 flex h-[calc(100vh-5rem)] min-h-[34rem] min-w-0 max-w-full flex-col overflow-hidden rounded-md border border-[#d4a574]/20 bg-[#15101a] shadow-[0_20px_70px_rgba(0,0,0,0.35)]"
+      aria-label="Project chat workspace"
+    >
+      <div className="border-b border-[#f3ebda]/10 bg-[#1c1622]/90 px-2 py-2">
+        <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1">
+          <span className="sr-only">Local studio</span>
+          <span className="shrink-0 text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-[#a59783]">Projects</span>
+          <span className="sr-only">{projects.length} projects</span>
           {projects.map(project => (
             <button
               className={cn(
-                "min-w-0 rounded-xl border px-3 py-2 text-left text-sm transition hover:bg-muted",
-                project.project_id === selectedProjectView.project.project_id ? "border-emerald-500/40 bg-emerald-500/10" : "border-border/70 bg-background",
+                "shrink-0 rounded-full border px-3 py-1.5 text-left text-xs transition hover:border-[#d4a574]/30 hover:bg-[#251d2c]/70",
+                project.project_id === selectedProjectView.project.project_id ? "border-[#d4a574]/50 bg-[#2e2436]/80" : "border-[#f3ebda]/10 bg-transparent",
               )}
               key={project.project_id}
               onClick={() => onSelectProject(project.project_id)}
               type="button"
             >
-              <span className="block max-w-full font-semibold [overflow-wrap:anywhere]">{project.name}</span>
-              <span className="mt-0.5 block max-w-full text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">
+              <span className="font-semibold text-[#f3ebda]">{project.name}</span>
+              <span className="sr-only">
                 {project.project_id === HERMES_PROJECT_ID ? "Active recovery lane" : "Paused until Jenny is stable"}
               </span>
             </button>
@@ -1647,11 +1893,12 @@ function CompactProjectRoom({
         </div>
       </div>
 
-      <article className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-border/70 bg-card p-3" data-testid="compact-project-room">
-        <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Chat room</p>
-            <h2 className="mt-1 max-w-full text-lg font-semibold leading-tight [overflow-wrap:anywhere]">{selectedProjectView.project.name}</h2>
+      <article className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden p-2" data-testid="compact-project-room">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-[#f3ebda]/10 pb-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="sr-only">IV. — Jenny workspace</span>
+            <h2 className="max-w-full truncate text-lg font-semibold leading-tight text-[#f3ebda]">{selectedProjectView.project.name}</h2>
+            <span className="hidden max-w-[30rem] truncate text-xs text-[#a59783] md:inline">{compactText(selectedProjectView.currentGoal, 120)}</span>
           </div>
           <div className="flex flex-wrap justify-end gap-2">
             <span className={cn("rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold", jennyStatusToneClass(connectionState.tone))}>
@@ -1668,55 +1915,79 @@ function CompactProjectRoom({
           </div>
         </div>
 
-        <div className="mt-3 max-w-full overflow-hidden rounded-2xl border border-border/70 bg-background p-3 text-sm">
-          <div className="grid min-w-0 gap-2">
-            <div>
-              <span className="font-semibold">Goal: </span>
-              <span className="text-muted-foreground [overflow-wrap:anywhere]">{compactText(selectedProjectView.currentGoal, 180)}</span>
+        <details className="mt-1 max-w-full overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#1c1622]/50 px-3 py-1.5 text-xs">
+          <summary className="cursor-pointer font-semibold text-muted-foreground">
+            Room status
+            <span className="sr-only">Next step</span>
+          </summary>
+            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="font-semibold text-[#f3ebda]">Goal</span>
+              <span className="min-w-0 flex-1 truncate text-[#a59783]">{compactText(selectedProjectView.currentGoal, 180)}</span>
+              <span className="font-semibold text-[#f3ebda]">Jenny:</span>
+              <span className="text-[#a59783] [overflow-wrap:anywhere]">{deliveryStatus}. {connectionState.detail}</span>
+              <span className="rounded-full border border-[#f3ebda]/10 bg-[#15101a]/60 px-2 py-0.5 text-[#a59783]">Pending {pendingCount}</span>
+              <span className="rounded-full border border-[#f3ebda]/10 bg-[#15101a]/60 px-2 py-0.5 text-[#a59783]">Replies {responseCount}</span>
             </div>
-            <div>
-              <span className="font-semibold">Jenny: </span>
-              <span className="text-muted-foreground [overflow-wrap:anywhere]">{deliveryStatus}. {connectionState.detail}</span>
-            </div>
-          </div>
-          <div className="mt-3 max-w-full overflow-hidden rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
-            <div className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Next step</div>
-            <p className="mt-1 max-w-full text-sm [overflow-wrap:anywhere]">
+            <p className="mt-2 max-w-full text-sm text-[#f3ebda] [overflow-wrap:anywhere]">
               {paused ? "Paused until Jenny is stable. Review context only; sending work to Jenny is disabled for this project." : nextStep}
             </p>
-            <div className="mt-2 flex flex-wrap gap-2 text-[0.68rem] text-muted-foreground">
-              <span className="rounded-full border border-border/70 px-2 py-0.5">Pending {pendingCount}</span>
-              <span className="rounded-full border border-border/70 px-2 py-0.5">Replies {responseCount}</span>
-            </div>
-          </div>
-          <details className="mt-2">
-            <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">Project context</summary>
             <div className="mt-2 grid gap-2 text-xs">
               <CompactField label="readiness" value={selectedProjectView.readinessDetail} />
               <CompactField label="last update" value={compactText(selectedProjectView.latestReport, 220)} />
               <CompactField label="report contract" value={selectedProjectView.reportContract} />
             </div>
-          </details>
-        </div>
+        </details>
 
-        <section className="mt-4 min-w-0 max-w-full overflow-hidden rounded-2xl border border-border/70 bg-background p-3" aria-label="Project chat transcript">
+        <details className="mt-2 min-w-0 max-w-full overflow-hidden rounded-md border border-[#60a5fa]/25 bg-[#60a5fa]/10 px-3 py-2" aria-label="Jenny activity">
+          <summary className="cursor-pointer text-sm font-semibold text-[#f3ebda]">Jenny activity</summary>
           <div className="flex min-w-0 items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">Conversation</h3>
-            <span className="text-right text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
+            <h3 className="sr-only">Jenny activity</h3>
+            <span className="text-right text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere]">
+              {busy ? "refreshing every 2.5s" : "recent bridge status"}
+            </span>
           </div>
-          <div className="mt-3 grid min-h-72 max-h-96 min-w-0 gap-3 overflow-y-auto overflow-x-hidden pr-1">
+          <div className="mt-2 grid min-w-0 gap-2">
+            {busy ? (
+              <p className="rounded-xl border border-[#60a5fa]/20 bg-[#15101a]/70 p-2 text-xs text-[#93c5fd] [overflow-wrap:anywhere]">
+                Jenny reply is running. Mission Control will show started, completed, or error status here while the guarded request is active.
+              </p>
+            ) : null}
+            {activityItems.length ? (
+              activityItems.map(item => (
+                <article className="rounded-xl border border-[#60a5fa]/20 bg-[#15101a]/70 p-2 text-xs" key={item.status_id ?? `${item.status}:${item.created_at}`}>
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <span className="font-semibold text-[#f3ebda] [overflow-wrap:anywhere]">{jennyActivityLabel(item.status)}</span>
+                    <span className="text-right text-[#a59783] [overflow-wrap:anywhere]">{item.created_at || "time unknown"}</span>
+                  </div>
+                  <p className="mt-1 text-[#a59783] [overflow-wrap:anywhere]">{jennyActivityDetail(item)}</p>
+                </article>
+              ))
+            ) : (
+              <p className="rounded-xl border border-dashed border-[#60a5fa]/20 p-2 text-xs text-[#a59783] [overflow-wrap:anywhere]">
+                No Jenny activity records yet.
+              </p>
+            )}
+          </div>
+        </details>
+
+        <section className="mt-2 flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#251d2c]/70 p-2" aria-label="Project chat transcript">
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-[#f3ebda]">Conversation</h3>
+            <span className="text-right text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere]">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
+          </div>
+          <div className="mt-2 grid min-h-0 min-w-0 flex-1 content-start gap-2 overflow-y-auto overflow-x-hidden pr-1">
             {chatMessages.length ? (
               chatMessages.map(chat => (
                 <article
                   className={cn(
-                    "min-w-0 max-w-full rounded-2xl border px-3 py-2 text-sm [overflow-wrap:anywhere] sm:max-w-[88%]",
-                    chat.speaker === "You" ? "justify-self-end border-emerald-500/30 bg-emerald-500/10" : "justify-self-start border-border/70 bg-card",
+                    "min-w-0 max-w-full rounded-lg border px-3 py-2 text-sm [overflow-wrap:anywhere] sm:max-w-[88%]",
+                    chat.speaker === "You" ? "justify-self-end border-[#5ab896]/30 bg-[#5ab896]/10 text-[#f3ebda]" : "justify-self-start border-[#f3ebda]/10 bg-[#1c1622]/90 text-[#f3ebda]",
                   )}
                   key={`${chat.speaker}:${chat.id}`}
                 >
                   <div className="mb-1 flex min-w-0 items-center justify-between gap-3 text-[0.68rem]">
                     <span className="font-semibold">{chat.speaker}</span>
-                    <span className="min-w-0 text-right text-muted-foreground [overflow-wrap:anywhere]">{chat.meta}</span>
+                    <span className="min-w-0 text-right text-[#a59783] [overflow-wrap:anywhere]">{chat.meta}</span>
                   </div>
                   <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                     {chat.speaker === "You" ? projectRequestPreview(chat.body, 750) : compactText(chat.body, 750)}
@@ -1724,46 +1995,49 @@ function CompactProjectRoom({
                 </article>
               ))
             ) : (
-              <p className="rounded-xl border border-dashed border-border/70 p-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+              <p className="rounded-xl border border-dashed border-[#f3ebda]/10 p-3 text-sm text-[#a59783] [overflow-wrap:anywhere]">
                 Ask Jenny a bounded question or give her one safe next task below.
               </p>
             )}
           </div>
         </section>
 
-        <label className="mt-4 grid gap-1 text-sm font-medium">
-          Message Jenny
-          <textarea
-            className="min-h-24 max-w-full rounded-xl border border-border/80 bg-background px-3 py-2 text-sm"
-            disabled={paused}
-            onChange={event => onRequestChange(event.target.value)}
-            placeholder={paused ? "This project is on hold until Jenny is stable." : "Tell Jenny what you want to discuss or ask her to do next..."}
-            value={projectRequest}
-          />
-        </label>
+        <div className="mt-3 border-t border-[#f3ebda]/10 pt-3">
+          <label className="grid gap-1 text-sm font-medium">
+            Message Jenny
+            <textarea
+              className="min-h-16 max-w-full rounded-md border border-[#f3ebda]/10 bg-[#15101a] px-3 py-2 text-sm text-[#f3ebda] outline-none transition placeholder:text-[#6e6353] focus:border-[#d4a574]/50"
+              disabled={paused}
+              onChange={event => onRequestChange(event.target.value)}
+              placeholder={paused ? "This project is on hold until Jenny is stable." : "Tell Jenny what you want to discuss or ask her to do next..."}
+              value={projectRequest}
+            />
+          </label>
 
-        <div className="mt-3 flex min-w-0 flex-wrap gap-2">
-          <button className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={busy || paused} onClick={onQueueBridge} type="button">
-            Send to Jenny
-          </button>
-          <button
-            className="rounded-xl border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/15 disabled:opacity-60 dark:text-sky-300"
-            disabled={busy || paused || !latestPending}
-            onClick={onRunJennyOnce}
-            type="button"
-          >
-            Get Jenny reply
-          </button>
-          <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onRefreshBridge} type="button">
-            Refresh replies
-          </button>
+          <div className="mt-2 flex min-w-0 flex-wrap gap-2">
+            <button className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={busy || paused} onClick={onQueueBridge} type="button">
+              Send to Jenny
+            </button>
+            <button
+              className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/15 disabled:opacity-60 dark:text-sky-300"
+              disabled={busy || paused || !latestPending}
+              onClick={onRunJennyOnce}
+              type="button"
+            >
+              Get Jenny reply
+            </button>
+            <button className="rounded-lg border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onRefreshBridge} type="button">
+              Refresh replies
+            </button>
+          </div>
+          <p className="mt-2 max-w-full text-xs text-muted-foreground [overflow-wrap:anywhere]">
+            {paused
+              ? "This project is visible for planning context only. Resume it after the Mission Control/Jenny recovery lane is stable."
+              : "Live reply refresh is on and read-only. Jenny can reply through the bridge; work still waits for the normal approval gates."}
+          </p>
+          {paused ? <CompactPausedProjectResumeChecklist /> : null}
         </div>
-        <p className="mt-2 max-w-full text-xs text-muted-foreground [overflow-wrap:anywhere]">
-          {paused
-            ? "This project is visible for planning context only. Resume it after the Mission Control/Jenny recovery lane is stable."
-            : "Live reply refresh is on and read-only. Jenny can reply through the bridge; work still waits for the normal approval gates."}
-        </p>
-        {paused ? <CompactPausedProjectResumeChecklist /> : null}
+
         {onQueueHermesUpdate ? (
           <button className="mt-2 rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300" disabled={busy} onClick={onQueueHermesUpdate} type="button">
             Start Hermes update lane
@@ -1776,9 +2050,10 @@ function CompactProjectRoom({
         ) : null}
         {message ? <p className="mt-2 max-w-full text-xs text-muted-foreground [overflow-wrap:anywhere]">{message}</p> : null}
 
-        <section className="mt-4 max-w-full overflow-hidden rounded-xl border border-border/70 bg-background p-3">
+        <details className="mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background p-3">
+          <summary className="cursor-pointer text-sm font-semibold">Previous sessions</summary>
           <div className="flex min-w-0 items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">Previous sessions</h3>
+            <h3 className="sr-only">Previous sessions</h3>
             <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{sessions.length} linked</span>
           </div>
           <div className="mt-2 grid min-w-0 gap-2">
@@ -1810,9 +2085,9 @@ function CompactProjectRoom({
               <p className="text-xs text-muted-foreground">No linked sessions for this project yet.</p>
             )}
           </div>
-        </section>
+        </details>
 
-        <details className="mt-4 max-w-full overflow-hidden rounded-xl border border-border/70 bg-background/60 p-3">
+        <details className="mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/60 p-3">
           <summary className="cursor-pointer text-sm font-semibold">Safety and maintenance</summary>
           <section className="mt-3 max-w-full overflow-hidden rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
             <div className="flex min-w-0 items-center justify-between gap-2">
@@ -1828,7 +2103,8 @@ function CompactProjectRoom({
                     <div className="font-semibold [overflow-wrap:anywhere]">{profile.profile ?? "profile"}</div>
                     <div className="mt-1 text-muted-foreground [overflow-wrap:anywhere]">Memory: {formatBytes(profile.memory?.bytes)} / {profile.memory?.chars ?? 0} chars / {profile.memory?.percent_used ?? 0}%</div>
                     <div className="text-muted-foreground [overflow-wrap:anywhere]">User: {formatBytes(profile.user?.bytes)} / {profile.user?.chars ?? 0} chars / {profile.user?.percent_used ?? 0}%</div>
-                    {profile.memory?.error || profile.user?.error ? <div className="mt-1 text-destructive [overflow-wrap:anywhere]">Read issue: {profile.memory?.error || profile.user?.error}</div> : null}
+                    <div className="text-muted-foreground [overflow-wrap:anywhere]">Mount: {profile.mount?.path ?? "unknown"} / {formatBytes(profile.mount?.used_bytes)} used of {formatBytes(profile.mount?.total_bytes)} / {formatPercent(profile.mount?.percent_used)}</div>
+                    {profile.memory?.error || profile.user?.error || profile.mount?.error ? <div className="mt-1 text-destructive [overflow-wrap:anywhere]">Read issue: {profile.memory?.error || profile.user?.error || profile.mount?.error}</div> : null}
                   </article>
                 ))
               ) : (
@@ -1932,7 +2208,7 @@ function CompactBridgeList<T>({
   );
 }
 
-function CompactProjectKanban({ projectViews }: { projectViews: ProjectViewModel[] }) {
+export function CompactProjectKanban({ projectViews }: { projectViews: ProjectViewModel[] }) {
   return (
     <section className="mt-4 max-w-full overflow-hidden rounded-2xl border border-border/70 bg-card p-3" aria-label="Project Kanban">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
@@ -1996,9 +2272,9 @@ function CompactReportIngestion({
   saving: boolean;
 }) {
   return (
-    <section className="mt-4 max-w-full overflow-hidden rounded-2xl border border-border/70 bg-card p-3" aria-label="Manual Jenny report ingestion compact">
-      <h2 className="text-sm font-semibold">Save Jenny report manually</h2>
-      <p className="mt-1 text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">Append-only reports/create only. Guarded mailbox is separate; this report form does not dispatch or route queues.</p>
+    <section className="mt-3 max-w-full overflow-hidden rounded-2xl border border-border/70 bg-card p-3" aria-label="Manual record repair compact">
+      <h2 className="text-sm font-semibold">Save a missing Jenny report</h2>
+      <p className="mt-1 text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">Repair tool for when Jenny gave a useful report but Mission Control did not capture it automatically. Not needed for normal chat.</p>
       <label className="mt-3 grid gap-1 text-xs font-medium">
         Project
         <select className="rounded-xl border border-border/80 bg-background px-3 py-2 text-sm" onChange={event => onChange("projectId", event.target.value)} value={form.projectId}>
@@ -2017,7 +2293,7 @@ function CompactReportIngestion({
       <CompactReportInput label="Changed files/evidence - one per line" onChange={value => onChange("changedFiles", value)} value={form.changedFiles} />
       <CompactReportInput label="Next recommended lane" onChange={value => onChange("nextRecommendedLane", value)} value={form.nextRecommendedLane} />
       <button className="mt-3 w-full rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onSave} type="button">
-        {saving ? "Saving report..." : "Save Jenny report manually"}
+        {saving ? "Saving report..." : "Save missing report"}
       </button>
       {message ? <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">{message}</p> : null}
     </section>
@@ -2052,6 +2328,225 @@ function SafetyStrip({ status }: { status: WorkspaceStatus }) {
       <SafetyPill label="Desktop app" good={false} value="separate worker-node update" />
     </section>
   );
+}
+
+type CompactHealthTone = "bad" | "good" | "idle" | "warn";
+
+function CompactHermesHealthDashboard({
+  activeProjectViews,
+  pausedProjects,
+  snapshot,
+}: {
+  activeProjectViews: ProjectViewModel[];
+  pausedProjects: ProjectRecord[];
+  snapshot: CompactSnapshot;
+}) {
+  const status = snapshot.workspaceStatus;
+  const guard = status.runtime_worktree_guard?.decision_state ?? "unknown";
+  const dispatch = status.safety?.dispatch_in_gateway;
+  const activeLaneCount = status.lane?.active_lane_count ?? 0;
+  const staleWarnings = status.stale_context?.warnings ?? [];
+  const bridgeError = snapshot.githubBridgeStatus.last_error || snapshot.jennyBridgePollerStatus.last_error || "";
+  const bridgePending = snapshot.githubBridgeStatus.pending_count ?? snapshot.jennyBridgePollerStatus.pending_count ?? 0;
+  const bridgeWatching = snapshot.githubBridgeStatus.foreground_watch_running === true;
+  const memoryErrors = snapshot.memoryStorage.errors ?? [];
+  const reportCount = activeProjectViews.filter(projectView => projectView.projectState?.has_real_report || projectView.report).length;
+  const deployedHead = status.deployment_gap?.deployed_head ?? status.accepted_baseline?.head ?? "unknown";
+  const issues = [
+    bridgeError ? `Jenny bridge error: ${bridgeError}` : "",
+    guard !== "pass" ? `Runtime guard is ${guard}` : "",
+    dispatch !== false ? "Dispatch safety is not confirmed off" : "",
+    activeLaneCount > 1 ? `${activeLaneCount} active lanes recorded` : "",
+    status.deployment_gap?.dashboard_deploy_needed ? "Phone/web dashboard needs a dashboard-only update" : "",
+    staleWarnings.length ? `Stale context: ${staleWarnings.join(", ")}` : "",
+    memoryErrors.length ? `${memoryErrors.length} memory storage warning${memoryErrors.length === 1 ? "" : "s"}` : "",
+  ].filter(Boolean);
+  const overallTone: CompactHealthTone = issues.length ? "warn" : "good";
+  const bridgeTone: CompactHealthTone = bridgeError ? "bad" : bridgePending ? "warn" : "good";
+  const safetyOk = guard === "pass" && dispatch === false && activeLaneCount <= 1 && staleWarnings.length === 0;
+  const maxMountPercent = Math.max(0, ...(snapshot.memoryStorage.profiles ?? []).map(profile => profile.mount?.percent_used ?? 0));
+
+  return (
+    <section className="max-w-full overflow-hidden rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-3" aria-label="Hermes health dashboard">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold">Hermes health dashboard</h2>
+          <p className="mt-1 text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">Jenny, phone/web, safety locks, project coverage, and parked tools.</p>
+        </div>
+        <CompactHealthBadge tone={overallTone}>{issues.length ? "Needs attention" : "Healthy"}</CompactHealthBadge>
+      </div>
+
+      <div className="mt-3 grid min-w-0 gap-2">
+        <CompactHealthTile
+          detail={issues.length ? issues[0] : "No blocking Mission Control health issue is currently recorded."}
+          label="Overall"
+          tone={overallTone}
+          value={issues.length ? `${issues.length} item${issues.length === 1 ? "" : "s"}` : "Ready"}
+        />
+        <CompactHealthTile
+          detail={bridgeError || (bridgeWatching ? "Live reply refresh is watching for Jenny." : bridgePending ? "A message is waiting for Jenny." : "No bridge error is recorded.")}
+          label="Jenny bridge"
+          tone={bridgeTone}
+          value={bridgeError ? "Error" : bridgePending ? `${bridgePending} pending` : "Ready"}
+        />
+        <CompactHealthTile
+          detail={status.deployment_gap?.dashboard_deploy_needed ? "Desktop may be current while phone/web waits for the dashboard bundle." : `Served head ${deployedHead.slice(0, 8)}.`}
+          label="Phone and web"
+          tone={status.deployment_gap?.dashboard_deploy_needed ? "warn" : "good"}
+          value={status.deployment_gap?.dashboard_deploy_needed ? "Update waiting" : "Current"}
+        />
+        <CompactHealthTile
+          detail={`Guard=${guard}; dispatch=${dispatch === false ? "false" : "unknown"}; active lanes=${activeLaneCount}.`}
+          label="Safety locks"
+          tone={safetyOk ? "good" : "warn"}
+          value={safetyOk ? "Holding" : "Check"}
+        />
+        <CompactHealthTile
+          detail={`${reportCount} active project${reportCount === 1 ? "" : "s"} have live report evidence. ${pausedProjects.length} projects remain intentionally on hold.`}
+          label="Project rooms"
+          tone={activeProjectViews.length === 1 && pausedProjects.length === 4 ? "good" : "warn"}
+          value={`${activeProjectViews.length} active / ${pausedProjects.length} paused`}
+        />
+        <CompactHealthTile
+          detail={`${snapshot.memoryStorage.profile_count ?? snapshot.memoryStorage.profiles?.length ?? 0} profiles. Highest mount usage ${formatPercent(maxMountPercent)}. ${memoryErrors.length ? memoryErrors[0]?.error ?? "Storage warning recorded." : "No memory storage errors recorded."}`}
+          label="Memory"
+          tone={memoryErrors.length ? "warn" : "good"}
+          value={formatBytes(snapshot.memoryStorage.total_bytes)}
+        />
+      </div>
+
+      <CompactProfileStorageList memoryStorage={snapshot.memoryStorage} />
+
+      <section className="mt-3 max-w-full overflow-hidden rounded-xl border border-border/70 bg-background p-2">
+        <h3 className="text-xs font-semibold">Needs attention</h3>
+        {issues.length ? (
+          <ul className="mt-2 grid gap-1 text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">
+            {issues.map(issue => <li key={issue}>{issue}</li>)}
+          </ul>
+        ) : (
+          <p className="mt-2 text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">Nothing urgent is recorded. Keep Hermes / Mission Control as the only active lane.</p>
+        )}
+      </section>
+      <section className="mt-3 max-w-full overflow-hidden rounded-xl border border-border/70 bg-background p-2">
+        <h3 className="text-xs font-semibold">Safe next actions</h3>
+        <ul className="mt-2 grid gap-1 text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">
+          <li>Review Jenny's latest reply before sending the next bounded message.</li>
+          <li>Keep paused projects on hold until you explicitly resume them.</li>
+          <li>Use Kanban later after the real task board is reliable.</li>
+        </ul>
+      </section>
+    </section>
+  );
+}
+
+function CompactProfileStorageList({ memoryStorage }: { memoryStorage: ProfileMemoryStorage }) {
+  const profiles = memoryStorage.profiles ?? [];
+  return (
+    <section className="mt-3 max-w-full overflow-hidden rounded-xl border border-border/70 bg-background p-2" aria-label="Profile storage usage">
+      <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-xs font-semibold">Profile storage usage</h3>
+        <span className="text-[0.65rem] text-muted-foreground">{profiles.length} profiles / {formatBytes(memoryStorage.total_profile_data_bytes ?? memoryStorage.total_bytes)}</span>
+      </div>
+      {profiles.length ? (
+        <div className="mt-2 grid gap-2">
+          {profiles.map(profile => (
+            <article key={`${profile.profile ?? "profile"}-${profile.home ?? ""}`} className="rounded-lg border border-border/60 bg-muted/20 p-2">
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <div className="min-w-0 truncate text-[0.72rem] font-semibold">{profile.profile ?? "default"}</div>
+                <div className="shrink-0 text-[0.68rem] text-muted-foreground">mount {formatPercent(profile.mount?.percent_used)}</div>
+              </div>
+              <div className="mt-1 grid grid-cols-2 gap-1 text-[0.65rem] text-muted-foreground">
+                <div>Profile data: {formatBytes(profile.data?.bytes ?? profile.total_bytes)}</div>
+                <div>State DB: {formatBytes(profile.data?.components?.state?.bytes)}</div>
+                <div>Sessions: {formatBytes(profile.data?.components?.sessions?.bytes)}</div>
+                <div>Recall files: {formatBytes(profile.recall_file_bytes ?? ((profile.memory?.bytes ?? 0) + (profile.user?.bytes ?? 0)))}</div>
+                <div>Mount used: {formatBytes(profile.mount?.used_bytes)}</div>
+                <div>Mount max: {formatBytes(profile.mount?.total_bytes)}</div>
+              </div>
+              <div className="mt-1 truncate text-[0.62rem] text-muted-foreground" title={profile.mount?.path ?? profile.home ?? ""}>
+                {profile.mount?.path ?? "unknown mount"}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 text-[0.68rem] text-muted-foreground">No profile storage records are available yet.</p>
+      )}
+    </section>
+  );
+}
+
+function CompactKanbanParkedCard() {
+  return (
+    <section className="max-w-full overflow-hidden rounded-2xl border border-amber-500/25 bg-amber-500/10 p-3" aria-label="Kanban parked">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold">Kanban parked for later</h2>
+          <p className="mt-1 text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">The task board is hidden until it can show real tasks and reliable controls.</p>
+        </div>
+        <CompactHealthBadge tone="idle">Later</CompactHealthBadge>
+      </div>
+    </section>
+  );
+}
+
+function CompactHealthBadge({ children, tone }: { children: string; tone: CompactHealthTone }) {
+  return (
+    <span className={cn("rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold", compactHealthToneClass(tone))}>
+      {children}
+    </span>
+  );
+}
+
+function CompactHealthTile({
+  detail,
+  label,
+  tone,
+  value,
+}: {
+  detail: string;
+  label: string;
+  tone: CompactHealthTone;
+  value: string;
+}) {
+  return (
+    <article className="max-w-full overflow-hidden rounded-xl border border-border/70 bg-background p-2">
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[0.65rem] font-medium uppercase text-muted-foreground [overflow-wrap:anywhere]">{label}</div>
+          <div className="mt-1 text-xs font-semibold [overflow-wrap:anywhere]">{value}</div>
+        </div>
+        <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", compactHealthDotClass(tone))} aria-hidden="true" />
+      </div>
+      <p className="mt-2 text-[0.68rem] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{detail}</p>
+    </article>
+  );
+}
+
+function compactHealthToneClass(tone: CompactHealthTone): string {
+  if (tone === "bad") {
+    return "border-destructive/40 bg-destructive/10 text-destructive";
+  }
+  if (tone === "good") {
+    return "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+  }
+  if (tone === "warn") {
+    return "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  }
+  return "border-border/70 bg-muted/40 text-muted-foreground";
+}
+
+function compactHealthDotClass(tone: CompactHealthTone): string {
+  if (tone === "bad") {
+    return "bg-destructive";
+  }
+  if (tone === "good") {
+    return "bg-emerald-500";
+  }
+  if (tone === "warn") {
+    return "bg-amber-500";
+  }
+  return "bg-muted-foreground";
 }
 
 function dashboardUpdateNotice(status: WorkspaceStatus): string {

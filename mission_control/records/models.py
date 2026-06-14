@@ -792,7 +792,7 @@ class GitHubBridgeMessageRecord:
     to_agent: str
     status: str
     message: str
-    created_at: str
+    created_at: str = ""
     github_repo: str = ""
     github_issue_number: int = 0
     github_comment_id: str = ""

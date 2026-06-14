@@ -786,20 +786,16 @@ diagnostic recipe in `references/execute-code-sandbox-env-windows.md`.
 
 ### Testing / Contributing
 
-**`scripts/run_tests.sh` doesn't work as-is on Windows** — it looks for
-POSIX venv layouts (`.venv/bin/activate`). The Hermes-installed venv at
-`venv/Scripts/` has no pip or pytest either (stripped for install size).
-Workaround: install `pytest + pytest-xdist + pyyaml` into a system Python
-3.11 user site, then invoke pytest directly with `PYTHONPATH` set:
+**Windows test runner.** Use the native PowerShell wrapper so Hermes can find
+`.venv/Scripts/python.exe`, use repo-local temp/cache directories, and keep the
+same per-file subprocess isolation as CI:
 
-```bash
-"/c/Program Files/Python311/python" -m pip install --user pytest pytest-xdist pyyaml
-export PYTHONPATH="$(pwd)"
-"/c/Program Files/Python311/python" -m pytest tests/foo/test_bar.py -v --tb=short -n 0
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_tests.ps1 tests/foo/test_bar.py -- -q
 ```
 
-Use `-n 0`, not `-n 4` — `pyproject.toml`'s default `addopts` already
-includes `-n`, and the wrapper's CI-parity guarantees don't apply off POSIX.
+Use `scripts/run_tests.sh` from POSIX shells and `scripts/run_tests.ps1` from
+native Windows. Avoid direct `pytest` unless you are debugging a single failure.
 
 **POSIX-only tests need skip guards.** Common markers already in the codebase:
 - Symlinks — elevated privileges on Windows
@@ -990,14 +986,15 @@ python -m pytest tests/tools/ -q            # Specific area
 - Run full suite before pushing any change
 - Use `-o 'addopts='` to clear any baked-in pytest flags
 
-**Windows contributors:** `scripts/run_tests.sh` currently looks for POSIX venvs (`.venv/bin/activate` / `venv/bin/activate`) and will error out on Windows where the layout is `venv/Scripts/activate` + `python.exe`. The Hermes-installed venv at `venv/Scripts/` also has no `pip` or `pytest` — it's stripped for end-user install size. Workaround: install pytest + pytest-xdist + pyyaml into a system Python 3.11 user site (`/c/Program Files/Python311/python -m pip install --user pytest pytest-xdist pyyaml`), then run tests directly:
+**Windows contributors:** use the native wrapper. It finds `.venv\Scripts\python.exe`,
+sets repo-local temp/cache directories, strips credential-shaped env vars, and
+runs the same per-file subprocess runner used by the POSIX wrapper:
 
-```bash
-export PYTHONPATH="$(pwd)"
-"/c/Program Files/Python311/python" -m pytest tests/tools/test_foo.py -v --tb=short -n 0
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_tests.ps1 tests/tools/test_foo.py -- -q
 ```
 
-Use `-n 0` (not `-n 4`) because `pyproject.toml`'s default `addopts` already includes `-n`, and the wrapper's CI-parity story doesn't apply off-POSIX.
+Use `scripts/run_tests.sh` from POSIX shells and `scripts/run_tests.ps1` from native Windows.
 
 **Cross-platform test guards:** tests that use POSIX-only syscalls need a skip marker. Common ones already in the codebase:
 - Symlink creation → `@pytest.mark.skipif(sys.platform == "win32", reason="Symlinks require elevated privileges on Windows")` (see `tests/cron/test_cron_script.py`)
