@@ -9,6 +9,7 @@ const DESKTOP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const PACKAGE_JSON = JSON.parse(fs.readFileSync(path.join(DESKTOP_ROOT, 'package.json'), 'utf8'))
 const MODE = process.argv[2] || 'help'
 const ARCH = process.arch === 'arm64' ? 'arm64' : 'x64'
+const HAS_EXPLICIT_RELEASE_ROOT = Boolean(process.env.HERMES_DESKTOP_RELEASE_ROOT)
 const RELEASE_ROOT = process.env.HERMES_DESKTOP_RELEASE_ROOT
   ? path.resolve(process.env.HERMES_DESKTOP_RELEASE_ROOT)
   : path.join(DESKTOP_ROOT, 'release')
@@ -161,7 +162,7 @@ function ensurePlatformBuilds() {
 }
 
 function ensurePackagedApp() {
-  if (process.env.HERMES_DESKTOP_SKIP_BUILD === '1' && exists(APP.binary)) {
+  if ((process.env.HERMES_DESKTOP_SKIP_BUILD === '1' || HAS_EXPLICIT_RELEASE_ROOT) && exists(APP.binary)) {
     return
   }
 
@@ -448,7 +449,10 @@ Fast rerun (skip rebuild if the packaged app already exists):
   HERMES_DESKTOP_SKIP_BUILD=1 npm run test:desktop:fresh
 
 Validate an alternate package output directory:
-  HERMES_DESKTOP_RELEASE_ROOT=release-bridge HERMES_DESKTOP_SKIP_BUILD=1 npm run test:desktop -- validate
+  HERMES_DESKTOP_RELEASE_ROOT=release-bridge npm run test:desktop -- validate
+
+When HERMES_DESKTOP_RELEASE_ROOT points at an existing packaged app, validate
+inspects that package in place instead of rebuilding into the default release/.
 `)
 }
 
