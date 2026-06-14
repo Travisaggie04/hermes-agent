@@ -489,6 +489,16 @@ function isDiagnosticChatMessage(message?: string): boolean {
   ].some(marker => text.includes(marker));
 }
 
+function isOperatorBridgeMessage(message: GitHubBridgeMessageRecord): boolean {
+  const fromAgent = message.from_agent?.toLowerCase() ?? "";
+  const requestId = message.request_id?.toLowerCase() ?? "";
+  const text = message.message?.toLowerCase() ?? "";
+  return fromAgent === "codex" ||
+    requestId.startsWith("codex-") ||
+    text.includes("bounded dashboard-only deploy check") ||
+    text.includes("review pr #");
+}
+
 function bridgeRequestId(): string {
   const fallback = Math.random().toString(16).slice(2, 14);
   return `mission-control-chat-${globalThis.crypto?.randomUUID?.() ?? fallback}`;
@@ -1531,7 +1541,7 @@ function CompactProjectRoom({
   const brief = selectedProjectView.projectBrief;
   const visibleBridgeRequests = bridgeRequests.filter(request => !isDiagnosticChatMessage(request.message));
   const visibleBridgeResponses = bridgeResponses.filter(response => !isDiagnosticChatMessage(response.message));
-  const visibleGitHubBridgeMessages = githubBridgeMessages.filter(message => !isDiagnosticChatMessage(message.message));
+  const visibleGitHubBridgeMessages = githubBridgeMessages.filter(message => !isDiagnosticChatMessage(message.message) && !isOperatorBridgeMessage(message));
   const repliedRequestIds = new Set(visibleBridgeResponses.map(response => response.request_id).filter(Boolean));
   const githubResponseIds = new Set(
     visibleGitHubBridgeMessages
