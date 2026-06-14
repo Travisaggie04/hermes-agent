@@ -9,6 +9,7 @@ const getMissionControlChallengeReviews = vi.fn()
 const getMissionControlJennyBridgeInbox = vi.fn()
 const getMissionControlJennyBridgeOutbox = vi.fn()
 const getMissionControlJennyBridgePollerStatus = vi.fn()
+const getMissionControlJennyReplyReviews = vi.fn()
 const getMissionControlGitHubBridgeStatus = vi.fn()
 const getMissionControlLaneRequests = vi.fn()
 const getMissionControlProfileMemoryStorage = vi.fn()
@@ -17,6 +18,7 @@ const getMissionControlProjectState = vi.fn()
 const getMissionControlProjectSessions = vi.fn()
 const createMissionControlChallengeReview = vi.fn()
 const createMissionControlGitHubBridgeRequest = vi.fn()
+const createMissionControlJennyReplyReview = vi.fn()
 const answerMissionControlGitHubBridgeOnce = vi.fn()
 const createMissionControlJennyBridgeRequest = vi.fn()
 const createMissionControlLaneRequest = vi.fn()
@@ -27,6 +29,7 @@ vi.mock('@/hermes', () => ({
   answerMissionControlGitHubBridgeOnce: (payload: unknown) => answerMissionControlGitHubBridgeOnce(payload),
   createMissionControlChallengeReview: (payload: unknown) => createMissionControlChallengeReview(payload),
   createMissionControlGitHubBridgeRequest: (payload: unknown) => createMissionControlGitHubBridgeRequest(payload),
+  createMissionControlJennyReplyReview: (payload: unknown) => createMissionControlJennyReplyReview(payload),
   createMissionControlJennyBridgeRequest: (payload: unknown) => createMissionControlJennyBridgeRequest(payload),
   createMissionControlLaneRequest: (payload: unknown) => createMissionControlLaneRequest(payload),
   createMissionControlReport: (payload: unknown) => createMissionControlReport(payload),
@@ -35,6 +38,7 @@ vi.mock('@/hermes', () => ({
   getMissionControlJennyBridgeInbox: () => getMissionControlJennyBridgeInbox(),
   getMissionControlJennyBridgeOutbox: () => getMissionControlJennyBridgeOutbox(),
   getMissionControlJennyBridgePollerStatus: () => getMissionControlJennyBridgePollerStatus(),
+  getMissionControlJennyReplyReviews: () => getMissionControlJennyReplyReviews(),
   getMissionControlGitHubBridgeStatus: () => getMissionControlGitHubBridgeStatus(),
   getMissionControlWorkspaceStatus: () => getMissionControlWorkspaceStatus(),
   getMissionControlProjectBriefs: () => getMissionControlProjectBriefs(),
@@ -154,6 +158,23 @@ beforeEach(() => {
     record_type: 'GitHubBridgeMessageRecord',
     send_to_jenny_enabled: true,
     stored: true
+  })
+  createMissionControlJennyReplyReview.mockResolvedValue({
+    dispatch_enabled: false,
+    manual_start_only: true,
+    record_type: 'JennyReplyReviewRecord',
+    reply_review: {
+      decision: 'needs_evidence',
+      note: 'Reviewed: needs evidence',
+      project_id: 'project-hermes-mission-control',
+      response_id: 'bridge-response-1',
+      review_id: 'reply-review-created',
+      reviewer: 'travis'
+    },
+    send_to_jenny_enabled: false,
+    stored: true,
+    timer_enabled: false,
+    worker_enabled: false
   })
   getMissionControlProfileMemoryStorage.mockResolvedValue({
     display_only: true,
@@ -581,6 +602,29 @@ beforeEach(() => {
     send_to_jenny_enabled: false,
     session_send_enabled: false,
     status_records: [],
+    stored: false,
+    timer_enabled: false,
+    worker_enabled: false
+  })
+  getMissionControlJennyReplyReviews.mockResolvedValue({
+    count: 1,
+    dispatch_enabled: false,
+    manual_start_only: true,
+    reply_reviews: [
+      {
+        record: {
+          created_at: '2026-06-12T15:24:00Z',
+          decision: 'needs_evidence',
+          note: 'Reviewed: needs evidence',
+          project_id: 'project-hermes-mission-control',
+          response_id: 'bridge-response-1',
+          review_id: 'reply-review-1',
+          reviewer: 'travis'
+        },
+        record_type: 'JennyReplyReviewRecord'
+      }
+    ],
+    send_to_jenny_enabled: false,
     stored: false,
     timer_enabled: false,
     worker_enabled: false
@@ -1082,7 +1126,17 @@ describe('MissionControlView', () => {
     expect(screen.getAllByRole('button', { name: 'Draft acceptance note' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'Ask for evidence' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'Challenge plan' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Reviewed: needs evidence').length).toBeGreaterThan(0)
     fireEvent.click(screen.getAllByRole('button', { name: 'Ask for evidence' })[0])
+    await waitFor(() => expect(createMissionControlJennyReplyReview).toHaveBeenCalledTimes(1))
+    expect(createMissionControlJennyReplyReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        decision: 'needs_evidence',
+        project_id: 'project-hermes-mission-control',
+        response_id: 'bridge-response-1',
+        reviewer: 'travis'
+      })
+    )
     expect((composer as HTMLTextAreaElement).value).toContain('needs stronger evidence')
     expect((composer as HTMLTextAreaElement).value).toContain('Do not take action. Report evidence only.')
     expect(createMissionControlGitHubBridgeRequest).not.toHaveBeenCalled()

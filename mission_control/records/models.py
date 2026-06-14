@@ -728,6 +728,51 @@ class JennyBridgeMessageResponseRecord:
 
 
 @dataclass(frozen=True)
+class JennyReplyReviewRecord:
+    review_id: str
+    project_id: str
+    response_id: str
+    decision: str
+    request_id: str = ""
+    reviewer: str = "travis"
+    note: str = ""
+    created_at: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "JennyReplyReviewRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metadata", _dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "review_id": self.review_id,
+            "project_id": self.project_id,
+            "response_id": self.response_id,
+            "request_id": self.request_id,
+            "decision": self.decision,
+            "reviewer": self.reviewer,
+            "note": self.note,
+            "created_at": self.created_at,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> JennyReplyReviewRecord:
+        return cls(
+            review_id=_required(data, "review_id"),
+            project_id=_required(data, "project_id"),
+            response_id=_required(data, "response_id"),
+            request_id=data.get("request_id", ""),
+            decision=_required(data, "decision"),
+            reviewer=data.get("reviewer", "travis"),
+            note=data.get("note", ""),
+            created_at=data.get("created_at", ""),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
 class JennyBridgePollerStatusRecord:
     status_id: str
     poller_id: str = "manual-jenny-bridge-relay"
@@ -2182,6 +2227,7 @@ RECORD_TYPES = {
         JennyBridgeMessageRequestRecord,
         JennyBridgeMessageResponseRecord,
         JennyBridgePollerStatusRecord,
+        JennyReplyReviewRecord,
         ReportRecord,
         RunRecord,
         SessionProjectLinkRecord,

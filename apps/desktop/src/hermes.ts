@@ -244,6 +244,27 @@ export interface MissionControlChallengeReviewCreatePayload {
   suggested_lane_title?: string
 }
 
+export interface MissionControlJennyReplyReviewRecord {
+  created_at?: string
+  decision: 'accepted' | 'needs_evidence' | 'needs_safer_plan' | string
+  metadata?: Record<string, unknown>
+  note?: string
+  project_id: string
+  request_id?: string
+  response_id: string
+  review_id: string
+  reviewer?: string
+}
+
+export interface MissionControlJennyReplyReviewCreatePayload {
+  decision: 'accepted' | 'needs_evidence' | 'needs_safer_plan'
+  note?: string
+  project_id: string
+  request_id?: string
+  response_id: string
+  reviewer?: string
+}
+
 export interface MissionControlReportRecord {
   report_id: string
   project_id: string
@@ -724,6 +745,29 @@ export interface MissionControlChallengeReviewCreateResponse {
   stored?: boolean
 }
 
+export interface MissionControlJennyReplyReviewsResponse {
+  count: number
+  dispatch_enabled?: boolean
+  manual_start_only?: boolean
+  reply_reviews: Array<MissionControlRecordEnvelope<MissionControlJennyReplyReviewRecord>>
+  send_to_jenny_enabled?: boolean
+  stored?: boolean
+  worker_enabled?: boolean
+  timer_enabled?: boolean
+}
+
+export interface MissionControlJennyReplyReviewCreateResponse {
+  dispatch_enabled?: boolean
+  manual_start_only?: boolean
+  record_index?: number
+  record_type?: string
+  reply_review: MissionControlJennyReplyReviewRecord
+  send_to_jenny_enabled?: boolean
+  stored?: boolean
+  worker_enabled?: boolean
+  timer_enabled?: boolean
+}
+
 export interface MissionControlReportsResponse {
   count: number
   dispatch_enabled?: boolean
@@ -802,6 +846,20 @@ export function createMissionControlChallengeReview(
     body: payload,
     method: 'POST',
     path: `${MISSION_CONTROL_API}/workspace/challenge-reviews/create`
+  })
+}
+
+export function getMissionControlJennyReplyReviews(): Promise<MissionControlJennyReplyReviewsResponse> {
+  return window.hermesDesktop.api<MissionControlJennyReplyReviewsResponse>({ path: `${MISSION_CONTROL_API}/workspace/jenny-reply-reviews` })
+}
+
+export function createMissionControlJennyReplyReview(
+  payload: MissionControlJennyReplyReviewCreatePayload
+): Promise<MissionControlJennyReplyReviewCreateResponse> {
+  return window.hermesDesktop.api<MissionControlJennyReplyReviewCreateResponse>({
+    body: payload,
+    method: 'POST',
+    path: `${MISSION_CONTROL_API}/workspace/jenny-reply-reviews/create`
   })
 }
 
