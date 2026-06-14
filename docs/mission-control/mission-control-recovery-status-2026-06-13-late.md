@@ -23,7 +23,7 @@ longer exposes paused-project queue buttons while the recovery lane is active.
 
 Latest accepted-live head after the current recovery UI sequence:
 
-- `f0ce9ca5125c42137fb0ac5f9985369d983d746b`
+- `58853d442654e69014fa4fbc95e3bd837cd87fe6`
 
 ## Completed PRs
 
@@ -46,15 +46,17 @@ Latest accepted-live head after the current recovery UI sequence:
 | #149 | `c98b553c8f0640965dc810c5c2c4df92fc62692f` | Makes compact/phone previous-session cards open the real chat resume route. |
 | #150 | `854a5bbee8769c1c1b51e0eb45da9e1c1516ad91` | Fixes desktop package validation so an explicit `release-bridge` root is validated in place without rebuilding into the default `release` folder. |
 | #151 | `f0ce9ca5125c42137fb0ac5f9985369d983d746b` | Hides additional bridge-smoke diagnostics such as `Bridge works` and `success smoke reached` from normal project chat. |
+| #152 | `8dd5c3e38a85cf535e6475152c582e63245b6855` | Refreshes this recovery status and the Hermes / Mission Control current-state handoff. |
+| #153 | `58853d442654e69014fa4fbc95e3bd837cd87fe6` | Hides operator bridge packets such as Codex deploy/review requests from the owner-facing project chat. |
 
 ## Local Desktop Status
 
-The local desktop app was rebuilt in place at PR #151:
+The local desktop app was rebuilt in place at PR #153:
 
 - path:
   `C:\Users\Travis\Documents\Codex\2026-06-12\how-do-we-connect-you-to\work\hermes-agent\apps\desktop\release-bridge\win-unpacked\Hermes.exe`
 - latest build stamp commit:
-  `f0ce9ca5125c42137fb0ac5f9985369d983d746b`
+  `58853d442654e69014fa4fbc95e3bd837cd87fe6`
 
 Expected desktop behavior:
 
@@ -63,6 +65,8 @@ Expected desktop behavior:
 - other four projects paused/read-only,
 - normal conversation hides smoke/error diagnostics and bridge-smoke
   confirmation chatter,
+- operator bridge packets from Codex deploy/review coordination are hidden
+  from the owner-facing chat,
 - primary controls are chat-like: message Jenny, send, get Jenny reply, refresh,
 - five project-room anchors remain visible even if the backend temporarily
   returns only Hermes / Mission Control,
@@ -81,8 +85,8 @@ Verified dashboard-only deployments completed through PR #136:
 - gateway runtime intentionally unchanged:
   `/home/jenny/.hermes/hermes-runtime-control-plane-af1eafe`
 
-PR #137/#139/#141/#142/#143/#145/#146/#147/#148/#149/#150/#151 dashboard
-runtime switch is still pending. Codex
+PR #137/#139/#141/#142/#143/#145/#146/#147/#148/#149/#150/#151/#152/#153
+dashboard runtime switch is still pending. Codex
 fixed host-key verification with a repo-local known-hosts entry matching the
 previously accepted VPS fingerprint, but direct SSH still hits a Tailscale
 browser re-auth challenge.
@@ -91,11 +95,11 @@ Fallback action already taken:
 
 - queued a GitHub bridge request to Jenny on PR #79,
 - superseding request id:
-  `codex-pr151-dashboard-deploy-structured-20260614-001`,
+  `codex-pr153-dashboard-deploy-structured-20260614-001`,
 - supersedes earlier request:
-  `codex-pr150-dashboard-deploy-structured-20260614-001`,
+  `codex-pr152-dashboard-deploy-structured-20260614-001`,
 - request asks for dashboard-only runtime switch to
-  `f0ce9ca5125c42137fb0ac5f9985369d983d746b`, no gateway restart, no
+  `58853d442654e69014fa4fbc95e3bd837cd87fe6`, no gateway restart, no
   dispatch/session-send, and exactly one `AcceptedBaselineRecord` only after
   successful validation.
 
@@ -201,6 +205,21 @@ PR #151 validation:
 - GitHub CI: clean,
 - local desktop app rebuilt in place.
 
+PR #152 validation:
+
+- docs-only diff,
+- `git diff --check`: passed,
+- GitHub CI: clean.
+
+PR #153 validation:
+
+- local desktop type-check: passed,
+- targeted desktop and compact ESLint: passed,
+- Python compile for compact static tests: passed,
+- static operator-bridge marker coverage: passed,
+- GitHub CI: clean,
+- local desktop app rebuilt in place.
+
 Local browser visual validation was attempted but blocked by the Windows
 sandbox browser runtime:
 
@@ -222,14 +241,14 @@ sandbox browser runtime:
 Primary next lane:
 
 - finish the latest accepted-live dashboard-only runtime switch to
-  `f0ce9ca5125c42137fb0ac5f9985369d983d746b`.
+  `58853d442654e69014fa4fbc95e3bd837cd87fe6`.
 
 After that:
 
-1. Add a clearer owner-facing "Jenny ready / waiting / blocked" indicator in
-   the chat header.
-2. Add a small "resume project" challenge gate later, so paused projects cannot
-   restart without an explicit brief, challenge review, and approval reason.
-3. Only after those are reliable, resume Tool & Tally first as a local-only
-   report-engine fixture lane. Do not start checkout or outreach.
+1. Keep the owner-facing chat clean of bridge/operator packets while preserving
+   normal Travis/Jenny messages.
+2. Add the next small Jenny Workspace reliability affordance only if it keeps
+   guardrails in the background for a non-coder operator.
+3. Do not resume Tool & Tally, Shorts, Long-form, or Waha until Travis
+   explicitly resumes them after Jenny/Mission Control is stable.
 
