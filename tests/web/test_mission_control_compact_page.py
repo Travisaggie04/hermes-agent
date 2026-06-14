@@ -147,6 +147,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Jenny activity",
         "jennyActivityItems",
         "Jenny is thinking",
+        "Jenny is checking the latest project message. Mission Control will show the reply or a guarded error here.",
         "recent bridge status",
         "refreshing every 2.5s",
         "Mission Control will show started, completed, or error status here while the guarded request is active.",
@@ -160,6 +161,8 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "status_records",
         "githubBridgeMessages",
         "queueJennyBridgeMessage",
+        "visibleCurrentGitHubBridgeMessagesForProject",
+        "latestVisiblePendingGitHubBridgeMessageForProject",
         "latestPendingGitHubBridgeMessage",
         "manual-start only",
         "worker/timer",
@@ -309,6 +312,20 @@ def test_compact_chat_send_uses_github_mailbox_not_local_only_outbox() -> None:
     assert 'to_agent: "jenny"' in send_fn
     assert "bridgeRequestId()" in send_fn
     assert "Sent to Jenny mailbox" in send_fn
+
+
+def test_compact_run_jenny_once_targets_visible_current_project_message() -> None:
+    src = page_source()
+    run_fn = function_source(src, "runJennyOnce")
+    assert "latestVisiblePendingGitHubBridgeMessageForProject" in run_fn
+    assert "projectView.project.project_id" in run_fn
+    helper_start = src.index("function visibleCurrentGitHubBridgeMessagesForProject")
+    helper_end = src.index("function latestVisiblePendingGitHubBridgeMessageForProject", helper_start)
+    helper = src[helper_start:helper_end]
+    assert "isDiagnosticChatMessage" in helper
+    assert "isOperatorBridgeMessage" in helper
+    assert "latestJennyReplyTimestamp([], visibleMessages)" in helper
+    assert "isCurrentAfterReply" in helper
 
 
 def test_compact_jenny_activity_uses_github_bridge_status_records() -> None:
