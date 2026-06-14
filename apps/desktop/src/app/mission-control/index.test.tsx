@@ -603,6 +603,8 @@ beforeEach(() => {
     foreground_watch_running: true,
     model_routing_enabled: false,
     pending_count: 1,
+    visible_pending_count: 0,
+    background_pending_count: 1,
     recent_messages: [
       {
         record: {
@@ -774,7 +776,7 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText('manual-start only').length).toBeGreaterThanOrEqual(2)
     expect(screen.getAllByText('replied').length).toBeGreaterThan(0)
     expect(screen.getByText('GitHub mailbox')).toBeTruthy()
-    expect(screen.getAllByText('1').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('visible 0 / background 1')).toBeTruthy()
     expect(screen.getByText('worker disabled / timer disabled')).toBeTruthy()
     expect(screen.getByText('daemon disabled / worker disabled / timer disabled')).toBeTruthy()
     expect(screen.getByText('deploy state')).toBeTruthy()

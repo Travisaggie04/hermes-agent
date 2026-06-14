@@ -1988,6 +1988,7 @@ function JennyLiveActivityRail({
 }) {
   const activityItems = jennyActivityItems(githubBridgeStatus)
   const hasError = Boolean(bridgeStatus.last_error || githubBridgeStatus.last_error)
+  const visiblePendingCount = githubBridgeStatus.visible_pending_count ?? githubBridgeStatus.pending_count ?? 0
   const liveLabel = projectRoomSaving
     ? 'Jenny is working'
     : hasError
@@ -2012,7 +2013,7 @@ function JennyLiveActivityRail({
       <div className="mt-4 grid gap-3">
         <StatusItem label="bridge" value={bridgeStatus.last_status || 'idle'} />
         <StatusItem label="mailbox" value={githubBridgeStatus.mode || 'manual'} />
-        <StatusItem label="pending" tone={(githubBridgeStatus.pending_count ?? 0) ? 'warn' : 'good'} value={String(githubBridgeStatus.pending_count ?? 0)} />
+        <StatusItem label="pending" tone={visiblePendingCount ? 'warn' : 'good'} value={String(visiblePendingCount)} />
         <StatusItem label="last response" value={githubBridgeStatus.last_response_request_id || githubBridgeStatus.last_response_at || 'none'} />
       </div>
 
@@ -2513,7 +2514,10 @@ function ProjectRoomsWorkspace({
               <div className="mt-3 grid gap-2 rounded-md border border-sky-500/20 bg-sky-500/5 p-2 text-xs md:grid-cols-2">
                 <Field label="GitHub mailbox" value={githubBridgeStatus.manual_start_only === false ? 'disabled' : 'manual-start only'} />
                 <Field label="GitHub mode" value={githubBridgeStatus.mode || 'manual'} />
-                <Field label="GitHub pending" value={String(githubBridgeStatus.pending_count ?? 0)} />
+                <Field
+                  label="GitHub pending"
+                  value={`visible ${githubBridgeStatus.visible_pending_count ?? githubBridgeStatus.pending_count ?? 0} / background ${githubBridgeStatus.background_pending_count ?? 0}`}
+                />
                 <Field label="GitHub last poll" value={githubBridgeStatus.last_poll_at || githubBridgeStatus.last_status || 'not polled'} />
                 <Field label="GitHub last response" value={githubBridgeStatus.last_response_request_id || githubBridgeStatus.last_response_at || 'none'} />
                 <Field label="GitHub last error" value={githubBridgeStatus.last_error || 'none'} />
@@ -2784,7 +2788,7 @@ function HermesHealthDashboard({
   status: ReturnType<typeof summarizeWorkspaceStatus>
 }) {
   const bridgeError = snapshot.githubBridgeStatus.last_error || snapshot.jennyBridgePollerStatus.last_error || ''
-  const bridgePending = snapshot.githubBridgeStatus.pending_count ?? snapshot.jennyBridgePollerStatus.pending_count ?? 0
+  const bridgePending = snapshot.githubBridgeStatus.visible_pending_count ?? snapshot.githubBridgeStatus.pending_count ?? snapshot.jennyBridgePollerStatus.pending_count ?? 0
   const bridgeWatching = snapshot.githubBridgeStatus.foreground_watch_running === true
   const reportCount = activeProjects.filter(project => {
     const state = stateForProject(project, snapshot.projectStates)

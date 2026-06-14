@@ -577,6 +577,20 @@ def test_workspace_github_bridge_status_is_read_only_and_manual_only(plugin_api,
         )
     )
     store.append(
+        GitHubBridgeMessageRecord(
+            request_id="github-req-travis-open",
+            project_id="project-hermes",
+            from_agent="travis",
+            to_agent="jenny",
+            status="queued",
+            message="Please answer Travis from Mission Control.",
+            created_at="2026-06-13T00:00:45Z",
+            github_repo="Travisaggie04/hermes-agent",
+            github_issue_number=79,
+            github_comment_id="103",
+        )
+    )
+    store.append(
         GitHubBridgeMailboxStatusRecord(
             status_id="github-status-1",
             repo="Travisaggie04/hermes-agent",
@@ -605,13 +619,16 @@ def test_workspace_github_bridge_status_is_read_only_and_manual_only(plugin_api,
     assert payload["daemon_enabled"] is False
     assert payload["discord_automation_enabled"] is False
     assert payload["model_routing_enabled"] is False
-    assert payload["pending_count"] == 1
+    assert payload["pending_count"] == 2
+    assert payload["visible_pending_count"] == 1
+    assert payload["background_pending_count"] == 1
     assert payload["mode"] == "watch_foreground"
     assert payload["foreground_watch_supported"] is True
     assert payload["foreground_watch_running"] is True
     assert payload["last_status"] == "watch_poll_completed"
     assert payload["pending_messages"][0]["record"]["request_id"] == "github-req-open"
-    assert payload["recent_messages"][-1]["record"]["request_id"] == "github-req-done"
+    assert payload["visible_pending_messages"][0]["record"]["request_id"] == "github-req-travis-open"
+    assert payload["recent_messages"][-1]["record"]["request_id"] == "github-req-travis-open"
     assert payload["response_messages"][0]["record"]["message"] == "Reviewed from Jenny."
     assert len(store.read_all()) == before
 
