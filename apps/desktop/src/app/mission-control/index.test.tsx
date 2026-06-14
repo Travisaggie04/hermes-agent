@@ -1258,6 +1258,40 @@ describe('MissionControlView', () => {
     expect(createMissionControlJennyBridgeRequest).not.toHaveBeenCalled()
   })
 
+  it('auto-routes broad project messages to a spec-first Jenny challenge', async () => {
+    await renderMissionControl()
+
+    const composer = screen.getByPlaceholderText('Tell Jenny what you want to discuss or ask her to do next...')
+    fireEvent.change(composer, { target: { value: 'make Jenny fully functional and autonomous' } })
+
+    await waitFor(() => expect((composer as HTMLTextAreaElement).value).toBe('make Jenny fully functional and autonomous'))
+    await waitFor(() => expect(screen.getAllByText(/Spec first/).length).toBeGreaterThan(0))
+    expect(screen.getAllByText(/Send to Jenny will ask for a challenge\/spec-first reply before any implementation plan/).length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Jenny' }))
+
+    await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(1))
+    expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from_agent: 'travis',
+        message: expect.stringContaining('Spec-first request for Jenny:'),
+        project_id: 'project-hermes-mission-control',
+        to_agent: 'jenny'
+      })
+    )
+    expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Jenny, do not implement yet. First challenge the request like a senior engineer:')
+      })
+    )
+    expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.not.stringContaining('Project room request:')
+      })
+    )
+    expect(createMissionControlJennyBridgeRequest).not.toHaveBeenCalled()
+  })
+
   it('runs Jenny once for the latest pending GitHub bridge request only', async () => {
     getMissionControlGitHubBridgeStatus.mockResolvedValue({
       count: 1,

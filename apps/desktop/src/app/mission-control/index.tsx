@@ -1423,6 +1423,10 @@ Jenny, do not implement yet. First challenge the request like a senior engineer:
 Return only the spec/challenge review and the recommended next safe lane.`
 }
 
+function shouldAutoChallengeRequest(intake: RequestIntakeAssessment): boolean {
+  return intake.state !== 'ready'
+}
+
 function buildPhoneSafeProjectPacket({
   brief,
   project,
@@ -1474,6 +1478,28 @@ Safety: guard=${status.guard}; dispatch=${yesNo(status.dispatch)}; active_lane_c
 ${structuredJennyHandoff(project.name)}`
 
   return truncate(packet.trim(), MAX_PHONE_SAFE_PACKET_CHARS)
+}
+
+function buildJennyMailboxMessage({
+  brief,
+  project,
+  requestText,
+  review,
+  state,
+  status
+}: {
+  brief: MissionControlProjectBriefRecord | null
+  project: MissionControlProjectRecord
+  requestText: string
+  review: MissionControlChallengeReviewRecord | null
+  state: MissionControlProjectState | null
+  status: ReturnType<typeof summarizeWorkspaceStatus>
+}): string {
+  const intake = assessProjectRequest(requestText, review)
+  if (shouldAutoChallengeRequest(intake)) {
+    return buildSpecFirstComposerText(project.name, requestText, intake)
+  }
+  return buildPhoneSafeProjectPacket({ brief, project, requestText, review, state, status })
 }
 
 function buildHermesUpdateLanePacket(status: ReturnType<typeof summarizeWorkspaceStatus>): string {
@@ -1743,6 +1769,17 @@ export function MissionControlView() {
     })
   }
 
+  function mailboxMessageForProject(project: MissionControlProjectRecord) {
+    return buildJennyMailboxMessage({
+      brief: latestForProject(project.project_id, snapshot.projectBriefs),
+      project,
+      requestText: projectRequest,
+      review: latestForProject(project.project_id, snapshot.challengeReviews),
+      state: stateForProject(project, snapshot.projectStates),
+      status
+    })
+  }
+
   async function copyProjectRoomPacket(project: MissionControlProjectRecord) {
     await navigator.clipboard?.writeText(packetForProject(project))
     setProjectRoomMessage('Copied phone-safe project packet.')
@@ -1761,7 +1798,7 @@ export function MissionControlView() {
     try {
       await createMissionControlGitHubBridgeRequest({
         from_agent: 'travis',
-        message: packetForProject(project),
+        message: mailboxMessageForProject(project),
         project_id: project.project_id,
         request_id: bridgeRequestId(),
         to_agent: 'jenny'
@@ -2837,6 +2874,9 @@ function ProjectRoomsWorkspace({
                 : 'border-amber-500/30 bg-amber-500/10 text-amber-100'
           )}>
             <span className="font-semibold">Request intake: {requestIntake.label}.</span> {requestIntake.detail}
+            {shouldAutoChallengeRequest(requestIntake) ? (
+              <span className="mt-1 block">Send to Jenny will ask for a challenge/spec-first reply before any implementation plan.</span>
+            ) : null}
           </div>
           <details className="mt-2 rounded-md border border-[#f3ebda]/10 bg-[#15101a]/60 px-3 py-2 text-xs">
             <summary className="cursor-pointer font-semibold text-[#ddd0bb]">Advanced request options</summary>
