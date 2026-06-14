@@ -89,12 +89,15 @@ const HERMES_UPDATE_LANE_REQUEST = [
   'Do not trigger the laptop worker-node update automatically, restart/switch gateway, dispatch, send sessions, use Waha/social/payment/customer actions, enable new background workers/timers/daemons/cron, or inspect/print secrets.'
 ].join(' ')
 const HERMES_STORAGE_CLEANUP_LANE_REQUEST = [
-  'Start a safe Hermes storage cleanup readiness lane for the VPS and laptop Hermes worker node.',
-  'Inventory VPS disk usage, large runtime/worktree/cache/build artifacts, logs, and Mission Control record growth before recommending cleanup.',
-  'Preserve rollback runtimes and accepted-live evidence. Do not delete anything without a separate explicit cleanup approval.',
+  'Start a safe Hermes storage cleanup lane for the VPS, with a target of about 50% disk usage when practical.',
+  'Inventory VPS disk usage, large runtime/worktree/cache/build artifacts, logs, backup/snapshot directories, and Mission Control record growth before cleanup.',
+  'Create a timestamped dry-run manifest before deleting anything; include exact paths, protected paths, expected GiB recovered, and rollback risk.',
+  'Preserve the current dashboard runtime, gateway runtime, shared runtime venv, latest rollback runtime, records, secrets, service files, live app data, dirty project worktrees, and report-builder/customer/payment/outreach data.',
+  'With explicit cleanup approval, safe candidates may include clean stale Hermes runtime worktrees, clean stale review worktrees, old caches, old build outputs, and obsolete logs.',
+  'Measure df -h and top du consumers before and after each cleanup pass; stop when the VPS is near 50% usage or remaining candidates are risky.',
   'Prefer moving review artifacts or exports to connected long-term storage when useful: OneDrive travis_Littleton@msn.com, Family Hub secondary storage, or the 5TB Google Drive.',
   'Keep laptop cleanup advisory-only unless Travis separately approves worker-node cleanup.',
-  'Do not delete files, prune runtimes, mutate records/config/state.db, restart/switch gateway, dispatch, send sessions, use Waha/social/payment/customer actions, enable workers/timers/daemons/cron, or inspect/print secrets.'
+  'Do not touch dirty worktrees, Tool & Tally report-builder data, records/config/state.db, secrets, current/rollback runtimes, gateway, dispatch, session send, Waha/social/payment/customer actions, workers/timers/daemons/cron, or laptop cleanup without separate approval.'
 ].join(' ')
 
 const REAL_PROJECT_NAMES = [
@@ -1094,13 +1097,14 @@ function buildHermesStorageCleanupLanePacket(status: ReturnType<typeof summarize
     HERMES_STORAGE_CLEANUP_LANE_REQUEST,
     '',
     'Required safe sequence:',
-    '1. Read-only inventory of VPS disk usage, largest Hermes runtimes/worktrees/caches/build outputs/logs, and current rollback runtimes.',
-    '2. Identify what is safe to archive versus what must stay for accepted-live rollback, audit evidence, or current services.',
-    '3. Recommend a cleanup plan with exact paths, expected bytes recovered, rollback risk, and archive destination if needed.',
-    '4. Stop before deleting, pruning, moving, or uploading anything; request a separate explicit cleanup approval.',
+    '1. Read-only inventory of VPS disk usage, largest Hermes runtimes/worktrees/caches/build outputs/logs/backups, and current rollback runtimes.',
+    '2. Build a timestamped dry-run manifest with exact candidate paths, protected paths, expected GiB recovered, and rollback risk.',
+    '3. Protect current dashboard runtime, gateway runtime, shared runtime venv, latest rollback runtime, live records/secrets/service files, dirty project worktrees, report-builder/customer/payment/outreach data, and anything uncertain.',
+    '4. With explicit cleanup approval, remove only clean stale Hermes runtime worktrees, clean stale review worktrees, old caches/build outputs/logs, and other manifest-approved low-risk artifacts.',
+    '5. Measure df -h and top du consumers before and after each pass; target about 50% disk usage, then stop and report residual risk.',
     '',
-    'Allowed: read-only storage inventory, cleanup recommendation, archive recommendation, and exact next approval.',
-    'Forbidden: delete/prune/move/upload files, mutate records/config/state.db, gateway restart/switch, laptop worker-node cleanup, dispatch, session sending, Waha/social/payment/customer action, workers/timers/daemons/cron, or secrets.',
+    'Allowed: storage inventory, dry-run manifest, approved stale runtime/worktree/cache/log cleanup, archive recommendation, and before/after effectiveness report.',
+    'Forbidden: dirty worktrees, Tool & Tally report-builder data, records/config/state.db, secrets, current/rollback runtimes, gateway restart/switch, laptop worker-node cleanup, dispatch, session sending, Waha/social/payment/customer action, workers/timers/daemons/cron.',
     '',
     `Current Mission Control safety status: guard=${status.guard}; dispatch=${yesNo(status.dispatch)}; active_lane_count=${status.activeLaneCount}.`
   ].join('\n')
