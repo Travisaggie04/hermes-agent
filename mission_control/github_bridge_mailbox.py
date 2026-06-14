@@ -183,11 +183,24 @@ def _extract_json_block(body: str) -> dict[str, Any] | None:
             raw = after.strip()
     else:
         raw = after.strip()
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError:
-        return None
-    return parsed if isinstance(parsed, dict) else None
+
+    candidates = [raw]
+    if '\\"' in raw:
+        candidates.append(raw.replace('\\"', '"'))
+
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, str):
+            try:
+                parsed = json.loads(parsed)
+            except json.JSONDecodeError:
+                continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
 
 
 def parse_bridge_comments(comments: list[dict[str, Any]], *, repo: str, issue_number: int) -> list[GitHubBridgeMessageRecord]:
