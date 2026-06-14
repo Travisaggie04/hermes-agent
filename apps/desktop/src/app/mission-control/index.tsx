@@ -2816,16 +2816,6 @@ function ProjectRoomsWorkspace({
             <button className="rounded-md border border-[#5ab896]/40 bg-[#5ab896]/10 px-4 py-2 text-sm font-semibold text-[#5ab896] hover:bg-[#5ab896]/15 disabled:opacity-60" disabled={saving || paused} onClick={onQueueBridge} type="button">
               Send to Jenny
             </button>
-            {requestIntake.state !== 'ready' ? (
-              <button
-                className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-200 hover:bg-amber-500/15 disabled:opacity-60"
-                disabled={saving || paused}
-                onClick={() => onRequestChange(specFirstComposerText)}
-                type="button"
-              >
-                Use spec-first prompt
-              </button>
-            ) : null}
             <button
               className="rounded-md border border-[#60a5fa]/40 bg-[#60a5fa]/10 px-4 py-2 text-sm font-semibold text-[#93c5fd] hover:bg-[#60a5fa]/15 disabled:opacity-60"
               disabled={saving || paused || !latestPending}
@@ -2848,6 +2838,24 @@ function ProjectRoomsWorkspace({
           )}>
             <span className="font-semibold">Request intake: {requestIntake.label}.</span> {requestIntake.detail}
           </div>
+          <details className="mt-2 rounded-md border border-[#f3ebda]/10 bg-[#15101a]/60 px-3 py-2 text-xs">
+            <summary className="cursor-pointer font-semibold text-[#ddd0bb]">Advanced request options</summary>
+            <p className="mt-2 text-[#a59783]">
+              Use these only when you want Jenny to challenge, narrow, or formalize the request before normal work.
+            </p>
+            {requestIntake.state !== 'ready' ? (
+              <button
+                className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-200 hover:bg-amber-500/15 disabled:opacity-60"
+                disabled={saving || paused}
+                onClick={() => onRequestChange(specFirstComposerText)}
+                type="button"
+              >
+                Use spec-first prompt
+              </button>
+            ) : (
+              <p className="mt-2 text-[#a59783]">This request is currently bounded enough for a guarded Jenny reply.</p>
+            )}
+          </details>
           <p className="mt-1 text-xs text-[#a59783]">
             {paused
               ? 'This project is visible for planning context only. Resume it after the Mission Control/Jenny recovery lane is stable.'
