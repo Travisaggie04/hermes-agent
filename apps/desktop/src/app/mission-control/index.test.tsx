@@ -606,6 +606,17 @@ beforeEach(() => {
           status: 'replied',
           to_agent: 'travis'
         }
+      },
+      {
+        record: {
+          created_at: '2026-06-13T01:08:00Z',
+          from_agent: 'jenny',
+          message: 'Bridge works. The success smoke reached Jenny and failures are guarded.',
+          project_id: 'project-hermes-mission-control',
+          request_id: 'github-bridge-diagnostic-3',
+          status: 'replied',
+          to_agent: 'travis'
+        }
       }
     ],
     response_messages: [],
@@ -663,6 +674,8 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText('Replies 2').length).toBeGreaterThan(0)
     expect(screen.queryByText(/Local error guard smoke/i)).toBeNull()
     expect(screen.queryByText(/codex app-server startup failed/i)).toBeNull()
+    expect(screen.queryByText(/Bridge works/i)).toBeNull()
+    expect(screen.queryByText(/success smoke reached/i)).toBeNull()
     expect(screen.getByText('Previous sessions')).toBeTruthy()
     expect(screen.getByText('Advanced controls')).toBeTruthy()
     expect(screen.getByText('Jenny bridge')).toBeTruthy()

@@ -477,9 +477,14 @@ function isDiagnosticChatMessage(message?: string): boolean {
   const text = (message ?? "").toLowerCase();
   return [
     "codex app-server startup failed",
+    "desktop phone bridge",
     "error guard",
+    "failure guarded",
     "local error",
+    "mission control two process",
     "reply with one sentence",
+    "success smoke reached",
+    "bridge works",
     "smoke",
   ].some(marker => text.includes(marker));
 }
