@@ -23,7 +23,7 @@ longer exposes paused-project queue buttons while the recovery lane is active.
 
 Latest accepted-live head after the current recovery UI sequence:
 
-- `366a35a071d2c8d51d577df093fd5a7bd48da0c4`
+- `ee49c42e94f8a7fcdfd2a48ea40f5aaf9f4a753c`
 
 ## Completed PRs
 
@@ -51,15 +51,18 @@ Latest accepted-live head after the current recovery UI sequence:
 | #154 | `5b52b520f89c531ab3269f3175aedbc015dd7307` | Refreshes this recovery status through PR #153 and the latest dashboard deploy request. |
 | #155 | `a35ba4063be578aa8086027d4f0d14aa0f10735cf` | Converts Mission Control desktop/compact owner-facing separators and loading text to ASCII to avoid mojibake. |
 | #156 | `366a35a071d2c8d51d577df093fd5a7bd48da0c4` | Hardens GitHub bridge parsing so escaped fenced JSON bridge packets do not silently stall. |
+| #157 | `b1e59b1564bdc83266df3d8c5f5337dd9766f78a` | Refreshes this recovery status through PR #156. |
+| #158 | `589a8f21c0e18bfae233a66443e027bddf74ded8` | Reports Tailscale/SSH auth-required failures as structured bridge status instead of an ambiguous exception. |
+| #159 | `ee49c42e94f8a7fcdfd2a48ea40f5aaf9f4a753c` | Renames visible technical sections to owner-facing labels: `Safety details and reports`, `Safety and maintenance`, and `Project context`. |
 
 ## Local Desktop Status
 
-The local desktop app was rebuilt in place at PR #156:
+The local desktop app was rebuilt in place at PR #159:
 
 - path:
   `C:\Users\Travis\Documents\Codex\2026-06-12\how-do-we-connect-you-to\work\hermes-agent\apps\desktop\release-bridge\win-unpacked\Hermes.exe`
 - latest build stamp commit:
-  `366a35a071d2c8d51d577df093fd5a7bd48da0c4`
+  `ee49c42e94f8a7fcdfd2a48ea40f5aaf9f4a753c`
 
 Expected desktop behavior:
 
@@ -75,7 +78,7 @@ Expected desktop behavior:
   returns only Hermes / Mission Control,
 - if accepted-live is ahead of the served dashboard, desktop shows plain
   update-lag copy instead of requiring Travis to interpret commit IDs,
-- advanced guardrails remain collapsed behind advanced sections.
+- safety and maintenance guardrails remain collapsed behind optional sections.
 
 ## Live Dashboard Status
 
@@ -88,7 +91,7 @@ Verified dashboard-only deployments completed through PR #136:
 - gateway runtime intentionally unchanged:
   `/home/jenny/.hermes/hermes-runtime-control-plane-af1eafe`
 
-PR #137/#139/#141/#142/#143/#145/#146/#147/#148/#149/#150/#151/#152/#153/#154/#155/#156
+PR #137/#139/#141/#142/#143/#145/#146/#147/#148/#149/#150/#151/#152/#153/#154/#155/#156/#157/#158/#159
 dashboard runtime switch is still pending. Codex
 fixed host-key verification with a repo-local known-hosts entry matching the
 previously accepted VPS fingerprint, but direct SSH still hits a Tailscale
@@ -98,11 +101,11 @@ Fallback action already taken:
 
 - queued a GitHub bridge request to Jenny on PR #79,
 - superseding request id:
-  `codex-pr156-dashboard-deploy-head-update-20260614-001`,
+  `codex-pr159-dashboard-deploy-head-update-20260614-001`,
 - supersedes earlier request:
-  `codex-pr155-dashboard-deploy-head-update-20260614-001`,
+  `codex-pr158-dashboard-deploy-head-update-20260614-001`,
 - request asks for dashboard-only runtime switch to
-  `366a35a071d2c8d51d577df093fd5a7bd48da0c4`, no gateway restart, no
+  `ee49c42e94f8a7fcdfd2a48ea40f5aaf9f4a753c`, no gateway restart, no
   dispatch/session-send, and exactly one `AcceptedBaselineRecord` only after
   successful validation.
 
@@ -248,6 +251,33 @@ PR #156 validation:
 - local desktop app rebuilt and packaged validator passed against
   `apps/desktop/release-bridge`.
 
+PR #157 validation:
+
+- docs-only diff,
+- `git diff --check`: passed,
+- GitHub CI: clean,
+- local desktop app rebuilt and packaged validator passed against
+  `apps/desktop/release-bridge`.
+
+PR #158 validation:
+
+- Python compile for GitHub bridge mailbox and tests: passed,
+- direct SSH auth-required guard smoke: passed,
+- GitHub CI: clean,
+- local desktop app rebuilt and packaged validator passed against
+  `apps/desktop/release-bridge`.
+
+PR #159 validation:
+
+- local desktop type-check: passed,
+- targeted desktop and compact ESLint: passed,
+- `npx tsc -b web`: passed,
+- Python compile for compact static tests: passed,
+- `git diff --check`: passed,
+- GitHub CI: clean,
+- local desktop app rebuilt and packaged validator passed against
+  `apps/desktop/release-bridge`.
+
 Local browser visual validation was attempted but blocked by the Windows
 sandbox browser runtime:
 
@@ -269,7 +299,7 @@ sandbox browser runtime:
 Primary next lane:
 
 - finish the latest accepted-live dashboard-only runtime switch to
-  `366a35a071d2c8d51d577df093fd5a7bd48da0c4`.
+  `ee49c42e94f8a7fcdfd2a48ea40f5aaf9f4a753c`.
 
 After that:
 
