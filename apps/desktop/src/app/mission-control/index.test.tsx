@@ -996,7 +996,7 @@ describe('MissionControlView', () => {
     expect(prompt).toContain('REVIEW PACKET')
     expect(prompt).toContain('Forbidden actions:')
     expect(prompt).toContain('Direct session send remains disabled')
-    expect(screen.getByText(/Project chat is record-backed/)).toBeTruthy()
+    expect(screen.getByText(/Messages are saved/)).toBeTruthy()
   })
 
   it('shows project room controls and creates only inert challenge and lane drafts', async () => {

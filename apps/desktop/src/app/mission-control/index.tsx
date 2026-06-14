@@ -1536,15 +1536,15 @@ export function MissionControlView() {
           <div>
             <h1 className="text-lg font-semibold tracking-tight">Jenny Workspace</h1>
             <p className="max-w-3xl text-sm text-muted-foreground">
-              Pick a project, talk to Jenny, and keep the safety controls in the background. Hermes / Mission Control is the active recovery lane.
+              Pick a project and talk to Jenny. Safety checks stay in the background while Hermes / Mission Control is being recovered.
             </p>
           </div>
           <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-            Jenny bridge guarded
+            Jenny guarded
           </span>
         </div>
         <p className="text-xs text-muted-foreground">
-          Project chat is record-backed. Deploys, gateway restarts, posting, payments, outreach, and hidden workers still require the normal approval gates.
+          Messages are saved. Higher-risk actions still need approval before anything live changes.
         </p>
       </header>
 
