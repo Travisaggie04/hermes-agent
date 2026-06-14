@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { fetchJSON } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -651,6 +652,10 @@ function isSmokeProject(project: ProjectRecord): boolean {
   return /smoke|support/i.test(`${project.project_id} ${project.name} ${project.status ?? ""}`);
 }
 
+function compactSessionRoute(sessionId: string): string {
+  return `/chat?resume=${encodeURIComponent(sessionId)}`;
+}
+
 function canonicalRealProjects(projects: ProjectRecord[]): ProjectRecord[] {
   return CANONICAL_REAL_PROJECTS.map(canonical => {
     const existing = projects.find(project => project.project_id === canonical.project_id)
@@ -941,6 +946,7 @@ async function loadCompactSnapshot(): Promise<CompactSnapshot> {
 }
 
 export default function MissionControlCompactPage() {
+  const navigate = useNavigate();
   const [snapshot, setSnapshot] = useState<CompactSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1299,6 +1305,11 @@ export default function MissionControlCompactPage() {
           onRunJennyOnce={() => void runJennyOnce(selectedProjectView)}
           onSaveChallenge={() => void saveChallengeDraft(selectedProjectView)}
           onSaveLane={() => void saveReadOnlyLaneDraft(selectedProjectView)}
+          onOpenSession={session => {
+            if (session.session_id) {
+              navigate(compactSessionRoute(session.session_id));
+            }
+          }}
           onSelectProject={projectId => {
             setSelectedProjectId(projectId);
             setRoomMessage("");
@@ -1472,6 +1483,7 @@ function CompactProjectRoom({
   onQueueBridge,
   onQueueHermesUpdate,
   onQueueStorageCleanup,
+  onOpenSession,
   onRefreshBridge,
   onRequestChange,
   onRunJennyOnce,
@@ -1496,6 +1508,7 @@ function CompactProjectRoom({
   onQueueBridge: () => void;
   onQueueHermesUpdate?: () => void;
   onQueueStorageCleanup?: () => void;
+  onOpenSession: (session: ProjectSessionRecord) => void;
   onRefreshBridge: () => void;
   onRequestChange: (value: string) => void;
   onRunJennyOnce: () => void;
@@ -1721,12 +1734,27 @@ function CompactProjectRoom({
           <div className="mt-2 grid gap-2">
             {sessions.length ? (
               sessions.map((session, index) => (
-                <div className="rounded-lg border border-border/60 bg-card/60 p-2 text-xs" key={session.session_id || index}>
-                  <div className="font-semibold">{session.title || session.session_id || "Linked session"}</div>
-                  <div className="mt-0.5 text-muted-foreground">
-                    {[session.profile, session.source, session.cwd_snapshot].filter(Boolean).join(" / ") || "session context"}
+                session.session_id ? (
+                  <button
+                    className="rounded-lg border border-border/60 bg-card/60 p-2 text-left text-xs transition hover:border-emerald-500/40 hover:bg-emerald-500/10"
+                    key={session.session_id}
+                    onClick={() => onOpenSession(session)}
+                    type="button"
+                  >
+                    <span className="block font-semibold">{session.title || session.session_id || "Linked session"}</span>
+                    <span className="mt-0.5 block text-muted-foreground">
+                      {[session.profile, session.source, session.cwd_snapshot].filter(Boolean).join(" / ") || "session context"}
+                    </span>
+                    <span className="mt-1 block text-[0.65rem] font-semibold text-emerald-700 dark:text-emerald-300">Open session</span>
+                  </button>
+                ) : (
+                  <div className="rounded-lg border border-border/60 bg-card/60 p-2 text-xs" key={index}>
+                    <div className="font-semibold">{session.title || "Linked session"}</div>
+                    <div className="mt-0.5 text-muted-foreground">
+                      {[session.profile, session.source, session.cwd_snapshot].filter(Boolean).join(" / ") || "session context"}
+                    </div>
                   </div>
-                </div>
+                )
               ))
             ) : (
               <p className="text-xs text-muted-foreground">No linked sessions for this project yet.</p>
