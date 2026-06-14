@@ -13,6 +13,7 @@ from mission_control.records.models import (
     JennyBridgeMessageRequestRecord,
     JennyBridgeMessageResponseRecord,
     JennyBridgePollerStatusRecord,
+    JennyReplyReviewRecord,
     JennyReportRecord,
     LaneRequestRecord,
     MissionBrief,
@@ -265,6 +266,44 @@ def test_jenny_bridge_message_response_record_round_trips_inbound_fields():
     assert data["message"] == "Safe to proceed with a read-only lane."
     assert JennyBridgeMessageResponseRecord.from_dict(data) == record
     assert RECORD_TYPES["JennyBridgeMessageResponseRecord"] is JennyBridgeMessageResponseRecord
+
+
+def test_jenny_reply_review_record_round_trips_operator_decision_fields():
+    record = JennyReplyReviewRecord(
+        review_id="reply-review-001",
+        project_id="project-hermes-mission-control",
+        response_id="response-001",
+        request_id="request-001",
+        decision="needs_evidence",
+        reviewer="travis",
+        note="Ask Jenny for files, checks, risks, and next safe lane.",
+        created_at="2026-06-14T19:00:00Z",
+        metadata={
+            "display_only": True,
+            "dispatch_enabled": False,
+            "execution_enabled": False,
+        },
+    )
+
+    data = record.to_dict()
+
+    assert data == {
+        "review_id": "reply-review-001",
+        "project_id": "project-hermes-mission-control",
+        "response_id": "response-001",
+        "request_id": "request-001",
+        "decision": "needs_evidence",
+        "reviewer": "travis",
+        "note": "Ask Jenny for files, checks, risks, and next safe lane.",
+        "created_at": "2026-06-14T19:00:00Z",
+        "metadata": {
+            "display_only": True,
+            "dispatch_enabled": False,
+            "execution_enabled": False,
+        },
+    }
+    assert JennyReplyReviewRecord.from_dict(data) == record
+    assert RECORD_TYPES["JennyReplyReviewRecord"] is JennyReplyReviewRecord
 
 
 def test_jenny_bridge_poller_status_record_round_trips_manual_status_fields():

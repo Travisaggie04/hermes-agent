@@ -54,6 +54,7 @@ from mission_control.records import (
     JennyBridgeMessageRequestRecord,
     JennyBridgeMessageResponseRecord,
     JennyBridgePollerStatusRecord,
+    JennyReplyReviewRecord,
     JsonlRecordStore,
     JennyReportRecord,
     LaneRequestRecord,
@@ -602,6 +603,10 @@ def _jenny_bridge_poller_status_payload(record: JennyBridgePollerStatusRecord) -
     return record.to_dict()
 
 
+def _jenny_reply_review_payload(record: JennyReplyReviewRecord) -> dict[str, Any]:
+    return record.to_dict()
+
+
 def _session_project_link_payload(record: SessionProjectLinkRecord) -> dict[str, Any]:
     payload = record.to_dict()
     payload["durable_session_id"] = record.durable_session_id
@@ -621,6 +626,8 @@ def _workspace_record_payload(record: Any) -> dict[str, Any]:
         return _jenny_bridge_response_payload(record)
     if isinstance(record, JennyBridgePollerStatusRecord):
         return _jenny_bridge_poller_status_payload(record)
+    if isinstance(record, JennyReplyReviewRecord):
+        return _jenny_reply_review_payload(record)
     if isinstance(record, (ApprovalRecord, ReportRecord, RunRecord)):
         return record.to_dict()
     if isinstance(record, SessionProjectLinkRecord):
@@ -1702,6 +1709,45 @@ def _build_jenny_bridge_response_record(payload: dict[str, Any]) -> JennyBridgeM
             "dispatch_enabled": False,
             "execution_enabled": False,
             "external_jenny_response": True,
+        },
+    )
+
+
+JENNY_REPLY_REVIEW_DECISIONS = {"accepted", "needs_evidence", "needs_safer_plan"}
+
+
+def _build_jenny_reply_review_record(payload: dict[str, Any]) -> JennyReplyReviewRecord:
+    project_id = _workspace_text(payload.get("project_id"), max_chars=120)
+    response_id = _workspace_text(payload.get("response_id"), max_chars=160)
+    decision = _workspace_text(payload.get("decision"), max_chars=80)
+    if not project_id:
+        raise HTTPException(status_code=422, detail="project_id is required")
+    if not response_id:
+        raise HTTPException(status_code=422, detail="response_id is required")
+    if decision not in JENNY_REPLY_REVIEW_DECISIONS:
+        raise HTTPException(status_code=422, detail="decision must be one of: accepted, needs_evidence, needs_safer_plan")
+    now = _utc_now()
+    review_id = _workspace_text(payload.get("review_id"), max_chars=120) or f"jenny-reply-review-{uuid.uuid4().hex[:12]}"
+    return JennyReplyReviewRecord(
+        review_id=review_id,
+        project_id=project_id,
+        response_id=response_id,
+        request_id=_workspace_text(payload.get("request_id"), max_chars=160),
+        decision=decision,
+        reviewer=_workspace_text(payload.get("reviewer"), max_chars=80) or "travis",
+        note=_workspace_text(payload.get("note"), max_chars=MAX_WORKSPACE_PROMPT_CHARS),
+        created_at=now,
+        metadata={
+            "source": "mission_control_jenny_reply_review_v1",
+            "display_only": True,
+            "manual_start_only": True,
+            "send_to_jenny_enabled": False,
+            "dispatch_enabled": False,
+            "execution_enabled": False,
+            "worker_enabled": False,
+            "timer_enabled": False,
+            "trusted_for_execution": False,
+            "inert_context_only": True,
         },
     )
 
@@ -3465,6 +3511,60 @@ async def workspace_jenny_bridge_poller_status(limit: str | None = Query(default
         "send_to_jenny_enabled": False,
         "dispatch_enabled": False,
         **projection,
+    }
+
+
+@router.get("/workspace/jenny-reply-reviews")
+async def workspace_jenny_reply_reviews(
+    project_id: str | None = Query(default=None),
+    response_id: str | None = Query(default=None),
+    limit: str | None = Query(default=None),
+) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    safe_project_id = _workspace_text(project_id, max_chars=120) if project_id else ""
+    safe_response_id = _workspace_text(response_id, max_chars=160) if response_id else ""
+    reviews = _latest_workspace_records(JennyReplyReviewRecord, applied_limit)
+    if safe_project_id:
+        reviews = [item for item in reviews if item.get("record", {}).get("project_id") == safe_project_id]
+    if safe_response_id:
+        reviews = [item for item in reviews if item.get("record", {}).get("response_id") == safe_response_id]
+    return {
+        **INERT_FLAGS,
+        "stored": False,
+        "display_only": True,
+        "manual_start_only": True,
+        "manual_copy_only": False,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "execution_enabled": False,
+        "worker_enabled": False,
+        "timer_enabled": False,
+        "project_id": safe_project_id,
+        "response_id": safe_response_id,
+        "count": len(reviews),
+        "reply_reviews": reviews,
+    }
+
+
+@router.post("/workspace/jenny-reply-reviews/create")
+async def workspace_jenny_reply_review_create(request: Request) -> dict[str, Any]:
+    payload = await _read_workspace_json_body(request)
+    record = _build_jenny_reply_review_record(payload)
+    index = JsonlRecordStore(record_store_path()).append(record)
+    return {
+        **INERT_FLAGS,
+        "stored": True,
+        "display_only": True,
+        "manual_start_only": True,
+        "manual_copy_only": False,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "execution_enabled": False,
+        "worker_enabled": False,
+        "timer_enabled": False,
+        "record_index": index,
+        "record_type": record.record_type,
+        "reply_review": _jenny_reply_review_payload(record),
     }
 
 

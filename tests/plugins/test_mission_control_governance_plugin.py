@@ -27,6 +27,7 @@ from mission_control.records import (
     JennyBridgeMessageRequestRecord,
     JennyBridgeMessageResponseRecord,
     JennyBridgePollerStatusRecord,
+    JennyReplyReviewRecord,
     JennyReportRecord,
     LaneRequestRecord,
     MissionBrief,
@@ -494,6 +495,62 @@ def test_workspace_jenny_bridge_api_creates_lists_and_stays_inert(plugin_api, cl
     assert pending_after_response.status_code == 200
     assert pending_after_response.json()["count"] == 0
     assert "No pending bridge requests." in pending_after_response.json()["relay_packet"]
+
+
+def test_workspace_jenny_reply_reviews_append_operator_decisions_and_stay_inert(plugin_api, client):
+    created = client.post(
+        "/api/plugins/mission-control-governance/workspace/jenny-reply-reviews/create",
+        json={
+            "project_id": "project-hermes",
+            "response_id": "bridge-response-1",
+            "request_id": "bridge-request-1",
+            "decision": "needs_evidence",
+            "reviewer": "travis",
+            "note": "Ask Jenny for exact files, checks, risks, and next safe lane.",
+        },
+    )
+
+    assert created.status_code == 200
+    payload = created.json()
+    assert payload["stored"] is True
+    assert payload["display_only"] is True
+    assert payload["manual_start_only"] is True
+    assert payload["send_to_jenny_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["worker_enabled"] is False
+    assert payload["timer_enabled"] is False
+    assert payload["record_type"] == "JennyReplyReviewRecord"
+    assert payload["reply_review"]["response_id"] == "bridge-response-1"
+    assert payload["reply_review"]["decision"] == "needs_evidence"
+    assert payload["reply_review"]["metadata"]["trusted_for_execution"] is False
+
+    reviews = JsonlRecordStore(plugin_api.record_store_path()).read_all(JennyReplyReviewRecord)
+    assert len(reviews) == 1
+    assert reviews[0].note == "Ask Jenny for exact files, checks, risks, and next safe lane."
+
+    listed = client.get(
+        "/api/plugins/mission-control-governance/workspace/jenny-reply-reviews?project_id=project-hermes&response_id=bridge-response-1"
+    )
+    assert listed.status_code == 200
+    list_payload = listed.json()
+    assert list_payload["stored"] is False
+    assert list_payload["send_to_jenny_enabled"] is False
+    assert list_payload["dispatch_enabled"] is False
+    assert list_payload["worker_enabled"] is False
+    assert list_payload["timer_enabled"] is False
+    assert list_payload["count"] == 1
+    assert list_payload["reply_reviews"][0]["record"]["decision"] == "needs_evidence"
+
+    invalid = client.post(
+        "/api/plugins/mission-control-governance/workspace/jenny-reply-reviews/create",
+        json={
+            "project_id": "project-hermes",
+            "response_id": "bridge-response-1",
+            "decision": "deploy_now",
+        },
+    )
+    assert invalid.status_code == 422
 
 
 def test_workspace_jenny_bridge_poller_status_is_read_only(plugin_api, client):
@@ -2158,6 +2215,8 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/jenny-bridge/outbox": {"GET"},
         "/workspace/jenny-bridge/pending": {"GET"},
         "/workspace/jenny-bridge/poller-status": {"GET"},
+        "/workspace/jenny-reply-reviews": {"GET"},
+        "/workspace/jenny-reply-reviews/create": {"POST"},
         "/workspace/github-bridge/status": {"GET"},
         "/workspace/github-bridge/outbox/create": {"POST"},
         "/workspace/github-bridge/answer-once": {"POST"},

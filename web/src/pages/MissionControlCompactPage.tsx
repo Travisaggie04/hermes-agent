@@ -16,6 +16,8 @@ const WORKSPACE_REPORTS_CREATE_URL = "/api/plugins/mission-control-governance/wo
 const WORKSPACE_JENNY_BRIDGE_OUTBOX_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/outbox";
 const WORKSPACE_JENNY_BRIDGE_INBOX_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/inbox";
 const WORKSPACE_JENNY_BRIDGE_POLLER_STATUS_URL = "/api/plugins/mission-control-governance/workspace/jenny-bridge/poller-status";
+const WORKSPACE_JENNY_REPLY_REVIEWS_URL = "/api/plugins/mission-control-governance/workspace/jenny-reply-reviews";
+const WORKSPACE_JENNY_REPLY_REVIEWS_CREATE_URL = "/api/plugins/mission-control-governance/workspace/jenny-reply-reviews/create";
 const WORKSPACE_GITHUB_BRIDGE_STATUS_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/status";
 const WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/outbox/create";
 const WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/answer-once";
@@ -203,6 +205,17 @@ interface JennyBridgeResponseRecord {
   status?: string;
 }
 
+interface JennyReplyReviewRecord {
+  created_at?: string;
+  decision?: string;
+  note?: string;
+  project_id?: string;
+  request_id?: string;
+  response_id?: string;
+  review_id?: string;
+  reviewer?: string;
+}
+
 interface JennyBridgePollerStatus {
   dispatch_enabled?: boolean;
   execution_enabled?: boolean;
@@ -370,6 +383,7 @@ interface CompactSnapshot {
   challengeReviews: ChallengeReviewRecord[];
   jennyBridgeRequests: JennyBridgeRequestRecord[];
   jennyBridgeResponses: JennyBridgeResponseRecord[];
+  jennyReplyReviews: JennyReplyReviewRecord[];
   jennyBridgePollerStatus: JennyBridgePollerStatus;
   githubBridgeStatus: GitHubBridgeStatus;
   laneRequests: LaneRequestRecord[];
@@ -549,6 +563,31 @@ function buildJennyReplyReviewPrompt(action: "accept" | "evidence" | "safer-plan
     "",
     `Jenny reply: ${replyPreview}`,
   ].join("\n");
+}
+
+type JennyReplyReviewDecision = "accepted" | "needs_evidence" | "needs_safer_plan";
+
+function jennyReplyReviewDecisionLabel(decision: string | undefined): string {
+  switch (decision) {
+    case "accepted":
+      return "Reviewed: accepted";
+    case "needs_evidence":
+      return "Reviewed: needs evidence";
+    case "needs_safer_plan":
+      return "Reviewed: needs safer plan";
+    default:
+      return "Not reviewed yet";
+  }
+}
+
+function latestReplyReviewByResponseId(reviews: JennyReplyReviewRecord[]): Map<string, JennyReplyReviewRecord> {
+  const map = new Map<string, JennyReplyReviewRecord>();
+  for (const review of reviews) {
+    if (review.response_id) {
+      map.set(review.response_id, review);
+    }
+  }
+  return map;
 }
 
 interface JennyRunProgress {
@@ -1280,7 +1319,7 @@ async function loadMissionControlEndpoint<T>(
 }
 
 async function loadCompactSnapshot(): Promise<CompactSnapshot> {
-  const [workspaceStatus, projects, projectBriefs, challengeReviews, laneRequests, reports, projectState, jennyBridgeOutbox, jennyBridgeInbox, jennyBridgePollerStatus, githubBridgeStatus, memoryStorage] = await Promise.all([
+  const [workspaceStatus, projects, projectBriefs, challengeReviews, laneRequests, reports, projectState, jennyBridgeOutbox, jennyBridgeInbox, jennyBridgePollerStatus, githubBridgeStatus, jennyReplyReviews, memoryStorage] = await Promise.all([
     loadMissionControlEndpoint("workspace status", () => fetchJSON<WorkspaceStatus>(WORKSPACE_STATUS_URL), {}),
     loadMissionControlEndpoint("projects", () => fetchJSON<{ projects?: Array<WrappedRecord<ProjectRecord> | ProjectRecord> }>(WORKSPACE_PROJECTS_URL), { projects: [] }),
     loadMissionControlEndpoint("project briefs", () => fetchJSON<{ project_briefs?: Array<WrappedRecord<ProjectBriefRecord> | ProjectBriefRecord> }>(WORKSPACE_PROJECT_BRIEFS_URL), { project_briefs: [] }),
@@ -1299,6 +1338,7 @@ async function loadCompactSnapshot(): Promise<CompactSnapshot> {
       recent_messages: [],
       response_messages: [],
     })),
+    loadMissionControlEndpoint("Jenny reply reviews", () => fetchJSON<{ reply_reviews?: Array<WrappedRecord<JennyReplyReviewRecord> | JennyReplyReviewRecord> }>(WORKSPACE_JENNY_REPLY_REVIEWS_URL), { reply_reviews: [] }),
     loadMissionControlEndpoint("profile storage", () => fetchJSON<ProfileMemoryStorage>(WORKSPACE_PROFILE_MEMORY_STORAGE_URL), error => ({
       errors: [{ error }],
       profiles: [],
@@ -1309,6 +1349,7 @@ async function loadCompactSnapshot(): Promise<CompactSnapshot> {
     challengeReviews: unwrapRecords(challengeReviews.challenge_reviews),
     jennyBridgeRequests: unwrapRecords(jennyBridgeOutbox.requests),
     jennyBridgeResponses: unwrapRecords(jennyBridgeInbox.responses),
+    jennyReplyReviews: unwrapRecords(jennyReplyReviews.reply_reviews),
     jennyBridgePollerStatus,
     githubBridgeStatus,
     laneRequests: unwrapRecords(laneRequests.lane_requests),
@@ -1505,6 +1546,37 @@ export default function MissionControlCompactPage() {
         detail: err instanceof Error ? err.message : String(err),
         phase: "error",
       });
+      setRoomMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRoomBusy(false);
+    }
+  }
+
+  async function reviewJennyReply(
+    projectView: ProjectViewModel,
+    decision: JennyReplyReviewDecision,
+    responseId: string,
+    reply: string,
+  ) {
+    const promptAction = decision === "accepted" ? "accept" : decision === "needs_evidence" ? "evidence" : "safer-plan";
+    setProjectRequest(buildJennyReplyReviewPrompt(promptAction, projectView.project.name, reply));
+    setRoomBusy(true);
+    setRoomMessage("");
+    try {
+      await fetchJSON(WORKSPACE_JENNY_REPLY_REVIEWS_CREATE_URL, {
+        body: JSON.stringify({
+          decision,
+          note: jennyReplyReviewDecisionLabel(decision),
+          project_id: projectView.project.project_id,
+          response_id: responseId,
+          reviewer: "travis",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      await refreshSnapshot();
+      setRoomMessage(`${jennyReplyReviewDecisionLabel(decision)}. Follow-up prompt is ready to send if needed.`);
+    } catch (err) {
       setRoomMessage(err instanceof Error ? err.message : String(err));
     } finally {
       setRoomBusy(false);
@@ -1751,12 +1823,14 @@ export default function MissionControlCompactPage() {
               jennyRunElapsedSeconds={jennyRunElapsedSeconds}
               jennyRunProgress={jennyRunProgress}
               memoryStorage={snapshot?.memoryStorage ?? {}}
+              replyReviews={snapshot?.jennyReplyReviews.filter(review => review.project_id === selectedProjectView.project.project_id) ?? []}
               onCopyPacket={() => void copyPhoneSafePacket(selectedProjectView)}
               onQueueBridge={() => void queueJennyBridgeMessage(selectedProjectView)}
               onQueueHermesUpdate={selectedProjectView.project.project_id === HERMES_PROJECT_ID ? () => void queueHermesUpdateLane(selectedProjectView) : undefined}
               onQueueStorageCleanup={selectedProjectView.project.project_id === HERMES_PROJECT_ID ? () => void queueHermesStorageCleanupLane(selectedProjectView) : undefined}
               onRefreshBridge={() => void refreshBridge()}
               onRequestChange={setProjectRequest}
+              onReviewReply={(decision, responseId, reply) => void reviewJennyReply(selectedProjectView, decision, responseId, reply)}
               onRunJennyOnce={() => void runJennyOnce(selectedProjectView)}
               onSaveChallenge={() => void saveChallengeDraft(selectedProjectView)}
               onSaveLane={() => void saveReadOnlyLaneDraft(selectedProjectView)}
@@ -2024,6 +2098,7 @@ function CompactProjectRoom({
   onQueueStorageCleanup,
   onOpenSession,
   onRefreshBridge,
+  onReviewReply,
   onRequestChange,
   onRunJennyOnce,
   onSaveChallenge,
@@ -2033,6 +2108,7 @@ function CompactProjectRoom({
   paused,
   projectRequest,
   projects,
+  replyReviews,
   selectedProjectView,
 }: {
   busy: boolean;
@@ -2051,6 +2127,7 @@ function CompactProjectRoom({
   onQueueStorageCleanup?: () => void;
   onOpenSession: (session: ProjectSessionRecord) => void;
   onRefreshBridge: () => void;
+  onReviewReply: (decision: JennyReplyReviewDecision, responseId: string, reply: string) => void;
   onRequestChange: (value: string) => void;
   onRunJennyOnce: () => void;
   onSaveChallenge: () => void;
@@ -2060,6 +2137,7 @@ function CompactProjectRoom({
   paused: boolean;
   projectRequest: string;
   projects: ProjectRecord[];
+  replyReviews: JennyReplyReviewRecord[];
   selectedProjectView: ProjectViewModel;
 }) {
   const sessions = selectedProjectView.projectState?.recent_sessions ?? [];
@@ -2093,26 +2171,27 @@ function CompactProjectRoom({
   const activityItems = jennyActivityItems(githubBridgeStatus);
   const requestIntake = assessProjectRequest(projectRequest, review);
   const specFirstComposerText = buildSpecFirstComposerText(selectedProjectView.project.name, projectRequest, requestIntake);
+  const latestReviewByResponseId = latestReplyReviewByResponseId(replyReviews);
   const runActive = isJennyRunActive(jennyRunProgress);
   const runCopy = jennyRunProgressCopy(jennyRunProgress, jennyRunElapsedSeconds);
   const chatMessages = [
     ...visibleBridgeRequests.map(request => ({
       body: request.message,
-      id: request.request_id,
+      id: request.request_id || request.ack_key || request.created_at || "bridge-request",
       meta: chatStatusLabel(request.bridge_state ?? (request.request_id && repliedRequestIds.has(request.request_id) ? "replied" : request.status ?? "queued")),
       speaker: "You",
       time: request.request_id,
     })),
     ...visibleBridgeResponses.map(response => ({
       body: response.message,
-      id: response.response_id,
+      id: response.response_id || response.request_id || response.created_at || "bridge-response",
       meta: chatStatusLabel(response.status ?? "reply"),
       speaker: "Jenny",
       time: response.response_id,
     })),
     ...visibleGitHubBridgeMessages.map(message => ({
       body: message.message,
-      id: message.github_comment_id || message.request_id,
+      id: message.github_comment_id || message.request_id || message.created_at || "github-message",
       meta: chatStatusLabel(message.status),
       speaker: message.from_agent === "jenny" || message.status === "replied" ? "Jenny" : "You",
       time: message.created_at,
@@ -2268,24 +2347,27 @@ function CompactProjectRoom({
                       )}>
                         {jennyReplyContract(chat.body).label}
                       </p>
+                      <p className="rounded-md border border-[#f3ebda]/10 bg-[#15101a]/60 px-2 py-1 text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere]">
+                        {jennyReplyReviewDecisionLabel(latestReviewByResponseId.get(chat.id)?.decision)}
+                      </p>
                       <div className="flex min-w-0 flex-wrap gap-1.5" aria-label="Jenny reply review actions">
                         <button
                           className="rounded-md border border-emerald-500/30 px-2 py-1 text-[0.68rem] font-semibold text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
-                          onClick={() => onRequestChange(buildJennyReplyReviewPrompt("accept", selectedProjectView.project.name, chat.body))}
+                          onClick={() => onReviewReply("accepted", chat.id, chat.body)}
                           type="button"
                         >
                           Draft acceptance note
                         </button>
                         <button
                           className="rounded-md border border-sky-500/30 px-2 py-1 text-[0.68rem] font-semibold text-sky-700 hover:bg-sky-500/10 dark:text-sky-300"
-                          onClick={() => onRequestChange(buildJennyReplyReviewPrompt("evidence", selectedProjectView.project.name, chat.body))}
+                          onClick={() => onReviewReply("needs_evidence", chat.id, chat.body)}
                           type="button"
                         >
                           Ask for evidence
                         </button>
                         <button
                           className="rounded-md border border-amber-500/30 px-2 py-1 text-[0.68rem] font-semibold text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
-                          onClick={() => onRequestChange(buildJennyReplyReviewPrompt("safer-plan", selectedProjectView.project.name, chat.body))}
+                          onClick={() => onReviewReply("needs_safer_plan", chat.id, chat.body)}
                           type="button"
                         >
                           Challenge plan
