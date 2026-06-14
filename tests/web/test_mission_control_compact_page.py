@@ -133,11 +133,15 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Return only the spec/challenge review and the recommended next safe lane.",
         "Queue for Jenny bridge",
         "Refresh replies",
-        "w-[100dvw]",
+        "w-full max-w-[100vw] overflow-x-clip",
+        "mx-0 max-w-full overflow-hidden",
         "order-1 min-w-0 max-w-full overflow-hidden xl:order-1",
         "order-2 min-w-0 max-w-full overflow-hidden xl:order-2",
-        "max-w-[11rem] shrink-0 rounded-full",
+        "grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[auto_repeat(5,minmax(0,1fr))]",
+        "min-w-0 max-w-full rounded-full",
         "block truncate font-semibold",
+        "grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between",
+        "w-full rounded-lg border border-emerald-500/40",
         "projectRoomProjects",
         "canonicalRealProjects",
         "projects={projectRoomProjects}",
@@ -255,7 +259,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
 def test_compact_project_chat_wraps_long_mobile_text() -> None:
     src = page_source()
     for expected in [
-        "overflow-x-hidden",
+        "overflow-x-clip",
         "overflow-y-auto overflow-x-hidden",
         "[overflow-wrap:anywhere]",
         "min-w-0 max-w-full",
