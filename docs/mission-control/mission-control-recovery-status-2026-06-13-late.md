@@ -23,7 +23,7 @@ longer exposes paused-project queue buttons while the recovery lane is active.
 
 Latest accepted-live head after the current recovery UI sequence:
 
-- `4c674cb868d396b39b78a92b99db2cf193010133`
+- `f0ce9ca5125c42137fb0ac5f9985369d983d746b`
 
 ## Completed PRs
 
@@ -38,22 +38,31 @@ Latest accepted-live head after the current recovery UI sequence:
 | #141 | `112361b51aa5803436208886a75180539308cbe3` | Keeps all five project rooms visible even when backend project records are partially projected. Existing records still override canonical project anchors. |
 | #142 | `82e142577f54d3cd3e2a728b33ac78827cb775cc` | Renames the owner-facing one-shot bridge action from `Run Jenny once` to `Get Jenny reply`. |
 | #143 | `4c674cb868d396b39b78a92b99db2cf193010133` | Adds plain owner-facing copy explaining that desktop can be current while phone/web waits for a safe dashboard-only update. |
+| #144 | `b41e5a7957834805fbcc6c2026da2ab957b0fdda` | Refreshes this Mission Control recovery status handoff. |
+| #145 | `b7835fc9fcc79a8deafa23ed01dc7e8930873ea6` | Adds paused-project resume requirements so paused work cannot resume without brief, challenge review, allowed/forbidden actions, and Travis approval. |
+| #146 | `bf140807bfbe5efbf74b7c519821e69aad49ad1f` | Adds packaged desktop validation for Jenny Workspace and the five project anchors. |
+| #147 | `feb34a1ba8228f309b391a598844e313f7c4b7ee` | Routes Hermes update and storage cleanup lane buttons through the GitHub Jenny mailbox instead of the old local-only bridge. |
+| #148 | `2d5c4c608b2a03411d4961325e14e2228db486de` | Keeps the desktop app single-instance so a second launch focuses the existing Hermes window instead of opening a duplicate. |
+| #149 | `c98b553c8f0640965dc810c5c2c4df92fc62692f` | Makes compact/phone previous-session cards open the real chat resume route. |
+| #150 | `854a5bbee8769c1c1b51e0eb45da9e1c1516ad91` | Fixes desktop package validation so an explicit `release-bridge` root is validated in place without rebuilding into the default `release` folder. |
+| #151 | `f0ce9ca5125c42137fb0ac5f9985369d983d746b` | Hides additional bridge-smoke diagnostics such as `Bridge works` and `success smoke reached` from normal project chat. |
 
 ## Local Desktop Status
 
-The local desktop app was rebuilt in place at PR #143:
+The local desktop app was rebuilt in place at PR #151:
 
 - path:
   `C:\Users\Travis\Documents\Codex\2026-06-12\how-do-we-connect-you-to\work\hermes-agent\apps\desktop\release-bridge\win-unpacked\Hermes.exe`
 - latest build stamp commit:
-  `4c674cb868d396b39b78a92b99db2cf193010133`
+  `f0ce9ca5125c42137fb0ac5f9985369d983d746b`
 
 Expected desktop behavior:
 
 - five real projects visible,
 - Hermes / Mission Control active,
 - other four projects paused/read-only,
-- normal conversation hides smoke/error diagnostics,
+- normal conversation hides smoke/error diagnostics and bridge-smoke
+  confirmation chatter,
 - primary controls are chat-like: message Jenny, send, get Jenny reply, refresh,
 - five project-room anchors remain visible even if the backend temporarily
   returns only Hermes / Mission Control,
@@ -72,7 +81,8 @@ Verified dashboard-only deployments completed through PR #136:
 - gateway runtime intentionally unchanged:
   `/home/jenny/.hermes/hermes-runtime-control-plane-af1eafe`
 
-PR #137/#139/#141/#142/#143 dashboard runtime switch is still pending. Codex
+PR #137/#139/#141/#142/#143/#145/#146/#147/#148/#149/#150/#151 dashboard
+runtime switch is still pending. Codex
 fixed host-key verification with a repo-local known-hosts entry matching the
 previously accepted VPS fingerprint, but direct SSH still hits a Tailscale
 browser re-auth challenge.
@@ -81,11 +91,11 @@ Fallback action already taken:
 
 - queued a GitHub bridge request to Jenny on PR #79,
 - superseding request id:
-  `codex-pr143-dashboard-deploy-head-update-20260614-001`,
+  `codex-pr151-dashboard-deploy-structured-20260614-001`,
 - supersedes earlier request:
-  `codex-pr139-dashboard-deploy-20260613-232501`,
+  `codex-pr150-dashboard-deploy-structured-20260614-001`,
 - request asks for dashboard-only runtime switch to
-  `4c674cb868d396b39b78a92b99db2cf193010133`, no gateway restart, no
+  `f0ce9ca5125c42137fb0ac5f9985369d983d746b`, no gateway restart, no
   dispatch/session-send, and exactly one `AcceptedBaselineRecord` only after
   successful validation.
 
@@ -139,6 +149,58 @@ PR #143 validation:
 - GitHub CI: clean,
 - local desktop app rebuilt in place.
 
+PR #145 validation:
+
+- local desktop type-check: passed,
+- targeted desktop ESLint: passed,
+- GitHub CI: clean.
+
+PR #146 validation:
+
+- packaged desktop validator path added and validated,
+- GitHub CI: clean,
+- local desktop app rebuilt in place.
+
+PR #147 validation:
+
+- local desktop type-check: passed,
+- targeted desktop ESLint: passed,
+- Python compile for touched backend files: passed,
+- GitHub CI: clean,
+- local desktop app rebuilt in place.
+
+PR #148 validation:
+
+- desktop platform tests: passed,
+- desktop type-check: passed,
+- targeted desktop ESLint: passed,
+- GitHub CI: clean,
+- local desktop app rebuilt in place.
+
+PR #149 validation:
+
+- `npx tsc -b web`: passed,
+- targeted compact static test: passed,
+- targeted web ESLint: passed,
+- GitHub CI: clean,
+- local desktop app rebuilt in place.
+
+PR #150 validation:
+
+- `HERMES_DESKTOP_RELEASE_ROOT=apps/desktop/release-bridge npm run test:desktop -- validate`: passed,
+- `node --check apps/desktop/scripts/test-desktop.mjs`: passed,
+- GitHub CI: clean,
+- local desktop app rebuilt in place.
+
+PR #151 validation:
+
+- local desktop type-check: passed,
+- targeted desktop and compact ESLint: passed,
+- Python compile for compact static tests: passed,
+- static diagnostic marker check: passed,
+- GitHub CI: clean,
+- local desktop app rebuilt in place.
+
 Local browser visual validation was attempted but blocked by the Windows
 sandbox browser runtime:
 
@@ -160,7 +222,7 @@ sandbox browser runtime:
 Primary next lane:
 
 - finish the latest accepted-live dashboard-only runtime switch to
-  `4c674cb868d396b39b78a92b99db2cf193010133`.
+  `f0ce9ca5125c42137fb0ac5f9985369d983d746b`.
 
 After that:
 
