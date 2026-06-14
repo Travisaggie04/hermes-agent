@@ -318,6 +318,32 @@ function latestPendingGitHubBridgeMessage(messages: MissionControlGitHubBridgeMe
   return pending.length ? pending[pending.length - 1] : null
 }
 
+function timestampValue(value?: string): number {
+  const time = Date.parse(value ?? '')
+  return Number.isFinite(time) ? time : 0
+}
+
+function latestJennyReplyTimestamp(
+  responses: MissionControlJennyBridgeResponseRecord[],
+  githubMessages: MissionControlGitHubBridgeMessageRecord[]
+): number {
+  const responseTimes = responses.map(response => timestampValue(response.created_at))
+  const githubReplyTimes = githubMessages
+    .filter(message => message.from_agent === 'jenny' || message.status === 'replied')
+    .map(message => timestampValue(message.created_at))
+
+  return Math.max(0, ...responseTimes, ...githubReplyTimes)
+}
+
+function isCurrentAfterReply(createdAt: string | undefined, latestReplyAt: number): boolean {
+  if (!latestReplyAt) {
+    return true
+  }
+
+  const created = timestampValue(createdAt)
+  return !created || created > latestReplyAt
+}
+
 function isDiagnosticChatMessage(message?: string): boolean {
   const text = (message ?? '').toLowerCase()
   return [
@@ -1827,6 +1853,9 @@ function ProjectRoomsWorkspace({
   const visibleBridgeRequests = bridgeRequests.filter(request => !isDiagnosticChatMessage(request.message))
   const visibleBridgeResponses = bridgeResponses.filter(response => !isDiagnosticChatMessage(response.message))
   const visibleGitHubBridgeMessages = githubBridgeMessages.filter(message => !isDiagnosticChatMessage(message.message) && !isOperatorBridgeMessage(message))
+  const latestReplyAt = latestJennyReplyTimestamp(visibleBridgeResponses, visibleGitHubBridgeMessages)
+  const currentPendingBridgeRequests = visibleBridgeRequests.filter(request => isCurrentAfterReply(request.created_at, latestReplyAt))
+  const currentPendingGitHubBridgeMessages = visibleGitHubBridgeMessages.filter(message => isCurrentAfterReply(message.created_at, latestReplyAt))
   const repliedRequestIds = new Set(visibleBridgeResponses.map(response => response.request_id).filter(Boolean))
   const githubResponseIds = new Set(
     visibleGitHubBridgeMessages
@@ -1834,14 +1863,14 @@ function ProjectRoomsWorkspace({
       .map(message => message.request_id)
       .filter(Boolean)
   )
-  const githubPendingCount = visibleGitHubBridgeMessages.filter(message =>
+  const githubPendingCount = currentPendingGitHubBridgeMessages.filter(message =>
     message.to_agent === 'jenny' &&
     ['queued', 'retry_requested'].includes(message.status) &&
     !githubResponseIds.has(message.request_id)
   ).length
-  const latestPending = latestPendingGitHubBridgeMessage(visibleGitHubBridgeMessages)
+  const latestPending = latestPendingGitHubBridgeMessage(currentPendingGitHubBridgeMessages)
   const githubResponseCount = visibleGitHubBridgeMessages.filter(message => message.status === 'replied' || message.from_agent === 'jenny').length
-  const pendingCount = pendingJennyMessageCount(visibleBridgeRequests, visibleBridgeResponses) + githubPendingCount
+  const pendingCount = pendingJennyMessageCount(currentPendingBridgeRequests, visibleBridgeResponses) + githubPendingCount
   const responseCount = visibleBridgeResponses.length + githubResponseCount
   const deliveryStatus = jennyDeliveryStatus(pendingCount, responseCount, bridgeStatus, githubBridgeStatus)
   const connectionState = jennyConnectionState(pendingCount, responseCount, bridgeStatus, githubBridgeStatus)
@@ -2143,7 +2172,7 @@ function ProjectRoomsWorkspace({
               </p>
               <div className="mt-3 grid gap-2 rounded-md border border-emerald-500/20 bg-background/60 p-2 text-xs md:grid-cols-2">
                 <Field label="manual relay" value={bridgeStatus.manual_start_only === false ? 'disabled' : 'manual-start only'} />
-                <Field label="pending" value={String(bridgeStatus.pending_count ?? visibleBridgeRequests.filter(request => (request.bridge_state ?? request.status ?? 'queued') !== 'replied').length)} />
+                <Field label="pending" value={String(pendingCount)} />
                 <Field label="last status" value={bridgeStatus.last_status ?? 'idle'} />
                 <Field label="last response" value={bridgeStatus.last_response_request_id || bridgeStatus.last_response_at || 'none'} />
                 <Field label="last error" value={bridgeStatus.last_error || 'none'} />
