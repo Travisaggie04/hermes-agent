@@ -689,6 +689,14 @@ interface JennyRunProgress {
   phase: "complete" | "error" | "queued" | "starting" | "waiting";
 }
 
+type JennyWorkSessionStepState = "active" | "blocked" | "done" | "idle";
+
+interface JennyWorkSessionStep {
+  detail: string;
+  label: string;
+  state: JennyWorkSessionStepState;
+}
+
 function jennyRunProgressCopy(progress: JennyRunProgress | null, elapsedSeconds: number): { detail: string; label: string } {
   if (!progress) {
     return {
@@ -724,6 +732,61 @@ function jennyRunProgressCopy(progress: JennyRunProgress | null, elapsedSeconds:
 
 function isJennyRunActive(progress: JennyRunProgress | null): boolean {
   return progress?.phase === "starting" || progress?.phase === "waiting";
+}
+
+function jennyWorkSessionSteps({
+  hasError,
+  hasRunnablePendingMessage,
+  pendingCount,
+  progress,
+  replyReviewTone,
+  responseCount,
+}: {
+  hasError: boolean;
+  hasRunnablePendingMessage: boolean;
+  pendingCount: number;
+  progress: JennyRunProgress | null;
+  replyReviewTone: "accepted" | "blocked" | "none" | "warn";
+  responseCount: number;
+}): JennyWorkSessionStep[] {
+  const activeRun = isJennyRunActive(progress);
+  const hasReply = responseCount > 0 || progress?.phase === "complete" || replyReviewTone !== "none";
+  const queued = pendingCount > 0 || hasRunnablePendingMessage || Boolean(progress);
+
+  return [
+    {
+      detail: queued ? "Message is in Jenny mailbox." : "Write and send one bounded message.",
+      label: "Queued",
+      state: hasError ? "blocked" : queued && !activeRun && !hasReply ? "active" : queued || hasReply ? "done" : "idle",
+    },
+    {
+      detail: activeRun ? "One guarded reply is running." : hasReply ? "Jenny run finished." : "Use Get Jenny reply when ready.",
+      label: "Jenny working",
+      state: hasError ? "blocked" : activeRun ? "active" : hasReply ? "done" : "idle",
+    },
+    {
+      detail: hasReply ? "Latest reply is available." : "No reply yet.",
+      label: "Reply received",
+      state: hasError ? "blocked" : hasReply ? "done" : "idle",
+    },
+    {
+      detail: replyReviewTone === "accepted"
+        ? "Reply accepted; send the next bounded message."
+        : replyReviewTone === "blocked" || replyReviewTone === "warn"
+          ? "Review asks Jenny for stronger evidence or a safer plan."
+          : hasReply
+            ? "Review the reply before relying on it."
+            : "Waiting for a reply to review.",
+      label: "Review next",
+      state: replyReviewTone === "accepted"
+        ? "done"
+        : replyReviewTone === "blocked" || replyReviewTone === "warn"
+          ? "blocked"
+          : hasReply
+            ? "active"
+            : "idle",
+    },
+  ];
 }
 
 function jennyActivityLabel(status: string | undefined): string {
@@ -2336,6 +2399,14 @@ function CompactProjectRoom({
   const statusCopy = jennyRunProgress
     ? runCopy
     : { detail: paused ? "This project is paused until Jenny is stable." : nextStep, label: connectionState.label };
+  const workSessionSteps = jennyWorkSessionSteps({
+    hasError: Boolean(bridgeError),
+    hasRunnablePendingMessage: Boolean(latestPending),
+    pendingCount,
+    progress: jennyRunProgress,
+    replyReviewTone: replyReviewStatus.tone,
+    responseCount,
+  });
 
   return (
     <section
@@ -2433,6 +2504,8 @@ function CompactProjectRoom({
           <p className="mt-2 max-w-full text-sm leading-snug [overflow-wrap:anywhere]">{statusCopy.detail}</p>
           {bridgeError ? <p className="mt-2 max-w-full text-xs [overflow-wrap:anywhere]">Bridge error: {bridgeError}</p> : null}
         </section>
+
+        <JennyWorkSessionTimeline steps={workSessionSteps} />
 
         <details className="mt-2 min-w-0 max-w-full overflow-hidden rounded-md border border-[#60a5fa]/25 bg-[#60a5fa]/10 px-3 py-2" aria-label="Jenny activity">
           <summary className="cursor-pointer text-sm font-semibold text-[#f3ebda]">Jenny activity</summary>
@@ -3189,5 +3262,37 @@ function CompactField({ label, value }: { label: string; value: string }) {
       <div className="text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
       <div className="mt-1 text-sm leading-snug [overflow-wrap:anywhere]">{value}</div>
     </div>
+  );
+}
+
+function jennyWorkSessionStepClass(state: JennyWorkSessionStepState): string {
+  if (state === "done") {
+    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200";
+  }
+  if (state === "active") {
+    return "border-sky-500/35 bg-sky-500/10 text-sky-700 dark:text-sky-200";
+  }
+  if (state === "blocked") {
+    return "border-red-500/35 bg-red-500/10 text-red-700 dark:text-red-200";
+  }
+  return "border-border/70 bg-background/70 text-muted-foreground";
+}
+
+function JennyWorkSessionTimeline({ steps }: { steps: JennyWorkSessionStep[] }) {
+  return (
+    <section aria-label="Jenny work session" className="mt-2 max-w-full overflow-hidden rounded-md border border-border/70 bg-background/70 p-2">
+      <div className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Work session</div>
+      <div className="mt-2 grid min-w-0 gap-2 min-[420px]:grid-cols-2">
+        {steps.map((step, index) => (
+          <article className={cn("min-w-0 max-w-full rounded-md border px-2.5 py-2 text-xs", jennyWorkSessionStepClass(step.state))} key={step.label}>
+            <div className="flex min-w-0 items-center gap-2 font-semibold">
+              <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full border border-current/25 text-[0.65rem]">{index + 1}</span>
+              <span className="min-w-0 [overflow-wrap:anywhere]">{step.label}</span>
+            </div>
+            <p className="mt-1 max-w-full leading-snug opacity-80 [overflow-wrap:anywhere]">{step.detail}</p>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
