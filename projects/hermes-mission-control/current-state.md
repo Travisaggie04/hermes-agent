@@ -103,9 +103,9 @@ Jenny is stable enough to resume project work through the new OS surface.
 
 ## 2026-06-14 Early Recovery Update
 
-The recovery status document now tracks accepted-live through PR #159. Current
+The recovery status document now tracks accepted-live through PR #161. Current
 local desktop `release-bridge` is rebuilt and validated at
-`ee49c42e94f8a7fcdfd2a48ea40f5aaf9f4a753c`.
+`05ce12414dedada7b68326585ea24345baac0cb5`.
 
 The remaining visible gap is the bounded dashboard-only runtime switch on the
 VPS so phone/web surfaces catch up to the current accepted-live Mission Control
@@ -123,3 +123,5 @@ fenced JSON packets can still be read instead of silently stalling the
 Codex/Jenny handoff. PR #158 reports Tailscale/SSH auth-required failures as
 structured bridge status. PR #159 renames technical owner-facing sections to
 `Safety details and reports`, `Safety and maintenance`, and `Project context`.
+PR #161 keeps stale pre-reply bridge messages from making the owner-facing chat
+look currently stuck at `Pending N` after Jenny has already replied later.

@@ -23,7 +23,7 @@ longer exposes paused-project queue buttons while the recovery lane is active.
 
 Latest accepted-live head after the current recovery UI sequence:
 
-- `ee49c42e94f8a7fcdfd2a48ea40f5aaf9f4a753c`
+- `05ce12414dedada7b68326585ea24345baac0cb5`
 
 ## Completed PRs
 
@@ -54,15 +54,17 @@ Latest accepted-live head after the current recovery UI sequence:
 | #157 | `b1e59b1564bdc83266df3d8c5f5337dd9766f78a` | Refreshes this recovery status through PR #156. |
 | #158 | `589a8f21c0e18bfae233a66443e027bddf74ded8` | Reports Tailscale/SSH auth-required failures as structured bridge status instead of an ambiguous exception. |
 | #159 | `ee49c42e94f8a7fcdfd2a48ea40f5aaf9f4a753c` | Renames visible technical sections to owner-facing labels: `Safety details and reports`, `Safety and maintenance`, and `Project context`. |
+| #160 | `be3c4870aeb809b2c432c290d0b9586252adeece` | Refreshes this recovery status through PR #159. |
+| #161 | `05ce12414dedada7b68326585ea24345baac0cb5` | Makes owner-facing Jenny chat status ignore stale pending messages from before the latest Jenny reply. |
 
 ## Local Desktop Status
 
-The local desktop app was rebuilt in place at PR #159:
+The local desktop app was rebuilt in place at PR #161:
 
 - path:
   `C:\Users\Travis\Documents\Codex\2026-06-12\how-do-we-connect-you-to\work\hermes-agent\apps\desktop\release-bridge\win-unpacked\Hermes.exe`
 - latest build stamp commit:
-  `ee49c42e94f8a7fcdfd2a48ea40f5aaf9f4a753c`
+  `05ce12414dedada7b68326585ea24345baac0cb5`
 
 Expected desktop behavior:
 
@@ -74,6 +76,8 @@ Expected desktop behavior:
 - operator bridge packets from Codex deploy/review coordination are hidden
   from the owner-facing chat,
 - primary controls are chat-like: message Jenny, send, get Jenny reply, refresh,
+- owner-facing pending/replied status ignores stale pre-reply bridge messages
+  so old unanswered records do not keep the room stuck at `Pending N`,
 - five project-room anchors remain visible even if the backend temporarily
   returns only Hermes / Mission Control,
 - if accepted-live is ahead of the served dashboard, desktop shows plain
@@ -91,7 +95,7 @@ Verified dashboard-only deployments completed through PR #136:
 - gateway runtime intentionally unchanged:
   `/home/jenny/.hermes/hermes-runtime-control-plane-af1eafe`
 
-PR #137/#139/#141/#142/#143/#145/#146/#147/#148/#149/#150/#151/#152/#153/#154/#155/#156/#157/#158/#159
+PR #137/#139/#141/#142/#143/#145/#146/#147/#148/#149/#150/#151/#152/#153/#154/#155/#156/#157/#158/#159/#160/#161
 dashboard runtime switch is still pending. Codex
 fixed host-key verification with a repo-local known-hosts entry matching the
 previously accepted VPS fingerprint, but direct SSH still hits a Tailscale
@@ -101,11 +105,11 @@ Fallback action already taken:
 
 - queued a GitHub bridge request to Jenny on PR #79,
 - superseding request id:
-  `codex-pr159-dashboard-deploy-head-update-20260614-001`,
+  `codex-pr161-dashboard-deploy-head-update-20260614-001`,
 - supersedes earlier request:
-  `codex-pr158-dashboard-deploy-head-update-20260614-001`,
+  `codex-pr160-dashboard-deploy-head-update-20260614-001`,
 - request asks for dashboard-only runtime switch to
-  `ee49c42e94f8a7fcdfd2a48ea40f5aaf9f4a753c`, no gateway restart, no
+  `05ce12414dedada7b68326585ea24345baac0cb5`, no gateway restart, no
   dispatch/session-send, and exactly one `AcceptedBaselineRecord` only after
   successful validation.
 
@@ -278,6 +282,27 @@ PR #159 validation:
 - local desktop app rebuilt and packaged validator passed against
   `apps/desktop/release-bridge`.
 
+PR #160 validation:
+
+- docs-only diff,
+- `git diff --check`: passed,
+- GitHub CI: clean,
+- local desktop app rebuilt and packaged validator passed against
+  `apps/desktop/release-bridge`.
+
+PR #161 validation:
+
+- local desktop type-check: passed,
+- targeted desktop and compact ESLint: passed,
+- `npx tsc -b web`: passed,
+- Python compile for compact static tests: passed,
+- `git diff --check`: passed,
+- GitHub CI: clean,
+- local desktop app rebuilt and packaged validator passed against
+  `apps/desktop/release-bridge`.
+- local Windows Vitest remained blocked by the sandbox/esbuild path permission
+  issue, so CI and Jenny/Linux-style checks remain the stronger test evidence.
+
 Local browser visual validation was attempted but blocked by the Windows
 sandbox browser runtime:
 
@@ -299,7 +324,7 @@ sandbox browser runtime:
 Primary next lane:
 
 - finish the latest accepted-live dashboard-only runtime switch to
-  `ee49c42e94f8a7fcdfd2a48ea40f5aaf9f4a753c`.
+  `05ce12414dedada7b68326585ea24345baac0cb5`.
 
 After that:
 
