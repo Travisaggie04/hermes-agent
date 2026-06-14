@@ -93,7 +93,7 @@ function validateMissionControlRendererText(rendererText) {
   const markerGroups = [
     ['Jenny Workspace', 'Project chat workspace', 'Message Jenny', 'Send to Jenny', 'Get Jenny reply'],
     ['Hermes / Mission Control', 'Long-form Video', 'Shorts Video', 'Tool & Tally', 'Waha Work'],
-    ['Paused until Jenny is stable', 'Resume requirements', 'Jenny bridge guarded']
+    ['Paused until Jenny is stable', 'Resume requirements', 'Jenny guarded']
   ]
 
   for (const markers of markerGroups) {
