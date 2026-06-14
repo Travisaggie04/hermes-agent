@@ -254,7 +254,7 @@ function freshnessLabel(state: MissionControlProjectState | null): string {
     return 'Live report available'
   }
 
-  return 'Seed only — needs first report'
+  return 'Seed only - needs first report'
 }
 
 function truncate(value: string, maxChars: number): string {
@@ -262,7 +262,7 @@ function truncate(value: string, maxChars: number): string {
     return value
   }
 
-  return `${value.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`
+  return `${value.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`
 }
 
 function compactText(value: string | string[] | null | undefined, maxChars: number): string {
@@ -519,7 +519,7 @@ function basename(path: string | null | undefined): string {
 function sessionMeta(session: MissionControlProjectSession): string {
   const meta = [session.profile, session.source, basename(session.cwd)].filter(Boolean)
 
-  return meta.length ? meta.join(' · ') : 'No profile/source recorded'
+  return meta.length ? meta.join(' / ') : 'No profile/source recorded'
 }
 
 function latestLaneForProject(projectId: string, lanes: MissionControlLaneRequestRecord[]) {
@@ -787,11 +787,11 @@ export function buildMissionControlCopyPrompt({
 }): string {
   const model = projectRenderModel(project, report, state)
   const template = templateForProject(project)
-  const risksBlockers = [listText(model.risks), listText(model.blockers)].filter(value => value !== 'None recorded').join(' · ') || 'None recorded'
+  const risksBlockers = [listText(model.risks), listText(model.blockers)].filter(value => value !== 'None recorded').join(' / ') || 'None recorded'
   const noHistory = model.latestReportSummary === 'No report yet' && model.latestResult === 'No result yet'
   const historyFallback = noHistory ? 'No prior report/result exists; start by verifying current state before acting.' : ''
 
-  const prompt = `PROJECT NEXT LANE — REVIEW PACKET
+  const prompt = `PROJECT NEXT LANE - REVIEW PACKET
 
 Project: ${project.name}
 Objective: ${template.objective}
@@ -1523,7 +1523,7 @@ export function MissionControlView() {
       </header>
 
       {error ? <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
-      {loading ? <div className="rounded-lg border border-border/70 p-4 text-sm text-muted-foreground">Loading Mission Control workspace…</div> : null}
+      {loading ? <div className="rounded-lg border border-border/70 p-4 text-sm text-muted-foreground">Loading Mission Control workspace...</div> : null}
 
       {updateNotice ? (
         <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
@@ -1655,7 +1655,7 @@ export function MissionControlView() {
           <div className="mt-3 grid gap-2">
             {supportingProjects.map(project => (
               <div className="rounded-lg border border-border/60 bg-background/40 p-3 text-xs text-muted-foreground" key={project.project_id}>
-                <span className="font-medium text-foreground/80">{project.name}</span> — de-emphasized smoke/support record
+                <span className="font-medium text-foreground/80">{project.name}</span> - de-emphasized smoke/support record
               </div>
             ))}
           </div>
@@ -2344,10 +2344,10 @@ function ManualReportIngestion({
         <ReportInput label="Optional lane request ID" onChange={value => onChange('laneRequestId', value)} value={form.laneRequestId} />
         <ReportInput label="Jenny report summary" onChange={value => onChange('summary', value)} required value={form.summary} />
         <ReportInput label="Latest result" onChange={value => onChange('result', value)} value={form.result} />
-        <ReportInput label="Risks/blockers — one per line" onChange={value => onChange('risks', value)} value={form.risks} />
-        <ReportInput label="Artifact/report links — one per line" onChange={value => onChange('artifactLinks', value)} value={form.artifactLinks} />
-        <ReportInput label="Changed files or evidence paths — one per line" onChange={value => onChange('changedFiles', value)} value={form.changedFiles} />
-        <ReportInput label="Tests/checks — one per line" onChange={value => onChange('tests', value)} value={form.tests} />
+        <ReportInput label="Risks/blockers - one per line" onChange={value => onChange('risks', value)} value={form.risks} />
+        <ReportInput label="Artifact/report links - one per line" onChange={value => onChange('artifactLinks', value)} value={form.artifactLinks} />
+        <ReportInput label="Changed files or evidence paths - one per line" onChange={value => onChange('changedFiles', value)} value={form.changedFiles} />
+        <ReportInput label="Tests/checks - one per line" onChange={value => onChange('tests', value)} value={form.tests} />
         <ReportInput className="lg:col-span-2" label="Next recommended lane" onChange={value => onChange('nextRecommendedLane', value)} value={form.nextRecommendedLane} />
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -2357,9 +2357,9 @@ function ManualReportIngestion({
           onClick={onSave}
           type="button"
         >
-          {saving ? 'Saving report…' : 'Save Jenny report manually'}
+          {saving ? 'Saving report...' : 'Save Jenny report manually'}
         </button>
-        <span className="text-xs text-muted-foreground">Manual-copy only · no session send · no queue mutation · no model routing</span>
+        <span className="text-xs text-muted-foreground">Manual-copy only / no session send / no queue mutation / no model routing</span>
       </div>
       {message ? <p className="mt-2 text-sm text-muted-foreground">{message}</p> : null}
     </section>
@@ -2434,7 +2434,7 @@ function ProjectSessionSummary({
           {recentSessions.slice(0, 3).map(session => (
             <SessionSummaryRow
               actionLabel="Move link"
-              badge="Linked · source of truth"
+              badge="Linked / source of truth"
               key={session.durable_session_id || session.session_id}
               onAction={() => onMoveLink(session)}
               session={session}
@@ -2446,7 +2446,7 @@ function ProjectSessionSummary({
       )}
       {suggestedSessions.length ? (
         <div className="mt-3 rounded-md border border-dashed border-amber-500/40 bg-amber-500/5 p-2">
-          <div className="font-medium text-amber-800 dark:text-amber-200">Suggested sessions — display-only</div>
+          <div className="font-medium text-amber-800 dark:text-amber-200">Suggested sessions - display-only</div>
           <p className="mt-1">Suggestions do not create links or become source-of-truth records.</p>
           <div className="mt-2 grid gap-2">
             {suggestedSessions.map(session => (
@@ -2510,7 +2510,7 @@ function UnassignedSessionsPanel({
           <p className="text-xs text-muted-foreground">Recent sessions not linked to a Mission Control project yet.</p>
         </div>
         <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-800 dark:text-amber-200">
-          {sessions.length} recent · {suggestionCount} suggestions
+          {sessions.length} recent / {suggestionCount} suggestions
         </span>
       </div>
       <p className="mt-2 text-xs text-muted-foreground">Suggested project badges are display-only. They do not create SessionProjectLinkRecord truth.</p>
@@ -2523,7 +2523,7 @@ function UnassignedSessionsPanel({
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {session.suggested_project_id ? (
                   <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[0.68rem] font-medium text-blue-700 dark:text-blue-300">
-                    Suggested: {projectNameForId(session.suggested_project_id, projects)} · display-only
+                    Suggested: {projectNameForId(session.suggested_project_id, projects)} / display-only
                   </span>
                 ) : (
                   <span className="text-[0.68rem] text-muted-foreground">No suggested project</span>
@@ -2570,7 +2570,7 @@ function ProjectCard({
   const model = projectRenderModel(project, report, state)
   const linkedSessionCount = state?.linked_session_count ?? sessionGroup?.linked_session_count ?? sessionGroup?.sessions.length ?? 0
   const recentSessions = state?.recent_sessions?.length ? state.recent_sessions : (sessionGroup?.sessions ?? [])
-  const risksBlockers = [listText(model.risks), listText(model.blockers)].filter(value => value !== 'None recorded').join(' · ') || 'None recorded'
+  const risksBlockers = [listText(model.risks), listText(model.blockers)].filter(value => value !== 'None recorded').join(' / ') || 'None recorded'
   const prompt = buildMissionControlCopyPrompt({ project, report, state, status })
 
   return (
@@ -2585,14 +2585,14 @@ function ProjectCard({
       <Field label="status" value={state?.status ?? project.status} />
       <Field label="current goal" value={state?.current_goal ?? project.current_goal} />
       <Field label="freshness" value={freshnessLabel(state)} />
-      <Field label="latest lane" value={lane ? `${lane.title}${lane.status ? ` (${lane.status})` : ''}${lane.objective ? ` — ${lane.objective}` : ''}` : 'No draft lane request recorded'} />
+      <Field label="latest lane" value={lane ? `${lane.title}${lane.status ? ` (${lane.status})` : ''}${lane.objective ? ` - ${lane.objective}` : ''}` : 'No draft lane request recorded'} />
       <Field label="latest Jenny report summary" value={model.latestReportSummary} />
       <Field label="report contract" value={model.reportContract} />
       <Field label="latest result" value={model.latestResult} />
       <Field label="risks/blockers" value={risksBlockers} />
       <Field label="last action time" value={`${model.latestActivityAt} (${model.latestActivitySource})`} />
       <Field label="artifact/report links" value={listText(model.artifactLinks, 'No artifact/report links recorded')} />
-      <Field label="missing state fields" value={listText(model.missingStateFields, 'None — report state is current')} />
+      <Field label="missing state fields" value={listText(model.missingStateFields, 'None - report state is current')} />
       <Field label="next recommended lane" value={model.nextLane} />
       <Field label="source of truth" value={project.source_of_truth} />
       <ProjectSessionSummary
@@ -2684,7 +2684,7 @@ function SessionLinkConfirmationDialog({
           </label>
           {dialog.session.suggested_project_id ? (
             <p className="text-xs text-amber-700 dark:text-amber-200">
-              Suggested project: {projectNameForId(dialog.session.suggested_project_id, projects)} · display-only until confirmed.
+              Suggested project: {projectNameForId(dialog.session.suggested_project_id, projects)} / display-only until confirmed.
             </p>
           ) : null}
           <label className="flex items-start gap-2 text-xs text-muted-foreground">
@@ -2703,7 +2703,7 @@ function SessionLinkConfirmationDialog({
             onClick={onSave}
             type="button"
           >
-            {saving ? 'Appending record…' : buttonLabel}
+            {saving ? 'Appending record...' : buttonLabel}
           </button>
         </div>
       </section>

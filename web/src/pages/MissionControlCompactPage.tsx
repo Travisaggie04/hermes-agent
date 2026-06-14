@@ -790,13 +790,13 @@ function viewModelForProject(snapshot: CompactSnapshot, project: ProjectRecord):
     artifactLinks: artifactText(state, report),
     blockers: listText(blockerValues, "No blockers recorded"),
     currentGoal: text(state?.current_goal ?? project.current_goal, "No current goal recorded"),
-    freshness: state?.has_real_report ? "Live report available" : "Seed only — needs first report",
+    freshness: state?.has_real_report ? "Live report available" : "Seed only - needs first report",
     latestActivity: text(state?.latest_activity_at, "No activity time recorded"),
     latestLane: text(state?.latest_lane_title ?? lane?.title, "No lane recorded"),
     latestLaneRequest: lane,
     latestReport: text(state?.latest_report_summary || report?.summary || project.latest_report_summary, "No report yet"),
     latestResult: text(state?.latest_result || report?.result || project.latest_result, "No result yet"),
-    missingFields: listText(state?.missing_state_fields, "None — report state is current"),
+    missingFields: listText(state?.missing_state_fields, "None - report state is current"),
     nextLane: text(state?.next_recommended_lane ?? report?.next_recommended_lane ?? project.next_recommended_lane ?? lane?.title, "No recommended lane yet"),
     projectBrief,
     projectState: state,
@@ -834,7 +834,7 @@ function structuredJennyHandoff(projectName: string): string {
 function buildCompactNextLanePrompt(projectView: ProjectViewModel, workspaceStatus: WorkspaceStatus): string {
   const guidance = PROJECT_LANE_GUIDANCE[projectView.project.project_id] ?? "Read-only Mission Control status lane. Report current state and the next safe manual step.";
   return [
-    "MISSION CONTROL COMPACT — REVIEW PACKET",
+    "MISSION CONTROL COMPACT - REVIEW PACKET",
     "",
     `Project: ${projectView.project.name}`,
     `Status: ${projectView.status}`,
@@ -1292,7 +1292,7 @@ export default function MissionControlCompactPage() {
         </div>
       </header>
 
-      {loading ? <p className="mt-4 rounded-xl border border-border/70 p-3 text-sm text-muted-foreground">Loading compact Mission Control…</p> : null}
+      {loading ? <p className="mt-4 rounded-xl border border-border/70 p-3 text-sm text-muted-foreground">Loading compact Mission Control...</p> : null}
       {error ? <p className="mt-4 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</p> : null}
 
       {updateNotice ? (
@@ -1384,7 +1384,7 @@ export default function MissionControlCompactPage() {
           <div className="mt-2 grid gap-2">
             {supportProjects.map(project => (
               <p className="rounded-lg border border-border/60 bg-background/50 p-2 text-xs text-muted-foreground" key={project.project_id || project.name}>
-                {project.name} — support only
+                {project.name} - support only
               </p>
             ))}
           </div>
@@ -1977,12 +1977,12 @@ function CompactReportIngestion({
       </label>
       <CompactReportInput label="Report summary" onChange={value => onChange("summary", value)} value={form.summary} />
       <CompactReportInput label="Latest result" onChange={value => onChange("result", value)} value={form.result} />
-      <CompactReportInput label="Risks/blockers — one per line" onChange={value => onChange("risks", value)} value={form.risks} />
-      <CompactReportInput label="Artifact/report links — one per line" onChange={value => onChange("artifactLinks", value)} value={form.artifactLinks} />
-      <CompactReportInput label="Changed files/evidence — one per line" onChange={value => onChange("changedFiles", value)} value={form.changedFiles} />
+      <CompactReportInput label="Risks/blockers - one per line" onChange={value => onChange("risks", value)} value={form.risks} />
+      <CompactReportInput label="Artifact/report links - one per line" onChange={value => onChange("artifactLinks", value)} value={form.artifactLinks} />
+      <CompactReportInput label="Changed files/evidence - one per line" onChange={value => onChange("changedFiles", value)} value={form.changedFiles} />
       <CompactReportInput label="Next recommended lane" onChange={value => onChange("nextRecommendedLane", value)} value={form.nextRecommendedLane} />
       <button className="mt-3 w-full rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onSave} type="button">
-        {saving ? "Saving report…" : "Save Jenny report manually"}
+        {saving ? "Saving report..." : "Save Jenny report manually"}
       </button>
       {message ? <p className="mt-2 text-xs text-muted-foreground">{message}</p> : null}
     </section>
