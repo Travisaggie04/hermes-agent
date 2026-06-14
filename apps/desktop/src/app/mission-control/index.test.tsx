@@ -1071,13 +1071,18 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText('wahainspection').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Lane draft ok').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Use a bounded read-only workspace usability lane/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Request intake: Needs request/).length).toBeGreaterThan(0)
 
     fireEvent.change(screen.getByPlaceholderText('Tell Jenny what you want to discuss or ask her to do next...'), {
       target: { value: 'Make the visible Mission Control page show project rooms on laptop and phone.' }
     })
+    expect(screen.getAllByText(/Request intake: Ready/).length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: 'Copy phone-safe packet' }))
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1))
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Project room request:')
+    expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Request intake:')
+    expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Ready / Request is bounded enough for a guarded Jenny reply.')
+    expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Jenny instruction:')
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Categories:')
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Blocking verdicts:')
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Structured handoff:')
@@ -1092,6 +1097,11 @@ describe('MissionControlView', () => {
         project_id: 'project-hermes-mission-control',
         request_id: expect.stringContaining('mission-control-chat-'),
         to_agent: 'jenny'
+      })
+    )
+    expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Request intake:'),
       })
     )
     expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(

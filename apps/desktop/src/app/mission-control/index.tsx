@@ -1145,6 +1145,59 @@ Validation: list checks run or why a check is blocked.
 Report format: preflight, recommendation, work done, validation, risks, safety confirmation.`
 }
 
+interface RequestIntakeAssessment {
+  detail: string
+  jennyInstruction: string
+  label: string
+  state: 'approval_required' | 'challenge_first' | 'ready' | 'spec_first'
+}
+
+function assessProjectRequest(requestText: string, review: MissionControlChallengeReviewRecord | null): RequestIntakeAssessment {
+  const normalized = requestText.replace(/\s+/g, ' ').trim()
+  const lower = normalized.toLowerCase()
+  const riskyAction = /\b(deploy|restart|runtime switch|gateway|payment|checkout|outreach|post|publish|delete|remove|cleanup|worker|timer|daemon|cron|secret|token|waha|whatsapp)\b/.test(lower)
+  const vagueRequest = normalized.length < 24 || /\b(fix it|make it better|do whatever|handle this|everything|autonomous|fully functional|robust)\b/.test(lower)
+
+  if (!normalized) {
+    return {
+      detail: 'Write one bounded request before Jenny receives work.',
+      jennyInstruction: 'Ask Travis for the missing request before proposing implementation.',
+      label: 'Needs request',
+      state: 'spec_first'
+    }
+  }
+  if (riskyAction) {
+    return {
+      detail: 'Contains protected actions; Jenny should challenge scope and identify approvals before work.',
+      jennyInstruction: 'Do not execute. First return a preflight, risks, required approvals, and a safer bounded lane.',
+      label: 'Approval check',
+      state: 'approval_required'
+    }
+  }
+  if (!review || review.decision_state !== 'clear_and_safe') {
+    return {
+      detail: 'No clear challenge review is recorded for this project lane.',
+      jennyInstruction: 'Treat this as challenge/spec-first. Ask clarifying questions or create a narrow plan before implementation.',
+      label: 'Challenge first',
+      state: 'challenge_first'
+    }
+  }
+  if (vagueRequest) {
+    return {
+      detail: 'Request may be too broad or underspecified; Jenny should narrow it before implementation.',
+      jennyInstruction: 'Question assumptions, split the request into a bounded lane, and ask Travis if critical details are missing.',
+      label: 'Spec first',
+      state: 'spec_first'
+    }
+  }
+  return {
+    detail: 'Request is bounded enough for a guarded Jenny reply.',
+    jennyInstruction: 'Proceed with a bounded recommendation or implementation plan, still challenging unsafe assumptions first.',
+    label: 'Ready',
+    state: 'ready'
+  }
+}
+
 function buildPhoneSafeProjectPacket({
   brief,
   project,
@@ -1161,6 +1214,7 @@ function buildPhoneSafeProjectPacket({
   status: ReturnType<typeof summarizeWorkspaceStatus>
 }): string {
   const readiness = projectReadinessLabel(brief, review)
+  const intake = assessProjectRequest(requestText, review)
   const categories = review?.challenge_categories?.length ? review.challenge_categories.join(', ') : 'none recorded'
   const verdicts = review?.blocking_verdicts?.length ? review.blocking_verdicts.join(', ') : 'none recorded'
   const packet = `Project room request:
@@ -1168,6 +1222,10 @@ ${project.name}
 
 Request:
 ${compactText(requestText, 420) || '<write the request>'}
+
+Request intake:
+${intake.label} / ${intake.detail}
+Jenny instruction: ${intake.jennyInstruction}
 
 Current brief:
 ${compactText(brief?.outcome, 220) || 'missing project brief'}
@@ -2257,6 +2315,7 @@ function ProjectRoomsWorkspace({
   const connectionState = jennyConnectionState(pendingCount, responseCount, bridgeStatus, githubBridgeStatus)
   const nextStep = jennyNextStep(pendingCount, responseCount, Boolean(latestPending), bridgeStatus, githubBridgeStatus)
   const activityItems = jennyActivityItems(githubBridgeStatus)
+  const requestIntake = assessProjectRequest(request, review)
   const runActive = isJennyRunActive(jennyRunProgress)
   const runCopy = jennyRunProgressCopy(jennyRunProgress, jennyRunElapsedSeconds)
   const chatMessages = [
@@ -2434,6 +2493,16 @@ function ProjectRoomsWorkspace({
             <button className="rounded-md border border-[#f3ebda]/10 px-4 py-2 text-sm font-semibold text-[#ddd0bb] hover:bg-[#251d2c] disabled:opacity-60" disabled={saving} onClick={onRefreshBridge} type="button">
               Refresh replies
             </button>
+          </div>
+          <div className={cn(
+            'mt-2 rounded-md border px-3 py-2 text-xs',
+            requestIntake.state === 'ready'
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+              : requestIntake.state === 'approval_required'
+                ? 'border-red-500/30 bg-red-500/10 text-red-200'
+                : 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+          )}>
+            <span className="font-semibold">Request intake: {requestIntake.label}.</span> {requestIntake.detail}
           </div>
           <p className="mt-1 text-xs text-[#a59783]">
             {paused
