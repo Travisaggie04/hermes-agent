@@ -57,6 +57,26 @@ def test_parse_bridge_comments_uses_bounded_message_format():
     assert messages[0].metadata["github_comment_id"] == 101
 
 
+def test_parse_bridge_comments_accepts_escaped_fenced_json():
+    payload = {
+        "request_id": "req-escaped",
+        "project_id": "project-hermes-mission-control",
+        "from_agent": "codex",
+        "to_agent": "jenny",
+        "status": "queued",
+        "message": "Escaped JSON should still parse.",
+        "created_at": "2026-06-13T00:00:00Z",
+    }
+    escaped_json = json.dumps(payload).replace('"', '\\"')
+    body = f"{GITHUB_BRIDGE_MARKER}\n```json\n{escaped_json}\n```"
+
+    messages = parse_bridge_comments([_comment(102, body)], repo="Travisaggie04/hermes-agent", issue_number=79)
+
+    assert len(messages) == 1
+    assert messages[0].request_id == "req-escaped"
+    assert messages[0].message == "Escaped JSON should still parse."
+
+
 def test_poll_comments_appends_new_messages_and_status_without_duplicates(tmp_path: Path):
     records = tmp_path / "records.jsonl"
 
