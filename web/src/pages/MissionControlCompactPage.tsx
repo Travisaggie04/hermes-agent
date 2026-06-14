@@ -492,10 +492,14 @@ function projectRequestPreview(value: string, maxChars: number): string {
   const requestMatch = normalized.match(
     /(?:^|[\s/])Request:\s*([\s\S]*?)(?=\s+(?:Request intake:|Current brief:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:)|$)/i,
   );
+  const inlineRequestMatch = normalized.match(
+    /^[\w &/-]+ Request:\s*([\s\S]*?)(?=\s+(?:Current brief:|Request intake:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:)|$)/i,
+  );
   const fallbackMatch = normalized.match(
     /^(.+?)\s+(?=Current brief:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:)/i,
   );
-  return compactText(requestMatch?.[1] ?? fallbackMatch?.[1] ?? value, maxChars);
+  const candidate = requestMatch?.[1] ?? inlineRequestMatch?.[1] ?? fallbackMatch?.[1] ?? value;
+  return compactText(candidate, maxChars);
 }
 
 function chatStatusLabel(value: string | undefined): string {
@@ -576,6 +580,7 @@ type JennyReplyReviewDecision = "accepted" | "needs_evidence" | "needs_safer_pla
 
 interface ProjectChatMessage {
   body: string;
+  displayBody?: string;
   id: string;
   meta: string;
   speaker: "Jenny" | "You";
@@ -949,6 +954,22 @@ function jennyStatusToneClass(tone: "bad" | "good" | "idle" | "warn"): string {
     return "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300";
   }
   return "border-border/70 bg-muted/40 text-muted-foreground";
+}
+
+function jennyRunStatusToneClass(progress: JennyRunProgress | null, connectionTone: "bad" | "good" | "idle" | "warn"): string {
+  if (progress?.phase === "error" || connectionTone === "bad") {
+    return "border-red-500/35 bg-red-500/10 text-red-100";
+  }
+  if (progress?.phase === "starting" || progress?.phase === "waiting") {
+    return "border-sky-500/35 bg-sky-500/10 text-sky-100";
+  }
+  if (progress?.phase === "queued" || connectionTone === "warn") {
+    return "border-amber-500/35 bg-amber-500/10 text-amber-100";
+  }
+  if (progress?.phase === "complete" || connectionTone === "good") {
+    return "border-emerald-500/35 bg-emerald-500/10 text-emerald-100";
+  }
+  return "border-[#f3ebda]/10 bg-[#15101a]/70 text-[#f3ebda]";
 }
 
 function jennyNextStep(
@@ -2271,9 +2292,11 @@ function CompactProjectRoom({
   const latestReviewByResponseId = latestReplyReviewByResponseId(replyReviews);
   const runActive = isJennyRunActive(jennyRunProgress);
   const runCopy = jennyRunProgressCopy(jennyRunProgress, jennyRunElapsedSeconds);
+  const bridgeError = bridgeStatus.last_error || githubBridgeStatus.last_error || "";
   const chatMessages: ProjectChatMessage[] = [
     ...visibleBridgeRequests.map(request => ({
       body: request.message,
+      displayBody: projectRequestPreview(request.message, 750),
       id: request.request_id || request.ack_key || request.created_at || "bridge-request",
       meta: chatStatusLabel(request.bridge_state ?? (request.request_id && repliedRequestIds.has(request.request_id) ? "replied" : request.status ?? "queued")),
       speaker: "You" as const,
@@ -2288,6 +2311,7 @@ function CompactProjectRoom({
     })),
     ...visibleGitHubBridgeMessages.map(message => ({
       body: message.message,
+      displayBody: message.from_agent === "jenny" || message.status === "replied" ? undefined : projectRequestPreview(message.message, 750),
       id: message.github_comment_id || message.request_id || message.created_at || "github-message",
       meta: chatStatusLabel(message.status),
       speaker: message.from_agent === "jenny" || message.status === "replied" ? "Jenny" as const : "You" as const,
@@ -2297,6 +2321,9 @@ function CompactProjectRoom({
   const latestReplyReview = latestReviewedJennyReply(chatMessages, latestReviewByResponseId);
   const replyReviewStatus = jennyReplyReviewStatus(latestReplyReview);
   const nextStep = replyReviewStatus.nextStep ?? bridgeNextStep;
+  const statusCopy = jennyRunProgress
+    ? runCopy
+    : { detail: paused ? "This project is paused until Jenny is stable." : nextStep, label: connectionState.label };
 
   return (
     <section
@@ -2376,6 +2403,25 @@ function CompactProjectRoom({
             </div>
         </details>
 
+        <section
+          className={cn("mt-2 max-w-full rounded-md border px-3 py-2 text-sm", jennyRunStatusToneClass(jennyRunProgress, connectionState.tone))}
+          aria-label="Jenny current status"
+        >
+          <div className="grid min-w-0 gap-2 sm:flex sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] opacity-75">Jenny status</div>
+              <div className="mt-0.5 font-semibold">{statusCopy.label}</div>
+            </div>
+            <div className="flex min-w-0 flex-wrap gap-1.5 text-xs">
+              <span className="rounded-full border border-current/20 px-2 py-0.5">Pending {pendingCount}</span>
+              <span className="rounded-full border border-current/20 px-2 py-0.5">Replies {responseCount}</span>
+              {runActive ? <span className="rounded-full border border-current/20 px-2 py-0.5">Elapsed {jennyRunElapsedSeconds}s</span> : null}
+            </div>
+          </div>
+          <p className="mt-2 max-w-full text-sm leading-snug [overflow-wrap:anywhere]">{statusCopy.detail}</p>
+          {bridgeError ? <p className="mt-2 max-w-full text-xs [overflow-wrap:anywhere]">Bridge error: {bridgeError}</p> : null}
+        </section>
+
         <details className="mt-2 min-w-0 max-w-full overflow-hidden rounded-md border border-[#60a5fa]/25 bg-[#60a5fa]/10 px-3 py-2" aria-label="Jenny activity">
           <summary className="cursor-pointer text-sm font-semibold text-[#f3ebda]">Jenny activity</summary>
           <div className="grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
@@ -2439,7 +2485,7 @@ function CompactProjectRoom({
                     <span className="min-w-0 text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chat.meta}</span>
                   </div>
                   <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                    {chat.speaker === "You" ? projectRequestPreview(chat.body, 750) : compactText(chat.body, 750)}
+                    {chat.speaker === "You" ? chat.displayBody ?? projectRequestPreview(chat.body, 750) : compactText(chat.body, 750)}
                   </p>
                   {chat.speaker === "Jenny" ? (
                     <div className="mt-2 grid min-w-0 gap-2">
