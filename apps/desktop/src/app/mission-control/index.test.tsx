@@ -1063,6 +1063,7 @@ describe('MissionControlView', () => {
     expect((await screen.findAllByRole('heading', { name: 'Hermes / Mission Control' })).length).toBeGreaterThan(0)
     expect(screen.getByText('Message Jenny')).toBeTruthy()
     expect(screen.getByText('Conversation')).toBeTruthy()
+    expect(screen.getAllByText(/Reply quality/).length).toBeGreaterThan(0)
     expect(screen.getByText('Phone-safe packet')).toBeTruthy()
     expect(screen.getByText('Previous sessions')).toBeTruthy()
     expect(screen.getByText('Hermes storage cleanup lane')).toBeTruthy()

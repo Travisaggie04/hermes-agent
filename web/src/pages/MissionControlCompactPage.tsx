@@ -493,6 +493,32 @@ function chatStatusLabel(value: string | undefined): string {
   }
 }
 
+interface JennyReplyContract {
+  label: string;
+  tone: "complete" | "missing";
+}
+
+function jennyReplyContract(value: string): JennyReplyContract {
+  const lower = value.toLowerCase();
+  const checks = [
+    { label: "recommendation", present: /\b(recommend|recommendation|next safe lane|next lane|next step)\b/.test(lower) },
+    { label: "evidence", present: /\b(evidence|validation|validated|test|tests|checked|verified|pass|ci)\b/.test(lower) },
+    { label: "risks", present: /\b(risk|risks|blocker|blockers|remaining risk)\b/.test(lower) },
+    { label: "safety", present: /\b(safety|approval|approved|forbidden|no deploy|no dispatch|guard|gated)\b/.test(lower) },
+  ];
+  const missing = checks.filter(check => !check.present).map(check => check.label);
+  const matched = checks.length - missing.length;
+
+  if (!missing.length) {
+    return { label: `Reply quality ${matched}/${checks.length}: complete`, tone: "complete" };
+  }
+
+  return {
+    label: `Reply quality ${matched}/${checks.length}: missing ${missing.join(", ")}`,
+    tone: "missing",
+  };
+}
+
 interface JennyRunProgress {
   detail: string;
   phase: "complete" | "error" | "queued" | "starting" | "waiting";
@@ -2200,6 +2226,16 @@ function CompactProjectRoom({
                   <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                     {chat.speaker === "You" ? projectRequestPreview(chat.body, 750) : compactText(chat.body, 750)}
                   </p>
+                  {chat.speaker === "Jenny" ? (
+                    <p className={cn(
+                      "mt-2 rounded-md border px-2 py-1 text-[0.68rem] [overflow-wrap:anywhere]",
+                      jennyReplyContract(chat.body).tone === "complete"
+                        ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
+                        : "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-100",
+                    )}>
+                      {jennyReplyContract(chat.body).label}
+                    </p>
+                  ) : null}
                 </article>
               ))
             ) : (
