@@ -1916,7 +1916,7 @@ export default function MissionControlCompactPage() {
       ) : null}
 
       {selectedProjectView ? (
-        <div className="mt-3 grid min-w-0 max-w-full gap-3 overflow-hidden xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="mt-3 grid min-w-0 max-w-full gap-3 overflow-visible xl:grid-cols-[minmax(0,1fr)_22rem] xl:overflow-hidden">
           <div className="order-2 min-w-0 max-w-full overflow-hidden xl:order-2">
             <CompactLiveActivityRail
               bridgeStatus={snapshot?.jennyBridgePollerStatus ?? {}}
@@ -2327,18 +2327,18 @@ function CompactProjectRoom({
 
   return (
     <section
-      className="mt-2 flex h-[calc(100vh-5rem)] min-h-[34rem] min-w-0 max-w-full flex-col overflow-hidden rounded-md border border-[#d4a574]/20 bg-[#15101a] shadow-[0_20px_70px_rgba(0,0,0,0.35)]"
+      className="mt-2 flex min-h-[calc(100dvh-8rem)] min-w-0 max-w-full flex-col overflow-hidden rounded-md border border-[#d4a574]/20 bg-[#15101a] shadow-[0_20px_70px_rgba(0,0,0,0.35)] sm:h-[calc(100vh-5rem)] sm:min-h-[34rem]"
       aria-label="Project chat workspace"
     >
       <div className="min-w-0 max-w-full overflow-hidden border-b border-[#f3ebda]/10 bg-[#1c1622]/90 px-2 py-2">
-        <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[auto_repeat(5,minmax(0,1fr))]">
+        <div className="grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-[auto_repeat(5,minmax(0,1fr))] sm:gap-2">
           <span className="sr-only">Local studio</span>
           <span className="self-center text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-[#a59783] sm:pr-1">Projects</span>
           <span className="sr-only">{projects.length} projects</span>
           {projects.map(project => (
             <button
               className={cn(
-                "min-w-0 max-w-full rounded-full border px-3 py-1.5 text-left text-xs transition hover:border-[#d4a574]/30 hover:bg-[#251d2c]/70",
+                "min-w-0 max-w-full rounded-md border px-2.5 py-1.5 text-left text-xs transition hover:border-[#d4a574]/30 hover:bg-[#251d2c]/70 sm:rounded-full sm:px-3",
                 project.project_id === selectedProjectView.project.project_id ? "border-[#d4a574]/50 bg-[#2e2436]/80" : "border-[#f3ebda]/10 bg-transparent",
               )}
               key={project.project_id}
@@ -2454,14 +2454,14 @@ function CompactProjectRoom({
           </div>
         </details>
 
-        <section className="mt-2 flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#251d2c]/70 p-2" aria-label="Project chat transcript">
+        <section className="mt-2 flex min-h-[18rem] min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#251d2c]/70 p-2" aria-label="Project chat transcript">
           <div className="grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
             <h3 className="text-sm font-semibold text-[#f3ebda]">Conversation</h3>
             <span className="text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
           </div>
           <div className="mt-2 grid min-h-0 min-w-0 flex-1 content-start gap-2 overflow-y-auto overflow-x-hidden pr-1">
             {runActive ? (
-              <article className="min-w-0 max-w-full justify-self-start rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm text-[#f3ebda] [overflow-wrap:anywhere] sm:max-w-[88%]">
+              <article className="min-w-0 max-w-[calc(100vw-2.5rem)] justify-self-start rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm text-[#f3ebda] [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]">
                 <div className="mb-1 grid min-w-0 gap-1 text-[0.68rem] sm:flex sm:items-center sm:justify-between sm:gap-3">
                   <span className="font-semibold">Jenny</span>
                   <span className="min-w-0 text-sky-300 [overflow-wrap:anywhere] sm:text-right">{runCopy.label}</span>
@@ -2475,7 +2475,7 @@ function CompactProjectRoom({
               chatMessages.map(chat => (
                 <article
                   className={cn(
-                    "min-w-0 max-w-full rounded-lg border px-3 py-2 text-sm [overflow-wrap:anywhere] sm:max-w-[88%]",
+                    "min-w-0 max-w-[calc(100vw-2.5rem)] rounded-lg border px-3 py-2 text-sm [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]",
                     chat.speaker === "You" ? "justify-self-end border-[#5ab896]/30 bg-[#5ab896]/10 text-[#f3ebda]" : "justify-self-start border-[#f3ebda]/10 bg-[#1c1622]/90 text-[#f3ebda]",
                   )}
                   key={`${chat.speaker}:${chat.id}`}
@@ -2484,7 +2484,7 @@ function CompactProjectRoom({
                     <span className="font-semibold">{chat.speaker}</span>
                     <span className="min-w-0 text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chat.meta}</span>
                   </div>
-                  <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                  <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word]">
                     {chat.speaker === "You" ? chat.displayBody ?? projectRequestPreview(chat.body, 750) : compactText(chat.body, 750)}
                   </p>
                   {chat.speaker === "Jenny" ? (
