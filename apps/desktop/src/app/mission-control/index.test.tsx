@@ -1089,7 +1089,10 @@ describe('MissionControlView', () => {
         to_agent: 'jenny'
       })
     )
-    expect(createMissionControlGitHubBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('Stop before deleting, pruning, moving, or uploading anything')
+    expect(createMissionControlGitHubBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('target of about 50% disk usage')
+    expect(createMissionControlGitHubBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('timestamped dry-run manifest')
+    expect(createMissionControlGitHubBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('Tool & Tally report-builder data')
+    expect(createMissionControlGitHubBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('With explicit cleanup approval')
     expect(createMissionControlJennyBridgeRequest).not.toHaveBeenCalled()
   })
 
