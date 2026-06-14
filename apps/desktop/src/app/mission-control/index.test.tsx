@@ -1109,6 +1109,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Message Jenny')).toBeTruthy()
     expect(screen.getByText('Conversation')).toBeTruthy()
     expect(screen.getByText('Jenny status')).toBeTruthy()
+    expect(screen.getByText('Advanced request options')).toBeTruthy()
     expect(screen.getAllByText(/Pending \d+/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Replies \d+/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Reply quality/).length).toBeGreaterThan(0)

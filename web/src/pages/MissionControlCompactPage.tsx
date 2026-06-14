@@ -2551,16 +2551,6 @@ function CompactProjectRoom({
             <button className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300 sm:w-auto" disabled={busy || paused} onClick={onQueueBridge} type="button">
               Send to Jenny
             </button>
-            {requestIntake.state !== "ready" ? (
-              <button
-                className="w-full rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/15 disabled:opacity-60 dark:text-amber-300 sm:w-auto"
-                disabled={busy || paused}
-                onClick={() => onRequestChange(specFirstComposerText)}
-                type="button"
-              >
-                Use spec-first prompt
-              </button>
-            ) : null}
             <button
               className="w-full rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/15 disabled:opacity-60 dark:text-sky-300 sm:w-auto"
               disabled={busy || paused || !latestPending}
@@ -2583,6 +2573,24 @@ function CompactProjectRoom({
           )}>
             <span className="font-semibold">Request intake: {requestIntake.label}.</span> {requestIntake.detail}
           </p>
+          <details className="mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/70 px-3 py-2 text-xs">
+            <summary className="cursor-pointer text-sm font-semibold">Advanced request options</summary>
+            <p className="mt-2 text-muted-foreground [overflow-wrap:anywhere]">
+              Use these when Jenny should challenge, narrow, or formalize the request before normal work.
+            </p>
+            {requestIntake.state !== "ready" ? (
+              <button
+                className="mt-2 w-full rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/15 disabled:opacity-60 dark:text-amber-300 sm:w-auto"
+                disabled={busy || paused}
+                onClick={() => onRequestChange(specFirstComposerText)}
+                type="button"
+              >
+                Use spec-first prompt
+              </button>
+            ) : (
+              <p className="mt-2 text-muted-foreground [overflow-wrap:anywhere]">This request is bounded enough for a guarded Jenny reply.</p>
+            )}
+          </details>
           <p className="mt-2 max-w-full text-xs text-muted-foreground [overflow-wrap:anywhere]">
             {paused
               ? "This project is visible for planning context only. Resume it after the Mission Control/Jenny recovery lane is stable."
@@ -2591,16 +2599,6 @@ function CompactProjectRoom({
           {paused ? <CompactPausedProjectResumeChecklist /> : null}
         </div>
 
-        {onQueueHermesUpdate ? (
-          <button className="mt-2 w-full rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300 sm:w-auto" disabled={busy} onClick={onQueueHermesUpdate} type="button">
-            Start Hermes update lane
-          </button>
-        ) : null}
-        {onQueueStorageCleanup ? (
-          <button className="mt-2 w-full rounded-xl border border-sky-500/40 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/10 disabled:opacity-60 dark:text-sky-300 sm:w-auto" disabled={busy} onClick={onQueueStorageCleanup} type="button">
-            Start storage cleanup lane
-          </button>
-        ) : null}
         {message ? <p className="mt-2 max-w-full text-xs text-muted-foreground [overflow-wrap:anywhere]">{message}</p> : null}
 
         <details className="mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background p-3">
@@ -2671,6 +2669,26 @@ function CompactProjectRoom({
             <CompactField label="latest report contract" value={selectedProjectView.reportContract} />
             <CompactField label="latest result" value={selectedProjectView.latestResult} />
           </div>
+          {onQueueHermesUpdate || onQueueStorageCleanup ? (
+            <section className="mt-3 rounded-xl border border-border/70 bg-card/60 p-3">
+              <h3 className="text-sm font-semibold">Maintenance lanes</h3>
+              <p className="mt-1 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                These only queue guarded Jenny requests. They do not restart, update, delete files, or switch runtimes.
+              </p>
+              <div className="mt-2 grid min-w-0 gap-2 sm:flex sm:flex-wrap">
+                {onQueueHermesUpdate ? (
+                  <button className="w-full rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300 sm:w-auto" disabled={busy} onClick={onQueueHermesUpdate} type="button">
+                    Start Hermes update lane
+                  </button>
+                ) : null}
+                {onQueueStorageCleanup ? (
+                  <button className="w-full rounded-xl border border-sky-500/40 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/10 disabled:opacity-60 dark:text-sky-300 sm:w-auto" disabled={busy} onClick={onQueueStorageCleanup} type="button">
+                    Start storage cleanup lane
+                  </button>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
           <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-3">
             <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onCopyPacket} type="button">
               Copy phone-safe packet
