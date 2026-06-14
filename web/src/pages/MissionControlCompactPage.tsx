@@ -1311,6 +1311,10 @@ function buildSpecFirstComposerText(projectName: string, requestText: string, in
   ].join("\n");
 }
 
+function shouldAutoChallengeRequest(intake: RequestIntakeAssessment): boolean {
+  return intake.state !== "ready";
+}
+
 function buildCompactNextLanePrompt(projectView: ProjectViewModel, workspaceStatus: WorkspaceStatus): string {
   const guidance = PROJECT_LANE_GUIDANCE[projectView.project.project_id] ?? "Read-only Mission Control status lane. Report current state and the next safe manual step.";
   return [
@@ -1372,6 +1376,14 @@ function buildPhoneSafeProjectPacket(projectView: ProjectViewModel, requestText:
     structuredJennyHandoff(projectView.project.name),
   ].join("\n").trim();
   return packet.length <= 1900 ? packet : `${packet.slice(0, 1897).trim()}...`;
+}
+
+function buildJennyMailboxMessage(projectView: ProjectViewModel, requestText: string, workspaceStatus: WorkspaceStatus): string {
+  const intake = assessProjectRequest(requestText, projectView.challengeReview);
+  if (shouldAutoChallengeRequest(intake)) {
+    return buildSpecFirstComposerText(projectView.project.name, requestText, intake);
+  }
+  return buildPhoneSafeProjectPacket(projectView, requestText, workspaceStatus);
 }
 
 function buildHermesUpdateLanePacket(workspaceStatus: WorkspaceStatus): string {
@@ -1597,7 +1609,7 @@ export default function MissionControlCompactPage() {
       await fetchJSON(WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL, {
         body: JSON.stringify({
           from_agent: "travis",
-          message: buildPhoneSafeProjectPacket(projectView, projectRequest, snapshot?.workspaceStatus ?? {}),
+          message: buildJennyMailboxMessage(projectView, projectRequest, snapshot?.workspaceStatus ?? {}),
           project_id: projectView.project.project_id,
           request_id: bridgeRequestId(),
           to_agent: "jenny",
@@ -2572,6 +2584,9 @@ function CompactProjectRoom({
                 : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-100",
           )}>
             <span className="font-semibold">Request intake: {requestIntake.label}.</span> {requestIntake.detail}
+            {shouldAutoChallengeRequest(requestIntake) ? (
+              <span className="mt-1 block">Send to Jenny will ask for a challenge/spec-first reply before any implementation plan.</span>
+            ) : null}
           </p>
           <details className="mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/70 px-3 py-2 text-xs">
             <summary className="cursor-pointer text-sm font-semibold">Advanced request options</summary>
