@@ -493,6 +493,48 @@ function chatStatusLabel(value: string | undefined): string {
   }
 }
 
+interface JennyRunProgress {
+  detail: string;
+  phase: "complete" | "error" | "queued" | "starting" | "waiting";
+}
+
+function jennyRunProgressCopy(progress: JennyRunProgress | null, elapsedSeconds: number): { detail: string; label: string } {
+  if (!progress) {
+    return {
+      detail: "Jenny is standing by.",
+      label: "Standing by",
+    };
+  }
+
+  if (progress.phase === "queued") {
+    return {
+      detail: progress.detail || "Your message is queued for Jenny.",
+      label: "Queued",
+    };
+  }
+  if (progress.phase === "complete") {
+    return {
+      detail: progress.detail || "Jenny replied. Review the latest response before sending the next message.",
+      label: "Reply received",
+    };
+  }
+  if (progress.phase === "error") {
+    return {
+      detail: progress.detail || "Jenny hit a guarded error. No hidden action was treated as successful.",
+      label: "Needs attention",
+    };
+  }
+
+  return {
+    detail: `${progress.detail || "Mission Control is waiting for Jenny to finish one guarded reply."} Refreshing status every 2.5s. Elapsed ${elapsedSeconds}s.`,
+    label: progress.phase === "starting" ? "Starting Jenny" : "Waiting for Jenny",
+  };
+}
+
+function isJennyRunActive(progress: JennyRunProgress | null): boolean {
+  return progress?.phase === "starting" || progress?.phase === "waiting";
+}
+
 function jennyActivityLabel(status: string | undefined): string {
   switch (status) {
     case "hermes_answer_started":
@@ -1155,6 +1197,8 @@ export default function MissionControlCompactPage() {
   const [projectRequest, setProjectRequest] = useState("");
   const [roomMessage, setRoomMessage] = useState("");
   const [roomBusy, setRoomBusy] = useState(false);
+  const [jennyRunElapsedSeconds, setJennyRunElapsedSeconds] = useState(0);
+  const [jennyRunProgress, setJennyRunProgress] = useState<JennyRunProgress | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1189,6 +1233,20 @@ export default function MissionControlCompactPage() {
 
     return () => window.clearInterval(timer);
   }, [roomBusy, selectedProjectId, snapshot?.projects.length]);
+
+  useEffect(() => {
+    if (!isJennyRunActive(jennyRunProgress)) {
+      setJennyRunElapsedSeconds(0);
+      return;
+    }
+
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setJennyRunElapsedSeconds(Math.max(1, Math.floor((Date.now() - startedAt) / 1000)));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [jennyRunProgress]);
 
   const realProjects = useMemo(() => {
     if (!snapshot) return [];
@@ -1252,6 +1310,10 @@ export default function MissionControlCompactPage() {
         method: "POST",
       });
       await refreshSnapshot();
+      setJennyRunProgress({
+        detail: "Message sent. Use Get Jenny reply when you want Jenny to answer this project message.",
+        phase: "queued",
+      });
       setRoomMessage("Sent to Jenny mailbox. Replies refresh automatically; use Refresh replies if you want to check now.");
     } catch (err) {
       setRoomMessage(err instanceof Error ? err.message : String(err));
@@ -1275,8 +1337,17 @@ export default function MissionControlCompactPage() {
     }
 
     setRoomBusy(true);
+    setJennyRunElapsedSeconds(0);
+    setJennyRunProgress({
+      detail: "Starting the guarded one-reply Jenny run.",
+      phase: "starting",
+    });
     setRoomMessage("Jenny is answering one pending message...");
     try {
+      setJennyRunProgress({
+        detail: "Mission Control sent the latest project message to Jenny and is waiting for one bounded reply.",
+        phase: "waiting",
+      });
       const result = await fetchJSON<{ answered?: boolean; status?: { last_error?: string } }>(WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL, {
         body: JSON.stringify({
           confirm_manual_hermes_answer: true,
@@ -1287,8 +1358,16 @@ export default function MissionControlCompactPage() {
         method: "POST",
       });
       await refreshSnapshot();
+      setJennyRunProgress({
+        detail: result.answered ? "Jenny replied to the latest project message." : `Jenny did not reply: ${result.status?.last_error ?? "no matching pending request"}`,
+        phase: result.answered ? "complete" : "error",
+      });
       setRoomMessage(result.answered ? "Jenny replied to the latest pending project message." : `Jenny did not reply: ${result.status?.last_error ?? "no matching pending request"}`);
     } catch (err) {
+      setJennyRunProgress({
+        detail: err instanceof Error ? err.message : String(err),
+        phase: "error",
+      });
       setRoomMessage(err instanceof Error ? err.message : String(err));
     } finally {
       setRoomBusy(false);
@@ -1515,7 +1594,8 @@ export default function MissionControlCompactPage() {
             <CompactLiveActivityRail
               bridgeStatus={snapshot?.jennyBridgePollerStatus ?? {}}
               githubBridgeStatus={snapshot?.githubBridgeStatus ?? {}}
-              roomBusy={roomBusy}
+              jennyRunElapsedSeconds={jennyRunElapsedSeconds}
+              jennyRunProgress={jennyRunProgress}
             />
           </div>
           <div className="xl:order-1">
@@ -1531,6 +1611,8 @@ export default function MissionControlCompactPage() {
                 ...unwrapRecords(snapshot?.githubBridgeStatus.response_messages),
               ]).filter(message => message.project_id === selectedProjectView.project.project_id)}
               githubBridgeStatus={snapshot?.githubBridgeStatus ?? {}}
+              jennyRunElapsedSeconds={jennyRunElapsedSeconds}
+              jennyRunProgress={jennyRunProgress}
               memoryStorage={snapshot?.memoryStorage ?? {}}
               onCopyPacket={() => void copyPhoneSafePacket(selectedProjectView)}
               onQueueBridge={() => void queueJennyBridgeMessage(selectedProjectView)}
@@ -1723,16 +1805,20 @@ function CompactPausedProjectResumeChecklist() {
 function CompactLiveActivityRail({
   bridgeStatus,
   githubBridgeStatus,
-  roomBusy,
+  jennyRunElapsedSeconds,
+  jennyRunProgress,
 }: {
   bridgeStatus: JennyBridgePollerStatus;
   githubBridgeStatus: GitHubBridgeStatus;
-  roomBusy: boolean;
+  jennyRunElapsedSeconds: number;
+  jennyRunProgress: JennyRunProgress | null;
 }) {
   const activityItems = jennyActivityItems(githubBridgeStatus);
   const hasError = Boolean(bridgeStatus.last_error || githubBridgeStatus.last_error);
+  const runActive = isJennyRunActive(jennyRunProgress);
+  const runCopy = jennyRunProgressCopy(jennyRunProgress, jennyRunElapsedSeconds);
   const visiblePendingCount = githubBridgeStatus.visible_pending_count ?? githubBridgeStatus.pending_count ?? 0;
-  const liveLabel = roomBusy ? "Jenny is working" : hasError ? "Needs attention" : githubBridgeStatus.last_status === "hermes_answer_completed" ? "Last reply complete" : "Standing by";
+  const liveLabel = runActive ? "Jenny is working" : jennyRunProgress?.phase === "complete" ? "Last reply complete" : hasError ? "Needs attention" : githubBridgeStatus.last_status === "hermes_answer_completed" ? "Last reply complete" : "Standing by";
 
   return (
     <aside className="max-w-full overflow-hidden rounded-2xl border border-[#f7efe4]/10 bg-[#1b1422]/80 p-3 shadow-[0_20px_70px_rgba(0,0,0,0.32)]">
@@ -1744,7 +1830,7 @@ function CompactLiveActivityRail({
         <span
           className={cn(
             "mt-1 h-3 w-3 shrink-0 rounded-full",
-            roomBusy ? "bg-blue-400 shadow-[0_0_24px_rgba(96,165,250,0.85)]" : hasError ? "bg-red-400" : "bg-emerald-400",
+            runActive ? "bg-blue-400 shadow-[0_0_24px_rgba(96,165,250,0.85)]" : hasError || jennyRunProgress?.phase === "error" ? "bg-red-400" : "bg-emerald-400",
           )}
         />
       </div>
@@ -1759,9 +1845,10 @@ function CompactLiveActivityRail({
       <div className="mt-4 border-t border-[#f7efe4]/10 pt-3">
         <div className="mb-2 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782]">Jenny stream</div>
         <div className="grid gap-2">
-          {roomBusy ? (
+          {jennyRunProgress ? (
             <p className="rounded-xl border border-blue-400/30 bg-blue-500/10 p-2 text-xs text-blue-100 [overflow-wrap:anywhere]">
-              Waiting for bridge status. Refresh runs quickly while Jenny is answering.
+              <span className="block font-semibold">{runCopy.label}</span>
+              <span className="mt-1 block leading-relaxed">{runCopy.detail}</span>
             </p>
           ) : null}
           {activityItems.length ? (
@@ -1790,6 +1877,8 @@ function CompactProjectRoom({
   bridgeStatus,
   githubBridgeStatus,
   githubBridgeMessages,
+  jennyRunElapsedSeconds,
+  jennyRunProgress,
   memoryStorage,
   message,
   onCopyPacket,
@@ -1815,6 +1904,8 @@ function CompactProjectRoom({
   bridgeStatus: JennyBridgePollerStatus;
   githubBridgeStatus: GitHubBridgeStatus;
   githubBridgeMessages: GitHubBridgeMessageRecord[];
+  jennyRunElapsedSeconds: number;
+  jennyRunProgress: JennyRunProgress | null;
   memoryStorage: ProfileMemoryStorage;
   message: string;
   onCopyPacket: () => void;
@@ -1863,6 +1954,8 @@ function CompactProjectRoom({
   const connectionState = jennyConnectionState(pendingCount, responseCount, bridgeStatus, githubBridgeStatus);
   const nextStep = jennyNextStep(pendingCount, responseCount, Boolean(latestPending), bridgeStatus, githubBridgeStatus);
   const activityItems = jennyActivityItems(githubBridgeStatus);
+  const runActive = isJennyRunActive(jennyRunProgress);
+  const runCopy = jennyRunProgressCopy(jennyRunProgress, jennyRunElapsedSeconds);
   const chatMessages = [
     ...visibleBridgeRequests.map(request => ({
       body: request.message,
@@ -1966,13 +2059,13 @@ function CompactProjectRoom({
           <div className="flex min-w-0 items-center justify-between gap-2">
             <h3 className="sr-only">Jenny activity</h3>
             <span className="text-right text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere]">
-              {busy ? "refreshing every 2.5s" : "recent bridge status"}
+              {runActive ? "refreshing every 2.5s" : "recent bridge status"}
             </span>
           </div>
           <div className="mt-2 grid min-w-0 gap-2">
-            {busy ? (
+            {runActive ? (
               <p className="rounded-xl border border-[#60a5fa]/20 bg-[#15101a]/70 p-2 text-xs text-[#93c5fd] [overflow-wrap:anywhere]">
-                Jenny reply is running. Mission Control will show started, completed, or error status here while the guarded request is active.
+                {runCopy.label}: {runCopy.detail}
               </p>
             ) : null}
             {activityItems.length ? (
@@ -1999,14 +2092,14 @@ function CompactProjectRoom({
             <span className="text-right text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere]">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
           </div>
           <div className="mt-2 grid min-h-0 min-w-0 flex-1 content-start gap-2 overflow-y-auto overflow-x-hidden pr-1">
-            {busy ? (
+            {runActive ? (
               <article className="min-w-0 max-w-full justify-self-start rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm text-[#f3ebda] [overflow-wrap:anywhere] sm:max-w-[88%]">
                 <div className="mb-1 flex min-w-0 items-center justify-between gap-3 text-[0.68rem]">
                   <span className="font-semibold">Jenny</span>
-                  <span className="min-w-0 text-right text-sky-300 [overflow-wrap:anywhere]">working</span>
+                  <span className="min-w-0 text-right text-sky-300 [overflow-wrap:anywhere]">{runCopy.label}</span>
                 </div>
                 <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                  Jenny is checking the latest project message. Mission Control will show the reply or a guarded error here.
+                  {runCopy.detail}
                 </p>
               </article>
             ) : null}
