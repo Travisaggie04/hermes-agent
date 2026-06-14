@@ -969,7 +969,40 @@ def remote_poll_bridge_over_ssh(
     if ssh_known_hosts is not None:
         ssh_args.extend(["-o", f"UserKnownHostsFile={ssh_known_hosts}"])
     ssh_args.extend([ssh_target, remote_command])
-    stdout = _run_ssh(ssh_args)
+    try:
+        stdout = _run_ssh(ssh_args)
+    except subprocess.CalledProcessError as exc:
+        output = f"{exc.stdout or ''}\n{exc.stderr or ''}"
+        last_error = compactTextForError(output) or f"ssh exited with code {exc.returncode}"
+        ssh_auth_required = "tailscale ssh requires an additional check" in output.lower()
+        return {
+            **_inert_response_flags(),
+            "ssh_target": ssh_target,
+            "remote_runtime": remote_runtime,
+            "repo": repo,
+            "issue_number": int(issue_number),
+            "remote_poll": {
+                "stored": False,
+                "status": "ssh_auth_required" if ssh_auth_required else "ssh_failed",
+                "ssh_auth_required": ssh_auth_required,
+                "last_error": last_error,
+            },
+        }
+    except subprocess.TimeoutExpired as exc:
+        output = f"{exc.stdout or ''}\n{exc.stderr or ''}"
+        return {
+            **_inert_response_flags(),
+            "ssh_target": ssh_target,
+            "remote_runtime": remote_runtime,
+            "repo": repo,
+            "issue_number": int(issue_number),
+            "remote_poll": {
+                "stored": False,
+                "status": "ssh_timeout",
+                "ssh_auth_required": "tailscale ssh requires an additional check" in output.lower(),
+                "last_error": compactTextForError(output) or "ssh timed out before remote poll completed",
+            },
+        }
     try:
         remote_payload = json.loads(stdout)
     except json.JSONDecodeError:

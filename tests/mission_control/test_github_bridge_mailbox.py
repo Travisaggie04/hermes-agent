@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
 import sys
 
 from mission_control.github_bridge_mailbox import (
@@ -805,3 +806,32 @@ def test_notify_jenny_now_main_uses_defaults_and_known_hosts(tmp_path: Path, mon
     assert "hermes-runtime-github-bridge-mailbox-944411a" in ssh_calls[0][-1]
     assert output["message_result"]["message"]["request_id"] == "req-cli-notify"
     assert output["remote_poll_result"]["remote_poll"]["stored"] is True
+
+
+def test_notify_jenny_now_reports_tailscale_ssh_auth_requirement(tmp_path: Path, monkeypatch):
+    records = tmp_path / "records.jsonl"
+
+    def fake_run_gh_api(_args: list[str]):
+        return {"id": 903}
+
+    def fake_run_ssh(_args: list[str]):
+        raise subprocess.CalledProcessError(
+            255,
+            ["ssh"],
+            output="# Tailscale SSH requires an additional check.",
+            stderr="# To authenticate, visit: https://login.tailscale.com/a/example",
+        )
+
+    monkeypatch.setattr("mission_control.github_bridge_mailbox._run_gh_api", fake_run_gh_api)
+    monkeypatch.setattr("mission_control.github_bridge_mailbox._run_ssh", fake_run_ssh)
+
+    payload = notify_jenny_now(
+        request_id="req-cli-notify-auth",
+        project_id="project-hermes-mission-control",
+        message="CLI notify should report auth requirement.",
+        path=records,
+    )
+
+    assert payload["message_result"]["message"]["request_id"] == "req-cli-notify-auth"
+    assert payload["remote_poll_result"]["remote_poll"]["status"] == "ssh_auth_required"
+    assert payload["remote_poll_result"]["remote_poll"]["ssh_auth_required"] is True
