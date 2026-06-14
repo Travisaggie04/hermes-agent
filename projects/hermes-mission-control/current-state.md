@@ -103,9 +103,9 @@ Jenny is stable enough to resume project work through the new OS surface.
 
 ## 2026-06-14 Early Recovery Update
 
-The recovery status document now tracks accepted-live through PR #153. Current
+The recovery status document now tracks accepted-live through PR #156. Current
 local desktop `release-bridge` is rebuilt and validated at
-`58853d442654e69014fa4fbc95e3bd837cd87fe6`.
+`366a35a071d2c8d51d577df093fd5a7bd48da0c4`.
 
 The remaining visible gap is the bounded dashboard-only runtime switch on the
 VPS so phone/web surfaces catch up to the current accepted-live Mission Control
@@ -116,3 +116,8 @@ actions, workers/timers/daemons, and broad cleanup remain out of scope.
 PR #153 also hides Codex/operator bridge packets from the owner-facing project
 chat, so Mission Control should continue moving toward a clean project chat
 surface while retaining technical guardrails behind advanced controls.
+
+PR #155 removes mojibake-prone Unicode separators from owner-facing Mission
+Control desktop/phone text. PR #156 hardens the GitHub bridge parser so escaped
+fenced JSON packets can still be read instead of silently stalling the
+Codex/Jenny handoff.

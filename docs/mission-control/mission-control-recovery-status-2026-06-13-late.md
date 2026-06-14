@@ -23,7 +23,7 @@ longer exposes paused-project queue buttons while the recovery lane is active.
 
 Latest accepted-live head after the current recovery UI sequence:
 
-- `58853d442654e69014fa4fbc95e3bd837cd87fe6`
+- `366a35a071d2c8d51d577df093fd5a7bd48da0c4`
 
 ## Completed PRs
 
@@ -48,15 +48,18 @@ Latest accepted-live head after the current recovery UI sequence:
 | #151 | `f0ce9ca5125c42137fb0ac5f9985369d983d746b` | Hides additional bridge-smoke diagnostics such as `Bridge works` and `success smoke reached` from normal project chat. |
 | #152 | `8dd5c3e38a85cf535e6475152c582e63245b6855` | Refreshes this recovery status and the Hermes / Mission Control current-state handoff. |
 | #153 | `58853d442654e69014fa4fbc95e3bd837cd87fe6` | Hides operator bridge packets such as Codex deploy/review requests from the owner-facing project chat. |
+| #154 | `5b52b520f89c531ab3269f3175aedbc015dd7307` | Refreshes this recovery status through PR #153 and the latest dashboard deploy request. |
+| #155 | `a35ba4063be578aa8086027d4f0d14aa0f10735cf` | Converts Mission Control desktop/compact owner-facing separators and loading text to ASCII to avoid mojibake. |
+| #156 | `366a35a071d2c8d51d577df093fd5a7bd48da0c4` | Hardens GitHub bridge parsing so escaped fenced JSON bridge packets do not silently stall. |
 
 ## Local Desktop Status
 
-The local desktop app was rebuilt in place at PR #153:
+The local desktop app was rebuilt in place at PR #156:
 
 - path:
   `C:\Users\Travis\Documents\Codex\2026-06-12\how-do-we-connect-you-to\work\hermes-agent\apps\desktop\release-bridge\win-unpacked\Hermes.exe`
 - latest build stamp commit:
-  `58853d442654e69014fa4fbc95e3bd837cd87fe6`
+  `366a35a071d2c8d51d577df093fd5a7bd48da0c4`
 
 Expected desktop behavior:
 
@@ -85,7 +88,7 @@ Verified dashboard-only deployments completed through PR #136:
 - gateway runtime intentionally unchanged:
   `/home/jenny/.hermes/hermes-runtime-control-plane-af1eafe`
 
-PR #137/#139/#141/#142/#143/#145/#146/#147/#148/#149/#150/#151/#152/#153
+PR #137/#139/#141/#142/#143/#145/#146/#147/#148/#149/#150/#151/#152/#153/#154/#155/#156
 dashboard runtime switch is still pending. Codex
 fixed host-key verification with a repo-local known-hosts entry matching the
 previously accepted VPS fingerprint, but direct SSH still hits a Tailscale
@@ -95,11 +98,11 @@ Fallback action already taken:
 
 - queued a GitHub bridge request to Jenny on PR #79,
 - superseding request id:
-  `codex-pr153-dashboard-deploy-structured-20260614-001`,
+  `codex-pr156-dashboard-deploy-head-update-20260614-001`,
 - supersedes earlier request:
-  `codex-pr152-dashboard-deploy-structured-20260614-001`,
+  `codex-pr155-dashboard-deploy-head-update-20260614-001`,
 - request asks for dashboard-only runtime switch to
-  `58853d442654e69014fa4fbc95e3bd837cd87fe6`, no gateway restart, no
+  `366a35a071d2c8d51d577df093fd5a7bd48da0c4`, no gateway restart, no
   dispatch/session-send, and exactly one `AcceptedBaselineRecord` only after
   successful validation.
 
@@ -220,6 +223,31 @@ PR #153 validation:
 - GitHub CI: clean,
 - local desktop app rebuilt in place.
 
+PR #154 validation:
+
+- docs-only diff,
+- `git diff --check`: passed,
+- GitHub CI: clean.
+
+PR #155 validation:
+
+- no mojibake-prone punctuation remains in touched Mission Control UI files,
+- local desktop type-check: passed,
+- targeted desktop and compact ESLint: passed,
+- `npx tsc -b web`: passed,
+- Python compile for compact static tests: passed,
+- GitHub CI: clean,
+- local desktop app rebuilt and packaged validator passed against
+  `apps/desktop/release-bridge`.
+
+PR #156 validation:
+
+- Python compile for GitHub bridge parser and tests: passed,
+- direct escaped fenced JSON parser smoke: passed,
+- GitHub CI: clean,
+- local desktop app rebuilt and packaged validator passed against
+  `apps/desktop/release-bridge`.
+
 Local browser visual validation was attempted but blocked by the Windows
 sandbox browser runtime:
 
@@ -241,7 +269,7 @@ sandbox browser runtime:
 Primary next lane:
 
 - finish the latest accepted-live dashboard-only runtime switch to
-  `58853d442654e69014fa4fbc95e3bd837cd87fe6`.
+  `366a35a071d2c8d51d577df093fd5a7bd48da0c4`.
 
 After that:
 
