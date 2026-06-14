@@ -301,6 +301,48 @@ function chatStatusLabel(value: string | undefined): string {
   }
 }
 
+interface JennyRunProgress {
+  detail: string
+  phase: 'complete' | 'error' | 'queued' | 'starting' | 'waiting'
+}
+
+function jennyRunProgressCopy(progress: JennyRunProgress | null, elapsedSeconds: number): { detail: string; label: string } {
+  if (!progress) {
+    return {
+      detail: 'Jenny is standing by.',
+      label: 'Standing by'
+    }
+  }
+
+  if (progress.phase === 'queued') {
+    return {
+      detail: progress.detail || 'Your message is queued for Jenny.',
+      label: 'Queued'
+    }
+  }
+  if (progress.phase === 'complete') {
+    return {
+      detail: progress.detail || 'Jenny replied. Review the latest response before sending the next message.',
+      label: 'Reply received'
+    }
+  }
+  if (progress.phase === 'error') {
+    return {
+      detail: progress.detail || 'Jenny hit a guarded error. No hidden action was treated as successful.',
+      label: 'Needs attention'
+    }
+  }
+
+  return {
+    detail: `${progress.detail || 'Mission Control is waiting for Jenny to finish one guarded reply.'} Refreshing status every 2.5s. Elapsed ${elapsedSeconds}s.`,
+    label: progress.phase === 'starting' ? 'Starting Jenny' : 'Waiting for Jenny'
+  }
+}
+
+function isJennyRunActive(progress: JennyRunProgress | null): boolean {
+  return progress?.phase === 'starting' || progress?.phase === 'waiting'
+}
+
 function pendingJennyMessageCount(
   requests: MissionControlJennyBridgeRequestRecord[],
   responses: MissionControlJennyBridgeResponseRecord[]
@@ -1287,6 +1329,8 @@ export function MissionControlView() {
   const [projectRequest, setProjectRequest] = useState('')
   const [projectRoomMessage, setProjectRoomMessage] = useState('')
   const [projectRoomSaving, setProjectRoomSaving] = useState(false)
+  const [jennyRunElapsedSeconds, setJennyRunElapsedSeconds] = useState(0)
+  const [jennyRunProgress, setJennyRunProgress] = useState<JennyRunProgress | null>(null)
 
   async function refreshMissionControlSnapshot(message = '') {
     setProjectRoomSaving(true)
@@ -1356,6 +1400,21 @@ export function MissionControlView() {
     return () => window.clearInterval(timer)
   }, [projectRoomSaving, selectedProjectId, snapshot.projects.length])
 
+  useEffect(() => {
+    if (!isJennyRunActive(jennyRunProgress)) {
+      setJennyRunElapsedSeconds(0)
+
+      return
+    }
+
+    const startedAt = Date.now()
+    const timer = window.setInterval(() => {
+      setJennyRunElapsedSeconds(Math.max(1, Math.floor((Date.now() - startedAt) / 1000)))
+    }, 1000)
+
+    return () => window.clearInterval(timer)
+  }, [jennyRunProgress])
+
   const status = useMemo(() => summarizeWorkspaceStatus(snapshot.workspaceStatus), [snapshot.workspaceStatus])
   const updateNotice = useMemo(() => dashboardUpdateNotice(status), [status])
   const realProjects = useMemo(() => canonicalRealProjects(sortRealProjects(snapshot.projects.filter(isRealProject))), [snapshot.projects])
@@ -1422,6 +1481,10 @@ export function MissionControlView() {
         to_agent: 'jenny'
       })
       setSnapshot(await loadMissionControlSnapshot())
+      setJennyRunProgress({
+        detail: 'Message sent. Use Get Jenny reply when you want Jenny to answer this project message.',
+        phase: 'queued'
+      })
       setProjectRoomMessage('Sent to Jenny mailbox. Replies refresh automatically; use Refresh replies if you want to check now.')
     } catch (err) {
       setProjectRoomMessage(String(err instanceof Error ? err.message : err))
@@ -1446,21 +1509,40 @@ export function MissionControlView() {
     }
 
     setProjectRoomSaving(true)
+    setJennyRunElapsedSeconds(0)
+    setJennyRunProgress({
+      detail: 'Starting the guarded one-reply Jenny run.',
+      phase: 'starting'
+    })
     setProjectRoomMessage('Jenny is answering one pending message...')
 
     try {
+      setJennyRunProgress({
+        detail: 'Mission Control sent the latest project message to Jenny and is waiting for one bounded reply.',
+        phase: 'waiting'
+      })
       const result = await answerMissionControlGitHubBridgeOnce({
         confirm_manual_hermes_answer: true,
         project_id: project.project_id,
         request_id: pending.request_id
       })
       setSnapshot(await loadMissionControlSnapshot())
+      setJennyRunProgress({
+        detail: result.answered
+          ? 'Jenny replied to the latest project message.'
+          : `Jenny did not reply: ${String((result.status as { last_error?: unknown } | undefined)?.last_error ?? 'no matching pending request')}`,
+        phase: result.answered ? 'complete' : 'error'
+      })
       setProjectRoomMessage(
         result.answered
           ? 'Jenny replied to the latest pending project message.'
           : `Jenny did not reply: ${String((result.status as { last_error?: unknown } | undefined)?.last_error ?? 'no matching pending request')}`
       )
     } catch (err) {
+      setJennyRunProgress({
+        detail: String(err instanceof Error ? err.message : err),
+        phase: 'error'
+      })
       setProjectRoomMessage(String(err instanceof Error ? err.message : err))
     } finally {
       setProjectRoomSaving(false)
@@ -1746,6 +1828,8 @@ export function MissionControlView() {
             <JennyLiveActivityRail
               bridgeStatus={snapshot.jennyBridgePollerStatus}
               githubBridgeStatus={snapshot.githubBridgeStatus}
+              jennyRunElapsedSeconds={jennyRunElapsedSeconds}
+              jennyRunProgress={jennyRunProgress}
               projectRoomSaving={projectRoomSaving}
             />
           </div>
@@ -1761,6 +1845,8 @@ export function MissionControlView() {
                 ...unwrapRecords(snapshot.githubBridgeStatus.response_messages)
               ]).filter(message => message.project_id === selectedProject.project_id)}
               githubBridgeStatus={snapshot.githubBridgeStatus}
+              jennyRunElapsedSeconds={jennyRunElapsedSeconds}
+              jennyRunProgress={jennyRunProgress}
               memoryStorage={snapshot.memoryStorage}
               message={projectRoomMessage}
               onCopyPacket={() => void copyProjectRoomPacket(selectedProject)}
@@ -1980,17 +2066,25 @@ function ActiveLanesPanel({
 function JennyLiveActivityRail({
   bridgeStatus,
   githubBridgeStatus,
+  jennyRunElapsedSeconds,
+  jennyRunProgress,
   projectRoomSaving
 }: {
   bridgeStatus: MissionControlJennyBridgePollerStatusResponse
   githubBridgeStatus: MissionControlGitHubBridgeStatusResponse
+  jennyRunElapsedSeconds: number
+  jennyRunProgress: JennyRunProgress | null
   projectRoomSaving: boolean
 }) {
   const activityItems = jennyActivityItems(githubBridgeStatus)
   const hasError = Boolean(bridgeStatus.last_error || githubBridgeStatus.last_error)
+  const runCopy = jennyRunProgressCopy(jennyRunProgress, jennyRunElapsedSeconds)
+  const runActive = isJennyRunActive(jennyRunProgress)
   const visiblePendingCount = githubBridgeStatus.visible_pending_count ?? githubBridgeStatus.pending_count ?? 0
-  const liveLabel = projectRoomSaving
+  const liveLabel = runActive
     ? 'Jenny is working'
+    : jennyRunProgress?.phase === 'complete'
+      ? 'Last reply complete'
     : hasError
       ? 'Needs attention'
       : githubBridgeStatus.last_status === 'hermes_answer_completed'
@@ -2006,7 +2100,7 @@ function JennyLiveActivityRail({
         </div>
         <span className={cn(
           'h-3 w-3 rounded-full',
-          projectRoomSaving ? 'bg-blue-400 shadow-[0_0_24px_rgba(96,165,250,0.85)]' : hasError ? 'bg-red-400' : 'bg-emerald-400'
+          runActive ? 'bg-blue-400 shadow-[0_0_24px_rgba(96,165,250,0.85)]' : hasError || jennyRunProgress?.phase === 'error' ? 'bg-red-400' : 'bg-emerald-400'
         )} />
       </div>
 
@@ -2020,9 +2114,10 @@ function JennyLiveActivityRail({
       <div className="mt-5 border-t border-[#f7efe4]/10 pt-4">
         <div className="mb-3 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782]">Jenny stream</div>
         <div className="grid gap-2">
-          {projectRoomSaving ? (
+          {jennyRunProgress ? (
             <div className="rounded-lg border border-blue-400/30 bg-blue-500/10 p-3 text-sm text-blue-100">
-              Waiting for bridge status. Refresh runs quickly while Jenny is answering.
+              <div className="font-semibold">{runCopy.label}</div>
+              <div className="mt-1 text-xs leading-relaxed">{runCopy.detail}</div>
             </div>
           ) : null}
           {activityItems.length ? (
@@ -2076,6 +2171,8 @@ function ProjectRoomsWorkspace({
   bridgeStatus,
   githubBridgeStatus,
   githubBridgeMessages,
+  jennyRunElapsedSeconds,
+  jennyRunProgress,
   memoryStorage,
   message,
   onCopyPacket,
@@ -2106,6 +2203,8 @@ function ProjectRoomsWorkspace({
   bridgeStatus: MissionControlJennyBridgePollerStatusResponse
   githubBridgeStatus: MissionControlGitHubBridgeStatusResponse
   githubBridgeMessages: MissionControlGitHubBridgeMessageRecord[]
+  jennyRunElapsedSeconds: number
+  jennyRunProgress: JennyRunProgress | null
   memoryStorage: MissionControlProfileMemoryStorageResponse
   message: string
   onCopyPacket: () => void
@@ -2158,6 +2257,8 @@ function ProjectRoomsWorkspace({
   const connectionState = jennyConnectionState(pendingCount, responseCount, bridgeStatus, githubBridgeStatus)
   const nextStep = jennyNextStep(pendingCount, responseCount, Boolean(latestPending), bridgeStatus, githubBridgeStatus)
   const activityItems = jennyActivityItems(githubBridgeStatus)
+  const runActive = isJennyRunActive(jennyRunProgress)
+  const runCopy = jennyRunProgressCopy(jennyRunProgress, jennyRunElapsedSeconds)
   const chatMessages = [
     ...visibleBridgeRequests.map(request => ({
       body: request.message,
@@ -2267,14 +2368,14 @@ function ProjectRoomsWorkspace({
             <span className="text-xs text-[#a59783]">{chatMessages.length ? `${chatMessages.length} recent messages` : 'No messages yet'}</span>
           </div>
           <div className="mt-2 grid min-h-0 flex-1 content-start gap-2 overflow-auto pr-1">
-            {saving ? (
+            {runActive ? (
               <article className="max-w-[85%] justify-self-start rounded-lg border border-[#60a5fa]/25 bg-[#60a5fa]/10 px-3 py-2 text-sm text-[#f3ebda] shadow-[0_10px_30px_rgba(0,0,0,0.18)]">
                 <div className="mb-1 flex items-center justify-between gap-3 text-xs">
                   <span className="font-semibold">Jenny</span>
-                  <span className="text-[#93c5fd]">working</span>
+                  <span className="text-[#93c5fd]">{runCopy.label}</span>
                 </div>
                 <p className="whitespace-pre-wrap break-words">
-                  Jenny is checking the latest project message. Mission Control will show the reply or a guarded error here.
+                  {runCopy.detail}
                 </p>
               </article>
             ) : null}
@@ -2352,13 +2453,13 @@ function ProjectRoomsWorkspace({
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-[#f3ebda]">Jenny activity</h3>
             <span className="text-xs text-[#a59783]">
-              {saving ? 'refreshing every 2.5s' : 'recent bridge status'}
+              {runActive ? 'refreshing every 2.5s' : 'recent bridge status'}
             </span>
           </div>
           <div className="mt-2 grid gap-2">
-            {saving ? (
+            {runActive ? (
               <p className="rounded-md border border-[#60a5fa]/20 bg-[#15101a]/70 p-2 text-xs text-[#93c5fd]">
-                Jenny reply is running. Mission Control will show started, completed, or error status here while the guarded request is active.
+                {runCopy.label}: {runCopy.detail}
               </p>
             ) : null}
             {activityItems.length ? (

@@ -1255,7 +1255,8 @@ describe('MissionControlView', () => {
     await renderMissionControl()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Get Jenny reply' }))
-    expect(await screen.findByText('Jenny is checking the latest project message. Mission Control will show the reply or a guarded error here.')).toBeTruthy()
+    expect((await screen.findAllByText('Waiting for Jenny')).length).toBeGreaterThanOrEqual(2)
+    expect((await screen.findAllByText(/Mission Control sent the latest project message to Jenny/)).length).toBeGreaterThanOrEqual(2)
     await waitFor(() => expect(answerMissionControlGitHubBridgeOnce).toHaveBeenCalledTimes(1))
     expect(answerMissionControlGitHubBridgeOnce).toHaveBeenCalledWith({
       confirm_manual_hermes_answer: true,
