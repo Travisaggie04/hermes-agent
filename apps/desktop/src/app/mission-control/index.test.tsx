@@ -1073,7 +1073,13 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText(/Use a bounded read-only workspace usability lane/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Request intake: Needs request/).length).toBeGreaterThan(0)
 
-    fireEvent.change(screen.getByPlaceholderText('Tell Jenny what you want to discuss or ask her to do next...'), {
+    const composer = screen.getByPlaceholderText('Tell Jenny what you want to discuss or ask her to do next...')
+    fireEvent.click(screen.getByRole('button', { name: 'Use spec-first prompt' }))
+    expect((composer as HTMLTextAreaElement).value).toContain('Spec-first request for Jenny:')
+    expect((composer as HTMLTextAreaElement).value).toContain('Jenny, do not implement yet. First challenge the request like a senior engineer:')
+    expect((composer as HTMLTextAreaElement).value).toContain('Return only the spec/challenge review and the recommended next safe lane.')
+
+    fireEvent.change(composer, {
       target: { value: 'Make the visible Mission Control page show project rooms on laptop and phone.' }
     })
     expect(screen.getAllByText(/Request intake: Ready/).length).toBeGreaterThan(0)

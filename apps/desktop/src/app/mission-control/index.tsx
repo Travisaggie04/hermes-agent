@@ -1198,6 +1198,25 @@ function assessProjectRequest(requestText: string, review: MissionControlChallen
   }
 }
 
+function buildSpecFirstComposerText(projectName: string, requestText: string, intake: RequestIntakeAssessment): string {
+  const request = compactText(requestText, 520) || '<write the request Travis is considering>'
+  return `Spec-first request for Jenny:
+Project: ${projectName}
+Request Travis is considering:
+${request}
+
+Current intake: ${intake.label} / ${intake.detail}
+
+Jenny, do not implement yet. First challenge the request like a senior engineer:
+1. Restate the goal in plain English.
+2. List missing facts or questions Travis must answer.
+3. Call out wrong-approach risks, hidden assumptions, and protected actions.
+4. Propose the smallest safe lane.
+5. Define evidence, tests, rollback/stop conditions, and approval needs.
+
+Return only the spec/challenge review and the recommended next safe lane.`
+}
+
 function buildPhoneSafeProjectPacket({
   brief,
   project,
@@ -2316,6 +2335,7 @@ function ProjectRoomsWorkspace({
   const nextStep = jennyNextStep(pendingCount, responseCount, Boolean(latestPending), bridgeStatus, githubBridgeStatus)
   const activityItems = jennyActivityItems(githubBridgeStatus)
   const requestIntake = assessProjectRequest(request, review)
+  const specFirstComposerText = buildSpecFirstComposerText(project.name, request, requestIntake)
   const runActive = isJennyRunActive(jennyRunProgress)
   const runCopy = jennyRunProgressCopy(jennyRunProgress, jennyRunElapsedSeconds)
   const chatMessages = [
@@ -2482,6 +2502,16 @@ function ProjectRoomsWorkspace({
             <button className="rounded-md border border-[#5ab896]/40 bg-[#5ab896]/10 px-4 py-2 text-sm font-semibold text-[#5ab896] hover:bg-[#5ab896]/15 disabled:opacity-60" disabled={saving || paused} onClick={onQueueBridge} type="button">
               Send to Jenny
             </button>
+            {requestIntake.state !== 'ready' ? (
+              <button
+                className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-200 hover:bg-amber-500/15 disabled:opacity-60"
+                disabled={saving || paused}
+                onClick={() => onRequestChange(specFirstComposerText)}
+                type="button"
+              >
+                Use spec-first prompt
+              </button>
+            ) : null}
             <button
               className="rounded-md border border-[#60a5fa]/40 bg-[#60a5fa]/10 px-4 py-2 text-sm font-semibold text-[#93c5fd] hover:bg-[#60a5fa]/15 disabled:opacity-60"
               disabled={saving || paused || !latestPending}
