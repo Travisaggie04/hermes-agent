@@ -100,3 +100,15 @@ The current recovery UI sequence makes Mission Control / Jenny recovery the only
 active lane, keeps the other real projects visible but read-only, simplifies the
 workspace toward a project chat, and removes paused-project queue controls until
 Jenny is stable enough to resume project work through the new OS surface.
+
+## 2026-06-14 Early Recovery Update
+
+The recovery status document now tracks accepted-live through PR #151. Current
+local desktop `release-bridge` is rebuilt and validated at
+`f0ce9ca5125c42137fb0ac5f9985369d983d746b`.
+
+The remaining visible gap is the bounded dashboard-only runtime switch on the
+VPS so phone/web surfaces catch up to the current accepted-live Mission Control
+UI. That request is queued to Jenny through the GitHub bridge. Gateway restart,
+laptop worker-node update, dispatch/session-send, Waha/social/payment/customer
+actions, workers/timers/daemons, and broad cleanup remain out of scope.
