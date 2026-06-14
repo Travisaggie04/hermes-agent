@@ -1306,15 +1306,15 @@ export default function MissionControlCompactPage() {
   }
 
   return (
-    <main className="min-h-screen bg-background px-3 py-4 text-foreground sm:px-5" data-testid="mission-control-compact-route">
-      <header className="sticky top-0 z-10 -mx-3 border-b border-border/70 bg-background/95 px-3 pb-3 pt-1 backdrop-blur sm:-mx-5 sm:px-5">
-        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Mission Control compact</p>
-        <div className="mt-1 flex items-start justify-between gap-3">
-          <div>
+    <main className="min-h-screen w-full max-w-full overflow-x-hidden bg-background px-3 py-4 text-foreground sm:px-5" data-testid="mission-control-compact-route">
+      <header className="sticky top-0 z-10 -mx-3 overflow-hidden border-b border-border/70 bg-background/95 px-3 pb-3 pt-1 backdrop-blur sm:-mx-5 sm:px-5">
+        <p className="max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground [overflow-wrap:anywhere]">Mission Control compact</p>
+        <div className="mt-1 flex min-w-0 items-start justify-between gap-2">
+          <div className="min-w-0">
             <h1 className="text-xl font-semibold leading-tight">Jenny OS workspace</h1>
-            <p className="mt-1 text-xs text-muted-foreground">Hermes / Mission Control is active. Shorts, long-form, Tool & Tally, and Waha are on hold until Jenny is stable here.</p>
+            <p className="mt-1 max-w-full text-xs text-muted-foreground [overflow-wrap:anywhere]">Hermes / Mission Control is active. Shorts, long-form, Tool & Tally, and Waha are on hold until Jenny is stable here.</p>
           </div>
-          <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-700 dark:text-emerald-300">
+          <span className="shrink-0 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-700 dark:text-emerald-300">
             Jenny guarded
           </span>
         </div>
@@ -1365,7 +1365,7 @@ export default function MissionControlCompactPage() {
         />
       ) : null}
 
-      <details className="mt-4 rounded-2xl border border-border/70 bg-card p-3">
+      <details className="mt-4 max-w-full overflow-hidden rounded-2xl border border-border/70 bg-card p-3">
         <summary className="cursor-pointer text-sm font-semibold">Safety details and reports</summary>
         <div className="mt-3 grid gap-4">
           {snapshot ? <SafetyStrip status={snapshot.workspaceStatus} /> : null}
@@ -1392,7 +1392,7 @@ export default function MissionControlCompactPage() {
         />
       ) : null}
 
-      <section className="mt-4 grid gap-3" aria-label="Project report archive">
+      <section className="mt-4 grid max-w-full gap-3 overflow-hidden" aria-label="Project report archive">
         {snapshot && realProjects.length !== 5 ? (
           <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
             {realProjects.length} of 5 real projects loaded. Check backend project records before using this as the daily workspace.
@@ -1456,11 +1456,11 @@ function compactActiveLaneStage(projectView: ProjectViewModel): string {
 
 function CompactActiveLanes({ projectViews, status }: { projectViews: ProjectViewModel[]; status: WorkspaceStatus }) {
   return (
-    <section className="mt-4 rounded-2xl border border-border/70 bg-card p-3" aria-label="Active Jenny OS lane compact">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
+    <section className="mt-4 max-w-full overflow-hidden rounded-2xl border border-border/70 bg-card p-3" aria-label="Active Jenny OS lane compact">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
           <h2 className="text-sm font-semibold">Active Jenny OS Lane</h2>
-          <p className="mt-1 text-[0.68rem] text-muted-foreground">Mission Control/Jenny stability lane only. Display-only; no dispatch, queue mutation, worker, or timer.</p>
+          <p className="mt-1 max-w-full text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">Mission Control/Jenny stability lane only. Display-only; no dispatch, queue mutation, worker, or timer.</p>
         </div>
         <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[0.65rem] font-semibold text-sky-700 dark:text-sky-300">
           display-only
@@ -1468,13 +1468,13 @@ function CompactActiveLanes({ projectViews, status }: { projectViews: ProjectVie
       </div>
       <div className="mt-3 grid gap-2">
         {projectViews.map(projectView => (
-          <article className="rounded-xl border border-border/70 bg-background p-2 text-xs" key={projectView.project.project_id}>
-            <div className="flex items-start justify-between gap-2">
-              <div>
+          <article className="max-w-full overflow-hidden rounded-xl border border-border/70 bg-background p-2 text-xs" key={projectView.project.project_id}>
+            <div className="flex min-w-0 items-start justify-between gap-2">
+              <div className="min-w-0">
                 <h3 className="font-semibold leading-tight">{projectView.project.name}</h3>
-                <p className="mt-1 text-[0.68rem] text-muted-foreground">{projectView.status}</p>
+                <p className="mt-1 max-w-full text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">{projectView.status}</p>
               </div>
-              <span className="shrink-0 rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{compactActiveLaneStage(projectView)}</span>
+              <span className="max-w-[45%] shrink-0 rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground [overflow-wrap:anywhere]">{compactActiveLaneStage(projectView)}</span>
             </div>
             <CompactField label="next safe lane" value={projectView.nextLane} />
             <CompactField label="latest evidence" value={projectView.latestReport} />
@@ -1483,7 +1483,7 @@ function CompactActiveLanes({ projectViews, status }: { projectViews: ProjectVie
           </article>
         ))}
       </div>
-      <p className="mt-3 text-[0.68rem] text-muted-foreground">Safety status: {safetySummary(status)}</p>
+      <p className="mt-3 max-w-full text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">Safety status: {safetySummary(status)}</p>
     </section>
   );
 }
@@ -1497,14 +1497,14 @@ function CompactPausedProjectResumeChecklist() {
   ];
 
   return (
-    <section className="mt-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+    <section className="mt-3 max-w-full overflow-hidden rounded-2xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
       <h3 className="font-semibold text-amber-800 dark:text-amber-200">Resume requirements</h3>
       <p className="mt-1 text-xs text-muted-foreground">
         This project is on hold. Jenny cannot receive work here until these checks are true.
       </p>
       <ul className="mt-3 grid gap-2 text-xs text-muted-foreground">
         {requirements.map(requirement => (
-          <li className="rounded-xl border border-amber-500/20 bg-background px-3 py-2" key={requirement}>
+          <li className="rounded-xl border border-amber-500/20 bg-background px-3 py-2 [overflow-wrap:anywhere]" key={requirement}>
             {requirement}
           </li>
         ))}
@@ -1617,25 +1617,25 @@ function CompactProjectRoom({
   ].sort((left, right) => String(left.time ?? "").localeCompare(String(right.time ?? ""))).slice(-8);
 
   return (
-    <section className="mt-4 grid gap-3 lg:grid-cols-[minmax(12rem,16rem)_1fr]" aria-label="Project chat workspace">
-      <div className="rounded-2xl border border-border/70 bg-card p-3">
-        <div className="flex items-center justify-between gap-2">
+    <section className="mt-4 grid min-w-0 max-w-full gap-3 overflow-x-hidden lg:grid-cols-[minmax(12rem,16rem)_1fr]" aria-label="Project chat workspace">
+      <div className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-border/70 bg-card p-3">
+        <div className="flex min-w-0 items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">Projects</h2>
           <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{projects.length}</span>
         </div>
-        <div className="mt-3 grid gap-2">
+        <div className="mt-3 grid min-w-0 gap-2">
           {projects.map(project => (
             <button
               className={cn(
-                "rounded-xl border px-3 py-2 text-left text-sm transition hover:bg-muted",
+                "min-w-0 rounded-xl border px-3 py-2 text-left text-sm transition hover:bg-muted",
                 project.project_id === selectedProjectView.project.project_id ? "border-emerald-500/40 bg-emerald-500/10" : "border-border/70 bg-background",
               )}
               key={project.project_id}
               onClick={() => onSelectProject(project.project_id)}
               type="button"
             >
-              <span className="block font-semibold">{project.name}</span>
-              <span className="mt-0.5 block text-[0.68rem] text-muted-foreground">
+              <span className="block max-w-full font-semibold [overflow-wrap:anywhere]">{project.name}</span>
+              <span className="mt-0.5 block max-w-full text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">
                 {project.project_id === HERMES_PROJECT_ID ? "Active recovery lane" : "Paused until Jenny is stable"}
               </span>
             </button>
@@ -1643,11 +1643,11 @@ function CompactProjectRoom({
         </div>
       </div>
 
-      <article className="rounded-2xl border border-border/70 bg-card p-3" data-testid="compact-project-room">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
+      <article className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-border/70 bg-card p-3" data-testid="compact-project-room">
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
             <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Chat room</p>
-            <h2 className="mt-1 text-lg font-semibold leading-tight">{selectedProjectView.project.name}</h2>
+            <h2 className="mt-1 max-w-full text-lg font-semibold leading-tight [overflow-wrap:anywhere]">{selectedProjectView.project.name}</h2>
           </div>
           <div className="flex flex-wrap justify-end gap-2">
             <span className={cn("rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold", jennyStatusToneClass(connectionState.tone))}>
@@ -1664,20 +1664,20 @@ function CompactProjectRoom({
           </div>
         </div>
 
-        <div className="mt-3 rounded-2xl border border-border/70 bg-background p-3 text-sm">
-          <div className="grid gap-2">
+        <div className="mt-3 max-w-full overflow-hidden rounded-2xl border border-border/70 bg-background p-3 text-sm">
+          <div className="grid min-w-0 gap-2">
             <div>
               <span className="font-semibold">Goal: </span>
-              <span className="text-muted-foreground">{compactText(selectedProjectView.currentGoal, 180)}</span>
+              <span className="text-muted-foreground [overflow-wrap:anywhere]">{compactText(selectedProjectView.currentGoal, 180)}</span>
             </div>
             <div>
               <span className="font-semibold">Jenny: </span>
-              <span className="text-muted-foreground">{deliveryStatus}. {connectionState.detail}</span>
+              <span className="text-muted-foreground [overflow-wrap:anywhere]">{deliveryStatus}. {connectionState.detail}</span>
             </div>
           </div>
-          <div className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
+          <div className="mt-3 max-w-full overflow-hidden rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
             <div className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Next step</div>
-            <p className="mt-1 text-sm">
+            <p className="mt-1 max-w-full text-sm [overflow-wrap:anywhere]">
               {paused ? "Paused until Jenny is stable. Review context only; sending work to Jenny is disabled for this project." : nextStep}
             </p>
             <div className="mt-2 flex flex-wrap gap-2 text-[0.68rem] text-muted-foreground">
@@ -1695,32 +1695,32 @@ function CompactProjectRoom({
           </details>
         </div>
 
-        <section className="mt-4 rounded-2xl border border-border/70 bg-background p-3" aria-label="Project chat transcript">
-          <div className="flex items-center justify-between gap-2">
+        <section className="mt-4 min-w-0 max-w-full overflow-hidden rounded-2xl border border-border/70 bg-background p-3" aria-label="Project chat transcript">
+          <div className="flex min-w-0 items-center justify-between gap-2">
             <h3 className="text-sm font-semibold">Conversation</h3>
-            <span className="text-[0.68rem] text-muted-foreground">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
+            <span className="text-right text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
           </div>
-          <div className="mt-3 grid min-h-72 max-h-96 gap-3 overflow-auto pr-1">
+          <div className="mt-3 grid min-h-72 max-h-96 min-w-0 gap-3 overflow-y-auto overflow-x-hidden pr-1">
             {chatMessages.length ? (
               chatMessages.map(chat => (
                 <article
                   className={cn(
-                    "max-w-[88%] rounded-2xl border px-3 py-2 text-sm",
+                    "min-w-0 max-w-full rounded-2xl border px-3 py-2 text-sm [overflow-wrap:anywhere] sm:max-w-[88%]",
                     chat.speaker === "You" ? "justify-self-end border-emerald-500/30 bg-emerald-500/10" : "justify-self-start border-border/70 bg-card",
                   )}
                   key={`${chat.speaker}:${chat.id}`}
                 >
-                  <div className="mb-1 flex items-center justify-between gap-3 text-[0.68rem]">
+                  <div className="mb-1 flex min-w-0 items-center justify-between gap-3 text-[0.68rem]">
                     <span className="font-semibold">{chat.speaker}</span>
-                    <span className="text-muted-foreground">{chat.meta}</span>
+                    <span className="min-w-0 text-right text-muted-foreground [overflow-wrap:anywhere]">{chat.meta}</span>
                   </div>
-                  <p className="whitespace-pre-wrap break-words">
+                  <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                     {chat.speaker === "You" ? projectRequestPreview(chat.body, 750) : compactText(chat.body, 750)}
                   </p>
                 </article>
               ))
             ) : (
-              <p className="rounded-xl border border-dashed border-border/70 p-3 text-sm text-muted-foreground">
+              <p className="rounded-xl border border-dashed border-border/70 p-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">
                 Ask Jenny a bounded question or give her one safe next task below.
               </p>
             )}
@@ -1730,7 +1730,7 @@ function CompactProjectRoom({
         <label className="mt-4 grid gap-1 text-sm font-medium">
           Message Jenny
           <textarea
-            className="min-h-24 rounded-xl border border-border/80 bg-background px-3 py-2 text-sm"
+            className="min-h-24 max-w-full rounded-xl border border-border/80 bg-background px-3 py-2 text-sm"
             disabled={paused}
             onChange={event => onRequestChange(event.target.value)}
             placeholder={paused ? "This project is on hold until Jenny is stable." : "Tell Jenny what you want to discuss or ask her to do next..."}
@@ -1738,7 +1738,7 @@ function CompactProjectRoom({
           />
         </label>
 
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 flex min-w-0 flex-wrap gap-2">
           <button className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={busy || paused} onClick={onQueueBridge} type="button">
             Send to Jenny
           </button>
@@ -1754,7 +1754,7 @@ function CompactProjectRoom({
             Refresh replies
           </button>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p className="mt-2 max-w-full text-xs text-muted-foreground [overflow-wrap:anywhere]">
           {paused
             ? "This project is visible for planning context only. Resume it after the Mission Control/Jenny recovery lane is stable."
             : "Live reply refresh is on and read-only. Jenny can reply through the bridge; work still waits for the normal approval gates."}
@@ -1770,33 +1770,33 @@ function CompactProjectRoom({
             Start storage cleanup lane
           </button>
         ) : null}
-        {message ? <p className="mt-2 text-xs text-muted-foreground">{message}</p> : null}
+        {message ? <p className="mt-2 max-w-full text-xs text-muted-foreground [overflow-wrap:anywhere]">{message}</p> : null}
 
-        <section className="mt-4 rounded-xl border border-border/70 bg-background p-3">
-          <div className="flex items-center justify-between gap-2">
+        <section className="mt-4 max-w-full overflow-hidden rounded-xl border border-border/70 bg-background p-3">
+          <div className="flex min-w-0 items-center justify-between gap-2">
             <h3 className="text-sm font-semibold">Previous sessions</h3>
             <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{sessions.length} linked</span>
           </div>
-          <div className="mt-2 grid gap-2">
+          <div className="mt-2 grid min-w-0 gap-2">
             {sessions.length ? (
               sessions.map((session, index) => (
                 session.session_id ? (
                   <button
-                    className="rounded-lg border border-border/60 bg-card/60 p-2 text-left text-xs transition hover:border-emerald-500/40 hover:bg-emerald-500/10"
+                    className="min-w-0 rounded-lg border border-border/60 bg-card/60 p-2 text-left text-xs transition hover:border-emerald-500/40 hover:bg-emerald-500/10"
                     key={session.session_id}
                     onClick={() => onOpenSession(session)}
                     type="button"
                   >
-                    <span className="block font-semibold">{session.title || session.session_id || "Linked session"}</span>
-                    <span className="mt-0.5 block text-muted-foreground">
+                    <span className="block max-w-full font-semibold [overflow-wrap:anywhere]">{session.title || session.session_id || "Linked session"}</span>
+                    <span className="mt-0.5 block max-w-full text-muted-foreground [overflow-wrap:anywhere]">
                       {[session.profile, session.source, session.cwd_snapshot].filter(Boolean).join(" / ") || "session context"}
                     </span>
                     <span className="mt-1 block text-[0.65rem] font-semibold text-emerald-700 dark:text-emerald-300">Open session</span>
                   </button>
                 ) : (
-                  <div className="rounded-lg border border-border/60 bg-card/60 p-2 text-xs" key={index}>
-                    <div className="font-semibold">{session.title || "Linked session"}</div>
-                    <div className="mt-0.5 text-muted-foreground">
+                  <div className="max-w-full overflow-hidden rounded-lg border border-border/60 bg-card/60 p-2 text-xs" key={index}>
+                    <div className="font-semibold [overflow-wrap:anywhere]">{session.title || "Linked session"}</div>
+                    <div className="mt-0.5 text-muted-foreground [overflow-wrap:anywhere]">
                       {[session.profile, session.source, session.cwd_snapshot].filter(Boolean).join(" / ") || "session context"}
                     </div>
                   </div>
@@ -1808,23 +1808,23 @@ function CompactProjectRoom({
           </div>
         </section>
 
-        <details className="mt-4 rounded-xl border border-border/70 bg-background/60 p-3">
+        <details className="mt-4 max-w-full overflow-hidden rounded-xl border border-border/70 bg-background/60 p-3">
           <summary className="cursor-pointer text-sm font-semibold">Safety and maintenance</summary>
-          <section className="mt-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
-            <div className="flex items-center justify-between gap-2">
+          <section className="mt-3 max-w-full overflow-hidden rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
+            <div className="flex min-w-0 items-center justify-between gap-2">
               <h3 className="text-sm font-semibold">Jenny memory storage</h3>
-              <span className="text-[0.68rem] text-violet-700 dark:text-violet-300">
+              <span className="min-w-0 text-right text-[0.68rem] text-violet-700 [overflow-wrap:anywhere] dark:text-violet-300">
                 {memoryStorage.profile_count ?? memoryStorage.profiles?.length ?? 0} profiles / {formatBytes(memoryStorage.total_bytes)}
               </span>
             </div>
-            <div className="mt-2 grid gap-2">
+            <div className="mt-2 grid min-w-0 gap-2">
               {(memoryStorage.profiles ?? []).length ? (
                 (memoryStorage.profiles ?? []).map(profile => (
-                  <article className="rounded-lg border border-violet-500/20 bg-background/70 p-2 text-xs" key={profile.profile ?? profile.home}>
-                    <div className="font-semibold">{profile.profile ?? "profile"}</div>
-                    <div className="mt-1 text-muted-foreground">Memory: {formatBytes(profile.memory?.bytes)} / {profile.memory?.chars ?? 0} chars / {profile.memory?.percent_used ?? 0}%</div>
-                    <div className="text-muted-foreground">User: {formatBytes(profile.user?.bytes)} / {profile.user?.chars ?? 0} chars / {profile.user?.percent_used ?? 0}%</div>
-                    {profile.memory?.error || profile.user?.error ? <div className="mt-1 text-destructive">Read issue: {profile.memory?.error || profile.user?.error}</div> : null}
+                  <article className="max-w-full overflow-hidden rounded-lg border border-violet-500/20 bg-background/70 p-2 text-xs" key={profile.profile ?? profile.home}>
+                    <div className="font-semibold [overflow-wrap:anywhere]">{profile.profile ?? "profile"}</div>
+                    <div className="mt-1 text-muted-foreground [overflow-wrap:anywhere]">Memory: {formatBytes(profile.memory?.bytes)} / {profile.memory?.chars ?? 0} chars / {profile.memory?.percent_used ?? 0}%</div>
+                    <div className="text-muted-foreground [overflow-wrap:anywhere]">User: {formatBytes(profile.user?.bytes)} / {profile.user?.chars ?? 0} chars / {profile.user?.percent_used ?? 0}%</div>
+                    {profile.memory?.error || profile.user?.error ? <div className="mt-1 text-destructive [overflow-wrap:anywhere]">Read issue: {profile.memory?.error || profile.user?.error}</div> : null}
                   </article>
                 ))
               ) : (
@@ -1832,13 +1832,13 @@ function CompactProjectRoom({
               )}
             </div>
           </section>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2">
             <CompactField label="project brief" value={compactText(brief?.outcome, 320) || "No project brief recorded"} />
             <CompactField label="challenge review" value={review ? `${review.decision_state ?? "unknown"} / ${review.recommended_path ?? "No recommended path recorded"}` : "No challenge review recorded"} />
             <CompactField label="latest report contract" value={selectedProjectView.reportContract} />
             <CompactField label="latest result" value={selectedProjectView.latestResult} />
           </div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-3">
             <button className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={busy} onClick={onCopyPacket} type="button">
               Copy phone-safe packet
             </button>
@@ -1850,13 +1850,13 @@ function CompactProjectRoom({
             </button>
           </div>
           <div className="sr-only">Queue for Jenny bridge</div>
-          <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
-            <div className="flex items-center justify-between gap-2">
+          <div className="mt-4 max-w-full overflow-hidden rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
+            <div className="flex min-w-0 items-center justify-between gap-2">
               <h3 className="text-sm font-semibold">Jenny bridge</h3>
               <span className="rounded-full border border-emerald-500/30 px-2 py-0.5 text-[0.65rem] text-emerald-700 dark:text-emerald-300">no dispatch</span>
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">Record-backed outbox/inbox for Jenny relay. Use refresh to check replies. Direct send remains disabled.</p>
-            <div className="mt-3 grid gap-2 rounded-lg border border-emerald-500/20 bg-background/70 p-2 text-xs sm:grid-cols-2">
+            <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">Record-backed outbox/inbox for Jenny relay. Use refresh to check replies. Direct send remains disabled.</p>
+            <div className="mt-3 grid min-w-0 gap-2 rounded-lg border border-emerald-500/20 bg-background/70 p-2 text-xs sm:grid-cols-2">
               <CompactField label="manual relay" value={bridgeStatus.manual_start_only === false ? "disabled" : "manual-start only"} />
               <CompactField label="pending" value={String(pendingCount)} />
               <CompactField label="last status" value={bridgeStatus.last_status ?? "idle"} />
@@ -1864,7 +1864,7 @@ function CompactProjectRoom({
               <CompactField label="last error" value={bridgeStatus.last_error || "none"} />
               <CompactField label="worker/timer" value={`worker ${bridgeStatus.worker_enabled ? "enabled" : "disabled"} / timer ${bridgeStatus.timer_enabled ? "enabled" : "disabled"}`} />
             </div>
-            <div className="mt-3 grid gap-2 rounded-lg border border-sky-500/20 bg-sky-500/5 p-2 text-xs sm:grid-cols-2">
+            <div className="mt-3 grid min-w-0 gap-2 rounded-lg border border-sky-500/20 bg-sky-500/5 p-2 text-xs sm:grid-cols-2">
               <CompactField label="GitHub mailbox" value={githubBridgeStatus.manual_start_only === false ? "disabled" : "manual-start only"} />
               <CompactField label="GitHub mode" value={githubBridgeStatus.mode || "manual"} />
               <CompactField label="GitHub pending" value={String(githubBridgeStatus.pending_count ?? 0)} />
@@ -1873,7 +1873,7 @@ function CompactProjectRoom({
               <CompactField label="GitHub last error" value={githubBridgeStatus.last_error || "none"} />
               <CompactField label="daemon/worker/timer" value={`daemon ${githubBridgeStatus.daemon_enabled ? "enabled" : "disabled"} / worker ${githubBridgeStatus.worker_enabled ? "enabled" : "disabled"} / timer ${githubBridgeStatus.timer_enabled ? "enabled" : "disabled"}`} />
             </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2">
               <CompactBridgeList
                 title="Outbound"
                 empty="No queued messages."
@@ -1883,12 +1883,12 @@ function CompactProjectRoom({
               <CompactBridgeList title="Replies" empty="No replies yet." items={visibleBridgeResponses} renderItem={item => `${item.responder ?? "jenny"} / ${item.message}`} />
             </div>
           </div>
-          <div className="mt-4 rounded-xl border border-border/70 bg-background p-3">
-            <div className="flex items-center justify-between gap-2">
+          <div className="mt-4 max-w-full overflow-hidden rounded-xl border border-border/70 bg-background p-3">
+            <div className="flex min-w-0 items-center justify-between gap-2">
               <h3 className="text-sm font-semibold">Phone-safe packet</h3>
               <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{packet.length} / 1900</span>
             </div>
-            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground">{packet}</pre>
+            <pre className="mt-2 max-h-64 max-w-full overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{packet}</pre>
           </div>
         </details>
       </article>
@@ -1908,20 +1908,20 @@ function CompactBridgeList<T>({
   title: string;
 }) {
   return (
-    <section className="rounded-lg border border-border/70 bg-background/70 p-2 text-xs">
-      <div className="flex items-center justify-between gap-2">
+    <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/70 p-2 text-xs">
+      <div className="flex min-w-0 items-center justify-between gap-2">
         <h4 className="font-semibold">{title}</h4>
         <span className="text-muted-foreground">{items.length}</span>
       </div>
-      <div className="mt-2 grid gap-2">
+      <div className="mt-2 grid min-w-0 gap-2">
         {items.length ? (
           items.slice(-2).reverse().map((item, index) => (
-            <p className="line-clamp-3 rounded-md border border-border/60 bg-background p-2 text-muted-foreground" key={index}>
+            <p className="line-clamp-3 rounded-md border border-border/60 bg-background p-2 text-muted-foreground [overflow-wrap:anywhere]" key={index}>
               {renderItem(item)}
             </p>
           ))
         ) : (
-          <p className="text-muted-foreground">{empty}</p>
+          <p className="text-muted-foreground [overflow-wrap:anywhere]">{empty}</p>
         )}
       </div>
     </section>
@@ -1930,11 +1930,11 @@ function CompactBridgeList<T>({
 
 function CompactProjectKanban({ projectViews }: { projectViews: ProjectViewModel[] }) {
   return (
-    <section className="mt-4 rounded-2xl border border-border/70 bg-card p-3" aria-label="Project Kanban">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
+    <section className="mt-4 max-w-full overflow-hidden rounded-2xl border border-border/70 bg-card p-3" aria-label="Project Kanban">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
           <h2 className="text-sm font-semibold">Project Kanban</h2>
-          <p className="mt-1 text-[0.68rem] text-muted-foreground">
+          <p className="mt-1 max-w-full text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">
             Record-backed lifecycle. Dragging disabled; cards move only when briefs, challenge reviews, lane drafts, approvals, or reports change.
           </p>
         </div>
@@ -1943,29 +1943,29 @@ function CompactProjectKanban({ projectViews }: { projectViews: ProjectViewModel
         </span>
       </div>
 
-      <div className="mt-3 grid gap-2">
+      <div className="mt-3 grid min-w-0 gap-2">
         {PROJECT_KANBAN_COLUMNS.map(column => {
           const cards = projectViews.filter(projectView => projectKanbanColumnFor(projectView) === column.id);
           return (
-            <section className="rounded-xl border border-border/70 bg-background p-2" key={column.id}>
-              <div className="flex items-center justify-between gap-2">
+            <section className="max-w-full overflow-hidden rounded-xl border border-border/70 bg-background p-2" key={column.id}>
+              <div className="flex min-w-0 items-center justify-between gap-2">
                 <h3 className="text-xs font-semibold">{column.title}</h3>
                 <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">{cards.length}</span>
               </div>
-              <p className="mt-1 text-[0.65rem] leading-snug text-muted-foreground">{column.description}</p>
-              <div className="mt-2 grid gap-2">
+              <p className="mt-1 text-[0.65rem] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{column.description}</p>
+              <div className="mt-2 grid min-w-0 gap-2">
                 {cards.length ? (
                   cards.map(projectView => (
-                    <article className="rounded-lg border border-border/60 bg-card/70 p-2 text-xs" key={projectView.project.project_id}>
-                      <div className="font-semibold leading-tight">{projectView.project.name}</div>
-                      <div className="mt-1 text-[0.68rem] text-muted-foreground">{projectView.readinessLabel}</div>
-                      <div className="mt-2 text-[0.68rem] leading-snug text-muted-foreground">Lane: {projectView.latestLane}</div>
-                      <div className="mt-1 text-[0.68rem] leading-snug text-muted-foreground">Next: {projectView.nextLane}</div>
-                      <div className="mt-1 text-[0.68rem] leading-snug text-muted-foreground">Contract: {projectView.reportContract}</div>
+                    <article className="max-w-full overflow-hidden rounded-lg border border-border/60 bg-card/70 p-2 text-xs" key={projectView.project.project_id}>
+                      <div className="font-semibold leading-tight [overflow-wrap:anywhere]">{projectView.project.name}</div>
+                      <div className="mt-1 text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">{projectView.readinessLabel}</div>
+                      <div className="mt-2 text-[0.68rem] leading-snug text-muted-foreground [overflow-wrap:anywhere]">Lane: {projectView.latestLane}</div>
+                      <div className="mt-1 text-[0.68rem] leading-snug text-muted-foreground [overflow-wrap:anywhere]">Next: {projectView.nextLane}</div>
+                      <div className="mt-1 text-[0.68rem] leading-snug text-muted-foreground [overflow-wrap:anywhere]">Contract: {projectView.reportContract}</div>
                     </article>
                   ))
                 ) : (
-                  <p className="rounded-lg border border-dashed border-border/70 p-2 text-[0.68rem] text-muted-foreground">No project cards.</p>
+                  <p className="rounded-lg border border-dashed border-border/70 p-2 text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">No project cards.</p>
                 )}
               </div>
             </section>
@@ -1992,9 +1992,9 @@ function CompactReportIngestion({
   saving: boolean;
 }) {
   return (
-    <section className="mt-4 rounded-2xl border border-border/70 bg-card p-3" aria-label="Manual Jenny report ingestion compact">
+    <section className="mt-4 max-w-full overflow-hidden rounded-2xl border border-border/70 bg-card p-3" aria-label="Manual Jenny report ingestion compact">
       <h2 className="text-sm font-semibold">Save Jenny report manually</h2>
-      <p className="mt-1 text-[0.68rem] text-muted-foreground">Append-only reports/create only. Guarded mailbox is separate; this report form does not dispatch or route queues.</p>
+      <p className="mt-1 text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">Append-only reports/create only. Guarded mailbox is separate; this report form does not dispatch or route queues.</p>
       <label className="mt-3 grid gap-1 text-xs font-medium">
         Project
         <select className="rounded-xl border border-border/80 bg-background px-3 py-2 text-sm" onChange={event => onChange("projectId", event.target.value)} value={form.projectId}>
@@ -2015,7 +2015,7 @@ function CompactReportIngestion({
       <button className="mt-3 w-full rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60" disabled={saving} onClick={onSave} type="button">
         {saving ? "Saving report..." : "Save Jenny report manually"}
       </button>
-      {message ? <p className="mt-2 text-xs text-muted-foreground">{message}</p> : null}
+      {message ? <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">{message}</p> : null}
     </section>
   );
 }
@@ -2024,7 +2024,7 @@ function CompactReportInput({ label, onChange, value }: { label: string; onChang
   return (
     <label className="mt-3 grid gap-1 text-xs font-medium">
       {label}
-      <textarea className="min-h-16 rounded-xl border border-border/80 bg-background px-3 py-2 text-sm" onChange={event => onChange(event.target.value)} value={value} />
+      <textarea className="min-h-16 max-w-full rounded-xl border border-border/80 bg-background px-3 py-2 text-sm" onChange={event => onChange(event.target.value)} value={value} />
     </label>
   );
 }
@@ -2038,7 +2038,7 @@ function SafetyStrip({ status }: { status: WorkspaceStatus }) {
   const acceptedLiveHead = status.deployment_gap?.accepted_live_head ?? status.accepted_baseline?.head ?? "";
   const deployedHead = status.deployment_gap?.deployed_head ?? status.accepted_baseline?.head ?? "";
   return (
-    <section className="mt-4 grid grid-cols-2 gap-2 text-xs" aria-label="Safety status">
+    <section className="mt-4 grid min-w-0 grid-cols-1 gap-2 text-xs sm:grid-cols-2" aria-label="Safety status">
       <SafetyPill label="Guard" good={guard === "pass"} value={guard} />
       <SafetyPill label="Dispatch" good={dispatch === false} value={dispatch === false ? "false" : "unknown"} />
       <SafetyPill label="Active lanes" good={activeLaneCount === 0} value={String(activeLaneCount)} />
@@ -2061,20 +2061,20 @@ function dashboardUpdateNotice(status: WorkspaceStatus): string {
 
 function SafetyPill({ good, label, value }: { good: boolean; label: string; value: string }) {
   return (
-    <div className={cn("rounded-xl border p-2", good ? "border-emerald-500/30 bg-emerald-500/10" : "border-amber-500/30 bg-amber-500/10")}>
+    <div className={cn("min-w-0 rounded-xl border p-2", good ? "border-emerald-500/30 bg-emerald-500/10" : "border-amber-500/30 bg-amber-500/10")}>
       <div className="text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
-      <div className="mt-0.5 font-semibold">{value}</div>
+      <div className="mt-0.5 font-semibold [overflow-wrap:anywhere]">{value}</div>
     </div>
   );
 }
 
 function CompactProjectCard({ copied, onCopy, projectView }: { copied: boolean; onCopy: () => void; projectView: ProjectViewModel }) {
   return (
-    <article className="rounded-2xl border border-border/70 bg-card p-3 shadow-sm" data-testid={`compact-project-${projectView.project.project_id}`}>
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h2 className="text-base font-semibold leading-tight">{projectView.project.name}</h2>
-          <p className="mt-1 text-[0.68rem] text-muted-foreground">{projectView.project.project_id}</p>
+    <article className="max-w-full overflow-hidden rounded-2xl border border-border/70 bg-card p-3 shadow-sm" data-testid={`compact-project-${projectView.project.project_id}`}>
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold leading-tight [overflow-wrap:anywhere]">{projectView.project.name}</h2>
+          <p className="mt-1 text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">{projectView.project.project_id}</p>
         </div>
         <span className="rounded-full border border-border/70 px-2 py-0.5 text-[0.65rem] text-muted-foreground">compact</span>
       </div>
@@ -2090,16 +2090,16 @@ function CompactProjectCard({ copied, onCopy, projectView }: { copied: boolean; 
       <button className="mt-3 w-full rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted" onClick={onCopy} type="button">
         {copied ? "Prompt copied" : "Copy next lane prompt"}
       </button>
-      <p className="mt-2 text-[0.68rem] text-muted-foreground">Use project chat for the guarded Jenny mailbox, or copy this archive prompt manually.</p>
+      <p className="mt-2 text-[0.68rem] text-muted-foreground [overflow-wrap:anywhere]">Use project chat for the guarded Jenny mailbox, or copy this archive prompt manually.</p>
     </article>
   );
 }
 
 function CompactField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="mt-3">
+    <div className="mt-3 min-w-0 max-w-full overflow-hidden">
       <div className="text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
-      <div className="mt-1 text-sm leading-snug">{value}</div>
+      <div className="mt-1 text-sm leading-snug [overflow-wrap:anywhere]">{value}</div>
     </div>
   );
 }
