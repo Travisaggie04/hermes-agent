@@ -282,7 +282,7 @@ function compactText(value: string | string[] | null | undefined, maxChars: numb
 }
 
 function projectRequestPreview(value: string, maxChars: number): string {
-  const requestMatch = value.match(/Request:\s*([\s\S]*?)(?:\n\s*\nCurrent brief:|\n\s*\nChallenge state:|$)/i)
+  const requestMatch = value.match(/Request:\s*([\s\S]*?)(?:\n\s*\nRequest intake:|\n\s*\nCurrent brief:|\n\s*\nChallenge state:|$)/i)
   return compactText(requestMatch?.[1] ?? value, maxChars)
 }
 
