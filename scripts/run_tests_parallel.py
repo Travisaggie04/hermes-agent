@@ -40,6 +40,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -47,6 +48,11 @@ import time
 from concurrent.futures import ThreadPoolExecutor, Future
 from pathlib import Path
 from typing import Dict, List, Tuple
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
 # Default test discovery roots.
@@ -131,11 +137,16 @@ def _count_tests(
 
     counts: dict[Path, int] = {}
     for line in result.stdout.splitlines():
+        count_match = re.match(r"^(.*?\.py):\s+(\d+)\s*$", line.strip())
+        if count_match:
+            key = (repo_root / count_match.group(1)).resolve()
+            counts[key] = counts.get(key, 0) + int(count_match.group(2))
+            continue
         # Lines look like: tests/acp/test_auth.py::TestClass::test_name
         if "::" not in line:
             continue
         file_part = line.split("::", 1)[0]
-        key = repo_root / file_part
+        key = (repo_root / file_part).resolve()
         counts[key] = counts.get(key, 0) + 1
 
     return counts

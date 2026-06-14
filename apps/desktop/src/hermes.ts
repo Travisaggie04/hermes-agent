@@ -526,6 +526,7 @@ export interface MissionControlGitHubBridgeRequestCreateResponse {
 }
 
 export interface MissionControlGitHubBridgeAnswerOncePayload {
+  confirm_manual_hermes_answer: true
   project_id: string
   request_id: string
 }
@@ -621,10 +622,31 @@ export interface MissionControlMemoryFileLevel {
   percent_used?: number
 }
 
+export interface MissionControlProfileMountUsage {
+  error?: string
+  free_bytes?: number
+  path?: string
+  percent_used?: number
+  total_bytes?: number
+  used_bytes?: number
+}
+
+export interface MissionControlProfileStorageLevel {
+  bytes?: number
+  components?: Record<string, MissionControlProfileStorageLevel>
+  error?: string
+  exists?: boolean
+  path?: string
+  scope?: string
+}
+
 export interface MissionControlProfileMemoryStorage {
+  data?: MissionControlProfileStorageLevel
   home?: string
   memory?: MissionControlMemoryFileLevel
+  mount?: MissionControlProfileMountUsage
   profile?: string
+  recall_file_bytes?: number
   total_bytes?: number
   user?: MissionControlMemoryFileLevel
 }
@@ -642,6 +664,8 @@ export interface MissionControlProfileMemoryStorageResponse {
   stored?: boolean
   total_bytes?: number
   total_memory_bytes?: number
+  total_profile_data_bytes?: number
+  total_recall_file_bytes?: number
   total_user_bytes?: number
 }
 

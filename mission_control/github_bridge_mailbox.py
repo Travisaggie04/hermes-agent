@@ -673,7 +673,7 @@ def run_hermes_responder(
         timeout=max(30, int(timeout_seconds)),
         check=False,
     )
-    if error := hermes_response_error(proc.stdout, proc.returncode):
+    if error := hermes_response_error(proc.stdout, getattr(proc, "returncode", 0)):
         raise HermesResponderError(error)
     return clean_hermes_response(proc.stdout)
 

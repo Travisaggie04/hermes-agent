@@ -161,23 +161,51 @@ beforeEach(() => {
     profile_count: 2,
     profiles: [
       {
+        data: {
+          bytes: 6_442_450_944,
+          components: {
+            memories: { bytes: 32_768, exists: true, path: '/home/jenny/.hermes/memories' },
+            sessions: { bytes: 2_790_309_888, exists: true, path: '/home/jenny/.hermes/sessions' },
+            state: { bytes: 3_652_108_288, exists: true, path: '/home/jenny/.hermes/state.db' }
+          },
+          exists: true,
+          path: '/home/jenny/.hermes',
+          scope: 'default_profile_state_sessions_memories'
+        },
         home: '/home/jenny/.hermes',
-        memory: { bytes: 1100, chars: 1100, exists: true, percent_used: 50 },
+        memory: { bytes: 1100, chars: 1100, exists: true, limit_chars: 2200, percent_used: 50 },
+        mount: { free_bytes: 4_294_967_296, path: '/', percent_used: 76, total_bytes: 17_179_869_184, used_bytes: 12_884_901_888 },
         profile: 'default',
-        total_bytes: 1300,
-        user: { bytes: 200, chars: 200, exists: true, percent_used: 15 }
+        recall_file_bytes: 1300,
+        total_bytes: 6_442_450_944,
+        user: { bytes: 200, chars: 200, exists: true, limit_chars: 1375, percent_used: 15 }
       },
       {
+        data: {
+          bytes: 49_283_072,
+          components: {
+            memories: { bytes: 4096, exists: true, path: '/home/jenny/.hermes/profiles/wahainspection/memories' },
+            sessions: { bytes: 12_582_912, exists: true, path: '/home/jenny/.hermes/profiles/wahainspection/sessions' },
+            state: { bytes: 36_696_064, exists: true, path: '/home/jenny/.hermes/profiles/wahainspection/state.db' }
+          },
+          exists: true,
+          path: '/home/jenny/.hermes/profiles/wahainspection',
+          scope: 'profile_directory'
+        },
         home: '/home/jenny/.hermes/profiles/wahainspection',
-        memory: { bytes: 0, chars: 0, exists: false, percent_used: 0 },
+        memory: { bytes: 0, chars: 0, exists: false, limit_chars: 2200, percent_used: 0 },
+        mount: { free_bytes: 4_294_967_296, path: '/', percent_used: 76, total_bytes: 17_179_869_184, used_bytes: 12_884_901_888 },
         profile: 'wahainspection',
-        total_bytes: 0,
-        user: { bytes: 0, chars: 0, exists: false, percent_used: 0 }
+        recall_file_bytes: 0,
+        total_bytes: 49_283_072,
+        user: { bytes: 0, chars: 0, exists: false, limit_chars: 1375, percent_used: 0 }
       }
     ],
     stored: false,
-    total_bytes: 1300,
+    total_bytes: 6_491_734_016,
     total_memory_bytes: 1100,
+    total_profile_data_bytes: 6_491_734_016,
+    total_recall_file_bytes: 1300,
     total_user_bytes: 200
   })
   answerMissionControlGitHubBridgeOnce.mockResolvedValue({
@@ -657,7 +685,28 @@ beforeEach(() => {
     response_messages: [],
     send_to_jenny_enabled: false,
     session_send_enabled: false,
-    status_records: [],
+    status_records: [
+      {
+        record: {
+          created_at: '2026-06-13T01:04:00Z',
+          handled_request_id: 'github-bridge-request-1',
+          mode: 'manual_hermes_answer',
+          pending_count: 1,
+          status: 'hermes_answer_started',
+          status_id: 'github-status-started'
+        }
+      },
+      {
+        record: {
+          created_at: '2026-06-13T01:05:00Z',
+          handled_request_id: 'github-bridge-request-1',
+          mode: 'manual_hermes_answer',
+          pending_count: 0,
+          status: 'hermes_answer_completed',
+          status_id: 'github-status-completed'
+        }
+      }
+    ],
     stored: false,
     timer_enabled: false,
     worker_enabled: false
@@ -696,9 +745,15 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Projects')).toBeTruthy()
     expect(screen.getAllByText('5 projects').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Paused until Jenny is stable').length).toBe(4)
-    expect(screen.getByText('Chat room')).toBeTruthy()
+    expect(screen.getByText('Local studio')).toBeTruthy()
+    expect(screen.getByText('IV. — Jenny workspace')).toBeTruthy()
+    expect(screen.getByRole('complementary', { name: 'Workspace inspector' })).toBeTruthy()
     expect(screen.getAllByRole('heading', { name: 'Hermes / Mission Control' }).length).toBeGreaterThan(0)
     expect(screen.getByText('Conversation')).toBeTruthy()
+    expect(screen.getByText('Jenny activity')).toBeTruthy()
+    expect(screen.getByText('recent bridge status')).toBeTruthy()
+    expect(screen.getByText('Jenny is thinking')).toBeTruthy()
+    expect(screen.getAllByText('request github-bridge-request-1').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Jenny').length).toBeGreaterThan(0)
     expect(screen.getByText('Jenny is watching')).toBeTruthy()
     expect(screen.getByText(/Bridge watching for replies/)).toBeTruthy()
@@ -715,7 +770,7 @@ describe('MissionControlView', () => {
     expect(screen.queryByText(/Dashboard-only deploy check completed/i)).toBeNull()
     expect(screen.getByText('Previous sessions')).toBeTruthy()
     expect(screen.getByText('Safety and maintenance')).toBeTruthy()
-    expect(screen.getByText('Jenny bridge')).toBeTruthy()
+    expect(screen.getAllByText('Jenny bridge').length).toBeGreaterThan(0)
     expect(screen.getAllByText('manual-start only').length).toBeGreaterThanOrEqual(2)
     expect(screen.getAllByText('replied').length).toBeGreaterThan(0)
     expect(screen.getByText('GitHub mailbox')).toBeTruthy()
@@ -736,7 +791,28 @@ describe('MissionControlView', () => {
     expect(screen.getByRole('button', { name: 'Refresh bridge' })).toBeTruthy()
     expect(screen.getByText(/replied \/ jenny/)).toBeTruthy()
     expect(screen.getByText('Live reply refresh is on and read-only. Jenny can reply through the bridge; work still waits for the normal approval gates.')).toBeTruthy()
-    expect(screen.getByText('Project Kanban')).toBeTruthy()
+    expect(screen.getByText('Hermes health dashboard')).toBeTruthy()
+    expect(screen.getByText('Profile storage usage')).toBeTruthy()
+    expect(screen.getByText('Profile data')).toBeTruthy()
+    expect(screen.getByText('State DB')).toBeTruthy()
+    expect(screen.getByText('Sessions')).toBeTruthy()
+    expect(screen.getByText('Recall files')).toBeTruthy()
+    expect(screen.queryByText('Total memory files')).toBeNull()
+    expect(screen.queryByText('MEMORY.md')).toBeNull()
+    expect(screen.queryByText('USER.md')).toBeNull()
+    expect(screen.queryByText('Memory cap')).toBeNull()
+    expect(screen.queryByText('Memory %')).toBeNull()
+    expect(screen.getByText('Mount max')).toBeTruthy()
+    expect(screen.getByText('Mount used')).toBeTruthy()
+    expect(screen.getAllByText('6.0 GB').length).toBeGreaterThan(0)
+    expect(screen.getByText('3.4 GB')).toBeTruthy()
+    expect(screen.getByText('2.6 GB')).toBeTruthy()
+    expect(screen.getByText('Mount %')).toBeTruthy()
+    expect(screen.getAllByText('16 GB').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('12 GB').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('76%').length).toBeGreaterThan(0)
+    expect(screen.getByText('Kanban parked for later')).toBeTruthy()
+    expect(screen.getByText('Advanced diagnostic records')).toBeTruthy()
     expect(screen.getAllByRole('heading', { name: 'Hermes / Mission Control' }).length).toBeGreaterThan(0)
     expect(screen.getByText('Hermes update lane')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Start Hermes update lane' })).toBeTruthy()
@@ -744,7 +820,7 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText('report contract').length).toBeGreaterThan(0)
     expect(screen.getByText('latest report contract')).toBeTruthy()
     expect(screen.getAllByText(/Missing:.*evidence.*tests/).length).toBeGreaterThan(0)
-    expect(screen.getByText('1 active / 4 paused')).toBeTruthy()
+    expect(screen.getAllByText('1 active / 4 paused').length).toBeGreaterThan(0)
     expect(screen.getByText('Projects on hold')).toBeTruthy()
 
     for (const [, name] of realProjects) {
@@ -784,27 +860,12 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText('Paused until Jenny is stable').length).toBe(4)
   })
 
-  it('renders a read-only project kanban lifecycle without queue mutation controls', async () => {
+  it('parks Kanban until the real task board is reliable', async () => {
     await renderMissionControl()
 
-    expect(await screen.findByText('Project Kanban')).toBeTruthy()
-    for (const expected of [
-      'Intake',
-      'Needs Clarification',
-      'Challenge Review',
-      'Lane Draft',
-      'Awaiting Approval',
-      'Active',
-      'Evidence Review',
-      'Accepted',
-      'Blocked / Rollback'
-    ]) {
-      expect(screen.getByText(expected)).toBeTruthy()
-    }
-
-    expect(screen.getByText(/Dragging is disabled/)).toBeTruthy()
-    expect(screen.getByText(/read-only board/)).toBeTruthy()
-    expect(screen.getAllByText(/no queue mutation/).length).toBeGreaterThan(0)
+    expect(await screen.findByText('Kanban parked for later')).toBeTruthy()
+    expect(screen.getByText(/hidden from this daily view until it can show real tasks and reliable controls/)).toBeTruthy()
+    expect(screen.queryByText('Project Kanban')).toBeNull()
     expect(screen.queryByRole('button', { name: /move card/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /start work/i })).toBeNull()
   })
@@ -812,15 +873,10 @@ describe('MissionControlView', () => {
   it('renders the active Jenny OS lane as the only active project board', async () => {
     await renderMissionControl()
 
-    const panel = await screen.findByRole('region', { name: 'Active Jenny OS lane' })
-    expect(panel.textContent).toContain('Hermes / Mission Control')
-    expect(panel.textContent).not.toContain('Shorts Video')
-    expect(panel.textContent).not.toContain('Long-form Video')
-    expect(panel.textContent).not.toContain('Tool & Tally')
-    expect(panel.textContent).not.toContain('Waha Work')
-    expect(panel.textContent).toContain('Display-only')
-    expect(panel.textContent).toContain('Active lane count: 0')
-    expect(panel.querySelectorAll('button')).toHaveLength(0)
+    const advanced = await screen.findByText('Advanced diagnostic records')
+    expect(advanced).toBeTruthy()
+    expect(screen.getByText('Active Jenny OS Lane')).toBeTruthy()
+    expect(screen.getByText('Active lane count: 0')).toBeTruthy()
   })
 
   it('shows paused project rooms but keeps their Jenny actions disabled', async () => {
@@ -845,8 +901,8 @@ describe('MissionControlView', () => {
     await renderMissionControl()
 
     expect((await screen.findAllByText('Jenny finished the desktop architecture review.')).length).toBeGreaterThan(0)
-    expect(screen.getByText('Manual Jenny report ingestion')).toBeTruthy()
-    expect(screen.getByText('Save Jenny report manually')).toBeTruthy()
+    expect(screen.getByText('Manual record repair')).toBeTruthy()
+    expect(screen.getByText('Save a missing Jenny report')).toBeTruthy()
     expect(screen.getByText('Use Mission Control backend with desktop frontend.')).toBeTruthy()
     expect(screen.getByText('dashboard overbuild · none')).toBeTruthy()
     expect(screen.getByText('reports/hermes/desktop-review.md')).toBeTruthy()
@@ -1009,8 +1065,8 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Previous sessions')).toBeTruthy()
     expect(screen.getByText('Hermes storage cleanup lane')).toBeTruthy()
     expect(screen.getByText('Jenny memory storage')).toBeTruthy()
-    expect(screen.getByText(/2 profiles/)).toBeTruthy()
-    expect(screen.getByText('wahainspection')).toBeTruthy()
+    expect(screen.getAllByText(/2 profiles/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('wahainspection').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Lane draft ok').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Use a bounded read-only workspace usability lane/).length).toBeGreaterThan(0)
 
@@ -1173,6 +1229,7 @@ describe('MissionControlView', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Get Jenny reply' }))
     await waitFor(() => expect(answerMissionControlGitHubBridgeOnce).toHaveBeenCalledTimes(1))
     expect(answerMissionControlGitHubBridgeOnce).toHaveBeenCalledWith({
+      confirm_manual_hermes_answer: true,
       project_id: 'project-hermes-mission-control',
       request_id: 'github-bridge-request-2'
     })
@@ -1338,7 +1395,7 @@ describe('MissionControlView', () => {
     expect(waha).toContain('cross-contamination')
   })
 
-  it('saves manual reports through the append-only reports/create route only', async () => {
+  it('saves missing Jenny reports through the append-only reports/create route only', async () => {
     await renderMissionControl()
 
     const projectSelect = await screen.findByLabelText('Project')
@@ -1347,7 +1404,7 @@ describe('MissionControlView', () => {
     fireEvent.change(screen.getByLabelText('Latest result'), { target: { value: 'Desktop and mobile now read projected state.' } })
     fireEvent.change(screen.getByLabelText('Risks/blockers — one per line'), { target: { value: 'proxy 9121 mismatch' } })
     fireEvent.change(screen.getByLabelText('Artifact/report links — one per line'), { target: { value: 'reports/hermes/current.md' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save Jenny report manually' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save missing report' }))
 
     await waitFor(() => expect(createMissionControlReport).toHaveBeenCalledTimes(1))
     expect(createMissionControlReport).toHaveBeenCalledWith(

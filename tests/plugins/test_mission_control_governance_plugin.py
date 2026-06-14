@@ -680,6 +680,22 @@ def test_workspace_github_bridge_answer_once_requires_explicit_request(plugin_ap
     assert response.json()["detail"] == "request_id is required"
 
 
+def test_workspace_github_bridge_answer_once_requires_manual_confirmation(plugin_api, client, monkeypatch):
+    monkeypatch.setattr(
+        plugin_api,
+        "answer_pending_with_hermes",
+        lambda **_kwargs: pytest.fail("answer-once must not run without explicit confirmation"),
+    )
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/github-bridge/answer-once",
+        json={"project_id": "project-hermes", "request_id": "github-req-ui"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "confirm_manual_hermes_answer is required"
+
+
 def test_workspace_github_bridge_answer_once_runs_single_manual_answer(plugin_api, client, monkeypatch):
     def fake_answer_pending_with_hermes(**kwargs):
         assert kwargs["project_id"] == "project-hermes"
@@ -717,13 +733,19 @@ def test_workspace_github_bridge_answer_once_runs_single_manual_answer(plugin_ap
 
     response = client.post(
         "/api/plugins/mission-control-governance/workspace/github-bridge/answer-once",
-        json={"project_id": "project-hermes", "request_id": "github-req-ui"},
+        json={
+            "confirm_manual_hermes_answer": True,
+            "project_id": "project-hermes",
+            "request_id": "github-req-ui",
+        },
     )
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["stored"] is True
     assert payload["manual_start_only"] is True
+    assert payload["manual_hermes_answer_enabled"] is True
+    assert payload["requires_explicit_manual_confirmation"] is True
     assert payload["send_to_jenny_enabled"] is True
     assert payload["dispatch_enabled"] is False
     assert payload["session_send_enabled"] is False
@@ -4532,20 +4554,60 @@ def test_workspace_profile_memory_storage_is_read_only(plugin_api, client, monke
                 {
                     "profile": "default",
                     "home": "/home/jenny/.hermes",
+                    "data": {
+                        "path": "/home/jenny/.hermes",
+                        "scope": "default_profile_state_sessions_memories",
+                        "exists": True,
+                        "bytes": 6_442_450_944,
+                        "components": {
+                            "state": {"path": "/home/jenny/.hermes/state.db", "exists": True, "bytes": 3_652_108_288},
+                            "sessions": {"path": "/home/jenny/.hermes/sessions", "exists": True, "bytes": 2_790_309_888},
+                            "memories": {"path": "/home/jenny/.hermes/memories", "exists": True, "bytes": 32_768},
+                        },
+                    },
                     "memory": {"bytes": 1100, "chars": 1100, "exists": True, "limit_chars": 2200, "percent_used": 50},
+                    "mount": {
+                        "path": "/",
+                        "total_bytes": 17_179_869_184,
+                        "used_bytes": 12_884_901_888,
+                        "free_bytes": 4_294_967_296,
+                        "percent_used": 75,
+                    },
+                    "recall_file_bytes": 1300,
                     "user": {"bytes": 200, "chars": 200, "exists": True, "limit_chars": 1375, "percent_used": 15},
-                    "total_bytes": 1300,
+                    "total_bytes": 6_442_450_944,
                 },
                 {
                     "profile": "wahainspection",
                     "home": "/home/jenny/.hermes/profiles/wahainspection",
+                    "data": {
+                        "path": "/home/jenny/.hermes/profiles/wahainspection",
+                        "scope": "profile_directory",
+                        "exists": True,
+                        "bytes": 49_283_072,
+                        "components": {
+                            "state": {"path": "/home/jenny/.hermes/profiles/wahainspection/state.db", "exists": True, "bytes": 36_696_064},
+                            "sessions": {"path": "/home/jenny/.hermes/profiles/wahainspection/sessions", "exists": True, "bytes": 12_582_912},
+                            "memories": {"path": "/home/jenny/.hermes/profiles/wahainspection/memories", "exists": True, "bytes": 4096},
+                        },
+                    },
                     "memory": {"bytes": 0, "chars": 0, "exists": False, "limit_chars": 2200, "percent_used": 0},
+                    "mount": {
+                        "path": "/",
+                        "total_bytes": 17_179_869_184,
+                        "used_bytes": 12_884_901_888,
+                        "free_bytes": 4_294_967_296,
+                        "percent_used": 75,
+                    },
+                    "recall_file_bytes": 0,
                     "user": {"bytes": 0, "chars": 0, "exists": False, "limit_chars": 1375, "percent_used": 0},
-                    "total_bytes": 0,
+                    "total_bytes": 49_283_072,
                 },
             ],
-            "total_bytes": 1300,
+            "total_bytes": 6_491_734_016,
             "total_memory_bytes": 1100,
+            "total_profile_data_bytes": 6_491_734_016,
+            "total_recall_file_bytes": 1300,
             "total_user_bytes": 200,
             "errors": [],
         },
@@ -4560,7 +4622,14 @@ def test_workspace_profile_memory_storage_is_read_only(plugin_api, client, monke
     assert payload["dispatch_enabled"] is False
     assert payload["profile_count"] == 2
     assert payload["profiles"][0]["profile"] == "default"
+    assert payload["profiles"][0]["total_bytes"] == 6_442_450_944
+    assert payload["profiles"][0]["data"]["components"]["state"]["bytes"] == 3_652_108_288
+    assert payload["profiles"][0]["data"]["components"]["sessions"]["bytes"] == 2_790_309_888
     assert payload["profiles"][0]["memory"]["percent_used"] == 50
+    assert payload["profiles"][0]["mount"]["path"] == "/"
+    assert payload["profiles"][0]["mount"]["total_bytes"] == 17_179_869_184
+    assert payload["profiles"][0]["mount"]["used_bytes"] == 12_884_901_888
+    assert payload["profiles"][0]["mount"]["percent_used"] == 75
     assert payload["profiles"][1]["profile"] == "wahainspection"
 
 

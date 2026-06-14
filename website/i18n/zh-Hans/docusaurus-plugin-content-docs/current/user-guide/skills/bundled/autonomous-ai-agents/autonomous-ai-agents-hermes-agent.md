@@ -698,15 +698,15 @@ mintty / git-bash 行为相同（Alt+Enter 全屏），除非你在选项 → �
 
 ### 测试/贡献
 
-**`scripts/run_tests.sh` 在 Windows 上无法直接使用** — 它查找 POSIX venv 布局（`.venv/bin/activate`）。Hermes 安装的 venv 位于 `venv/Scripts/`，也没有 pip 或 pytest（为减小安装体积而精简）。解决方案：将 `pytest + pytest-xdist + pyyaml` 安装到系统 Python 3.11 用户站点，然后设置 `PYTHONPATH` 直接调用 pytest：
+**Windows 测试 runner。** 使用原生 PowerShell wrapper，让 Hermes 找到
+`.venv/Scripts/python.exe`，使用仓库本地 temp/cache 目录，并保持与 CI 相同的按文件子进程隔离：
 
-```bash
-"/c/Program Files/Python311/python" -m pip install --user pytest pytest-xdist pyyaml
-export PYTHONPATH="$(pwd)"
-"/c/Program Files/Python311/python" -m pytest tests/foo/test_bar.py -v --tb=short -n 0
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_tests.ps1 tests/foo/test_bar.py -- -q
 ```
 
-使用 `-n 0` 而非 `-n 4` — `pyproject.toml` 的默认 `addopts` 已包含 `-n`，且 wrapper 的 CI 一致性保证不适用于非 POSIX 环境。
+POSIX shell 使用 `scripts/run_tests.sh`，原生 Windows 使用 `scripts/run_tests.ps1`。
+除非正在调试单个失败，否则避免直接调用 `pytest`。
 
 **仅 POSIX 的测试需要跳过守卫。** 代码库中已有的常见标记：
 - 符号链接——Windows 上需要提升权限
@@ -891,14 +891,14 @@ python -m pytest tests/tools/ -q            # 特定区域
 - 推送任何变更前运行完整套件
 - 使用 `-o 'addopts='` 清除任何内置的 pytest 标志
 
-**Windows 贡献者：** `scripts/run_tests.sh` 目前查找 POSIX venv（`.venv/bin/activate` / `venv/bin/activate`），在 Windows 上会报错，因为布局是 `venv/Scripts/activate` + `python.exe`。Hermes 安装的 venv 位于 `venv/Scripts/`，也没有 `pip` 或 `pytest`——为终端用户安装体积而精简。解决方案：将 pytest + pytest-xdist + pyyaml 安装到系统 Python 3.11 用户站点（`/c/Program Files/Python311/python -m pip install --user pytest pytest-xdist pyyaml`），然后直接运行测试：
+**Windows 贡献者：** 使用原生 wrapper。它会查找 `.venv\Scripts\python.exe`，
+设置仓库本地 temp/cache 目录，清理凭据形态的环境变量，并运行与 POSIX wrapper 相同的按文件子进程 runner：
 
-```bash
-export PYTHONPATH="$(pwd)"
-"/c/Program Files/Python311/python" -m pytest tests/tools/test_foo.py -v --tb=short -n 0
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_tests.ps1 tests/tools/test_foo.py -- -q
 ```
 
-使用 `-n 0`（而非 `-n 4`），因为 `pyproject.toml` 的默认 `addopts` 已包含 `-n`，且 wrapper 的 CI 一致性保证不适用于非 POSIX 环境。
+POSIX shell 使用 `scripts/run_tests.sh`，原生 Windows 使用 `scripts/run_tests.ps1`。
 
 **跨平台测试守卫：** 使用仅 POSIX 系统调用的测试需要跳过标记。代码库中已有的常见标记：
 - 符号链接创建 → `@pytest.mark.skipif(sys.platform == "win32", reason="Symlinks require elevated privileges on Windows")`（参见 `tests/cron/test_cron_script.py`）

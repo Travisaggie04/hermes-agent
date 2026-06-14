@@ -121,8 +121,11 @@ hermes chat -q "Hello"
 ### Run tests
 
 ```bash
-# Preferred — matches CI (hermetic env, 4 xdist workers); see AGENTS.md
+# Preferred — matches CI (hermetic env, per-file subprocess isolation); see AGENTS.md
 scripts/run_tests.sh
+
+# Native Windows
+powershell -ExecutionPolicy Bypass -File scripts/run_tests.ps1 tests/
 
 # Alternative (activate the venv first). The wrapper is still recommended
 # for parity with GitHub Actions before you open a PR:

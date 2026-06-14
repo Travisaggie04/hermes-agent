@@ -59,8 +59,9 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
     src = page_source()
     for expected in [
         "Project chat workspace",
+        "Local studio",
         "Projects",
-        "Chat room",
+        "IV. — Jenny workspace",
         "Conversation",
         "Jenny:",
         "jennyConnectionState",
@@ -143,6 +144,12 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "bottom-bar version",
         "separate installed worker-node version",
         "Jenny bridge",
+        "Jenny activity",
+        "jennyActivityItems",
+        "Jenny is thinking",
+        "recent bridge status",
+        "refreshing every 2.5s",
+        "Mission Control will show started, completed, or error status here while the guarded request is active.",
         "Record-backed outbox/inbox for Jenny relay",
         "WORKSPACE_JENNY_BRIDGE_OUTBOX_URL",
         "WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL",
@@ -150,6 +157,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "WORKSPACE_JENNY_BRIDGE_POLLER_STATUS_URL",
         "WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL",
         "WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL",
+        "status_records",
         "githubBridgeMessages",
         "queueJennyBridgeMessage",
         "latestPendingGitHubBridgeMessage",
@@ -164,6 +172,19 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "deployment_gap",
         "latest report contract",
         "reportContractSummary",
+        "Hermes health dashboard",
+        "CompactHermesHealthDashboard",
+        "Profile storage usage",
+        "Profile data",
+        "State DB",
+        "Sessions",
+        "Recall files",
+        "Mount max",
+        "Mount used",
+        "mount {formatPercent",
+        "Needs attention",
+        "Safe next actions",
+        "Kanban parked for later",
         "Phone-safe packet",
         "buildPhoneSafeProjectPacket",
         "WORKSPACE_CHALLENGE_REVIEWS_CREATE_URL",
@@ -187,27 +208,22 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
         assert expected in src
 
 
-def test_compact_route_has_read_only_project_kanban_lifecycle() -> None:
+def test_compact_route_parks_kanban_until_real_task_board_is_reliable() -> None:
     src = page_source()
     for expected in [
-        "Project Kanban",
-        "PROJECT_KANBAN_COLUMNS",
-        "projectKanbanColumnFor",
-        "Record-backed lifecycle",
-        "Dragging disabled",
-        "read-only board",
-        "Intake",
-        "Needs Clarification",
-        "Challenge Review",
-        "Lane Draft",
-        "Awaiting Approval",
-        "Active",
-        "Evidence Review",
-        "Accepted",
-        "Blocked / Rollback",
-        "Contract:",
+        "Kanban parked for later",
+        "The task board is hidden until it can show real tasks and reliable controls.",
+        "CompactKanbanParkedCard",
     ]:
         assert expected in src
+    for forbidden in [
+        "Memory cap",
+        "Memory used %",
+        "Total memory files",
+        "profileMemoryPercent",
+        "profileMemoryLimit",
+    ]:
+        assert forbidden not in src
     for forbidden in [
         "moveKanbanCard",
         "startKanbanWork",
@@ -295,6 +311,23 @@ def test_compact_chat_send_uses_github_mailbox_not_local_only_outbox() -> None:
     assert "Sent to Jenny mailbox" in send_fn
 
 
+def test_compact_jenny_activity_uses_github_bridge_status_records() -> None:
+    src = page_source()
+    start = src.index("function jennyActivityItems")
+    activity_src = src[start : src.index("\n}", start) + 2]
+    assert "status.status_records" in activity_src
+    assert ".slice(-4).reverse()" in activity_src
+    assert "function jennyActivityLabel" in src
+    assert "hermes_answer_started" in src
+    assert "Jenny is thinking" in src
+    assert "hermes_answer_completed" in src
+    assert "Jenny replied" in src
+    assert "aria-label=\"Jenny activity\"" in src
+
+    interval_effect = src[src.index("const timer = window.setInterval") : src.index("return () => window.clearInterval(timer)", src.index("const timer = window.setInterval"))]
+    assert "roomBusy ? 2500 : 15000" in interval_effect
+
+
 def test_compact_admin_buttons_use_github_mailbox_not_local_only_outbox() -> None:
     src = page_source()
     for function_name, expected in [
@@ -331,10 +364,11 @@ def test_compact_cards_show_project_state_freshness_and_artifacts() -> None:
 
 def test_send_dispatch_disabled_and_no_post_session_wiring() -> None:
     src = page_source()
-    assert "Save Jenny report manually" in src
+    assert "Manual record repair" in src
+    assert "Save a missing Jenny report" in src
+    assert "Not needed for normal chat." in src
     assert "WORKSPACE_REPORTS_CREATE_URL" in src
     assert "method: \"POST\"" in src
-    assert "Direct session send remains disabled" in src
     assert "Forbidden actions: no POST, session-send, dispatch" in src
     forbidden_runtime_fragments = [
         'fetchJSON<unknown>("/api/plugins/mission-control-governance/workspace/projects/create"',
