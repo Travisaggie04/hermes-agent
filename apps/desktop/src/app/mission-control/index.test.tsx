@@ -1213,6 +1213,28 @@ describe('MissionControlView', () => {
             status: 'queued',
             to_agent: 'jenny'
           }
+        },
+        {
+          record: {
+            created_at: '2026-06-13T01:07:00Z',
+            from_agent: 'codex',
+            message: 'Review PR #999 for bridge smoke only.',
+            project_id: 'project-hermes-mission-control',
+            request_id: 'codex-bridge-smoke-later',
+            status: 'queued',
+            to_agent: 'jenny'
+          }
+        },
+        {
+          record: {
+            created_at: '2026-06-13T01:08:00Z',
+            from_agent: 'travis',
+            message: 'Other project request.',
+            project_id: 'project-tool-tally',
+            request_id: 'github-bridge-other-project',
+            status: 'queued',
+            to_agent: 'jenny'
+          }
         }
       ],
       response_messages: [],
@@ -1223,15 +1245,38 @@ describe('MissionControlView', () => {
       timer_enabled: false,
       worker_enabled: false
     })
+    let resolveAnswer: (value: unknown) => void = () => undefined
+    answerMissionControlGitHubBridgeOnce.mockReturnValueOnce(new Promise(resolve => {
+      resolveAnswer = resolve
+    }))
 
     await renderMissionControl()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Get Jenny reply' }))
+    expect(await screen.findByText('Jenny is checking the latest project message. Mission Control will show the reply or a guarded error here.')).toBeTruthy()
     await waitFor(() => expect(answerMissionControlGitHubBridgeOnce).toHaveBeenCalledTimes(1))
     expect(answerMissionControlGitHubBridgeOnce).toHaveBeenCalledWith({
       confirm_manual_hermes_answer: true,
       project_id: 'project-hermes-mission-control',
       request_id: 'github-bridge-request-2'
+    })
+    resolveAnswer({
+      answered: true,
+      dispatch_enabled: false,
+      manual_start_only: true,
+      response: {
+        created_at: '2026-06-13T01:07:00Z',
+        from_agent: 'jenny',
+        message: 'Jenny answered the second request.',
+        project_id: 'project-hermes-mission-control',
+        request_id: 'github-bridge-request-2',
+        status: 'replied',
+        to_agent: 'travis'
+      },
+      send_to_jenny_enabled: true,
+      stored: true,
+      timer_enabled: false,
+      worker_enabled: false
     })
     expect(await screen.findByText('Jenny replied to the latest pending project message.')).toBeTruthy()
   })

@@ -622,6 +622,24 @@ function isOperatorBridgeMessage(message: GitHubBridgeMessageRecord): boolean {
     text.includes("review pr #");
 }
 
+function visibleCurrentGitHubBridgeMessagesForProject(
+  messages: GitHubBridgeMessageRecord[],
+  projectId: string,
+): GitHubBridgeMessageRecord[] {
+  const visibleMessages = uniqueGitHubBridgeMessages(messages)
+    .filter(message => message.project_id === projectId)
+    .filter(message => !isDiagnosticChatMessage(message.message) && !isOperatorBridgeMessage(message));
+  const latestReplyAt = latestJennyReplyTimestamp([], visibleMessages);
+  return visibleMessages.filter(message => isCurrentAfterReply(message.created_at, latestReplyAt));
+}
+
+function latestVisiblePendingGitHubBridgeMessageForProject(
+  messages: GitHubBridgeMessageRecord[],
+  projectId: string,
+): GitHubBridgeMessageRecord | null {
+  return latestPendingGitHubBridgeMessage(visibleCurrentGitHubBridgeMessagesForProject(messages, projectId));
+}
+
 function bridgeRequestId(): string {
   const fallback = Math.random().toString(16).slice(2, 14);
   return `mission-control-chat-${globalThis.crypto?.randomUUID?.() ?? fallback}`;
@@ -1240,12 +1258,13 @@ export default function MissionControlCompactPage() {
   }
 
   async function runJennyOnce(projectView: ProjectViewModel) {
-    const pending = latestPendingGitHubBridgeMessage(
-      uniqueGitHubBridgeMessages([
+    const pending = latestVisiblePendingGitHubBridgeMessageForProject(
+      [
         ...unwrapRecords(snapshot?.githubBridgeStatus.pending_messages),
         ...unwrapRecords(snapshot?.githubBridgeStatus.recent_messages),
         ...unwrapRecords(snapshot?.githubBridgeStatus.response_messages),
-      ]).filter(message => message.project_id === projectView.project.project_id),
+      ],
+      projectView.project.project_id,
     );
     if (!pending?.request_id) {
       setRoomMessage("Send Jenny a project message first; there is no pending request to answer.");
@@ -1976,6 +1995,17 @@ function CompactProjectRoom({
             <span className="text-right text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere]">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
           </div>
           <div className="mt-2 grid min-h-0 min-w-0 flex-1 content-start gap-2 overflow-y-auto overflow-x-hidden pr-1">
+            {busy ? (
+              <article className="min-w-0 max-w-full justify-self-start rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm text-[#f3ebda] [overflow-wrap:anywhere] sm:max-w-[88%]">
+                <div className="mb-1 flex min-w-0 items-center justify-between gap-3 text-[0.68rem]">
+                  <span className="font-semibold">Jenny</span>
+                  <span className="min-w-0 text-right text-sky-300 [overflow-wrap:anywhere]">working</span>
+                </div>
+                <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                  Jenny is checking the latest project message. Mission Control will show the reply or a guarded error here.
+                </p>
+              </article>
+            ) : null}
             {chatMessages.length ? (
               chatMessages.map(chat => (
                 <article
