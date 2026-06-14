@@ -489,12 +489,24 @@ beforeEach(() => {
     trusted_for_execution: false
   })
   getMissionControlJennyBridgeOutbox.mockResolvedValue({
-    count: 1,
+    count: 2,
     dispatch_enabled: false,
     manual_copy_only: false,
     requests: [
       {
         record: {
+          created_at: '2026-06-12T15:21:00Z',
+          message: 'Old unanswered bridge request that should not keep the room pending.',
+          project_id: 'project-hermes-mission-control',
+          request_id: 'bridge-request-old',
+          status: 'queued',
+          target_agent: 'jenny'
+        },
+        record_type: 'JennyBridgeMessageRequestRecord'
+      },
+      {
+        record: {
+          created_at: '2026-06-12T15:22:00Z',
           message: 'Review PR #75 and report readiness.',
           project_id: 'project-hermes-mission-control',
           request_id: 'bridge-request-1',
@@ -513,6 +525,7 @@ beforeEach(() => {
     responses: [
       {
         record: {
+          created_at: '2026-06-12T15:23:00Z',
           message: 'Safe to mark ready.',
           project_id: 'project-hermes-mission-control',
           request_id: 'bridge-request-1',

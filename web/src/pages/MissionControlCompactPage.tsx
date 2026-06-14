@@ -181,6 +181,7 @@ interface ReportRecord {
 interface JennyBridgeRequestRecord {
   ack_key?: string;
   bridge_state?: string;
+  created_at?: string;
   has_response?: boolean;
   message: string;
   project_id?: string;
@@ -190,6 +191,7 @@ interface JennyBridgeRequestRecord {
 }
 
 interface JennyBridgeResponseRecord {
+  created_at?: string;
   message: string;
   project_id?: string;
   request_id?: string;
@@ -471,6 +473,32 @@ function latestPendingGitHubBridgeMessage(messages: GitHubBridgeMessageRecord[])
     !repliedRequestIds.has(message.request_id),
   );
   return pending.length ? pending[pending.length - 1] : null;
+}
+
+function timestampValue(value?: string): number {
+  const time = Date.parse(value ?? "");
+  return Number.isFinite(time) ? time : 0;
+}
+
+function latestJennyReplyTimestamp(
+  responses: JennyBridgeResponseRecord[],
+  githubMessages: GitHubBridgeMessageRecord[],
+): number {
+  const responseTimes = responses.map(response => timestampValue(response.created_at));
+  const githubReplyTimes = githubMessages
+    .filter(message => message.from_agent === "jenny" || message.status === "replied")
+    .map(message => timestampValue(message.created_at));
+
+  return Math.max(0, ...responseTimes, ...githubReplyTimes);
+}
+
+function isCurrentAfterReply(createdAt: string | undefined, latestReplyAt: number): boolean {
+  if (!latestReplyAt) {
+    return true;
+  }
+
+  const created = timestampValue(createdAt);
+  return !created || created > latestReplyAt;
 }
 
 function isDiagnosticChatMessage(message?: string): boolean {
@@ -1542,6 +1570,9 @@ function CompactProjectRoom({
   const visibleBridgeRequests = bridgeRequests.filter(request => !isDiagnosticChatMessage(request.message));
   const visibleBridgeResponses = bridgeResponses.filter(response => !isDiagnosticChatMessage(response.message));
   const visibleGitHubBridgeMessages = githubBridgeMessages.filter(message => !isDiagnosticChatMessage(message.message) && !isOperatorBridgeMessage(message));
+  const latestReplyAt = latestJennyReplyTimestamp(visibleBridgeResponses, visibleGitHubBridgeMessages);
+  const currentPendingBridgeRequests = visibleBridgeRequests.filter(request => isCurrentAfterReply(request.created_at, latestReplyAt));
+  const currentPendingGitHubBridgeMessages = visibleGitHubBridgeMessages.filter(message => isCurrentAfterReply(message.created_at, latestReplyAt));
   const repliedRequestIds = new Set(visibleBridgeResponses.map(response => response.request_id).filter(Boolean));
   const githubResponseIds = new Set(
     visibleGitHubBridgeMessages
@@ -1549,14 +1580,14 @@ function CompactProjectRoom({
       .map(message => message.request_id)
       .filter(Boolean),
   );
-  const githubPendingCount = visibleGitHubBridgeMessages.filter(message =>
+  const githubPendingCount = currentPendingGitHubBridgeMessages.filter(message =>
     message.to_agent === "jenny" &&
     ["queued", "retry_requested"].includes(message.status ?? "") &&
     !githubResponseIds.has(message.request_id),
   ).length;
-  const latestPending = latestPendingGitHubBridgeMessage(visibleGitHubBridgeMessages);
+  const latestPending = latestPendingGitHubBridgeMessage(currentPendingGitHubBridgeMessages);
   const githubResponseCount = visibleGitHubBridgeMessages.filter(message => message.status === "replied" || message.from_agent === "jenny").length;
-  const pendingCount = pendingJennyMessageCount(visibleBridgeRequests, visibleBridgeResponses) + githubPendingCount;
+  const pendingCount = pendingJennyMessageCount(currentPendingBridgeRequests, visibleBridgeResponses) + githubPendingCount;
   const responseCount = visibleBridgeResponses.length + githubResponseCount;
   const deliveryStatus = jennyDeliveryStatus(pendingCount, responseCount, bridgeStatus, githubBridgeStatus);
   const connectionState = jennyConnectionState(pendingCount, responseCount, bridgeStatus, githubBridgeStatus);
@@ -1827,7 +1858,7 @@ function CompactProjectRoom({
             <p className="mt-2 text-xs text-muted-foreground">Record-backed outbox/inbox for Jenny relay. Use refresh to check replies. Direct send remains disabled.</p>
             <div className="mt-3 grid gap-2 rounded-lg border border-emerald-500/20 bg-background/70 p-2 text-xs sm:grid-cols-2">
               <CompactField label="manual relay" value={bridgeStatus.manual_start_only === false ? "disabled" : "manual-start only"} />
-              <CompactField label="pending" value={String(bridgeStatus.pending_count ?? visibleBridgeRequests.filter(request => (request.bridge_state ?? request.status ?? "queued") !== "replied").length)} />
+              <CompactField label="pending" value={String(pendingCount)} />
               <CompactField label="last status" value={bridgeStatus.last_status ?? "idle"} />
               <CompactField label="last response" value={bridgeStatus.last_response_request_id || bridgeStatus.last_response_at || "none"} />
               <CompactField label="last error" value={bridgeStatus.last_error || "none"} />
