@@ -617,6 +617,28 @@ beforeEach(() => {
           status: 'replied',
           to_agent: 'travis'
         }
+      },
+      {
+        record: {
+          created_at: '2026-06-13T01:09:00Z',
+          from_agent: 'codex',
+          message: 'Bounded dashboard-only deploy check request for accepted-live.',
+          project_id: 'project-hermes-mission-control',
+          request_id: 'codex-pr151-dashboard-deploy-structured-20260614-001',
+          status: 'queued',
+          to_agent: 'jenny'
+        }
+      },
+      {
+        record: {
+          created_at: '2026-06-13T01:10:00Z',
+          from_agent: 'jenny',
+          message: 'Dashboard-only deploy check completed for Codex.',
+          project_id: 'project-hermes-mission-control',
+          request_id: 'codex-pr151-dashboard-deploy-structured-20260614-001',
+          status: 'replied',
+          to_agent: 'codex'
+        }
       }
     ],
     response_messages: [],
@@ -676,6 +698,8 @@ describe('MissionControlView', () => {
     expect(screen.queryByText(/codex app-server startup failed/i)).toBeNull()
     expect(screen.queryByText(/Bridge works/i)).toBeNull()
     expect(screen.queryByText(/success smoke reached/i)).toBeNull()
+    expect(screen.queryByText(/Bounded dashboard-only deploy check/i)).toBeNull()
+    expect(screen.queryByText(/Dashboard-only deploy check completed/i)).toBeNull()
     expect(screen.getByText('Previous sessions')).toBeTruthy()
     expect(screen.getByText('Advanced controls')).toBeTruthy()
     expect(screen.getByText('Jenny bridge')).toBeTruthy()
