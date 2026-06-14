@@ -1022,6 +1022,59 @@ function structuredJennyHandoff(projectName: string): string {
   ].join("\n");
 }
 
+interface RequestIntakeAssessment {
+  detail: string;
+  jennyInstruction: string;
+  label: string;
+  state: "approval_required" | "challenge_first" | "ready" | "spec_first";
+}
+
+function assessProjectRequest(requestText: string, review: ChallengeReviewRecord | undefined): RequestIntakeAssessment {
+  const normalized = requestText.replace(/\s+/g, " ").trim();
+  const lower = normalized.toLowerCase();
+  const riskyAction = /\b(deploy|restart|runtime switch|gateway|payment|checkout|outreach|post|publish|delete|remove|cleanup|worker|timer|daemon|cron|secret|token|waha|whatsapp)\b/.test(lower);
+  const vagueRequest = normalized.length < 24 || /\b(fix it|make it better|do whatever|handle this|everything|autonomous|fully functional|robust)\b/.test(lower);
+
+  if (!normalized) {
+    return {
+      detail: "Write one bounded request before Jenny receives work.",
+      jennyInstruction: "Ask Travis for the missing request before proposing implementation.",
+      label: "Needs request",
+      state: "spec_first",
+    };
+  }
+  if (riskyAction) {
+    return {
+      detail: "Contains protected actions; Jenny should challenge scope and identify approvals before work.",
+      jennyInstruction: "Do not execute. First return a preflight, risks, required approvals, and a safer bounded lane.",
+      label: "Approval check",
+      state: "approval_required",
+    };
+  }
+  if (!review || review.decision_state !== "clear_and_safe") {
+    return {
+      detail: "No clear challenge review is recorded for this project lane.",
+      jennyInstruction: "Treat this as challenge/spec-first. Ask clarifying questions or create a narrow plan before implementation.",
+      label: "Challenge first",
+      state: "challenge_first",
+    };
+  }
+  if (vagueRequest) {
+    return {
+      detail: "Request may be too broad or underspecified; Jenny should narrow it before implementation.",
+      jennyInstruction: "Question assumptions, split the request into a bounded lane, and ask Travis if critical details are missing.",
+      label: "Spec first",
+      state: "spec_first",
+    };
+  }
+  return {
+    detail: "Request is bounded enough for a guarded Jenny reply.",
+    jennyInstruction: "Proceed with a bounded recommendation or implementation plan, still challenging unsafe assumptions first.",
+    label: "Ready",
+    state: "ready",
+  };
+}
+
 function buildCompactNextLanePrompt(projectView: ProjectViewModel, workspaceStatus: WorkspaceStatus): string {
   const guidance = PROJECT_LANE_GUIDANCE[projectView.project.project_id] ?? "Read-only Mission Control status lane. Report current state and the next safe manual step.";
   return [
@@ -1046,6 +1099,7 @@ function buildPhoneSafeProjectPacket(projectView: ProjectViewModel, requestText:
   const request = compactText(requestText, 420) || "<write the request>";
   const brief = projectView.projectBrief;
   const review = projectView.challengeReview;
+  const intake = assessProjectRequest(requestText, review);
   const categories = review?.challenge_categories?.length ? review.challenge_categories.join(", ") : "none recorded";
   const verdicts = review?.blocking_verdicts?.length ? review.blocking_verdicts.join(", ") : "none recorded";
   const guard = compactText(projectView.project.mistakes_guards, 220) || "guarded mailbox only; no live action";
@@ -1055,6 +1109,10 @@ function buildPhoneSafeProjectPacket(projectView: ProjectViewModel, requestText:
     "",
     "Request:",
     request,
+    "",
+    "Request intake:",
+    `${intake.label} / ${intake.detail}`,
+    `Jenny instruction: ${intake.jennyInstruction}`,
     "",
     "Current brief:",
     compactText(brief?.outcome, 220) || "missing project brief",
@@ -1954,6 +2012,7 @@ function CompactProjectRoom({
   const connectionState = jennyConnectionState(pendingCount, responseCount, bridgeStatus, githubBridgeStatus);
   const nextStep = jennyNextStep(pendingCount, responseCount, Boolean(latestPending), bridgeStatus, githubBridgeStatus);
   const activityItems = jennyActivityItems(githubBridgeStatus);
+  const requestIntake = assessProjectRequest(projectRequest, review);
   const runActive = isJennyRunActive(jennyRunProgress);
   const runCopy = jennyRunProgressCopy(jennyRunProgress, jennyRunElapsedSeconds);
   const chatMessages = [
@@ -2157,6 +2216,16 @@ function CompactProjectRoom({
               Refresh replies
             </button>
           </div>
+          <p className={cn(
+            "mt-2 max-w-full rounded-lg border px-3 py-2 text-xs [overflow-wrap:anywhere]",
+            requestIntake.state === "ready"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
+              : requestIntake.state === "approval_required"
+                ? "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-200"
+                : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-100",
+          )}>
+            <span className="font-semibold">Request intake: {requestIntake.label}.</span> {requestIntake.detail}
+          </p>
           <p className="mt-2 max-w-full text-xs text-muted-foreground [overflow-wrap:anywhere]">
             {paused
               ? "This project is visible for planning context only. Resume it after the Mission Control/Jenny recovery lane is stable."
