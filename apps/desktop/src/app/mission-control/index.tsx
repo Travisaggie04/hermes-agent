@@ -327,6 +327,38 @@ function jennyReplyContract(value: string): JennyReplyContract {
   }
 }
 
+function buildJennyReplyReviewPrompt(action: 'accept' | 'evidence' | 'safer-plan', projectName: string, reply: string): string {
+  const replyPreview = compactText(reply, 500)
+
+  if (action === 'accept') {
+    return [
+      `Review this Jenny reply for ${projectName}.`,
+      'If it is complete, convert it into a concise accepted-result summary with evidence, risks/blockers, tests/checks, and the next safe lane.',
+      'If it is not complete, say exactly what is missing before Travis relies on it.',
+      '',
+      `Jenny reply: ${replyPreview}`
+    ].join('\n')
+  }
+
+  if (action === 'evidence') {
+    return [
+      `The last Jenny reply for ${projectName} needs stronger evidence.`,
+      'Reply with the exact files, commands, checks, PR/CI status, runtime status, and remaining risks that prove or disprove the recommendation.',
+      'Do not take action. Report evidence only.',
+      '',
+      `Jenny reply: ${replyPreview}`
+    ].join('\n')
+  }
+
+  return [
+    `Challenge the last Jenny reply for ${projectName} like a senior engineer.`,
+    'Identify unsafe assumptions, missing approvals, wrong approach risk, rollback concerns, and the smallest safer next lane.',
+    'Do not implement or trigger live actions.',
+    '',
+    `Jenny reply: ${replyPreview}`
+  ].join('\n')
+}
+
 interface JennyRunProgress {
   detail: string
   phase: 'complete' | 'error' | 'queued' | 'starting' | 'waiting'
@@ -2503,14 +2535,39 @@ function ProjectRoomsWorkspace({
                     {chat.speaker === 'You' ? projectRequestPreview(chat.body, 900) : compactText(chat.body, 900)}
                   </p>
                   {chat.speaker === 'Jenny' ? (
-                    <p className={cn(
-                      'mt-2 rounded border px-2 py-1 text-xs',
-                      jennyReplyContract(chat.body).tone === 'complete'
-                        ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                        : 'border-amber-500/25 bg-amber-500/10 text-amber-100'
-                    )}>
-                      {jennyReplyContract(chat.body).label}
-                    </p>
+                    <div className="mt-2 grid gap-2">
+                      <p className={cn(
+                        'rounded border px-2 py-1 text-xs',
+                        jennyReplyContract(chat.body).tone === 'complete'
+                          ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+                          : 'border-amber-500/25 bg-amber-500/10 text-amber-100'
+                      )}>
+                        {jennyReplyContract(chat.body).label}
+                      </p>
+                      <div aria-label="Jenny reply review actions" className="flex flex-wrap gap-1.5">
+                        <button
+                          className="rounded border border-[#5ab896]/30 px-2 py-1 text-xs font-semibold text-[#5ab896] hover:bg-[#5ab896]/10"
+                          onClick={() => onRequestChange(buildJennyReplyReviewPrompt('accept', project.name, chat.body))}
+                          type="button"
+                        >
+                          Draft acceptance note
+                        </button>
+                        <button
+                          className="rounded border border-[#60a5fa]/30 px-2 py-1 text-xs font-semibold text-[#93c5fd] hover:bg-[#60a5fa]/10"
+                          onClick={() => onRequestChange(buildJennyReplyReviewPrompt('evidence', project.name, chat.body))}
+                          type="button"
+                        >
+                          Ask for evidence
+                        </button>
+                        <button
+                          className="rounded border border-amber-500/30 px-2 py-1 text-xs font-semibold text-amber-200 hover:bg-amber-500/10"
+                          onClick={() => onRequestChange(buildJennyReplyReviewPrompt('safer-plan', project.name, chat.body))}
+                          type="button"
+                        >
+                          Challenge plan
+                        </button>
+                      </div>
+                    </div>
                   ) : null}
                 </article>
               ))
