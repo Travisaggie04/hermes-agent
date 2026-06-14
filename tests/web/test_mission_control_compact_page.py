@@ -168,6 +168,20 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         assert expected in src
 
 
+def test_compact_project_chat_wraps_long_mobile_text() -> None:
+    src = page_source()
+    for expected in [
+        "overflow-x-hidden",
+        "overflow-y-auto overflow-x-hidden",
+        "[overflow-wrap:anywhere]",
+        "min-w-0 max-w-full",
+        "max-w-full overflow-hidden",
+        "whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
+        "grid min-w-0 grid-cols-1 gap-2 text-xs sm:grid-cols-2",
+    ]:
+        assert expected in src
+
+
 def test_compact_route_has_read_only_project_kanban_lifecycle() -> None:
     src = page_source()
     for expected in [
