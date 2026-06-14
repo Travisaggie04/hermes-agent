@@ -234,7 +234,10 @@ interface GitHubBridgeStatus {
   foreground_watch_running?: boolean;
   model_routing_enabled?: boolean;
   pending_count?: number;
+  visible_pending_count?: number;
+  background_pending_count?: number;
   pending_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
+  visible_pending_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
   recent_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
   response_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
   session_send_enabled?: boolean;
@@ -1728,6 +1731,7 @@ function CompactLiveActivityRail({
 }) {
   const activityItems = jennyActivityItems(githubBridgeStatus);
   const hasError = Boolean(bridgeStatus.last_error || githubBridgeStatus.last_error);
+  const visiblePendingCount = githubBridgeStatus.visible_pending_count ?? githubBridgeStatus.pending_count ?? 0;
   const liveLabel = roomBusy ? "Jenny is working" : hasError ? "Needs attention" : githubBridgeStatus.last_status === "hermes_answer_completed" ? "Last reply complete" : "Standing by";
 
   return (
@@ -1748,7 +1752,7 @@ function CompactLiveActivityRail({
       <div className="mt-3 grid min-w-0 gap-2 text-xs">
         <CompactField label="bridge" value={bridgeStatus.last_status || "idle"} />
         <CompactField label="mailbox" value={githubBridgeStatus.mode || "manual"} />
-        <CompactField label="pending" value={String(githubBridgeStatus.pending_count ?? 0)} />
+        <CompactField label="pending" value={String(visiblePendingCount)} />
         <CompactField label="last response" value={githubBridgeStatus.last_response_request_id || githubBridgeStatus.last_response_at || "none"} />
       </div>
 
@@ -2177,7 +2181,10 @@ function CompactProjectRoom({
             <div className="mt-3 grid min-w-0 gap-2 rounded-lg border border-sky-500/20 bg-sky-500/5 p-2 text-xs sm:grid-cols-2">
               <CompactField label="GitHub mailbox" value={githubBridgeStatus.manual_start_only === false ? "disabled" : "manual-start only"} />
               <CompactField label="GitHub mode" value={githubBridgeStatus.mode || "manual"} />
-              <CompactField label="GitHub pending" value={String(githubBridgeStatus.pending_count ?? 0)} />
+              <CompactField
+                label="GitHub pending"
+                value={`visible ${githubBridgeStatus.visible_pending_count ?? githubBridgeStatus.pending_count ?? 0} / background ${githubBridgeStatus.background_pending_count ?? 0}`}
+              />
               <CompactField label="GitHub last poll" value={githubBridgeStatus.last_poll_at || githubBridgeStatus.last_status || "not polled"} />
               <CompactField label="GitHub last response" value={githubBridgeStatus.last_response_request_id || githubBridgeStatus.last_response_at || "none"} />
               <CompactField label="GitHub last error" value={githubBridgeStatus.last_error || "none"} />
@@ -2377,7 +2384,7 @@ function CompactHermesHealthDashboard({
   const activeLaneCount = status.lane?.active_lane_count ?? 0;
   const staleWarnings = status.stale_context?.warnings ?? [];
   const bridgeError = snapshot.githubBridgeStatus.last_error || snapshot.jennyBridgePollerStatus.last_error || "";
-  const bridgePending = snapshot.githubBridgeStatus.pending_count ?? snapshot.jennyBridgePollerStatus.pending_count ?? 0;
+  const bridgePending = snapshot.githubBridgeStatus.visible_pending_count ?? snapshot.githubBridgeStatus.pending_count ?? snapshot.jennyBridgePollerStatus.pending_count ?? 0;
   const bridgeWatching = snapshot.githubBridgeStatus.foreground_watch_running === true;
   const memoryErrors = snapshot.memoryStorage.errors ?? [];
   const reportCount = activeProjectViews.filter(projectView => projectView.projectState?.has_real_report || projectView.report).length;

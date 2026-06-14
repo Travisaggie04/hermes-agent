@@ -742,6 +742,24 @@ def _jenny_bridge_poller_status_projection(limit: int = DEFAULT_RECORDS_LIMIT) -
     }
 
 
+def _is_operator_github_bridge_record(record: dict[str, Any]) -> bool:
+    from_agent = str(record.get("from_agent") or "").lower()
+    request_id = str(record.get("request_id") or "").lower()
+    text = str(record.get("message") or "").lower()
+    return (
+        from_agent == "codex"
+        or request_id.startswith("codex-")
+        or "bounded dashboard-only deploy check" in text
+        or "review pr #" in text
+        or "codex app-server startup failed" in text
+        or "mission control two process" in text
+        or "desktop phone bridge" in text
+        or "bridge works" in text
+        or "success smoke reached" in text
+        or "failure guarded" in text
+    )
+
+
 def _github_bridge_mailbox_status_projection(limit: int = DEFAULT_RECORDS_LIMIT) -> dict[str, Any]:
     messages = _latest_workspace_records(GitHubBridgeMessageRecord, limit)
     statuses = _latest_workspace_records(GitHubBridgeMailboxStatusRecord, limit)
@@ -758,6 +776,12 @@ def _github_bridge_mailbox_status_projection(limit: int = DEFAULT_RECORDS_LIMIT)
         and item.get("record", {}).get("to_agent") == "jenny"
         and item.get("record", {}).get("request_id") not in response_request_ids
     ]
+    visible_pending = [
+        item
+        for item in pending
+        if not _is_operator_github_bridge_record(item.get("record", {}))
+    ]
+    background_pending_count = max(len(pending) - len(visible_pending), 0)
     responses = [
         item
         for item in messages
@@ -779,6 +803,8 @@ def _github_bridge_mailbox_status_projection(limit: int = DEFAULT_RECORDS_LIMIT)
         "stored": False,
         "count": len(statuses),
         "pending_count": len(pending),
+        "visible_pending_count": len(visible_pending),
+        "background_pending_count": background_pending_count,
         "mode": latest_status.get("mode", "manual"),
         "foreground_watch_supported": True,
         "foreground_watch_running": latest_status.get("status", "").startswith("watch_") and latest_status.get("status") != "watch_stopped",
@@ -788,6 +814,7 @@ def _github_bridge_mailbox_status_projection(limit: int = DEFAULT_RECORDS_LIMIT)
         "last_response_request_id": latest_response.get("request_id", ""),
         "last_error": latest_status.get("last_error", ""),
         "pending_messages": pending,
+        "visible_pending_messages": visible_pending,
         "response_messages": responses[-limit:],
         "recent_messages": messages[-limit:],
         "status_records": statuses,

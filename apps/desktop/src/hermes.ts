@@ -495,7 +495,10 @@ export interface MissionControlGitHubBridgeStatusResponse {
   foreground_watch_running?: boolean
   model_routing_enabled?: boolean
   pending_count?: number
+  visible_pending_count?: number
+  background_pending_count?: number
   pending_messages?: Array<MissionControlRecordEnvelope<MissionControlGitHubBridgeMessageRecord>>
+  visible_pending_messages?: Array<MissionControlRecordEnvelope<MissionControlGitHubBridgeMessageRecord>>
   recent_messages?: Array<MissionControlRecordEnvelope<MissionControlGitHubBridgeMessageRecord>>
   response_messages?: Array<MissionControlRecordEnvelope<MissionControlGitHubBridgeMessageRecord>>
   send_to_jenny_enabled?: boolean
