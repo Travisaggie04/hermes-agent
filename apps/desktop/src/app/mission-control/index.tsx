@@ -287,8 +287,14 @@ function compactText(value: string | string[] | null | undefined, maxChars: numb
 }
 
 function projectRequestPreview(value: string, maxChars: number): string {
-  const requestMatch = value.match(/Request:\s*([\s\S]*?)(?:\n\s*\nRequest intake:|\n\s*\nCurrent brief:|\n\s*\nChallenge state:|$)/i)
-  return compactText(requestMatch?.[1] ?? value, maxChars)
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  const requestMatch = normalized.match(
+    /(?:^|[\s/])Request:\s*([\s\S]*?)(?=\s+(?:Request intake:|Current brief:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:)|$)/i
+  )
+  const fallbackMatch = normalized.match(
+    /^(.+?)\s+(?=Current brief:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:)/i
+  )
+  return compactText(requestMatch?.[1] ?? fallbackMatch?.[1] ?? value, maxChars)
 }
 
 function chatStatusLabel(value: string | undefined): string {
@@ -317,7 +323,8 @@ function jennyReplyContract(value: string): JennyReplyContract {
     { label: 'recommendation', present: /\b(recommend|recommendation|next safe lane|next lane|next step)\b/.test(lower) },
     { label: 'evidence', present: /\b(evidence|validation|validated|test|tests|checked|verified|pass|ci)\b/.test(lower) },
     { label: 'risks', present: /\b(risk|risks|blocker|blockers|remaining risk)\b/.test(lower) },
-    { label: 'safety', present: /\b(safety|approval|approved|forbidden|no deploy|no dispatch|guard|gated)\b/.test(lower) }
+    { label: 'approval/rollback', present: /\b(approval|approved|rollback|required approval|approval needed|roll back)\b/.test(lower) },
+    { label: 'safety', present: /\b(safety|forbidden|no deploy|no dispatch|guard|gated)\b/.test(lower) }
   ]
   const missing = checks.filter(check => !check.present).map(check => check.label)
   const matched = checks.length - missing.length
@@ -1312,7 +1319,15 @@ Scope: use this project room context and approved repo/runtime evidence only.
 Challenge: question unclear, unsafe, or wrong-approach requests before implementation.
 Definition of done: state exact change, evidence, remaining risk, and next safe lane.
 Validation: list checks run or why a check is blocked.
-Report format: preflight, recommendation, work done, validation, risks, safety confirmation.`
+Report format: preflight, recommendation, work done, validation, risks, safety confirmation.
+Evidence contract:
+1. Recommendation: one-sentence next lane.
+2. Evidence: exact files/commands/checks/PR/CI/runtime/links used.
+3. Tests: pass/fail/not-run with reason.
+4. Risks: blockers, unsafe assumptions, missing info.
+5. Approval/rollback: approval needed before live action plus rollback path.
+6. Next safe lane: smallest bounded step.
+Rule: if evidence is missing, say "not proven"; do not present it as done.`
 }
 
 interface RequestIntakeAssessment {
