@@ -1079,6 +1079,13 @@ describe('MissionControlView', () => {
     expect((composer as HTMLTextAreaElement).value).toContain('Spec-first request for Jenny:')
     expect((composer as HTMLTextAreaElement).value).toContain('Jenny, do not implement yet. First challenge the request like a senior engineer:')
     expect((composer as HTMLTextAreaElement).value).toContain('Return only the spec/challenge review and the recommended next safe lane.')
+    expect(screen.getAllByRole('button', { name: 'Draft acceptance note' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: 'Ask for evidence' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: 'Challenge plan' }).length).toBeGreaterThan(0)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Ask for evidence' })[0])
+    expect((composer as HTMLTextAreaElement).value).toContain('needs stronger evidence')
+    expect((composer as HTMLTextAreaElement).value).toContain('Do not take action. Report evidence only.')
+    expect(createMissionControlGitHubBridgeRequest).not.toHaveBeenCalled()
 
     fireEvent.change(composer, {
       target: { value: 'Make the visible Mission Control page show project rooms on laptop and phone.' }

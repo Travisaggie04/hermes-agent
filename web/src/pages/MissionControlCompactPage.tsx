@@ -519,6 +519,38 @@ function jennyReplyContract(value: string): JennyReplyContract {
   };
 }
 
+function buildJennyReplyReviewPrompt(action: "accept" | "evidence" | "safer-plan", projectName: string, reply: string): string {
+  const replyPreview = compactText(reply, 500);
+
+  if (action === "accept") {
+    return [
+      `Review this Jenny reply for ${projectName}.`,
+      "If it is complete, convert it into a concise accepted-result summary with evidence, risks/blockers, tests/checks, and the next safe lane.",
+      "If it is not complete, say exactly what is missing before Travis relies on it.",
+      "",
+      `Jenny reply: ${replyPreview}`,
+    ].join("\n");
+  }
+
+  if (action === "evidence") {
+    return [
+      `The last Jenny reply for ${projectName} needs stronger evidence.`,
+      "Reply with the exact files, commands, checks, PR/CI status, runtime status, and remaining risks that prove or disprove the recommendation.",
+      "Do not take action. Report evidence only.",
+      "",
+      `Jenny reply: ${replyPreview}`,
+    ].join("\n");
+  }
+
+  return [
+    `Challenge the last Jenny reply for ${projectName} like a senior engineer.`,
+    "Identify unsafe assumptions, missing approvals, wrong approach risk, rollback concerns, and the smallest safer next lane.",
+    "Do not implement or trigger live actions.",
+    "",
+    `Jenny reply: ${replyPreview}`,
+  ].join("\n");
+}
+
 interface JennyRunProgress {
   detail: string;
   phase: "complete" | "error" | "queued" | "starting" | "waiting";
@@ -2227,14 +2259,39 @@ function CompactProjectRoom({
                     {chat.speaker === "You" ? projectRequestPreview(chat.body, 750) : compactText(chat.body, 750)}
                   </p>
                   {chat.speaker === "Jenny" ? (
-                    <p className={cn(
-                      "mt-2 rounded-md border px-2 py-1 text-[0.68rem] [overflow-wrap:anywhere]",
-                      jennyReplyContract(chat.body).tone === "complete"
-                        ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
-                        : "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-100",
-                    )}>
-                      {jennyReplyContract(chat.body).label}
-                    </p>
+                    <div className="mt-2 grid min-w-0 gap-2">
+                      <p className={cn(
+                        "rounded-md border px-2 py-1 text-[0.68rem] [overflow-wrap:anywhere]",
+                        jennyReplyContract(chat.body).tone === "complete"
+                          ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
+                          : "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-100",
+                      )}>
+                        {jennyReplyContract(chat.body).label}
+                      </p>
+                      <div className="flex min-w-0 flex-wrap gap-1.5" aria-label="Jenny reply review actions">
+                        <button
+                          className="rounded-md border border-emerald-500/30 px-2 py-1 text-[0.68rem] font-semibold text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
+                          onClick={() => onRequestChange(buildJennyReplyReviewPrompt("accept", selectedProjectView.project.name, chat.body))}
+                          type="button"
+                        >
+                          Draft acceptance note
+                        </button>
+                        <button
+                          className="rounded-md border border-sky-500/30 px-2 py-1 text-[0.68rem] font-semibold text-sky-700 hover:bg-sky-500/10 dark:text-sky-300"
+                          onClick={() => onRequestChange(buildJennyReplyReviewPrompt("evidence", selectedProjectView.project.name, chat.body))}
+                          type="button"
+                        >
+                          Ask for evidence
+                        </button>
+                        <button
+                          className="rounded-md border border-amber-500/30 px-2 py-1 text-[0.68rem] font-semibold text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
+                          onClick={() => onRequestChange(buildJennyReplyReviewPrompt("safer-plan", selectedProjectView.project.name, chat.body))}
+                          type="button"
+                        >
+                          Challenge plan
+                        </button>
+                      </div>
+                    </div>
                   ) : null}
                 </article>
               ))
