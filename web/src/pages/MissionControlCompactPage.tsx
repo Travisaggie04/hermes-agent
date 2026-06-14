@@ -1075,6 +1075,27 @@ function assessProjectRequest(requestText: string, review: ChallengeReviewRecord
   };
 }
 
+function buildSpecFirstComposerText(projectName: string, requestText: string, intake: RequestIntakeAssessment): string {
+  const request = compactText(requestText, 520) || "<write the request Travis is considering>";
+  return [
+    "Spec-first request for Jenny:",
+    `Project: ${projectName}`,
+    "Request Travis is considering:",
+    request,
+    "",
+    `Current intake: ${intake.label} / ${intake.detail}`,
+    "",
+    "Jenny, do not implement yet. First challenge the request like a senior engineer:",
+    "1. Restate the goal in plain English.",
+    "2. List missing facts or questions Travis must answer.",
+    "3. Call out wrong-approach risks, hidden assumptions, and protected actions.",
+    "4. Propose the smallest safe lane.",
+    "5. Define evidence, tests, rollback/stop conditions, and approval needs.",
+    "",
+    "Return only the spec/challenge review and the recommended next safe lane.",
+  ].join("\n");
+}
+
 function buildCompactNextLanePrompt(projectView: ProjectViewModel, workspaceStatus: WorkspaceStatus): string {
   const guidance = PROJECT_LANE_GUIDANCE[projectView.project.project_id] ?? "Read-only Mission Control status lane. Report current state and the next safe manual step.";
   return [
@@ -2013,6 +2034,7 @@ function CompactProjectRoom({
   const nextStep = jennyNextStep(pendingCount, responseCount, Boolean(latestPending), bridgeStatus, githubBridgeStatus);
   const activityItems = jennyActivityItems(githubBridgeStatus);
   const requestIntake = assessProjectRequest(projectRequest, review);
+  const specFirstComposerText = buildSpecFirstComposerText(selectedProjectView.project.name, projectRequest, requestIntake);
   const runActive = isJennyRunActive(jennyRunProgress);
   const runCopy = jennyRunProgressCopy(jennyRunProgress, jennyRunElapsedSeconds);
   const chatMessages = [
@@ -2204,6 +2226,16 @@ function CompactProjectRoom({
             <button className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={busy || paused} onClick={onQueueBridge} type="button">
               Send to Jenny
             </button>
+            {requestIntake.state !== "ready" ? (
+              <button
+                className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/15 disabled:opacity-60 dark:text-amber-300"
+                disabled={busy || paused}
+                onClick={() => onRequestChange(specFirstComposerText)}
+                type="button"
+              >
+                Use spec-first prompt
+              </button>
+            ) : null}
             <button
               className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/15 disabled:opacity-60 dark:text-sky-300"
               disabled={busy || paused || !latestPending}
