@@ -110,6 +110,7 @@ function ChatHeader({
     enabled: gatewayOpen && Boolean(selectedProjectId.trim()),
     queryFn: getMissionControlGitHubBridgeStatus,
     queryKey: ['mission-control-github-bridge-status', selectedProjectId],
+    refetchInterval: 3_000,
     staleTime: 10_000
   })
 
