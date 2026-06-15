@@ -14,4 +14,12 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('New project chat')
     expect(source).toContain('New chat in ${selectedMissionControlProjectName || selectedMissionControlProjectId}')
   })
+
+  it('keeps the native sidebar project-first after project selection', () => {
+    expect(source).toContain('setSidebarRecentsOpen(false)')
+    expect(source).toContain('const selectProjectGroup')
+    expect(source).toContain('const startProjectChat')
+    expect(source).toContain('onSelectProject={selectProjectGroup}')
+    expect(source).toContain('onNewSessionInProject={startProjectChat}')
+  })
 })

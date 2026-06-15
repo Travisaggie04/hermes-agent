@@ -425,6 +425,7 @@ export function ChatSidebar({
 
         if (!$selectedMissionControlProjectId.get().trim() && next.length) {
           setSelectedMissionControlProject(next[0].id, next[0].label)
+          setSidebarRecentsOpen(false)
         }
       })
       .catch(() => {
@@ -487,6 +488,7 @@ export function ChatSidebar({
       })
 
       setSelectedMissionControlProject(createdProjectId, project.project.name || name)
+      setSidebarRecentsOpen(false)
       setProjectIntake({ forbidden: '', goal: '', name: '', source: '', success: '' })
       setProjectIntakeOpen(false)
       refreshProjectGroups()
@@ -525,6 +527,19 @@ export function ChatSidebar({
       }
     },
     [refreshProjectGroups]
+  )
+
+  const selectProjectGroup = useCallback((projectId: string, projectName: string) => {
+    setSelectedMissionControlProject(projectId, projectName)
+    setSidebarRecentsOpen(false)
+  }, [])
+
+  const startProjectChat = useCallback(
+    (projectId: string, projectName: string) => {
+      setSidebarRecentsOpen(false)
+      onNewSessionInProject(projectId, projectName)
+    },
+    [onNewSessionInProject]
   )
 
   // Index sessions by both their live id and their lineage-root id so a pin
@@ -936,9 +951,9 @@ export function ChatSidebar({
             onArchiveSession={onArchiveSession}
             onDeleteSession={onDeleteSession}
             onMoveSessionToProject={moveSessionToProject}
-            onNewSessionInProject={onNewSessionInProject}
+            onNewSessionInProject={startProjectChat}
             onResumeSession={onResumeSession}
-            onSelectProject={(projectId, projectName) => setSelectedMissionControlProject(projectId, projectName)}
+            onSelectProject={selectProjectGroup}
             onToggle={() => undefined}
             onTogglePin={pinSession}
             open
