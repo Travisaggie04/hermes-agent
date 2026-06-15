@@ -1585,6 +1585,13 @@ function shouldAutoChallengeRequest(intake: RequestIntakeAssessment): boolean {
   return intake.state !== 'ready'
 }
 
+function jennySendButtonLabel(intake: RequestIntakeAssessment): string {
+  if (shouldAutoChallengeRequest(intake)) {
+    return 'Ask Jenny to challenge first'
+  }
+  return 'Send to Jenny'
+}
+
 function buildPhoneSafeProjectPacket({
   brief,
   project,
@@ -2774,6 +2781,7 @@ function ProjectRoomsWorkspace({
   const activityItems = jennyActivityItems(githubBridgeStatus)
   const requestIntake = assessProjectRequest(request, review)
   const specFirstComposerText = buildSpecFirstComposerText(project.name, request, requestIntake)
+  const sendButtonLabel = jennySendButtonLabel(requestIntake)
   const latestReviewByResponseId = latestReplyReviewByResponseId(replyReviews)
   const runActive = isJennyRunActive(jennyRunProgress)
   const runCopy = jennyRunProgressCopy(jennyRunProgress, jennyRunElapsedSeconds)
@@ -3055,7 +3063,7 @@ function ProjectRoomsWorkspace({
 
           <div className="mt-2 flex flex-wrap gap-2">
             <button className="rounded-md border border-[#5ab896]/40 bg-[#5ab896]/10 px-4 py-2 text-sm font-semibold text-[#5ab896] hover:bg-[#5ab896]/15 disabled:opacity-60" disabled={saving || paused} onClick={onQueueBridge} type="button">
-              Send to Jenny
+              {sendButtonLabel}
             </button>
             <button
               className="rounded-md border border-[#60a5fa]/40 bg-[#60a5fa]/10 px-4 py-2 text-sm font-semibold text-[#93c5fd] hover:bg-[#60a5fa]/15 disabled:opacity-60"
@@ -3079,9 +3087,19 @@ function ProjectRoomsWorkspace({
           )}>
             <span className="font-semibold">Request intake: {requestIntake.label}.</span> {requestIntake.detail}
             {shouldAutoChallengeRequest(requestIntake) ? (
-              <span className="mt-1 block">Send to Jenny will ask for a challenge/spec-first reply before any implementation plan.</span>
+              <span className="mt-1 block">Ask Jenny to challenge first will request a spec-first reply before any implementation plan.</span>
             ) : null}
           </div>
+          {shouldAutoChallengeRequest(requestIntake) ? (
+            <div aria-label="Jenny challenge checklist" className="mt-2 rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+              <div className="font-semibold">Jenny must challenge first</div>
+              <ul className="mt-1 grid gap-1">
+                <li>Question missing facts and unsafe assumptions.</li>
+                <li>Push back on protected actions or broad scope.</li>
+                <li>Return the smallest safe lane with evidence and approval needs.</li>
+              </ul>
+            </div>
+          ) : null}
           <details className="mt-2 rounded-md border border-[#f3ebda]/10 bg-[#15101a]/60 px-3 py-2 text-xs">
             <summary className="cursor-pointer font-semibold text-[#ddd0bb]">Advanced request options</summary>
             <p className="mt-2 text-[#a59783]">

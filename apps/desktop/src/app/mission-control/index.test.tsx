@@ -959,7 +959,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Resume requirements')).toBeTruthy()
     expect(screen.getByText('Jenny challenge review clears the approach')).toBeTruthy()
     expect(screen.getByText('Travis approval is recorded before work resumes')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Send to Jenny' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Ask Jenny to challenge first' })).toHaveProperty('disabled', true)
     expect(screen.getByRole('button', { name: 'Get Jenny reply' })).toHaveProperty('disabled', true)
     expect(screen.getByRole('button', { name: 'Save challenge draft' })).toHaveProperty('disabled', true)
     expect(screen.getByRole('button', { name: 'Save read-only lane draft' })).toHaveProperty('disabled', true)
@@ -1300,9 +1300,13 @@ describe('MissionControlView', () => {
 
     await waitFor(() => expect((composer as HTMLTextAreaElement).value).toBe('make Jenny fully functional and autonomous'))
     await waitFor(() => expect(screen.getAllByText(/Spec first/).length).toBeGreaterThan(0))
-    expect(screen.getAllByText(/Send to Jenny will ask for a challenge\/spec-first reply before any implementation plan/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Ask Jenny to challenge first will request a spec-first reply before any implementation plan/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Jenny must challenge first').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Question missing facts and unsafe assumptions.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Push back on protected actions or broad scope.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Return the smallest safe lane with evidence and approval needs.').length).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send to Jenny' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Jenny to challenge first' }))
 
     await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(1))
     expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
