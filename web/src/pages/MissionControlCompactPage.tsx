@@ -1491,7 +1491,7 @@ interface RequestIntakeAssessment {
 function assessProjectRequest(requestText: string, review: ChallengeReviewRecord | undefined): RequestIntakeAssessment {
   const normalized = requestText.replace(/\s+/g, " ").trim();
   const lower = normalized.toLowerCase();
-  const riskyAction = /\b(deploy|restart|runtime switch|gateway|payment|checkout|outreach|post|publish|delete|remove|cleanup|worker|timer|daemon|cron|secret|token|waha|whatsapp)\b/.test(lower);
+  const riskyAction = /\b(deploy|restart|runtime switch|gateway|payment|checkout|outreach|post|publish|delete|remove|cleanup|update|upgrade|install|configure|migrate|worker|timer|daemon|cron|secret|token|waha|whatsapp)\b/.test(lower);
   const vagueRequest = normalized.length < 24 || /\b(fix it|make it better|do whatever|handle this|everything|autonomous|fully functional|robust)\b/.test(lower);
 
   if (!normalized) {

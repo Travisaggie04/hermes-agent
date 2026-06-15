@@ -1363,6 +1363,31 @@ describe('MissionControlView', () => {
     expect(createMissionControlJennyBridgeRequest).not.toHaveBeenCalled()
   })
 
+  it('routes update and install requests through the approval challenge gate', async () => {
+    await renderMissionControl()
+
+    const composer = screen.getByPlaceholderText('Tell Jenny what you want to discuss or ask her to do next...')
+    fireEvent.change(composer, { target: { value: 'update Hermes on the VPS and install the laptop worker node' } })
+
+    await waitFor(() => expect(screen.getAllByText(/Approval check/).length).toBeGreaterThan(0))
+    expect(screen.getAllByText(/Contains protected actions; Jenny should challenge scope and identify approvals before work/).length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Jenny to review first' }))
+
+    await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(1))
+    expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Current intake: Approval check / Contains protected actions'),
+        user_message: 'update Hermes on the VPS and install the laptop worker node'
+      })
+    )
+    expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('First challenge the request like a senior engineer')
+      })
+    )
+  })
+
   it('runs Jenny once for the latest pending GitHub bridge request only', async () => {
     getMissionControlGitHubBridgeStatus.mockResolvedValue({
       count: 1,
