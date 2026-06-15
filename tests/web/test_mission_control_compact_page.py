@@ -123,6 +123,8 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "cleanChatDisplayMessage",
         "user_message",
         "displayBody",
+        "projectRoomRequestMatch",
+        "Project room request:",
         'message.from_agent === "jenny" ? undefined : cleanChatDisplayMessage',
         "inlineRequestMatch",
         "structuredJennyHandoff",

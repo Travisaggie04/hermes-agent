@@ -688,6 +688,17 @@ beforeEach(() => {
       },
       {
         record: {
+          created_at: '2026-06-13T01:05:40Z',
+          from_agent: 'travis',
+          message: 'Project room request: Hermes / Mission Control Request: fix the two way communication with codex through the bridge Current brief: Replace Discord as Travis primary workspace. Challenge state: clear_and_safe / start record-only manual-copy. Allowed: read approved context. Forbidden: no direct session send.',
+          project_id: 'project-hermes-mission-control',
+          request_id: 'github-bridge-request-project-room-legacy',
+          status: 'replied',
+          to_agent: 'jenny'
+        }
+      },
+      {
+        record: {
           created_at: '2026-06-13T01:06:00Z',
           from_agent: 'travis',
           message: 'Local error guard smoke. This should not post a reply.',
@@ -1170,7 +1181,9 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Review the Mission Control room.')).toBeTruthy()
     const transcript = within(screen.getByLabelText('Project chat transcript'))
     expect(transcript.getByText('testing. tell me a short story')).toBeTruthy()
+    expect(transcript.getByText('fix the two way communication with codex through the bridge')).toBeTruthy()
     expect(transcript.getByText('Review the Mission Control room.')).toBeTruthy()
+    expect(transcript.queryByText(/Project room request: Hermes/)).toBeNull()
     expect(transcript.queryByText(/Current brief: Replace Discord as Travis primary workspace/)).toBeNull()
     expect(transcript.queryByText(/Allowed: read approved context/)).toBeNull()
     expect(transcript.queryByText(/Forbidden: no direct session send/)).toBeNull()

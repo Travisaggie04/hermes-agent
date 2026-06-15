@@ -491,6 +491,9 @@ function compactText(value: string | string[] | undefined, maxChars: number): st
 
 function projectRequestPreview(value: string, maxChars: number): string {
   const normalized = value.replace(/\s+/g, " ").trim();
+  const projectRoomRequestMatch = normalized.match(
+    /^Project room request:\s*(?:.+?\s+)?Request:\s*([\s\S]*?)(?=\s+(?:Request intake:|Current brief:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:)|$)/i,
+  );
   const requestMatch = normalized.match(
     /(?:^|[\s/])Request:\s*([\s\S]*?)(?=\s+(?:Request intake:|Current brief:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:)|$)/i,
   );
@@ -500,7 +503,7 @@ function projectRequestPreview(value: string, maxChars: number): string {
   const fallbackMatch = normalized.match(
     /^(.+?)\s+(?=Current brief:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:)/i,
   );
-  const candidate = requestMatch?.[1] ?? inlineRequestMatch?.[1] ?? fallbackMatch?.[1] ?? value;
+  const candidate = projectRoomRequestMatch?.[1] ?? requestMatch?.[1] ?? inlineRequestMatch?.[1] ?? fallbackMatch?.[1] ?? value;
   return compactText(candidate, maxChars);
 }
 
