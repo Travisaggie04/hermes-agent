@@ -632,6 +632,52 @@ function isJennyRunActive(progress: JennyRunProgress | null): boolean {
   return progress?.phase === 'starting' || progress?.phase === 'waiting'
 }
 
+function recordBackedJennyRunProgress(
+  statusRecords: MissionControlGitHubBridgeMailboxStatusRecord[],
+  bridgeMessages: MissionControlGitHubBridgeMessageRecord[],
+  projectId: string
+): JennyRunProgress | null {
+  const projectRequestIds = new Set(
+    bridgeMessages
+      .filter(message => message.project_id === projectId)
+      .map(message => message.request_id)
+      .filter(Boolean)
+  )
+
+  for (const record of [...statusRecords].reverse()) {
+    if (record.handled_request_id && projectRequestIds.size && !projectRequestIds.has(record.handled_request_id)) {
+      continue
+    }
+    switch (record.status) {
+      case 'hermes_answer_started':
+        return {
+          detail: 'Jenny is working on the latest project message. This status is restored from the bridge audit trail.',
+          phase: 'waiting'
+        }
+      case 'hermes_answer_completed':
+      case 'response_appended':
+        return {
+          detail: 'Jenny replied to the latest project message. Review the response before relying on it.',
+          phase: 'complete'
+        }
+      case 'hermes_answer_error':
+        return {
+          detail: record.last_error || 'Jenny hit a guarded error. No hidden action was treated as successful.',
+          phase: 'error'
+        }
+      case 'message_posted':
+        return {
+          detail: 'Your message is queued for Jenny. Mission Control will refresh the bridge status automatically.',
+          phase: 'queued'
+        }
+      default:
+        break
+    }
+  }
+
+  return null
+}
+
 function jennyWorkSessionSteps({
   hasError,
   hasRunnablePendingMessage,
@@ -979,7 +1025,7 @@ function jennyNextStep(
   if (responseCount) {
     return 'Review Jenny\'s latest reply, then send the next bounded message.'
   }
-  return 'Type one bounded project message, then click Send message.'
+  return 'Type one bounded project message, then press Send.'
 }
 
 function jennyOperatorGuidance({
@@ -1000,9 +1046,9 @@ function jennyOperatorGuidance({
   if (bridgeError || progress?.phase === 'error') {
     return {
       detail: hasRunnablePendingMessage
-        ? 'Retry Jenny once for the latest pending message. Treat the failed run as not done.'
+        ? 'Jenny hit a guarded error. Send a short follow-up only after the error is reviewed.'
         : 'Refresh replies first. If the error remains, inspect the bridge before sending more work.',
-      label: hasRunnablePendingMessage ? 'Retry Jenny once' : 'Check bridge',
+      label: 'Jenny needs attention',
       tone: 'bad'
     }
   }
@@ -1022,8 +1068,8 @@ function jennyOperatorGuidance({
   }
   if (hasRunnablePendingMessage || pendingCount) {
     return {
-      detail: 'A message is waiting. Run Jenny once when you want exactly one guarded reply.',
-      label: 'Run one reply',
+      detail: 'A message is waiting for Jenny. Mission Control will keep the chat status visible.',
+      label: 'Waiting for Jenny',
       tone: 'warn'
     }
   }
@@ -1672,11 +1718,8 @@ function shouldAutoChallengeRequest(intake: RequestIntakeAssessment): boolean {
   return intake.state !== 'ready'
 }
 
-function jennySendButtonLabel(intake: RequestIntakeAssessment): string {
-  if (shouldAutoChallengeRequest(intake)) {
-    return 'Ask Jenny to review first'
-  }
-  return 'Send message'
+function jennySendButtonLabel(_intake: RequestIntakeAssessment): string {
+  return 'Send'
 }
 
 function buildPhoneSafeProjectPacket({
@@ -2865,10 +2908,16 @@ function ProjectRoomsWorkspace({
   const specFirstComposerText = buildSpecFirstComposerText(project.name, request, requestIntake)
   const sendButtonLabel = jennySendButtonLabel(requestIntake)
   const latestReviewByResponseId = latestReplyReviewByResponseId(replyReviews)
-  const runActive = isJennyRunActive(jennyRunProgress)
-  const runCopy = jennyRunProgressCopy(jennyRunProgress, jennyRunElapsedSeconds)
   const bridgeError = normalizedBridgeError(bridgeStatus, githubBridgeStatus)
   const hasRunnablePendingMessage = Boolean(projectedVisiblePending ?? latestPending)
+  const statusRecords = unwrapRecords(githubBridgeStatus.status_records)
+  const statusSourceBridgeMessages = [
+    ...visibleGitHubBridgeMessages,
+    ...unwrapRecords(githubBridgeStatus.visible_pending_messages),
+    ...unwrapRecords(githubBridgeStatus.pending_messages),
+    ...unwrapRecords(githubBridgeStatus.recent_messages),
+    ...unwrapRecords(githubBridgeStatus.response_messages)
+  ]
   const chatMessages: ProjectChatMessage[] = [
     ...visibleBridgeRequests.map(request => ({
       body: request.message,
@@ -2894,6 +2943,9 @@ function ProjectRoomsWorkspace({
       time: message.created_at
     }))
   ].sort((left, right) => String(left.time ?? '').localeCompare(String(right.time ?? ''))).slice(-8)
+  const effectiveJennyRunProgress = jennyRunProgress ?? recordBackedJennyRunProgress(statusRecords, statusSourceBridgeMessages, project.project_id)
+  const runActive = isJennyRunActive(effectiveJennyRunProgress)
+  const runCopy = jennyRunProgressCopy(effectiveJennyRunProgress, jennyRunElapsedSeconds)
   const latestReplyReview = latestReviewedJennyReply(chatMessages, latestReviewByResponseId)
   const replyReviewStatus = jennyReplyReviewStatus(latestReplyReview)
   const latestActualJennyReply = latestJennyReply(chatMessages)
@@ -2901,7 +2953,7 @@ function ProjectRoomsWorkspace({
   const latestJennyOutcome = latestJennyOutcomeStatus(latestActualJennyReply, latestActualReplyReview)
   const reviewRequired = Boolean(latestActualJennyReply && !latestActualReplyReview)
   const nextStep = replyReviewStatus.nextStep ?? bridgeNextStep
-  const statusCopy = jennyRunProgress
+  const statusCopy = effectiveJennyRunProgress
     ? runCopy
     : { detail: paused ? 'This project is paused until Jenny is stable.' : nextStep, label: connectionState.label }
   const latestUserMessage = [...chatMessages].reverse().find(chat => chat.speaker === 'You')
@@ -2909,7 +2961,7 @@ function ProjectRoomsWorkspace({
     elapsedSeconds: jennyRunElapsedSeconds,
     latestUserMessage: latestUserMessage ? projectRequestPreview(latestUserMessage.displayBody ?? latestUserMessage.body, 96) : '',
     pendingCount,
-    progress: jennyRunProgress,
+    progress: effectiveJennyRunProgress,
     responseCount,
     statusLabel: statusCopy.label
   })
@@ -2917,18 +2969,18 @@ function ProjectRoomsWorkspace({
     hasError: Boolean(bridgeError),
     hasRunnablePendingMessage,
     pendingCount,
-    progress: jennyRunProgress,
+    progress: effectiveJennyRunProgress,
     replyReviewTone: replyReviewStatus.tone,
     responseCount
   })
   useEffect(() => {
     chatEndRef.current?.scrollIntoView?.({ block: 'end' })
-  }, [chatMessages.length, jennyRunProgress?.phase, jennyRunElapsedSeconds, project.project_id])
+  }, [chatMessages.length, effectiveJennyRunProgress?.phase, jennyRunElapsedSeconds, project.project_id])
   const operatorGuidance = jennyOperatorGuidance({
     bridgeError,
     hasRunnablePendingMessage,
     pendingCount,
-    progress: jennyRunProgress,
+    progress: effectiveJennyRunProgress,
     replyReviewTone: replyReviewStatus.tone,
     responseCount
   })
@@ -3049,7 +3101,7 @@ function ProjectRoomsWorkspace({
           </summary>
           <section
             aria-label="Jenny current status"
-            className={cn('mt-2 rounded-md border px-3 py-2 text-sm', jennyRunStatusToneClass(jennyRunProgress, connectionState.tone))}
+            className={cn('mt-2 rounded-md border px-3 py-2 text-sm', jennyRunStatusToneClass(effectiveJennyRunProgress, connectionState.tone))}
           >
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
@@ -3226,7 +3278,7 @@ function ProjectRoomsWorkspace({
             )}>
               <span className="font-semibold">Request intake: {requestIntake.label}.</span> {requestIntake.detail}
               {shouldAutoChallengeRequest(requestIntake) ? (
-                <span className="mt-1 block">Ask Jenny to review first will request a spec-first reply before any implementation plan.</span>
+                <span className="mt-1 block">Jenny will challenge this request before planning any implementation.</span>
               ) : null}
             </div>
             {shouldAutoChallengeRequest(requestIntake) ? (
