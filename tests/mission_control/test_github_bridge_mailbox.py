@@ -523,7 +523,10 @@ def test_notify_jenny_now_posts_message_and_runs_one_ssh_poll(tmp_path: Path, mo
     assert ssh_calls[0][-2] == "jenny@100.115.125.111"
     assert "systemctl --user show hermes-dashboard.service -p WorkingDirectory --value" in ssh_calls[0][-1]
     assert "mission_control.github_bridge_mailbox poll" in ssh_calls[0][-1]
+    assert "--comments-json \"$tmp\"" in ssh_calls[0][-1]
+    assert "Review this bounded request." in ssh_calls[0][-1]
     assert payload["remote_poll_result"]["remote_runtime"] == "systemd:hermes-dashboard.service/WorkingDirectory"
+    assert payload["remote_poll_result"]["remote_poll_source"] == "single_comment"
 
 
 def test_notify_jenny_now_can_use_explicit_remote_runtime(tmp_path: Path, monkeypatch):
@@ -548,6 +551,7 @@ def test_notify_jenny_now_can_use_explicit_remote_runtime(tmp_path: Path, monkey
 
     assert "cd /tmp/hermes-runtime-test" in ssh_calls[0][-1]
     assert "systemctl --user show hermes-dashboard.service" not in ssh_calls[0][-1]
+    assert "--comments-json \"$tmp\"" in ssh_calls[0][-1]
     assert payload["remote_poll_result"]["remote_runtime"] == "/tmp/hermes-runtime-test"
 
 
@@ -587,6 +591,8 @@ def test_notify_jenny_now_duplicate_skips_github_but_still_polls(tmp_path: Path,
     assert duplicate["message_result"]["status"]["status"] == "skipped_duplicate"
     assert len(gh_calls) == 1
     assert len(ssh_calls) == 2
+    assert "--comments-json \"$tmp\"" in ssh_calls[0][-1]
+    assert "--comments-json" not in ssh_calls[1][-1]
     assert [message.message for message in messages] == ["First notify request."]
     assert [status.status for status in statuses] == ["message_posted", "skipped_duplicate"]
 
@@ -831,8 +837,10 @@ def test_notify_jenny_now_main_uses_defaults_and_known_hosts(tmp_path: Path, mon
     assert gh_calls[0][0] == "repos/Travisaggie04/hermes-agent/issues/79/comments"
     assert ssh_calls[0][-2] == "jenny@100.115.125.111"
     assert "systemctl --user show hermes-dashboard.service -p WorkingDirectory --value" in ssh_calls[0][-1]
+    assert "--comments-json \"$tmp\"" in ssh_calls[0][-1]
     assert output["message_result"]["message"]["request_id"] == "req-cli-notify"
     assert output["remote_poll_result"]["remote_poll"]["stored"] is True
+    assert output["remote_poll_result"]["remote_poll_source"] == "single_comment"
 
 
 def test_notify_jenny_now_reports_tailscale_ssh_auth_requirement(tmp_path: Path, monkeypatch):

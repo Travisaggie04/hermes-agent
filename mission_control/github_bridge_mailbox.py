@@ -146,6 +146,26 @@ def bridge_comment_body(payload: dict[str, str]) -> str:
     return f"{GITHUB_BRIDGE_MARKER}\n```json\n{json.dumps(clean, sort_keys=True)}\n```"
 
 
+def _comment_payload_for_message(message: dict[str, Any]) -> dict[str, Any]:
+    body = bridge_comment_body(
+        {
+            "request_id": str(message.get("request_id") or ""),
+            "project_id": str(message.get("project_id") or ""),
+            "from_agent": str(message.get("from_agent") or ""),
+            "to_agent": str(message.get("to_agent") or ""),
+            "status": str(message.get("status") or "queued"),
+            "message": str(message.get("message") or ""),
+            "created_at": str(message.get("created_at") or utc_now()),
+        }
+    )
+    return {
+        "body": body,
+        "created_at": str(message.get("created_at") or utc_now()),
+        "id": str(message.get("github_comment_id") or ""),
+        "user": {"login": str(message.get("from_agent") or "codex")},
+    }
+
+
 def response_comment_body(
     *,
     request_id: str,
@@ -933,6 +953,7 @@ def remote_poll_bridge_over_ssh(
     ssh_target: str = DEFAULT_NOTIFY_SSH_TARGET,
     remote_runtime: str = DEFAULT_NOTIFY_REMOTE_RUNTIME,
     ssh_known_hosts: Path | None = None,
+    comment_payload: dict[str, Any] | None = None,
     operator: str = "manual",
 ) -> dict[str, Any]:
     ssh_target = _bounded_text(ssh_target, max_chars=200)
@@ -945,10 +966,8 @@ def remote_poll_bridge_over_ssh(
     else:
         runtime_command = 'runtime=$(systemctl --user show hermes-dashboard.service -p WorkingDirectory --value) && test -n "$runtime" && cd "$runtime"'
         runtime_label = "systemd:hermes-dashboard.service/WorkingDirectory"
-    remote_command = " ".join(
+    poll_command = " ".join(
         [
-            runtime_command,
-            "&&",
             "python3",
             "-m",
             "mission_control.github_bridge_mailbox",
@@ -961,6 +980,17 @@ def remote_poll_bridge_over_ssh(
             shlex.quote(operator),
         ]
     )
+    poll_source = "github_issue"
+    if comment_payload is not None:
+        comments_json = json.dumps([comment_payload], sort_keys=True)
+        poll_command = (
+            "tmp=$(mktemp) && "
+            "trap 'rm -f \"$tmp\"' EXIT && "
+            f"printf %s {shlex.quote(comments_json)} > \"$tmp\" && "
+            f"{poll_command} --comments-json \"$tmp\""
+        )
+        poll_source = "single_comment"
+    remote_command = " ".join([runtime_command, "&&", poll_command])
     ssh_args = [
         "ssh",
         "-o",
@@ -985,6 +1015,7 @@ def remote_poll_bridge_over_ssh(
             **_inert_response_flags(),
             "ssh_target": ssh_target,
             "remote_runtime": runtime_label,
+            "remote_poll_source": poll_source,
             "repo": repo,
             "issue_number": int(issue_number),
             "remote_poll": {
@@ -1000,6 +1031,7 @@ def remote_poll_bridge_over_ssh(
             **_inert_response_flags(),
             "ssh_target": ssh_target,
             "remote_runtime": runtime_label,
+            "remote_poll_source": poll_source,
             "repo": repo,
             "issue_number": int(issue_number),
             "remote_poll": {
@@ -1017,6 +1049,7 @@ def remote_poll_bridge_over_ssh(
         **_inert_response_flags(),
         "ssh_target": ssh_target,
         "remote_runtime": runtime_label,
+        "remote_poll_source": poll_source,
         "repo": repo,
         "issue_number": int(issue_number),
         "remote_poll": remote_payload,
@@ -1051,12 +1084,14 @@ def notify_jenny_now(
         path=path,
         operator=operator,
     )
+    message = message_result.get("message") if isinstance(message_result, dict) else None
     poll_result = remote_poll_bridge_over_ssh(
         repo=repo,
         issue_number=issue_number,
         ssh_target=ssh_target,
         remote_runtime=remote_runtime,
         ssh_known_hosts=ssh_known_hosts,
+        comment_payload=_comment_payload_for_message(message) if isinstance(message, dict) else None,
         operator=operator,
     )
     return {
