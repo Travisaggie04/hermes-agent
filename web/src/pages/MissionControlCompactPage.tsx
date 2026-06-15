@@ -2150,10 +2150,10 @@ export default function MissionControlCompactPage() {
         <div className="mt-2 grid min-w-0 gap-2 sm:flex sm:items-start sm:justify-between">
           <div className="min-w-0 max-w-full">
             <h1 className="max-w-full text-xl font-semibold leading-tight text-[#fff8ed] [overflow-wrap:anywhere]">Jenny</h1>
-            <p className="mt-1 max-w-full text-xs text-[#a89782] [overflow-wrap:anywhere]">Pick a project and chat. Guardrails stay in the background.</p>
+            <p className="sr-only max-w-full text-xs text-[#a89782] [overflow-wrap:anywhere]">Pick a project and chat. Guardrails stay in the background.</p>
             <p className="sr-only">Chat with Jenny first; safety and project records stay collapsed below.</p>
           </div>
-          <span className="max-w-full rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-300 [overflow-wrap:anywhere]">
+          <span className="sr-only max-w-full rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-300 [overflow-wrap:anywhere]">
             guarded
           </span>
         </div>
@@ -2237,8 +2237,8 @@ export default function MissionControlCompactPage() {
         </div>
       ) : null}
 
-      <details className="mt-4 max-w-full overflow-hidden rounded-xl border border-border/60 bg-card/80 p-3">
-        <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">Details</summary>
+      <details className="mt-3 max-w-full overflow-hidden rounded-xl border border-border/60 bg-card/70 p-3">
+        <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">More</summary>
         <div className="mt-3 grid gap-4">
           {snapshot ? (
             <CompactHermesHealthDashboard
@@ -3019,7 +3019,7 @@ function CompactProjectRoom({
         </details>
 
         <details className="mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/60 p-3">
-          <summary className="cursor-pointer text-sm font-semibold">Safety and maintenance</summary>
+          <summary className="cursor-pointer text-sm font-semibold">Advanced</summary>
           <section className="mt-3 max-w-full overflow-hidden rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
             <div className="grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
               <h3 className="text-sm font-semibold">Jenny memory storage</h3>
