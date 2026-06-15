@@ -1871,7 +1871,7 @@ export default function MissionControlCompactPage() {
         detail: "Message sent. Use Get Jenny's reply when you want Jenny to answer this project message.",
         phase: "queued",
       });
-      setRoomMessage("Message sent. Replies refresh automatically; use Refresh replies under More options if you want to check now.");
+      setRoomMessage("Message sent. Replies refresh automatically; use Refresh replies under Details if you want to check now.");
     } catch (err) {
       setRoomMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -2146,8 +2146,8 @@ export default function MissionControlCompactPage() {
         </p>
         <div className="mt-2 grid min-w-0 gap-2 sm:flex sm:items-start sm:justify-between">
           <div className="min-w-0 max-w-full">
-            <h1 className="max-w-full text-xl font-semibold leading-tight text-[#fff8ed] [overflow-wrap:anywhere]">Jenny workspace</h1>
-            <p className="mt-1 max-w-full text-xs text-[#a89782] [overflow-wrap:anywhere]">Pick a project, message Jenny, and review the outcome.</p>
+            <h1 className="max-w-full text-xl font-semibold leading-tight text-[#fff8ed] [overflow-wrap:anywhere]">Jenny</h1>
+            <p className="mt-1 max-w-full text-xs text-[#a89782] [overflow-wrap:anywhere]">Pick a project and chat. Guardrails stay in the background.</p>
             <p className="sr-only">Chat with Jenny first; safety and project records stay collapsed below.</p>
           </div>
           <span className="max-w-full rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-300 [overflow-wrap:anywhere]">
@@ -2234,8 +2234,8 @@ export default function MissionControlCompactPage() {
         </div>
       ) : null}
 
-      <details className="mt-4 max-w-full overflow-hidden rounded-2xl border border-border/70 bg-card p-3">
-        <summary className="cursor-pointer text-sm font-semibold">Safety details and reports</summary>
+      <details className="mt-4 max-w-full overflow-hidden rounded-xl border border-border/60 bg-card/80 p-3">
+        <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">Details</summary>
         <div className="mt-3 grid gap-4">
           {snapshot ? (
             <CompactHermesHealthDashboard
@@ -2626,12 +2626,12 @@ function CompactProjectRoom({
 
   return (
     <section
-      className="mt-2 flex min-h-[calc(100dvh-8rem)] w-full min-w-0 max-w-full flex-col overflow-hidden rounded-md border border-[#d4a574]/20 bg-[#15101a] shadow-[0_20px_70px_rgba(0,0,0,0.35)] sm:h-[calc(100vh-5rem)] sm:min-h-[34rem]"
+      className="mt-2 flex min-h-[calc(100dvh-8rem)] w-full min-w-0 max-w-full flex-col overflow-hidden rounded-md border border-[#d4a574]/15 bg-[#15101a] shadow-[0_20px_70px_rgba(0,0,0,0.28)] sm:h-[calc(100vh-5rem)] sm:min-h-[34rem]"
       aria-label="Project chat workspace"
     >
-      <div className="w-full min-w-0 max-w-full overflow-hidden border-b border-[#f3ebda]/10 bg-[#1c1622]/90 px-2 py-2">
-        <label className="grid w-full min-w-0 max-w-full gap-1 sm:hidden">
-          <span className="text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-[#a59783]">Project</span>
+      <div className="w-full min-w-0 max-w-full overflow-hidden border-b border-[#f3ebda]/10 bg-[#1c1622]/70 px-2 py-2">
+        <label className="grid w-full min-w-0 max-w-xl gap-1">
+          <span className="text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-[#a59783]">Active project</span>
           <select
             className="w-full min-w-0 max-w-full rounded-md border border-[#f3ebda]/10 bg-[#100b15] px-3 py-2 text-sm font-semibold text-[#f3ebda] outline-none [overflow-wrap:anywhere]"
             onChange={event => onSelectProject(event.target.value)}
@@ -2644,7 +2644,7 @@ function CompactProjectRoom({
             ))}
           </select>
         </label>
-        <div className="hidden w-full min-w-0 max-w-full gap-1.5 sm:grid sm:grid-cols-[auto_repeat(5,minmax(0,1fr))]">
+        <div className="sr-only w-full min-w-0 max-w-full gap-1.5">
           <span className="sr-only">Local studio</span>
           <span className="hidden self-center text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-[#a59783] sm:block sm:pr-1">Projects</span>
           <span className="sr-only">{projects.length} projects</span>
@@ -2691,6 +2691,9 @@ function CompactProjectRoom({
             </span>
           </div>
         </div>
+        <p className="mt-2 max-w-full text-sm text-[#a59783] [overflow-wrap:anywhere]">
+          {paused ? "This project is on hold while Jenny is stabilized." : nextStep}
+        </p>
 
         <details className="sr-only mt-1 max-w-full overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#1c1622]/50 px-3 py-1.5 text-xs">
           <summary className="cursor-pointer font-semibold text-muted-foreground">
@@ -2894,7 +2897,7 @@ function CompactProjectRoom({
           {reviewRequired ? (
             <p className="mb-2 max-w-full rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 [overflow-wrap:anywhere] dark:text-amber-100" role="status">
               <span className="font-semibold">Review Jenny&apos;s latest reply before relying on it.</span>
-              <span className="ml-1">Open Review reply on the latest Jenny message to accept it, ask for evidence, or challenge the plan.</span>
+              <span className="sr-only ml-1">Open Review reply on the latest Jenny message to accept it, ask for evidence, or challenge the plan.</span>
             </p>
           ) : null}
           <label className="grid gap-1 text-sm font-medium">
@@ -2922,7 +2925,7 @@ function CompactProjectRoom({
             </button>
           </div>
           <details className="mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/70 px-3 py-2 text-xs">
-            <summary className="cursor-pointer text-sm font-semibold">More options</summary>
+            <summary className="cursor-pointer text-sm font-semibold">Details</summary>
             <button className="mt-2 w-full rounded-lg border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60 sm:w-auto" disabled={busy} onClick={onRefreshBridge} type="button">
               Refresh replies
             </button>
