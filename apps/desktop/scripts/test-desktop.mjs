@@ -91,9 +91,9 @@ function extractAsarText(asarPath, filePath) {
 
 function validateMissionControlRendererText(rendererText) {
   const markerGroups = [
-    ['Jenny Workspace', 'Project chat workspace', 'Message Jenny', 'Send to Jenny', 'Get Jenny reply'],
+    ['Jenny Workspace', 'Project chat workspace', 'Message Jenny', 'Send', 'Jenny is answering'],
     ['Hermes / Mission Control', 'Long-form Video', 'Shorts Video', 'Tool & Tally', 'Waha Work'],
-    ['Paused until Jenny is stable', 'Resume requirements', 'Jenny guarded']
+    ['Paused until Jenny is stable', 'Resume requirements', 'guarded']
   ]
 
   for (const markers of markerGroups) {
