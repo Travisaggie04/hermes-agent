@@ -1261,6 +1261,9 @@ describe('MissionControlView', () => {
     )
     expect(createMissionControlJennyBridgeRequest).not.toHaveBeenCalled()
 
+    fireEvent.change(composer, {
+      target: { value: 'Make the visible Mission Control page show project rooms on laptop and phone.' }
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Save challenge draft' }))
     await waitFor(() => expect(createMissionControlChallengeReview).toHaveBeenCalledTimes(1))
     expect(createMissionControlChallengeReview).toHaveBeenCalledWith(
@@ -1403,7 +1406,9 @@ describe('MissionControlView', () => {
     await renderMissionControl()
 
     fireEvent.change(await screen.findByLabelText('Message Jenny'), { target: { value: 'Please check the chat bridge.' } })
+    const composer = screen.getByLabelText('Message Jenny') as HTMLTextAreaElement
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    await waitFor(() => expect(composer.value).toBe(''))
     expect((await screen.findAllByText('Waiting for Jenny')).length).toBeGreaterThanOrEqual(2)
     expect((await screen.findAllByText(/Mission Control sent the latest project message to Jenny/)).length).toBeGreaterThanOrEqual(2)
     await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
