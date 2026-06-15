@@ -72,6 +72,8 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "latestJennyOutcomeStatus",
         "latestJennyReply",
         "Review before relying",
+        "Review Jenny&apos;s latest reply before relying on it.",
+        "Open Review reply on the latest Jenny message to accept it, ask for evidence, or challenge the plan.",
         "Do not rely yet",
         "Usable as context",
         "Send one bounded project message, then get one Jenny reply.",

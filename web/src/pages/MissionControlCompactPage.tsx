@@ -2592,6 +2592,7 @@ function CompactProjectRoom({
   const latestActualJennyReply = latestJennyReply(chatMessages);
   const latestActualReplyReview = latestActualJennyReply ? latestReviewByResponseId.get(latestActualJennyReply.id) ?? null : null;
   const latestJennyOutcome = latestJennyOutcomeStatus(latestActualJennyReply, latestActualReplyReview);
+  const reviewRequired = Boolean(latestActualJennyReply && !latestActualReplyReview);
   const nextStep = replyReviewStatus.nextStep ?? bridgeNextStep;
   const statusCopy = jennyRunProgress
     ? runCopy
@@ -2890,6 +2891,12 @@ function CompactProjectRoom({
         </section>
 
         <div className="mt-3 border-t border-[#f3ebda]/10 pt-3">
+          {reviewRequired ? (
+            <p className="mb-2 max-w-full rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 [overflow-wrap:anywhere] dark:text-amber-100" role="status">
+              <span className="font-semibold">Review Jenny&apos;s latest reply before relying on it.</span>
+              <span className="ml-1">Open Review reply on the latest Jenny message to accept it, ask for evidence, or challenge the plan.</span>
+            </p>
+          ) : null}
           <label className="grid gap-1 text-sm font-medium">
             Message Jenny
             <textarea
