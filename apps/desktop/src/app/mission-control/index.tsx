@@ -2950,6 +2950,12 @@ function ProjectRoomsWorkspace({
   const replyReviewStatus = jennyReplyReviewStatus(latestReplyReview)
   const latestActualJennyReply = latestJennyReply(chatMessages)
   const latestActualReplyReview = latestActualJennyReply ? latestReviewByResponseId.get(latestActualJennyReply.id) ?? null : null
+  const showJennyStatusInChat = Boolean(effectiveJennyRunProgress && (
+    runActive ||
+    effectiveJennyRunProgress.phase === 'queued' ||
+    effectiveJennyRunProgress.phase === 'error' ||
+    (effectiveJennyRunProgress.phase === 'complete' && !latestActualJennyReply)
+  ))
   const latestJennyOutcome = latestJennyOutcomeStatus(latestActualJennyReply, latestActualReplyReview)
   const reviewRequired = Boolean(latestActualJennyReply && !latestActualReplyReview)
   const nextStep = replyReviewStatus.nextStep ?? bridgeNextStep
@@ -3159,17 +3165,6 @@ function ProjectRoomsWorkspace({
             <span className="text-xs text-[#a59783]">{chatMessages.length ? `${chatMessages.length} recent messages` : 'No messages yet'}</span>
           </div>
           <div className="mt-2 grid min-h-0 flex-1 content-start gap-2 overflow-auto pr-1">
-            {runActive ? (
-              <article className="max-w-[85%] justify-self-start rounded-lg border border-[#60a5fa]/25 bg-[#60a5fa]/10 px-3 py-2 text-sm text-[#f3ebda] shadow-[0_10px_30px_rgba(0,0,0,0.18)]">
-                <div className="mb-1 flex items-center justify-between gap-3 text-xs">
-                  <span className="font-semibold">Jenny</span>
-                  <span className="text-[#93c5fd]">{runCopy.label}</span>
-                </div>
-                <p className="whitespace-pre-wrap break-words">
-                  {runCopy.detail}
-                </p>
-              </article>
-            ) : null}
             {chatMessages.length ? (
               chatMessages.map(chat => {
                 const replyReview = latestReviewByResponseId.get(chat.id)
@@ -3245,6 +3240,24 @@ function ProjectRoomsWorkspace({
                 Ask Jenny a bounded question or give her one safe next task below.
               </div>
             )}
+            {showJennyStatusInChat ? (
+              <article className={cn(
+                'max-w-[85%] justify-self-start rounded-lg border px-3 py-2 text-sm text-[#f3ebda] shadow-[0_10px_30px_rgba(0,0,0,0.18)]',
+                effectiveJennyRunProgress?.phase === 'error'
+                  ? 'border-red-500/30 bg-red-500/10'
+                  : 'border-[#60a5fa]/25 bg-[#60a5fa]/10'
+              )}>
+                <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+                  <span className="font-semibold">Jenny</span>
+                  <span className={effectiveJennyRunProgress?.phase === 'error' ? 'text-red-200' : 'text-[#93c5fd]'}>
+                    {runCopy.label}
+                  </span>
+                </div>
+                <p className="whitespace-pre-wrap break-words">
+                  {runCopy.detail}
+                </p>
+              </article>
+            ) : null}
             <div ref={chatEndRef} />
           </div>
         </section>
