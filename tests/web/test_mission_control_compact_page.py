@@ -90,6 +90,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Type one bounded project message, then tap Send to Jenny.",
         "projectRequestPreview",
         "displayBody",
+        'message.from_agent === "jenny" ? undefined : projectRequestPreview',
         "inlineRequestMatch",
         "structuredJennyHandoff",
         "Structured handoff:",
@@ -280,6 +281,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "compact-project-room",
     ]:
         assert expected in src
+    assert 'message.from_agent === "jenny" || message.status === "replied"' not in src
 
 
 def test_compact_project_chat_wraps_long_mobile_text() -> None:

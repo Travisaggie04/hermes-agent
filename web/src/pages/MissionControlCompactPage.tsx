@@ -838,7 +838,7 @@ function pendingJennyMessageCount(requests: JennyBridgeRequestRecord[], response
 function latestPendingGitHubBridgeMessage(messages: GitHubBridgeMessageRecord[]): GitHubBridgeMessageRecord | null {
   const repliedRequestIds = new Set(
     messages
-      .filter(message => message.status === "replied" || message.from_agent === "jenny")
+      .filter(message => message.from_agent === "jenny")
       .map(message => message.request_id)
       .filter(Boolean),
   );
@@ -880,7 +880,7 @@ function latestJennyReplyTimestamp(
 ): number {
   const responseTimes = responses.map(response => timestampValue(response.created_at));
   const githubReplyTimes = githubMessages
-    .filter(message => message.from_agent === "jenny" || message.status === "replied")
+    .filter(message => message.from_agent === "jenny")
     .map(message => timestampValue(message.created_at));
 
   return Math.max(0, ...responseTimes, ...githubReplyTimes);
@@ -2345,7 +2345,7 @@ function CompactProjectRoom({
   const repliedRequestIds = new Set(visibleBridgeResponses.map(response => response.request_id).filter(Boolean));
   const githubResponseIds = new Set(
     visibleGitHubBridgeMessages
-      .filter(message => message.status === "replied" || message.from_agent === "jenny")
+      .filter(message => message.from_agent === "jenny")
       .map(message => message.request_id)
       .filter(Boolean),
   );
@@ -2355,7 +2355,7 @@ function CompactProjectRoom({
     !githubResponseIds.has(message.request_id),
   ).length;
   const latestPending = latestPendingGitHubBridgeMessage(currentPendingGitHubBridgeMessages);
-  const githubResponseCount = visibleGitHubBridgeMessages.filter(message => message.status === "replied" || message.from_agent === "jenny").length;
+  const githubResponseCount = visibleGitHubBridgeMessages.filter(message => message.from_agent === "jenny").length;
   const pendingCount = pendingJennyMessageCount(currentPendingBridgeRequests, visibleBridgeResponses) + githubPendingCount;
   const responseCount = visibleBridgeResponses.length + githubResponseCount;
   const deliveryStatus = jennyDeliveryStatus(pendingCount, responseCount, bridgeStatus, githubBridgeStatus);
@@ -2386,10 +2386,10 @@ function CompactProjectRoom({
     })),
     ...visibleGitHubBridgeMessages.map(message => ({
       body: message.message,
-      displayBody: message.from_agent === "jenny" || message.status === "replied" ? undefined : projectRequestPreview(message.message, 750),
+      displayBody: message.from_agent === "jenny" ? undefined : projectRequestPreview(message.message, 750),
       id: message.github_comment_id || message.request_id || message.created_at || "github-message",
       meta: chatStatusLabel(message.status),
-      speaker: message.from_agent === "jenny" || message.status === "replied" ? "Jenny" as const : "You" as const,
+      speaker: message.from_agent === "jenny" ? "Jenny" as const : "You" as const,
       time: message.created_at,
     })),
   ].sort((left, right) => String(left.time ?? "").localeCompare(String(right.time ?? ""))).slice(-8);
