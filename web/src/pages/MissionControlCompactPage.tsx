@@ -861,7 +861,7 @@ function jennyWorkSessionSteps({
       state: hasError ? "blocked" : queued && !activeRun && !hasReply ? "active" : queued || hasReply ? "done" : "idle",
     },
     {
-      detail: activeRun ? "One guarded reply is running." : hasReply ? "Jenny run finished." : "Use Get Jenny's reply when ready.",
+      detail: activeRun ? "One guarded reply is running." : hasReply ? "Jenny run finished." : "Send a message to start one guarded reply.",
       label: "Jenny working",
       state: hasError ? "blocked" : activeRun ? "active" : hasReply ? "done" : "idle",
     },
@@ -1168,10 +1168,10 @@ function jennyNextStep(
     return "Open safety details, check the bridge error, then refresh replies.";
   }
   if (hasRunnablePendingMessage) {
-    return "Tap Get Jenny's reply to ask Jenny for one response to the latest message.";
+    return "A message is waiting for Jenny; send your next message only after this reply finishes.";
   }
   if (pendingCount) {
-    return "A message is waiting; refresh replies or wait for the bridge.";
+    return "A message is waiting; refresh replies or wait for Jenny.";
   }
   if (responseCount) {
     return "Review Jenny's latest reply, then send the next bounded message.";
@@ -1854,27 +1854,28 @@ export default function MissionControlCompactPage() {
       setRoomMessage("Write one bounded request before queuing a Jenny bridge message.");
       return;
     }
+    const requestId = bridgeRequestId();
     setRoomBusy(true);
     setRoomMessage("");
     try {
-      await fetchJSON(WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL, {
+      const result = await fetchJSON<{ message?: { request_id?: string } }>(WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL, {
         body: JSON.stringify({
           from_agent: "travis",
           message: buildJennyMailboxMessage(projectView, projectRequest, snapshot?.workspaceStatus ?? {}),
           project_id: projectView.project.project_id,
-          request_id: bridgeRequestId(),
+          request_id: requestId,
           to_agent: "jenny",
           user_message: projectRequest.trim(),
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
-      await refreshSnapshot();
       setJennyRunProgress({
-        detail: "Message sent. Use Get Jenny's reply when you want Jenny to answer this project message.",
-        phase: "queued",
+        detail: "Message sent. Jenny is starting one guarded reply.",
+        phase: "starting",
       });
-      setRoomMessage("Message sent. Replies refresh automatically; use Refresh replies under Details if you want to check now.");
+      setRoomMessage("Message sent. Jenny is answering...");
+      await runJennyOnce(projectView, result.message?.request_id || requestId);
     } catch (err) {
       setRoomMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1882,16 +1883,19 @@ export default function MissionControlCompactPage() {
     }
   }
 
-  async function runJennyOnce(projectView: ProjectViewModel) {
-    const pending = latestVisiblePendingGitHubBridgeMessageForProject(
-      [
-        ...unwrapRecords(snapshot?.githubBridgeStatus.pending_messages),
-        ...unwrapRecords(snapshot?.githubBridgeStatus.recent_messages),
-        ...unwrapRecords(snapshot?.githubBridgeStatus.response_messages),
-      ],
+  async function runJennyOnce(projectView: ProjectViewModel, requestId?: string) {
+    const pendingRequestId = requestId || latestVisiblePendingGitHubBridgeMessageForProject(
+      unwrapRecords(snapshot?.githubBridgeStatus.visible_pending_messages),
       projectView.project.project_id,
-    );
-    if (!pending?.request_id) {
+    )?.request_id || latestVisiblePendingGitHubBridgeMessageForProject(
+        [
+          ...unwrapRecords(snapshot?.githubBridgeStatus.pending_messages),
+          ...unwrapRecords(snapshot?.githubBridgeStatus.recent_messages),
+          ...unwrapRecords(snapshot?.githubBridgeStatus.response_messages),
+        ],
+        projectView.project.project_id,
+      )?.request_id;
+    if (!pendingRequestId) {
       setRoomMessage("Send Jenny a project message first; there is no pending request to answer.");
       return;
     }
@@ -1912,7 +1916,7 @@ export default function MissionControlCompactPage() {
         body: JSON.stringify({
           confirm_manual_hermes_answer: true,
           project_id: projectView.project.project_id,
-          request_id: pending.request_id,
+          request_id: pendingRequestId,
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -2191,6 +2195,7 @@ export default function MissionControlCompactPage() {
               bridgeResponses={snapshot?.jennyBridgeResponses.filter(response => response.project_id === selectedProjectView.project.project_id) ?? []}
               bridgeStatus={snapshot?.jennyBridgePollerStatus ?? {}}
               githubBridgeMessages={uniqueGitHubBridgeMessages([
+                ...unwrapRecords(snapshot?.githubBridgeStatus.visible_pending_messages),
                 ...unwrapRecords(snapshot?.githubBridgeStatus.pending_messages),
                 ...unwrapRecords(snapshot?.githubBridgeStatus.recent_messages),
                 ...unwrapRecords(snapshot?.githubBridgeStatus.response_messages),
@@ -2207,7 +2212,6 @@ export default function MissionControlCompactPage() {
               onRefreshBridge={() => void refreshBridge()}
               onRequestChange={setProjectRequest}
               onReviewReply={(decision, responseId, reply) => void reviewJennyReply(selectedProjectView, decision, responseId, reply)}
-              onRunJennyOnce={() => void runJennyOnce(selectedProjectView)}
               onSaveChallenge={() => void saveChallengeDraft(selectedProjectView)}
               onSaveLane={() => void saveReadOnlyLaneDraft(selectedProjectView)}
               onOpenSession={session => {
@@ -2488,7 +2492,6 @@ function CompactProjectRoom({
   onRefreshBridge,
   onReviewReply,
   onRequestChange,
-  onRunJennyOnce,
   onSaveChallenge,
   onSaveLane,
   onSelectProject,
@@ -2517,7 +2520,6 @@ function CompactProjectRoom({
   onRefreshBridge: () => void;
   onReviewReply: (decision: JennyReplyReviewDecision, responseId: string, reply: string) => void;
   onRequestChange: (value: string) => void;
-  onRunJennyOnce: () => void;
   onSaveChallenge: () => void;
   onSaveLane: () => void;
   onSelectProject: (projectId: string) => void;
@@ -2550,12 +2552,16 @@ function CompactProjectRoom({
     !githubResponseIds.has(message.request_id),
   ).length;
   const latestPending = latestPendingGitHubBridgeMessage(currentPendingGitHubBridgeMessages);
+  const projectedVisiblePending = latestVisiblePendingGitHubBridgeMessageForProject(
+    unwrapRecords(githubBridgeStatus.visible_pending_messages),
+    selectedProjectView.project.project_id,
+  );
   const githubResponseCount = visibleGitHubBridgeMessages.filter(message => message.from_agent === "jenny").length;
   const pendingCount = pendingJennyMessageCount(currentPendingBridgeRequests, visibleBridgeResponses) + githubPendingCount;
   const responseCount = visibleBridgeResponses.length + githubResponseCount;
   const deliveryStatus = jennyDeliveryStatus(pendingCount, responseCount, bridgeStatus, githubBridgeStatus);
   const connectionState = jennyConnectionState(pendingCount, responseCount, bridgeStatus, githubBridgeStatus);
-  const bridgeNextStep = jennyNextStep(pendingCount, responseCount, Boolean(latestPending), bridgeStatus, githubBridgeStatus);
+  const bridgeNextStep = jennyNextStep(pendingCount, responseCount, Boolean(projectedVisiblePending ?? latestPending), bridgeStatus, githubBridgeStatus);
   const activityItems = jennyActivityItems(githubBridgeStatus);
   const requestIntake = assessProjectRequest(projectRequest, review);
   const specFirstComposerText = buildSpecFirstComposerText(selectedProjectView.project.name, projectRequest, requestIntake);
@@ -2564,7 +2570,7 @@ function CompactProjectRoom({
   const runActive = isJennyRunActive(jennyRunProgress);
   const runCopy = jennyRunProgressCopy(jennyRunProgress, jennyRunElapsedSeconds);
   const bridgeError = normalizedBridgeError(bridgeStatus, githubBridgeStatus);
-  const hasRunnablePendingMessage = Boolean(latestPending);
+  const hasRunnablePendingMessage = Boolean(projectedVisiblePending ?? latestPending);
   const chatMessages: ProjectChatMessage[] = [
     ...visibleBridgeRequests.map(request => ({
       body: request.message,
@@ -2625,8 +2631,6 @@ function CompactProjectRoom({
     replyReviewTone: replyReviewStatus.tone,
     responseCount,
   });
-  const getJennyReplyLabel = operatorGuidance.label === "Retry Jenny once" ? "Try Jenny again" : "Get Jenny's reply";
-
   return (
     <section
       className="mt-1 flex min-h-[calc(100dvh-3rem)] w-full min-w-0 max-w-full flex-col overflow-hidden rounded-md border border-[#d4a574]/10 bg-[#15101a] sm:h-[calc(100vh-4rem)] sm:min-h-[34rem]"
@@ -2931,14 +2935,6 @@ function CompactProjectRoom({
           <div className="mt-2 grid min-w-0 gap-2 sm:flex sm:flex-wrap">
             <button className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300 sm:w-auto" disabled={busy || paused} onClick={onQueueBridge} type="button">
               {sendButtonLabel}
-            </button>
-            <button
-              className="w-full rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/15 disabled:opacity-60 dark:text-sky-300 sm:w-auto"
-              disabled={busy || paused || !latestPending}
-              onClick={onRunJennyOnce}
-              type="button"
-            >
-              {getJennyReplyLabel}
             </button>
           </div>
           <details className="mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/70 px-3 py-2 text-xs">

@@ -984,7 +984,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Jenny challenge review clears the approach')).toBeTruthy()
     expect(screen.getByText('Travis approval is recorded before work resumes')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Ask Jenny to review first' })).toHaveProperty('disabled', true)
-    expect(screen.getByRole('button', { name: "Get Jenny's reply" })).toHaveProperty('disabled', true)
+    expect(screen.queryByRole('button', { name: "Get Jenny's reply" })).toBeNull()
     expect(screen.getByRole('button', { name: 'Save challenge draft' })).toHaveProperty('disabled', true)
     expect(screen.getByRole('button', { name: 'Save read-only lane draft' })).toHaveProperty('disabled', true)
   })
@@ -1387,92 +1387,14 @@ describe('MissionControlView', () => {
         message: expect.stringContaining('First challenge the request like a senior engineer')
       })
     )
+    await waitFor(() => expect(answerMissionControlGitHubBridgeOnce).toHaveBeenCalledWith({
+      confirm_manual_hermes_answer: true,
+      project_id: 'project-hermes-mission-control',
+      request_id: 'github-bridge-request-created'
+    }))
   })
 
-  it('runs Jenny once for the latest pending GitHub bridge request only', async () => {
-    getMissionControlGitHubBridgeStatus.mockResolvedValue({
-      count: 1,
-      daemon_enabled: false,
-      discord_automation_enabled: false,
-      dispatch_enabled: false,
-      display_only: true,
-      execution_enabled: false,
-      last_error: '',
-      last_poll_at: '2026-06-13T01:00:00Z',
-      last_response_at: '2026-06-13T01:05:00Z',
-      last_response_request_id: 'github-bridge-request-1',
-      last_status: 'poll_completed',
-      manual_start_only: true,
-      mode: 'watch_foreground',
-      foreground_watch_supported: true,
-      foreground_watch_running: true,
-      model_routing_enabled: false,
-      pending_count: 1,
-      recent_messages: [
-        {
-          record: {
-            created_at: '2026-06-13T01:00:00Z',
-            from_agent: 'travis',
-            message: 'Review the Mission Control room.',
-            project_id: 'project-hermes-mission-control',
-            request_id: 'github-bridge-request-1',
-            status: 'queued',
-            to_agent: 'jenny'
-          }
-        },
-        {
-          record: {
-            created_at: '2026-06-13T01:05:00Z',
-            from_agent: 'jenny',
-            message: 'I can see the Mission Control room request.',
-            project_id: 'project-hermes-mission-control',
-            request_id: 'github-bridge-request-1',
-            status: 'replied',
-            to_agent: 'travis'
-          }
-        },
-        {
-          record: {
-            created_at: '2026-06-13T01:06:00Z',
-            from_agent: 'travis',
-            message: 'Second request.',
-            project_id: 'project-hermes-mission-control',
-            request_id: 'github-bridge-request-2',
-            status: 'queued',
-            to_agent: 'jenny'
-          }
-        },
-        {
-          record: {
-            created_at: '2026-06-13T01:07:00Z',
-            from_agent: 'codex',
-            message: 'Review PR #999 for bridge smoke only.',
-            project_id: 'project-hermes-mission-control',
-            request_id: 'codex-bridge-smoke-later',
-            status: 'queued',
-            to_agent: 'jenny'
-          }
-        },
-        {
-          record: {
-            created_at: '2026-06-13T01:08:00Z',
-            from_agent: 'travis',
-            message: 'Other project request.',
-            project_id: 'project-tool-tally',
-            request_id: 'github-bridge-other-project',
-            status: 'queued',
-            to_agent: 'jenny'
-          }
-        }
-      ],
-      response_messages: [],
-      send_to_jenny_enabled: false,
-      session_send_enabled: false,
-      status_records: [],
-      stored: false,
-      timer_enabled: false,
-      worker_enabled: false
-    })
+  it('sends a chat message and immediately runs one guarded Jenny reply', async () => {
     let resolveAnswer: (value: unknown) => void = () => undefined
     answerMissionControlGitHubBridgeOnce.mockReturnValueOnce(new Promise(resolve => {
       resolveAnswer = resolve
@@ -1480,14 +1402,21 @@ describe('MissionControlView', () => {
 
     await renderMissionControl()
 
-    fireEvent.click(await screen.findByRole('button', { name: "Get Jenny's reply" }))
+    fireEvent.change(await screen.findByLabelText('Message Jenny'), { target: { value: 'Please check the chat bridge.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
     expect((await screen.findAllByText('Waiting for Jenny')).length).toBeGreaterThanOrEqual(2)
     expect((await screen.findAllByText(/Mission Control sent the latest project message to Jenny/)).length).toBeGreaterThanOrEqual(2)
+    await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request_id: expect.stringContaining('mission-control-chat-'),
+        user_message: 'Please check the chat bridge.'
+      })
+    ))
     await waitFor(() => expect(answerMissionControlGitHubBridgeOnce).toHaveBeenCalledTimes(1))
     expect(answerMissionControlGitHubBridgeOnce).toHaveBeenCalledWith({
       confirm_manual_hermes_answer: true,
       project_id: 'project-hermes-mission-control',
-      request_id: 'github-bridge-request-2'
+      request_id: 'github-bridge-request-created'
     })
     resolveAnswer({
       answered: true,
@@ -1496,9 +1425,9 @@ describe('MissionControlView', () => {
       response: {
         created_at: '2026-06-13T01:07:00Z',
         from_agent: 'jenny',
-        message: 'Jenny answered the second request.',
+        message: 'Jenny answered the chat request.',
         project_id: 'project-hermes-mission-control',
-        request_id: 'github-bridge-request-2',
+        request_id: 'github-bridge-request-created',
         status: 'replied',
         to_agent: 'travis'
       },
