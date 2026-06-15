@@ -202,6 +202,9 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Spec-first request for Jenny:",
         "Jenny, do not implement yet. First challenge the request like a senior engineer:",
         "Return only the spec/challenge review and the recommended next safe lane.",
+        "COMPACT_JENNY_MESSAGE_LIMIT = 1900",
+        "boundCompactJennyMessage",
+        "COMPACT_JENNY_MESSAGE_LIMIT - 3",
         "Queue for Jenny bridge",
         "Refresh replies",
         "w-full min-w-0 max-w-[100dvw] overflow-x-hidden",
@@ -336,6 +339,19 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
     assert 'message.from_agent === "jenny" || message.status === "replied"' not in src
 
 
+def test_compact_jenny_mailbox_payload_is_bounded() -> None:
+    src = page_source()
+    message_fn = function_source(src, "buildJennyMailboxMessage")
+    phone_packet_fn = function_source(src, "buildPhoneSafeProjectPacket")
+    queue_fn = function_source(src, "queueJennyBridgeMessage")
+
+    assert "boundCompactJennyMessage(buildSpecFirstComposerText" in message_fn
+    assert "boundCompactJennyMessage(buildPhoneSafeProjectPacket" in message_fn
+    assert "return boundCompactJennyMessage(packet)" in phone_packet_fn
+    assert "message: buildJennyMailboxMessage" in queue_fn
+    assert "user_message: boundCompactJennyMessage(chatRequest)" in queue_fn
+
+
 def test_compact_project_chat_wraps_long_mobile_text() -> None:
     src = page_source()
     for expected in [
@@ -365,7 +381,8 @@ def test_compact_project_chat_keeps_primary_flow_chat_first() -> None:
     assert 'className="sr-only"' in transcript_src
     assert 'Conversation' in transcript_src
     assert "rounded-md border border-[#f3ebda]/10 bg-[#120d17] p-2" not in transcript_src
-    composer_src = room[composer_start - 500:composer_start + 500]
+    composer_section_start = room.rindex("sticky bottom-0 z-10", 0, composer_start)
+    composer_src = room[composer_section_start:composer_start + 500]
     assert "sticky bottom-0 z-10" in composer_src
     assert "backdrop-blur" in composer_src
 
