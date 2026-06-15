@@ -163,6 +163,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "assessProjectRequest",
         "Approval check",
         "Contains protected actions; Jenny should challenge scope and identify approvals before work.",
+        "cleanup|update|upgrade|install|configure|migrate|worker",
         "Question assumptions, split the request into a bounded lane",
         "Jenny instruction:",
         "jennyReplyContract",
