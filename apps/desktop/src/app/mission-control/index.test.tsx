@@ -815,6 +815,8 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText((_, element) => element?.textContent?.includes('Next: Review before relying') ?? false).length).toBeGreaterThan(0)
     expect(screen.getByRole('region', { name: 'Latest Jenny outcome' })).toBeTruthy()
     expect(screen.getByText('Review before relying')).toBeTruthy()
+    expect(screen.getAllByText(/Review Jenny's latest reply before relying on it/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Open Review reply on the latest Jenny message/).length).toBeGreaterThan(0)
     expect(screen.getByText(/Next: Use the reply review buttons/)).toBeTruthy()
     expect(screen.getByLabelText('Jenny operator guidance')).toBeTruthy()
     expect(screen.getByText('Review Jenny reply')).toBeTruthy()
