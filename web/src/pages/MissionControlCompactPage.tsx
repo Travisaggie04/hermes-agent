@@ -1473,6 +1473,13 @@ function shouldAutoChallengeRequest(intake: RequestIntakeAssessment): boolean {
   return intake.state !== "ready";
 }
 
+function jennySendButtonLabel(intake: RequestIntakeAssessment): string {
+  if (shouldAutoChallengeRequest(intake)) {
+    return "Ask Jenny to challenge first";
+  }
+  return "Send to Jenny";
+}
+
 function buildCompactNextLanePrompt(projectView: ProjectViewModel, workspaceStatus: WorkspaceStatus): string {
   const guidance = PROJECT_LANE_GUIDANCE[projectView.project.project_id] ?? "Read-only Mission Control status lane. Report current state and the next safe manual step.";
   return [
@@ -2463,6 +2470,7 @@ function CompactProjectRoom({
   const activityItems = jennyActivityItems(githubBridgeStatus);
   const requestIntake = assessProjectRequest(projectRequest, review);
   const specFirstComposerText = buildSpecFirstComposerText(selectedProjectView.project.name, projectRequest, requestIntake);
+  const sendButtonLabel = jennySendButtonLabel(requestIntake);
   const latestReviewByResponseId = latestReplyReviewByResponseId(replyReviews);
   const runActive = isJennyRunActive(jennyRunProgress);
   const runCopy = jennyRunProgressCopy(jennyRunProgress, jennyRunElapsedSeconds);
@@ -2783,7 +2791,7 @@ function CompactProjectRoom({
 
           <div className="mt-2 grid min-w-0 gap-2 sm:flex sm:flex-wrap">
             <button className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300 sm:w-auto" disabled={busy || paused} onClick={onQueueBridge} type="button">
-              Send to Jenny
+              {sendButtonLabel}
             </button>
             <button
               className="w-full rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/15 disabled:opacity-60 dark:text-sky-300 sm:w-auto"
@@ -2807,9 +2815,19 @@ function CompactProjectRoom({
           )}>
             <span className="font-semibold">Request intake: {requestIntake.label}.</span> {requestIntake.detail}
             {shouldAutoChallengeRequest(requestIntake) ? (
-              <span className="mt-1 block">Send to Jenny will ask for a challenge/spec-first reply before any implementation plan.</span>
+              <span className="mt-1 block">Ask Jenny to challenge first will request a spec-first reply before any implementation plan.</span>
             ) : null}
           </p>
+          {shouldAutoChallengeRequest(requestIntake) ? (
+            <div aria-label="Jenny challenge checklist" className="mt-2 max-w-full rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 [overflow-wrap:anywhere] dark:text-amber-100">
+              <div className="font-semibold">Jenny must challenge first</div>
+              <ul className="mt-1 grid gap-1">
+                <li>Question missing facts and unsafe assumptions.</li>
+                <li>Push back on protected actions or broad scope.</li>
+                <li>Return the smallest safe lane with evidence and approval needs.</li>
+              </ul>
+            </div>
+          ) : null}
           <details className="mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/70 px-3 py-2 text-xs">
             <summary className="cursor-pointer text-sm font-semibold">Advanced request options</summary>
             <p className="mt-2 text-muted-foreground [overflow-wrap:anywhere]">
