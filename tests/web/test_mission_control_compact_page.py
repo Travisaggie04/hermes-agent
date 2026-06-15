@@ -343,6 +343,8 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
         "max-w-[100dvw]",
         "min-[420px]:grid-cols-2",
         "overflow-y-auto overflow-x-hidden",
+        "sticky bottom-0 z-10",
+        "pb-[calc(env(safe-area-inset-bottom)+0.5rem)]",
         "[overflow-wrap:anywhere]",
         "[word-break:break-word]",
         "min-w-0 max-w-full",
@@ -352,6 +354,20 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
         "grid min-w-0 grid-cols-1 gap-2 text-xs sm:grid-cols-2",
     ]:
         assert expected in src
+
+
+def test_compact_project_chat_keeps_primary_flow_chat_first() -> None:
+    src = page_source()
+    room = function_source(src, "CompactProjectRoom")
+    transcript_start = room.index('aria-label="Project chat transcript"')
+    composer_start = room.index('placeholder={paused ? "This project is on hold until Jenny is stable."')
+    transcript_src = room[transcript_start:composer_start]
+    assert 'className="sr-only"' in transcript_src
+    assert 'Conversation' in transcript_src
+    assert "rounded-md border border-[#f3ebda]/10 bg-[#120d17] p-2" not in transcript_src
+    composer_src = room[composer_start - 500:composer_start + 500]
+    assert "sticky bottom-0 z-10" in composer_src
+    assert "backdrop-blur" in composer_src
 
 
 def test_compact_route_parks_kanban_until_real_task_board_is_reliable() -> None:
