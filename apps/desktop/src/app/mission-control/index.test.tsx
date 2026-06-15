@@ -827,8 +827,7 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText((_, element) => element?.textContent?.includes('Next: Review before relying') ?? false).length).toBeGreaterThan(0)
     expect(screen.getByRole('region', { name: 'Latest Jenny outcome' })).toBeTruthy()
     expect(screen.getByText('Review before relying')).toBeTruthy()
-    expect(screen.getAllByText(/Review Jenny's latest reply before relying on it/).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/Open Review reply on the latest Jenny message/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Review the latest Jenny reply in the chat before acting on it/).length).toBeGreaterThan(0)
     expect(screen.getByText(/Next: Use the reply review buttons/)).toBeTruthy()
     expect(screen.getByLabelText('Jenny operator guidance')).toBeTruthy()
     expect(screen.getByText('Review Jenny reply')).toBeTruthy()
@@ -1170,7 +1169,7 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText(/Pending \d+/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Replies \d+/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Reply quality/).length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Review reply').length).toBeGreaterThan(0)
+    expect(screen.getAllByLabelText('Review latest Jenny reply').length).toBeGreaterThan(0)
     expect(screen.getByText('Phone-safe packet')).toBeTruthy()
     expect(screen.getByText('Previous sessions')).toBeTruthy()
     expect(screen.getByText('Hermes storage cleanup lane')).toBeTruthy()
@@ -1195,9 +1194,9 @@ describe('MissionControlView', () => {
     expect((composer as HTMLTextAreaElement).value).toContain('Spec-first request for Jenny:')
     expect((composer as HTMLTextAreaElement).value).toContain('Jenny, do not implement yet. First challenge the request like a senior engineer:')
     expect((composer as HTMLTextAreaElement).value).toContain('Return only the spec/challenge review and the recommended next safe lane.')
-    expect(screen.getAllByRole('button', { name: 'Draft acceptance note' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: 'Looks good' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'Ask for evidence' }).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('button', { name: 'Challenge plan' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: 'Challenge' }).length).toBeGreaterThan(0)
     expect(screen.getAllByText('Reviewed: needs evidence').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Needs evidence').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Ask Jenny for exact files, commands, checks, CI\/runtime status/).length).toBeGreaterThan(0)
@@ -1207,7 +1206,7 @@ describe('MissionControlView', () => {
       expect.objectContaining({
         decision: 'needs_evidence',
         project_id: 'project-hermes-mission-control',
-        response_id: 'bridge-response-1',
+        response_id: 'github-bridge-request-1',
         reviewer: 'travis'
       })
     )

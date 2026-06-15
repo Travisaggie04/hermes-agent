@@ -2905,7 +2905,12 @@ function CompactProjectRoom({
               </article>
             ) : null}
             {chatMessages.length ? (
-              chatMessages.map(chat => (
+              chatMessages.map(chat => {
+                const replyReview = latestReviewByResponseId.get(chat.id)
+                const isLatestJennyReply = chat.speaker === "Jenny" && latestActualJennyReply?.id === chat.id
+                const showLatestReplyActions = isLatestJennyReply && !replyReview
+
+                return (
                 <article
                   className={cn(
                     "min-w-0 max-w-full rounded-lg border px-3 py-2 text-sm [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]",
@@ -2921,48 +2926,52 @@ function CompactProjectRoom({
                     {chat.speaker === "You" ? chat.displayBody ?? projectRequestPreview(chat.body, 750) : compactText(chat.body, 750)}
                   </p>
                   {chat.speaker === "Jenny" ? (
-                    <details className="sr-only mt-2 max-w-full overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#15101a]/50 px-2 py-1.5 text-xs">
-                      <summary className="cursor-pointer font-semibold text-[#a59783]">Review reply</summary>
-                      <div className="mt-2 grid min-w-0 gap-2">
-                      <p className={cn(
-                        "rounded-md border px-2 py-1 text-[0.68rem] [overflow-wrap:anywhere]",
-                        jennyReplyContract(chat.body).tone === "complete"
-                          ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
-                          : "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-100",
-                      )}>
-                        {jennyReplyContract(chat.body).label}
-                      </p>
-                      <p className="rounded-md border border-[#f3ebda]/10 bg-[#15101a]/60 px-2 py-1 text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere]">
-                        {jennyReplyReviewDecisionLabel(latestReviewByResponseId.get(chat.id)?.decision)}
-                      </p>
-                      <div className="flex min-w-0 flex-wrap gap-1.5" aria-label="Jenny reply review actions">
-                        <button
-                          className="rounded-md border border-emerald-500/30 px-2 py-1 text-[0.68rem] font-semibold text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
-                          onClick={() => onReviewReply("accepted", chat.id, chat.body)}
-                          type="button"
-                        >
-                          Draft acceptance note
-                        </button>
-                        <button
-                          className="rounded-md border border-sky-500/30 px-2 py-1 text-[0.68rem] font-semibold text-sky-700 hover:bg-sky-500/10 dark:text-sky-300"
-                          onClick={() => onReviewReply("needs_evidence", chat.id, chat.body)}
-                          type="button"
-                        >
-                          Ask for evidence
-                        </button>
-                        <button
-                          className="rounded-md border border-amber-500/30 px-2 py-1 text-[0.68rem] font-semibold text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
-                          onClick={() => onReviewReply("needs_safer_plan", chat.id, chat.body)}
-                          type="button"
-                        >
-                          Challenge plan
-                        </button>
+                    <div className="mt-2 grid min-w-0 gap-2 border-t border-[#f3ebda]/10 pt-2 text-[0.68rem]">
+                      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                        <span className={cn(
+                          "rounded-full border px-2 py-1 font-semibold [overflow-wrap:anywhere]",
+                          jennyReplyContract(chat.body).tone === "complete"
+                            ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
+                            : "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-100",
+                        )}>
+                          {jennyReplyContract(chat.body).label}
+                        </span>
+                        {replyReview ? (
+                          <span className="rounded-full border border-[#f3ebda]/10 bg-[#15101a]/60 px-2 py-1 text-[#a59783] [overflow-wrap:anywhere]">
+                            {jennyReplyReviewDecisionLabel(replyReview.decision)}
+                          </span>
+                        ) : null}
                       </div>
-                      </div>
-                    </details>
+                      {showLatestReplyActions ? (
+                        <div className="flex min-w-0 flex-wrap gap-1.5" aria-label="Review latest Jenny reply">
+                          <button
+                            className="rounded-full border border-emerald-500/30 px-2.5 py-1 font-semibold text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
+                            onClick={() => onReviewReply("accepted", chat.id, chat.body)}
+                            type="button"
+                          >
+                            Looks good
+                          </button>
+                          <button
+                            className="rounded-full border border-sky-500/30 px-2.5 py-1 font-semibold text-sky-700 hover:bg-sky-500/10 dark:text-sky-300"
+                            onClick={() => onReviewReply("needs_evidence", chat.id, chat.body)}
+                            type="button"
+                          >
+                            Ask for evidence
+                          </button>
+                          <button
+                            className="rounded-full border border-amber-500/30 px-2.5 py-1 font-semibold text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
+                            onClick={() => onReviewReply("needs_safer_plan", chat.id, chat.body)}
+                            type="button"
+                          >
+                            Challenge
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   ) : null}
                 </article>
-              ))
+                )
+              })
             ) : (
               <p className="rounded-xl border border-dashed border-[#f3ebda]/10 p-3 text-sm text-[#a59783] [overflow-wrap:anywhere]">
                 Ask Jenny a bounded question or give her one safe next task below.
@@ -2974,9 +2983,8 @@ function CompactProjectRoom({
 
         <div className="mt-3 border-t border-[#f3ebda]/10 pt-3">
           {reviewRequired ? (
-            <p className="mb-2 max-w-full rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 [overflow-wrap:anywhere] dark:text-amber-100" role="status">
-              <span className="font-semibold">Review Jenny&apos;s latest reply before relying on it.</span>
-              <span className="sr-only ml-1">Open Review reply on the latest Jenny message to accept it, ask for evidence, or challenge the plan.</span>
+            <p className="mb-2 max-w-full text-xs font-semibold text-amber-700 [overflow-wrap:anywhere] dark:text-amber-100" role="status">
+              Review the latest Jenny reply in the chat before acting on it.
             </p>
           ) : null}
           <label className="grid gap-1 text-sm font-medium">
