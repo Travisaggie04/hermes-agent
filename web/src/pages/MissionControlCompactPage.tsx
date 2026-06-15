@@ -491,6 +491,9 @@ function compactText(value: string | string[] | undefined, maxChars: number): st
 
 function projectRequestPreview(value: string, maxChars: number): string {
   const normalized = value.replace(/\s+/g, " ").trim();
+  const specFirstRequestMatch = normalized.match(
+    /^Spec-first request for Jenny:\s*Project:\s*.+?\s+Request Travis is considering:\s*([\s\S]*?)(?=\s+Current intake:|$)/i,
+  );
   const projectRoomRequestMatch = normalized.match(
     /^Project room request:\s*(?:.+?\s+)?Request:\s*([\s\S]*?)(?=\s+(?:Request intake:|Current brief:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:)|$)/i,
   );
@@ -503,8 +506,12 @@ function projectRequestPreview(value: string, maxChars: number): string {
   const fallbackMatch = normalized.match(
     /^(.+?)\s+(?=Current brief:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:)/i,
   );
-  const candidate = projectRoomRequestMatch?.[1] ?? requestMatch?.[1] ?? inlineRequestMatch?.[1] ?? fallbackMatch?.[1] ?? value;
+  const candidate = specFirstRequestMatch?.[1] ?? projectRoomRequestMatch?.[1] ?? requestMatch?.[1] ?? inlineRequestMatch?.[1] ?? fallbackMatch?.[1] ?? value;
   return compactText(candidate, maxChars);
+}
+
+function chatRequestText(value: string): string {
+  return projectRequestPreview(value, 1200);
 }
 
 function cleanChatDisplayMessage(metadata: Record<string, unknown> | undefined, fallback: string, maxChars: number): string {
@@ -777,14 +784,14 @@ function jennyRunProgressCopy(progress: JennyRunProgress | null, elapsedSeconds:
 
   if (progress.phase === "queued") {
     return {
-      detail: progress.detail || "Your message is queued for Jenny.",
-      label: "Queued",
+      detail: progress.detail || "Sent. Waiting for Jenny to start.",
+      label: "Sent",
     };
   }
   if (progress.phase === "complete") {
     return {
-      detail: progress.detail || "Jenny replied. Review the latest response before sending the next message.",
-      label: "Reply received",
+      detail: progress.detail || "Jenny replied.",
+      label: "Jenny replied",
     };
   }
   if (progress.phase === "error") {
@@ -795,8 +802,8 @@ function jennyRunProgressCopy(progress: JennyRunProgress | null, elapsedSeconds:
   }
 
   return {
-    detail: `${progress.detail || "Mission Control is waiting for Jenny to finish one guarded reply."} Refreshing status every 2.5s. Elapsed ${elapsedSeconds}s.`,
-    label: progress.phase === "starting" ? "Starting Jenny" : "Waiting for Jenny",
+    detail: `${progress.detail || "Jenny is working on one guarded reply."} Elapsed ${elapsedSeconds}s.`,
+    label: progress.phase === "starting" ? "Starting Jenny" : "Jenny is working",
   };
 }
 
@@ -870,7 +877,7 @@ function recordBackedJennyRunProgress(
         };
       case "message_posted":
         return {
-          detail: "Your message is queued for Jenny. Mission Control will refresh the bridge status automatically.",
+          detail: "Sent. Waiting for Jenny to start.",
           phase: "queued",
         };
       default:
@@ -1107,7 +1114,7 @@ function normalizedBridgeError(bridgeStatus: JennyBridgePollerStatus, githubBrid
 function noReplyStatusMessage(error: unknown): string {
   const rawError = error ?? "no matching pending request";
   if (isNoPendingBridgeError(rawError)) {
-    return "No message is waiting for Jenny. Send a message first.";
+    return "Jenny is caught up. Send a new message to start the next reply.";
   }
   return `Jenny did not reply: ${String(rawError)}`;
 }
@@ -1141,7 +1148,7 @@ function jennyConnectionState(
 ): { detail: string; label: string; tone: "bad" | "good" | "idle" | "warn" } {
   if (normalizedBridgeError(bridgeStatus, githubBridgeStatus)) {
     return {
-      detail: "Open advanced controls, check the bridge error, then refresh replies.",
+      detail: "Jenny hit a guarded bridge issue. Open Safety details only if you need diagnostics.",
       label: "Jenny needs attention",
       tone: "bad",
     };
@@ -1211,13 +1218,13 @@ function jennyNextStep(
   githubBridgeStatus: GitHubBridgeStatus,
 ): string {
   if (normalizedBridgeError(bridgeStatus, githubBridgeStatus)) {
-    return "Open safety details, check the bridge error, then refresh replies.";
+    return "Jenny hit a guarded bridge issue. Open Safety details only if you need diagnostics.";
   }
   if (hasRunnablePendingMessage) {
     return "A message is waiting for Jenny; send your next message only after this reply finishes.";
   }
   if (pendingCount) {
-    return "A message is waiting; refresh replies or wait for Jenny.";
+    return "A message is waiting for Jenny.";
   }
   if (responseCount) {
     return "Review Jenny's latest reply, then send the next bounded message.";
@@ -1244,7 +1251,7 @@ function jennyOperatorGuidance({
     return {
       detail: hasRunnablePendingMessage
         ? "Jenny hit a guarded error. Send a short follow-up only after the error is reviewed."
-        : "Refresh replies first. If the error remains, inspect the bridge before sending more work.",
+        : "Jenny hit a guarded error. Open Safety details if you need the bridge diagnostics before sending more work.",
       label: "Jenny needs attention",
       tone: "bad",
     };
@@ -1673,11 +1680,12 @@ function buildPhoneSafeProjectPacket(projectView: ProjectViewModel, requestText:
 }
 
 function buildJennyMailboxMessage(projectView: ProjectViewModel, requestText: string, workspaceStatus: WorkspaceStatus): string {
-  const intake = assessProjectRequest(requestText, projectView.challengeReview);
+  const request = chatRequestText(requestText);
+  const intake = assessProjectRequest(request, projectView.challengeReview);
   if (shouldAutoChallengeRequest(intake)) {
-    return buildSpecFirstComposerText(projectView.project.name, requestText, intake);
+    return buildSpecFirstComposerText(projectView.project.name, request, intake);
   }
-  return buildPhoneSafeProjectPacket(projectView, requestText, workspaceStatus);
+  return buildPhoneSafeProjectPacket(projectView, request, workspaceStatus);
 }
 
 function buildHermesUpdateLanePacket(workspaceStatus: WorkspaceStatus): string {
@@ -1883,7 +1891,7 @@ export default function MissionControlCompactPage() {
   }
 
   async function copyPhoneSafePacket(projectView: ProjectViewModel) {
-    const packet = buildPhoneSafeProjectPacket(projectView, projectRequest, snapshot?.workspaceStatus ?? {});
+    const packet = buildPhoneSafeProjectPacket(projectView, chatRequestText(projectRequest), snapshot?.workspaceStatus ?? {});
     if (!navigator.clipboard?.writeText) {
       setRoomMessage("Clipboard unavailable. Select and copy the phone-safe packet manually.");
       return;
@@ -1893,7 +1901,8 @@ export default function MissionControlCompactPage() {
   }
 
   async function queueJennyBridgeMessage(projectView: ProjectViewModel) {
-    if (!projectRequest.trim()) {
+    const chatRequest = chatRequestText(projectRequest);
+    if (!chatRequest) {
       setRoomMessage("Write one bounded request before queuing a Jenny bridge message.");
       return;
     }
@@ -1904,11 +1913,11 @@ export default function MissionControlCompactPage() {
       const result = await fetchJSON<{ message?: { request_id?: string } }>(WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL, {
         body: JSON.stringify({
           from_agent: "travis",
-          message: buildJennyMailboxMessage(projectView, projectRequest, snapshot?.workspaceStatus ?? {}),
+          message: buildJennyMailboxMessage(projectView, chatRequest, snapshot?.workspaceStatus ?? {}),
           project_id: projectView.project.project_id,
           request_id: requestId,
           to_agent: "jenny",
-          user_message: projectRequest.trim(),
+          user_message: chatRequest,
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -2762,7 +2771,7 @@ function CompactProjectRoom({
           </div>
         </div>
         <section
-          className="mt-1 flex max-w-full flex-wrap items-center justify-between gap-2 border-b border-[#f3ebda]/10 px-1 pb-2 text-xs text-[#a59783]"
+          className="sr-only"
           aria-label="Jenny chat status"
         >
           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -2893,7 +2902,7 @@ function CompactProjectRoom({
           </div>
         </details>
 
-        <section className="mt-2 flex min-h-[18rem] min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#251d2c]/70 p-2" aria-label="Project chat transcript">
+        <section className="mt-2 flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#120d17] p-2" aria-label="Project chat transcript">
           <div className="grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
             <h3 className="text-sm font-semibold text-[#f3ebda]">Conversation</h3>
             <span className="text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
@@ -2997,16 +3006,16 @@ function CompactProjectRoom({
           </div>
         </section>
 
-        <div className="mt-3 border-t border-[#f3ebda]/10 pt-3">
+        <div className="mt-3 max-w-full overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#15101a] p-2">
           {reviewRequired ? (
             <p className="mb-2 max-w-full text-xs font-semibold text-amber-700 [overflow-wrap:anywhere] dark:text-amber-100" role="status">
               Review the latest Jenny reply in the chat before acting on it.
             </p>
           ) : null}
           <label className="grid gap-1 text-sm font-medium">
-            Message Jenny
+            <span className="sr-only">Message Jenny</span>
             <textarea
-              className="min-h-16 w-full min-w-0 max-w-full rounded-md border border-[#f3ebda]/10 bg-[#15101a] px-3 py-2 text-sm text-[#f3ebda] outline-none transition placeholder:text-[#6e6353] focus:border-[#d4a574]/50"
+              className="min-h-16 w-full min-w-0 max-w-full rounded-md border border-[#f3ebda]/10 bg-[#0e0b12] px-3 py-2 text-sm text-[#f3ebda] outline-none transition placeholder:text-[#6e6353] focus:border-[#d4a574]/50"
               disabled={paused}
               onChange={event => onRequestChange(event.target.value)}
               placeholder={paused ? "This project is on hold until Jenny is stable." : "Tell Jenny what you want to discuss or ask her to do next..."}
@@ -3014,12 +3023,12 @@ function CompactProjectRoom({
             />
           </label>
 
-          <div className="mt-2 grid min-w-0 gap-2 sm:flex sm:flex-wrap">
-            <button className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300 sm:w-auto" disabled={busy || paused} onClick={onQueueBridge} type="button">
+          <div className="mt-2 flex min-w-0 justify-end">
+            <button className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300 min-[420px]:w-auto" disabled={busy || paused} onClick={onQueueBridge} type="button">
               {sendButtonLabel}
             </button>
           </div>
-          <details className="mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/70 px-3 py-2 text-xs">
+          <details className="hidden" hidden>
             <summary className="cursor-pointer text-sm font-semibold">Request options</summary>
             <button className="mt-2 w-full rounded-lg border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60 sm:w-auto" disabled={busy} onClick={onRefreshBridge} type="button">
               Refresh replies

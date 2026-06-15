@@ -1192,10 +1192,8 @@ describe('MissionControlView', () => {
     expect(transcript.queryByText(/Forbidden: no direct session send/)).toBeNull()
 
     const composer = screen.getByPlaceholderText('Tell Jenny what you want to discuss or ask her to do next...')
-    fireEvent.click(screen.getByRole('button', { name: 'Use spec-first prompt' }))
-    expect((composer as HTMLTextAreaElement).value).toContain('Spec-first request for Jenny:')
-    expect((composer as HTMLTextAreaElement).value).toContain('Jenny, do not implement yet. First challenge the request like a senior engineer:')
-    expect((composer as HTMLTextAreaElement).value).toContain('Return only the spec/challenge review and the recommended next safe lane.')
+    expect(screen.queryByRole('button', { name: 'Use spec-first prompt' })).toBeNull()
+    expect((composer as HTMLTextAreaElement).value).toBe('')
     expect(screen.getAllByRole('button', { name: 'Looks good' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'Ask for evidence' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'Challenge' }).length).toBeGreaterThan(0)
@@ -1409,9 +1407,13 @@ describe('MissionControlView', () => {
 
     fireEvent.change(await screen.findByLabelText('Message Jenny'), { target: { value: 'Please check the chat bridge.' } })
     const composer = screen.getByLabelText('Message Jenny') as HTMLTextAreaElement
+    expect(screen.queryByRole('button', { name: /get.*jenny/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /try jenny/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /run jenny/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Refresh replies' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     await waitFor(() => expect(composer.value).toBe(''))
-    expect((await screen.findAllByText('Waiting for Jenny')).length).toBeGreaterThanOrEqual(2)
+    expect((await screen.findAllByText('Jenny is working')).length).toBeGreaterThanOrEqual(1)
     expect((await screen.findAllByText(/Mission Control sent the latest project message to Jenny/)).length).toBeGreaterThanOrEqual(2)
     await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1538,7 +1540,7 @@ describe('MissionControlView', () => {
     await renderMissionControl()
 
     expect((await screen.findAllByText(/Jenny is working on the latest project message/)).length).toBeGreaterThan(0)
-    expect((await screen.findAllByText('Waiting for Jenny')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('Jenny is working')).length).toBeGreaterThan(0)
     expect(answerMissionControlGitHubBridgeOnce).not.toHaveBeenCalled()
   })
 
@@ -1733,7 +1735,7 @@ describe('MissionControlView', () => {
     expect(text).toContain('createMissionControlSessionProjectLink')
     expect(text).toContain('isNoPendingBridgeError')
     expect(text).toContain('normalizedBridgeError')
-    expect(text).toContain('No message is waiting for Jenny. Send a message first.')
+    expect(text).toContain('Jenny is caught up. Send a new message to start the next reply.')
 
     for (const forbidden of [
       '.post(',
