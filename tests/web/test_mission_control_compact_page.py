@@ -10,7 +10,11 @@ def page_source() -> str:
 
 
 def function_source(src: str, name: str) -> str:
-    start = src.index(f"async function {name}")
+    async_marker = f"async function {name}"
+    function_marker = f"function {name}"
+    start = src.find(async_marker)
+    if start == -1:
+        start = src.index(function_marker)
     next_start = src.find("\n  async function ", start + 1)
     if next_start == -1:
         next_start = src.find("\n  function ", start + 1)
@@ -83,7 +87,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Use the reply review buttons: accept only if evidence is clear, otherwise ask for evidence or challenge the plan.",
         "Jenny operator guidance",
         "jennyOperatorGuidance",
-        "Retry Jenny once",
+        "Jenny needs attention",
         "Review Jenny reply",
         "one reply at a time",
         "evidence required",
@@ -121,7 +125,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Pending {pendingCount}",
         "Replies {responseCount}",
         "A message is waiting for Jenny; send your next message only after this reply finishes.",
-        "Type one bounded project message, then tap Send message.",
+        "Type one bounded project message, then tap Send.",
         "projectRequestPreview",
         "cleanChatDisplayMessage",
         "user_message",
@@ -159,8 +163,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Copy phone-safe packet",
         "Save challenge draft",
         "Save read-only lane draft",
-        "Send message",
-        "Ask Jenny to review first",
+        "Send",
         "Jenny is answering...",
         "Request intake:",
         "assessProjectRequest",
@@ -196,7 +199,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "More",
         "Use these when Jenny should challenge, narrow, or formalize the request before normal work.",
         "This request is bounded enough for a guarded Jenny reply.",
-        "Ask Jenny to review first will request a spec-first reply before any implementation plan.",
+        "Jenny will challenge this request before planning any implementation.",
         "Spec-first request for Jenny:",
         "Jenny, do not implement yet. First challenge the request like a senior engineer:",
         "Return only the spec/challenge review and the recommended next safe lane.",
@@ -468,6 +471,24 @@ def test_compact_chat_behaves_like_a_normal_thread_after_send() -> None:
     chat_src = src[chat_start:chat_end]
     assert "time: request.created_at" in chat_src
     assert "time: response.created_at" in chat_src
+
+
+def test_compact_chat_restores_jenny_status_from_bridge_records() -> None:
+    src = page_source()
+    helper_start = src.index("function recordBackedJennyRunProgress")
+    helper_end = src.index("function jennyWorkSessionSteps", helper_start)
+    helper = src[helper_start:helper_end]
+    assert "statusRecords: GitHubBridgeMailboxStatusRecord[]" in helper
+    assert "bridgeMessages: GitHubBridgeMessageRecord[]" in helper
+    assert "hermes_answer_started" in helper
+    assert "This status is restored from the bridge audit trail." in helper
+    assert "hermes_answer_completed" in helper
+    assert "response_appended" in helper
+    assert "hermes_answer_error" in helper
+    room = function_source(src, "CompactProjectRoom")
+    assert "const statusRecords = unwrapRecords(githubBridgeStatus.status_records)" in room
+    assert "const effectiveJennyRunProgress = jennyRunProgress ?? recordBackedJennyRunProgress" in room
+    assert "jennyRunStatusToneClass(effectiveJennyRunProgress, connectionState.tone)" in room
 
 
 def test_compact_run_jenny_once_targets_visible_current_project_message() -> None:

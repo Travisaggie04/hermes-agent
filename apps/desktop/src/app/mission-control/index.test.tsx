@@ -983,7 +983,8 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Resume requirements')).toBeTruthy()
     expect(screen.getByText('Jenny challenge review clears the approach')).toBeTruthy()
     expect(screen.getByText('Travis approval is recorded before work resumes')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Ask Jenny to review first' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', true)
+    expect(screen.queryByRole('button', { name: 'Ask Jenny to review first' })).toBeNull()
     expect(screen.queryByRole('button', { name: "Get Jenny's reply" })).toBeNull()
     expect(screen.getByRole('button', { name: 'Save challenge draft' })).toHaveProperty('disabled', true)
     expect(screen.getByRole('button', { name: 'Save read-only lane draft' })).toHaveProperty('disabled', true)
@@ -1232,7 +1233,7 @@ describe('MissionControlView', () => {
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Recommendation: one-sentence next lane.')
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('if evidence is missing, say "not proven"')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(1))
     expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1336,13 +1337,13 @@ describe('MissionControlView', () => {
 
     await waitFor(() => expect((composer as HTMLTextAreaElement).value).toBe('make Jenny fully functional and autonomous'))
     await waitFor(() => expect(screen.getAllByText(/Spec first/).length).toBeGreaterThan(0))
-    expect(screen.getAllByText(/Ask Jenny to review first will request a spec-first reply before any implementation plan/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Jenny will challenge this request before planning any implementation/).length).toBeGreaterThan(0)
     expect(screen.getAllByText('Jenny must challenge first').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Question missing facts and unsafe assumptions.').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Push back on protected actions or broad scope.').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Return the smallest safe lane with evidence and approval needs.').length).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ask Jenny to review first' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(1))
     expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
@@ -1376,7 +1377,7 @@ describe('MissionControlView', () => {
     await waitFor(() => expect(screen.getAllByText(/Approval check/).length).toBeGreaterThan(0))
     expect(screen.getAllByText(/Contains protected actions; Jenny should challenge scope and identify approvals before work/).length).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ask Jenny to review first' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(1))
     expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
@@ -1407,7 +1408,7 @@ describe('MissionControlView', () => {
 
     fireEvent.change(await screen.findByLabelText('Message Jenny'), { target: { value: 'Please check the chat bridge.' } })
     const composer = screen.getByLabelText('Message Jenny') as HTMLTextAreaElement
-    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     await waitFor(() => expect(composer.value).toBe(''))
     expect((await screen.findAllByText('Waiting for Jenny')).length).toBeGreaterThanOrEqual(2)
     expect((await screen.findAllByText(/Mission Control sent the latest project message to Jenny/)).length).toBeGreaterThanOrEqual(2)
@@ -1442,6 +1443,102 @@ describe('MissionControlView', () => {
       worker_enabled: false
     })
     expect(await screen.findByText('Jenny replied to the latest pending project message.')).toBeTruthy()
+  })
+
+  it('restores Jenny working status from bridge audit records after refresh', async () => {
+    getMissionControlGitHubBridgeStatus.mockResolvedValue({
+      count: 1,
+      daemon_enabled: false,
+      discord_automation_enabled: false,
+      dispatch_enabled: false,
+      display_only: true,
+      execution_enabled: false,
+      last_error: '',
+      last_poll_at: '2026-06-13T02:01:00Z',
+      last_response_at: '',
+      last_response_request_id: '',
+      last_status: 'hermes_answer_started',
+      manual_start_only: true,
+      mode: 'manual_hermes_answer',
+      foreground_watch_supported: true,
+      foreground_watch_running: false,
+      model_routing_enabled: false,
+      pending_count: 1,
+      visible_pending_count: 1,
+      background_pending_count: 0,
+      pending_messages: [
+        {
+          record: {
+            created_at: '2026-06-13T02:00:00Z',
+            from_agent: 'travis',
+            message: 'Project room request: Please inspect the current Mission Control bridge.',
+            metadata: {
+              user_message: 'Please inspect the current Mission Control bridge.'
+            },
+            project_id: 'project-hermes-mission-control',
+            request_id: 'github-bridge-working-request',
+            status: 'queued',
+            to_agent: 'jenny'
+          }
+        }
+      ],
+      visible_pending_messages: [
+        {
+          record: {
+            created_at: '2026-06-13T02:00:00Z',
+            from_agent: 'travis',
+            message: 'Project room request: Please inspect the current Mission Control bridge.',
+            metadata: {
+              user_message: 'Please inspect the current Mission Control bridge.'
+            },
+            project_id: 'project-hermes-mission-control',
+            request_id: 'github-bridge-working-request',
+            status: 'queued',
+            to_agent: 'jenny'
+          }
+        }
+      ],
+      recent_messages: [
+        {
+          record: {
+            created_at: '2026-06-13T02:00:00Z',
+            from_agent: 'travis',
+            message: 'Project room request: Please inspect the current Mission Control bridge.',
+            metadata: {
+              user_message: 'Please inspect the current Mission Control bridge.'
+            },
+            project_id: 'project-hermes-mission-control',
+            request_id: 'github-bridge-working-request',
+            status: 'queued',
+            to_agent: 'jenny'
+          }
+        }
+      ],
+      response_messages: [],
+      send_to_jenny_enabled: false,
+      session_send_enabled: false,
+      status_records: [
+        {
+          record: {
+            created_at: '2026-06-13T02:01:00Z',
+            handled_request_id: 'github-bridge-working-request',
+            mode: 'manual_hermes_answer',
+            pending_count: 1,
+            status: 'hermes_answer_started',
+            status_id: 'github-status-working'
+          }
+        }
+      ],
+      stored: false,
+      timer_enabled: false,
+      worker_enabled: false
+    })
+
+    await renderMissionControl()
+
+    expect((await screen.findAllByText(/Jenny is working on the latest project message/)).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('Waiting for Jenny')).length).toBeGreaterThan(0)
+    expect(answerMissionControlGitHubBridgeOnce).not.toHaveBeenCalled()
   })
 
   it('blocks desktop lane drafts when the newest challenge review is not clear', async () => {
