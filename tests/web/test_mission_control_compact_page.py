@@ -120,7 +120,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Next step",
         "Pending {pendingCount}",
         "Replies {responseCount}",
-        "Tap Get Jenny's reply to ask Jenny for one response to the latest message.",
+        "A message is waiting for Jenny; send your next message only after this reply finishes.",
         "Type one bounded project message, then tap Send message.",
         "projectRequestPreview",
         "cleanChatDisplayMessage",
@@ -139,7 +139,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Evidence: exact files/commands/checks/PR/CI/runtime/links used.",
         "Approval/rollback: approval needed before live action plus rollback path.",
         "Rule: if evidence is missing, say \\\"not proven\\\"; do not present it as done.",
-        "Message sent. Replies refresh automatically; use Refresh replies under Details if you want to check now.",
+        "Message sent. Jenny is answering...",
         "Live reply refresh is on and read-only",
         "setInterval",
         "clearInterval",
@@ -161,7 +161,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Save read-only lane draft",
         "Send message",
         "Ask Jenny to review first",
-        "Get Jenny's reply",
+        "Jenny is answering...",
         "Request intake:",
         "assessProjectRequest",
         "Approval check",
@@ -448,11 +448,13 @@ def test_compact_chat_send_uses_github_mailbox_not_local_only_outbox() -> None:
     src = page_source()
     send_fn = function_source(src, "queueJennyBridgeMessage")
     assert "WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL" in send_fn
+    assert "WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL" in function_source(src, "runJennyOnce")
     assert "WORKSPACE_JENNY_BRIDGE_OUTBOX_CREATE_URL" not in send_fn
     assert 'from_agent: "travis"' in send_fn
     assert 'to_agent: "jenny"' in send_fn
     assert "bridgeRequestId()" in send_fn
-    assert "Message sent. Replies refresh automatically; use Refresh replies under Details if you want to check now." in send_fn
+    assert "Message sent. Jenny is answering..." in send_fn
+    assert "await runJennyOnce(projectView, result.message?.request_id || requestId)" in send_fn
 
 
 def test_compact_run_jenny_once_targets_visible_current_project_message() -> None:
