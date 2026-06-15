@@ -2141,8 +2141,8 @@ export default function MissionControlCompactPage() {
   }
 
   return (
-    <main className="box-border min-h-screen w-full min-w-0 max-w-[100dvw] overflow-x-hidden bg-[#0e0b12] px-1 py-2 text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 [&_*]:box-border" data-testid="mission-control-compact-route">
-      <header className="sticky top-0 z-10 mx-0 w-full min-w-0 max-w-full overflow-hidden border-b border-[#f7efe4]/10 bg-[#120d17]/95 px-3 pb-2 pt-2 backdrop-blur sm:px-4">
+    <main className="box-border min-h-screen w-full min-w-0 max-w-[100dvw] overflow-x-hidden bg-[#0e0b12] px-1 py-1 text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 [&_*]:box-border" data-testid="mission-control-compact-route">
+      <header className="sr-only">
         <p className="sr-only max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782] [overflow-wrap:anywhere]">
           <span className="font-serif text-lg italic text-[#d4a574]">IV.</span>
           <span className="ml-2">Agent · Jenny</span>
@@ -2629,12 +2629,12 @@ function CompactProjectRoom({
 
   return (
     <section
-      className="mt-2 flex min-h-[calc(100dvh-8rem)] w-full min-w-0 max-w-full flex-col overflow-hidden rounded-md border border-[#d4a574]/15 bg-[#15101a] shadow-[0_20px_70px_rgba(0,0,0,0.28)] sm:h-[calc(100vh-5rem)] sm:min-h-[34rem]"
+      className="mt-1 flex min-h-[calc(100dvh-3rem)] w-full min-w-0 max-w-full flex-col overflow-hidden rounded-md border border-[#d4a574]/10 bg-[#15101a] sm:h-[calc(100vh-4rem)] sm:min-h-[34rem]"
       aria-label="Project chat workspace"
     >
-      <div className="w-full min-w-0 max-w-full overflow-hidden border-b border-[#f3ebda]/10 bg-[#1c1622]/70 px-2 py-2">
+      <div className="w-full min-w-0 max-w-full overflow-hidden border-b border-[#f3ebda]/10 bg-[#15101a] px-2 py-2">
         <label className="grid w-full min-w-0 max-w-xl gap-1">
-          <span className="text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-[#a59783]">Active project</span>
+          <span className="sr-only">Active project</span>
           <select
             className="w-full min-w-0 max-w-full rounded-md border border-[#f3ebda]/10 bg-[#100b15] px-3 py-2 text-sm font-semibold text-[#f3ebda] outline-none [overflow-wrap:anywhere]"
             onChange={event => onSelectProject(event.target.value)}
@@ -2671,7 +2671,7 @@ function CompactProjectRoom({
       </div>
 
       <article className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden p-2" data-testid="compact-project-room">
-        <div className="grid min-w-0 gap-2 border-b border-[#f3ebda]/10 pb-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="sr-only grid min-w-0 gap-2 border-b border-[#f3ebda]/10 pb-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-2">
             <span className="sr-only">IV. — Jenny workspace</span>
             <h2 className="max-w-full text-lg font-semibold leading-tight text-[#f3ebda] [overflow-wrap:anywhere]">{selectedProjectView.project.name}</h2>
@@ -2694,9 +2694,23 @@ function CompactProjectRoom({
             </span>
           </div>
         </div>
-        <p className="mt-2 max-w-full text-sm text-[#a59783] [overflow-wrap:anywhere]">
-          {paused ? "This project is on hold while Jenny is stabilized." : nextStep}
-        </p>
+        <section
+          className="mt-1 flex max-w-full flex-wrap items-center justify-between gap-2 border-b border-[#f3ebda]/10 px-1 pb-2 text-xs text-[#a59783]"
+          aria-label="Jenny chat status"
+        >
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="min-w-0">
+              <div className="font-semibold text-[#f3ebda] [overflow-wrap:anywhere]">{paused ? "Project paused" : statusCopy.label}</div>
+              <p className="sr-only mt-0.5 max-w-full text-xs leading-snug opacity-85 [overflow-wrap:anywhere]">
+                {paused ? "This project is on hold while Jenny is stabilized." : statusCopy.detail}
+              </p>
+            </div>
+            <span>Pending {pendingCount}</span>
+            <span>Replies {responseCount}</span>
+            {runActive ? <span>Elapsed {jennyRunElapsedSeconds}s</span> : null}
+          </div>
+          <p className="sr-only mt-2 max-w-full text-xs leading-snug opacity-80 [overflow-wrap:anywhere]">Next: {paused ? "Resume this project after Jenny is stable." : nextStep}</p>
+        </section>
 
         <details className="sr-only mt-1 max-w-full overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#1c1622]/50 px-3 py-1.5 text-xs">
           <summary className="cursor-pointer font-semibold text-muted-foreground">
@@ -2782,7 +2796,7 @@ function CompactProjectRoom({
 
         <details className="sr-only mt-2 min-w-0 max-w-full overflow-hidden rounded-md border border-[#60a5fa]/25 bg-[#60a5fa]/10 px-3 py-2" aria-label="Jenny activity">
           <summary className="cursor-pointer text-sm font-semibold text-[#f3ebda]">Jenny activity</summary>
-          <div className="grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
+          <div className="sr-only grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
             <h3 className="sr-only">Jenny activity</h3>
             <span className="text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere] sm:text-right">
               {runActive ? "refreshing every 2.5s" : "recent bridge status"}
@@ -2846,7 +2860,7 @@ function CompactProjectRoom({
                     {chat.speaker === "You" ? chat.displayBody ?? projectRequestPreview(chat.body, 750) : compactText(chat.body, 750)}
                   </p>
                   {chat.speaker === "Jenny" ? (
-                    <details className="mt-2 max-w-full overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#15101a]/50 px-2 py-1.5 text-xs">
+                    <details className="sr-only mt-2 max-w-full overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#15101a]/50 px-2 py-1.5 text-xs">
                       <summary className="cursor-pointer font-semibold text-[#a59783]">Review reply</summary>
                       <div className="mt-2 grid min-w-0 gap-2">
                       <p className={cn(
