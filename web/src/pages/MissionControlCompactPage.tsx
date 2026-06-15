@@ -1986,7 +1986,7 @@ export default function MissionControlCompactPage() {
   }
 
   return (
-    <main className="box-border min-h-screen w-full max-w-[100dvw] overflow-x-hidden bg-[#0e0b12] px-2 py-2 text-[#f7efe4] sm:px-3" data-testid="mission-control-compact-route">
+    <main className="box-border min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-[#0e0b12] px-1 py-2 text-[#f7efe4] [overflow-wrap:anywhere] sm:px-3" data-testid="mission-control-compact-route">
       <header className="sticky top-0 z-10 mx-0 w-full max-w-full overflow-hidden border-b border-[#f7efe4]/10 bg-[#120d17]/95 px-3 pb-3 pt-2 backdrop-blur sm:px-4">
         <p className="max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782] [overflow-wrap:anywhere]">
           <span className="font-serif text-lg italic text-[#d4a574]">IV.</span>
@@ -2299,7 +2299,7 @@ function CompactLiveActivityRail({
               <article className="min-w-0 max-w-full overflow-hidden rounded-xl border border-[#f7efe4]/10 bg-[#100b15]/80 p-2 text-xs" key={item.status_id ?? `${item.status}:${item.created_at}`}>
                 <div className="grid min-w-0 max-w-full gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
                   <span className="min-w-0 font-semibold text-[#fff8ed] [overflow-wrap:anywhere]">{jennyActivityLabel(item.status)}</span>
-                  <span className="min-w-0 max-w-full text-[#a89782] [overflow-wrap:anywhere] [word-break:break-word] sm:text-right">{item.created_at || "time unknown"}</span>
+                  <span className="min-w-0 max-w-full text-[#a89782] [overflow-wrap:anywhere] [word-break:break-all] sm:text-right">{item.created_at || "time unknown"}</span>
                 </div>
                 <p className="mt-1 max-w-full leading-relaxed text-[#c9b8a2] [overflow-wrap:anywhere] [word-break:break-word]">{jennyActivityDetail(item)}</p>
               </article>
@@ -2463,14 +2463,28 @@ function CompactProjectRoom({
       aria-label="Project chat workspace"
     >
       <div className="w-full min-w-0 max-w-full overflow-hidden border-b border-[#f3ebda]/10 bg-[#1c1622]/90 px-2 py-2">
-        <div className="flex w-full min-w-0 max-w-full gap-1.5 overflow-x-auto overscroll-x-contain pb-1 sm:grid sm:grid-cols-[auto_repeat(5,minmax(0,1fr))] sm:overflow-hidden sm:pb-0">
+        <label className="grid w-full min-w-0 max-w-full gap-1 sm:hidden">
+          <span className="text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-[#a59783]">Project</span>
+          <select
+            className="w-full min-w-0 max-w-full rounded-md border border-[#f3ebda]/10 bg-[#100b15] px-3 py-2 text-sm font-semibold text-[#f3ebda] outline-none [overflow-wrap:anywhere]"
+            onChange={event => onSelectProject(event.target.value)}
+            value={selectedProjectView.project.project_id}
+          >
+            {projects.map(project => (
+              <option key={project.project_id} value={project.project_id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="hidden w-full min-w-0 max-w-full gap-1.5 sm:grid sm:grid-cols-[auto_repeat(5,minmax(0,1fr))]">
           <span className="sr-only">Local studio</span>
           <span className="hidden self-center text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-[#a59783] sm:block sm:pr-1">Projects</span>
           <span className="sr-only">{projects.length} projects</span>
           {projects.map(project => (
             <button
               className={cn(
-                "min-w-[9.5rem] max-w-[80vw] shrink-0 overflow-hidden rounded-full border px-3 py-1.5 text-left text-xs transition hover:border-[#d4a574]/30 hover:bg-[#251d2c]/70 sm:min-w-0 sm:max-w-full",
+                "min-w-0 max-w-full overflow-hidden rounded-full border px-3 py-1.5 text-left text-xs transition hover:border-[#d4a574]/30 hover:bg-[#251d2c]/70",
                 project.project_id === selectedProjectView.project.project_id ? "border-[#d4a574]/50 bg-[#2e2436]/80" : "border-[#f3ebda]/10 bg-transparent",
               )}
               key={project.project_id}
@@ -2490,22 +2504,22 @@ function CompactProjectRoom({
         <div className="grid min-w-0 gap-2 border-b border-[#f3ebda]/10 pb-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-2">
             <span className="sr-only">IV. — Jenny workspace</span>
-            <h2 className="max-w-full truncate text-lg font-semibold leading-tight text-[#f3ebda]">{selectedProjectView.project.name}</h2>
+            <h2 className="max-w-full text-lg font-semibold leading-tight text-[#f3ebda] [overflow-wrap:anywhere]">{selectedProjectView.project.name}</h2>
             <span className="hidden max-w-[30rem] truncate text-xs text-[#a59783] md:inline">{compactText(selectedProjectView.currentGoal, 120)}</span>
           </div>
-          <div className="flex min-w-0 flex-wrap gap-2 sm:justify-end">
-            <span className={cn("rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold", jennyStatusToneClass(connectionState.tone))}>
+          <div className="grid min-w-0 grid-cols-1 gap-2 min-[360px]:grid-cols-2 sm:flex sm:flex-wrap sm:justify-end">
+            <span className={cn("max-w-full rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold [overflow-wrap:anywhere]", jennyStatusToneClass(connectionState.tone))}>
               {connectionState.label}
             </span>
             <span className={cn(
-              "rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold",
+              "max-w-full rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold [overflow-wrap:anywhere]",
               paused
                 ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
                 : "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
             )}>
               {paused ? "Paused" : selectedProjectView.readinessLabel}
             </span>
-            <span className={cn("rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold", jennyReplyReviewStatusClass(replyReviewStatus.tone))}>
+            <span className={cn("max-w-full rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold [overflow-wrap:anywhere]", jennyReplyReviewStatusClass(replyReviewStatus.tone))}>
               {replyReviewStatus.label}
             </span>
           </div>
@@ -2555,7 +2569,7 @@ function CompactProjectRoom({
             {liveStatusItems.map(item => (
               <div className="min-w-0 max-w-full overflow-hidden rounded-md border border-current/15 bg-black/10 px-2 py-1" key={item.label}>
                 <div className="text-[0.62rem] font-semibold uppercase tracking-[0.12em] opacity-70">{item.label}</div>
-                <div className="mt-0.5 truncate font-semibold [overflow-wrap:anywhere]">{item.value}</div>
+                <div className="mt-0.5 font-semibold [overflow-wrap:anywhere] [word-break:break-word]">{item.value}</div>
               </div>
             ))}
           </div>
@@ -2583,7 +2597,7 @@ function CompactProjectRoom({
                 <article className="rounded-xl border border-[#60a5fa]/20 bg-[#15101a]/70 p-2 text-xs" key={item.status_id ?? `${item.status}:${item.created_at}`}>
                   <div className="grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
                     <span className="font-semibold text-[#f3ebda] [overflow-wrap:anywhere]">{jennyActivityLabel(item.status)}</span>
-                    <span className="min-w-0 text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{item.created_at || "time unknown"}</span>
+                    <span className="min-w-0 text-[#a59783] [overflow-wrap:anywhere] [word-break:break-all] sm:text-right">{item.created_at || "time unknown"}</span>
                   </div>
                   <p className="mt-1 text-[#a59783] [overflow-wrap:anywhere]">{jennyActivityDetail(item)}</p>
                 </article>
@@ -2603,7 +2617,7 @@ function CompactProjectRoom({
           </div>
           <div className="mt-2 grid min-h-0 min-w-0 flex-1 content-start gap-2 overflow-y-auto overflow-x-hidden pr-1">
             {runActive ? (
-              <article className="min-w-0 max-w-[92%] justify-self-start rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm text-[#f3ebda] [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]">
+              <article className="min-w-0 max-w-full justify-self-start rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm text-[#f3ebda] [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]">
                 <div className="mb-1 grid min-w-0 gap-1 text-[0.68rem] sm:flex sm:items-center sm:justify-between sm:gap-3">
                   <span className="font-semibold">Jenny</span>
                   <span className="min-w-0 text-sky-300 [overflow-wrap:anywhere] sm:text-right">{runCopy.label}</span>
@@ -2617,7 +2631,7 @@ function CompactProjectRoom({
               chatMessages.map(chat => (
                 <article
                   className={cn(
-                    "min-w-0 max-w-[92%] rounded-lg border px-3 py-2 text-sm [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]",
+                    "min-w-0 max-w-full rounded-lg border px-3 py-2 text-sm [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]",
                     chat.speaker === "You" ? "justify-self-end border-[#5ab896]/30 bg-[#5ab896]/10 text-[#f3ebda]" : "justify-self-start border-[#f3ebda]/10 bg-[#1c1622]/90 text-[#f3ebda]",
                   )}
                   key={`${chat.speaker}:${chat.id}`}
@@ -2681,7 +2695,7 @@ function CompactProjectRoom({
           <label className="grid gap-1 text-sm font-medium">
             Message Jenny
             <textarea
-              className="min-h-16 max-w-full rounded-md border border-[#f3ebda]/10 bg-[#15101a] px-3 py-2 text-sm text-[#f3ebda] outline-none transition placeholder:text-[#6e6353] focus:border-[#d4a574]/50"
+              className="min-h-16 w-full min-w-0 max-w-full rounded-md border border-[#f3ebda]/10 bg-[#15101a] px-3 py-2 text-sm text-[#f3ebda] outline-none transition placeholder:text-[#6e6353] focus:border-[#d4a574]/50"
               disabled={paused}
               onChange={event => onRequestChange(event.target.value)}
               placeholder={paused ? "This project is on hold until Jenny is stable." : "Tell Jenny what you want to discuss or ask her to do next..."}
