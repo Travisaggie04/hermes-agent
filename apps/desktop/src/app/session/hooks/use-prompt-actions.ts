@@ -94,6 +94,13 @@ function nativeProjectHarnessContext(): string {
   ].join('\n')
 }
 
+function withNativeProjectHarnessContext(text: string): string {
+  const body = text.trim()
+  const projectHarnessContext = nativeProjectHarnessContext()
+
+  return [projectHarnessContext, body].filter(Boolean).join('\n\n')
+}
+
 interface PromptActionsOptions {
   activeSessionId: string | null
   activeSessionIdRef: MutableRefObject<string | null>
@@ -831,7 +838,7 @@ export function usePromptActions({
       try {
         await requestGateway('prompt.submit', {
           session_id: activeSessionId,
-          text: userText,
+          text: withNativeProjectHarnessContext(userText),
           truncate_before_user_ordinal: truncateBeforeUserOrdinal
         })
       } catch (err) {
@@ -887,7 +894,7 @@ export function usePromptActions({
       const submit = (truncateOrdinal?: number) =>
         requestGateway('prompt.submit', {
           session_id: sessionId,
-          text,
+          text: withNativeProjectHarnessContext(text),
           ...(truncateOrdinal !== undefined && { truncate_before_user_ordinal: truncateOrdinal })
         })
 

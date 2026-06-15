@@ -1,3 +1,4 @@
+import type { AppendMessage } from '@assistant-ui/react'
 import { cleanup, render } from '@testing-library/react'
 import type { MutableRefObject } from 'react'
 import { useEffect } from 'react'
@@ -5,7 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ChatMessage } from '@/lib/chat-messages'
 import {
+  $messages,
   $sessions,
+  setAwaitingResponse,
+  setBusy,
   setSelectedMissionControlProject,
   setSessions
 } from '@/store/session'
@@ -46,15 +50,19 @@ function sessionInfo(overrides: Partial<SessionInfo> = {}): SessionInfo {
 }
 
 interface HarnessHandle {
+  editMessage: (message: AppendMessage) => Promise<void>
+  reloadFromMessage: (parentId: string | null) => Promise<void>
   submitText: (text: string) => Promise<boolean>
 }
 
 function Harness({
+  initialMessages = [],
   onReady,
   onState,
   refreshSessions,
   requestGateway
 }: {
+  initialMessages?: ChatMessage[]
   onReady: (handle: HarnessHandle) => void
   onState?: (state: { messages: ChatMessage[]; busy: boolean; awaitingResponse: boolean }) => void
   refreshSessions: () => Promise<void>
@@ -63,6 +71,7 @@ function Harness({
   const activeSessionIdRef: MutableRefObject<string | null> = { current: RUNTIME_SESSION_ID }
   const selectedStoredSessionIdRef: MutableRefObject<string | null> = { current: RUNTIME_SESSION_ID }
   const busyRef = { current: false }
+  let currentState = { messages: initialMessages, busy: false, awaitingResponse: false } as never
 
   const actions = usePromptActions({
     activeSessionId: RUNTIME_SESSION_ID,
@@ -77,15 +86,20 @@ function Harness({
     startFreshSessionDraft: () => undefined,
     sttEnabled: false,
     updateSessionState: (_sessionId, updater) => {
-      const state = updater({ messages: [], busy: false, awaitingResponse: false } as never)
+      const state = updater(currentState)
+      currentState = state as never
       onState?.(state as { messages: ChatMessage[]; busy: boolean; awaitingResponse: boolean })
       return state
     }
   })
 
   useEffect(() => {
-    onReady({ submitText: actions.submitText })
-  }, [actions.submitText, onReady])
+    onReady({
+      editMessage: actions.editMessage,
+      reloadFromMessage: actions.reloadFromMessage,
+      submitText: actions.submitText
+    })
+  }, [actions.editMessage, actions.reloadFromMessage, actions.submitText, onReady])
 
   return null
 }
@@ -93,10 +107,15 @@ function Harness({
 describe('usePromptActions /title', () => {
   beforeEach(() => {
     setSessions(() => [sessionInfo()])
+    setBusy(false)
+    setAwaitingResponse(false)
   })
 
   afterEach(() => {
     cleanup()
+    $messages.set([])
+    setBusy(false)
+    setAwaitingResponse(false)
     vi.restoreAllMocks()
     setSelectedMissionControlProject(null)
   })
@@ -181,11 +200,17 @@ describe('usePromptActions /title', () => {
 describe('usePromptActions project harness', () => {
   beforeEach(() => {
     setSessions(() => [sessionInfo()])
+    $messages.set([])
+    setBusy(false)
+    setAwaitingResponse(false)
     setSelectedMissionControlProject(null)
   })
 
   afterEach(() => {
     cleanup()
+    $messages.set([])
+    setBusy(false)
+    setAwaitingResponse(false)
     vi.restoreAllMocks()
     setSelectedMissionControlProject(null)
   })
@@ -224,5 +249,75 @@ describe('usePromptActions project harness', () => {
 
     const optimisticUser = states.flatMap(state => state.messages).find(message => message.role === 'user')
     expect(optimisticUser?.parts).toEqual([{ type: 'text', text: 'test' }])
+  })
+
+  it('keeps hidden project context when regenerating a project chat reply', async () => {
+    setSelectedMissionControlProject('project-hermes-mission-control', 'Hermes / Mission Control')
+    const initialMessages: ChatMessage[] = [
+      { id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'recheck the plan' }] },
+      { id: 'assistant-1', role: 'assistant', parts: [{ type: 'text', text: 'old reply' }] }
+    ]
+    $messages.set(initialMessages)
+
+    const refreshSessions = vi.fn(async () => undefined)
+    const requestGateway = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({}) as never)
+
+    let handle: HarnessHandle | null = null
+    render(
+      <Harness
+        initialMessages={initialMessages}
+        onReady={h => (handle = h)}
+        refreshSessions={refreshSessions}
+        requestGateway={requestGateway}
+      />
+    )
+
+    await handle!.reloadFromMessage('assistant-1')
+
+    expect(requestGateway).toHaveBeenCalledWith('prompt.submit', {
+      session_id: RUNTIME_SESSION_ID,
+      text: expect.stringContaining('Hidden Jenny OS project context:'),
+      truncate_before_user_ordinal: 0
+    })
+    const promptSubmitCall = requestGateway.mock.calls.find(call => call[0] === 'prompt.submit') as
+      | [string, { session_id: string; text: string; truncate_before_user_ordinal?: number }]
+      | undefined
+    expect(promptSubmitCall?.[1].text).toContain('Project: Hermes / Mission Control')
+    expect(promptSubmitCall?.[1].text.trim().endsWith('recheck the plan')).toBe(true)
+  })
+
+  it('keeps hidden project context when editing and resending a project chat message', async () => {
+    setSelectedMissionControlProject('project-hermes-mission-control', 'Hermes / Mission Control')
+    const initialMessages: ChatMessage[] = [
+      { id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'old request' }] },
+      { id: 'assistant-1', role: 'assistant', parts: [{ type: 'text', text: 'old reply' }] }
+    ]
+    $messages.set(initialMessages)
+
+    const refreshSessions = vi.fn(async () => undefined)
+    const requestGateway = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({}) as never)
+
+    let handle: HarnessHandle | null = null
+    render(
+      <Harness
+        initialMessages={initialMessages}
+        onReady={h => (handle = h)}
+        refreshSessions={refreshSessions}
+        requestGateway={requestGateway}
+      />
+    )
+
+    await handle!.editMessage({
+      content: [{ type: 'text', text: 'edited request' }],
+      role: 'user',
+      sourceId: 'user-1'
+    } as unknown as AppendMessage)
+
+    const promptSubmitCall = requestGateway.mock.calls.find(call => call[0] === 'prompt.submit') as
+      | [string, { session_id: string; text: string; truncate_before_user_ordinal?: number }]
+      | undefined
+    expect(promptSubmitCall?.[1].text).toContain('Hidden Jenny OS project context:')
+    expect(promptSubmitCall?.[1].text).toContain('Project: Hermes / Mission Control')
+    expect(promptSubmitCall?.[1].text.trim().endsWith('edited request')).toBe(true)
   })
 })
