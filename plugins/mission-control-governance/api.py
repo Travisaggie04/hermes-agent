@@ -767,6 +767,41 @@ def _is_operator_github_bridge_record(record: dict[str, Any]) -> bool:
     )
 
 
+def _operator_github_bridge_group_key(record: dict[str, Any]) -> str:
+    if not _is_operator_github_bridge_record(record):
+        return ""
+    project_id = str(record.get("project_id") or "unknown")
+    request_id = str(record.get("request_id") or "").lower()
+    text = str(record.get("message") or "").lower()
+    if request_id.startswith("codex-deploy-") or "dashboard-only deploy request" in text:
+        return f"{project_id}:codex-dashboard-deploy"
+    if request_id.startswith("codex-"):
+        return f"{project_id}:codex-operator"
+    return ""
+
+
+def _collapse_superseded_operator_pending(items: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    current: list[dict[str, Any]] = []
+    latest_by_group: dict[str, int] = {}
+    superseded_count = 0
+
+    for item in items:
+        group_key = _operator_github_bridge_group_key(item.get("record", {}))
+        if not group_key:
+            current.append(item)
+            continue
+
+        previous_index = latest_by_group.get(group_key)
+        if previous_index is not None:
+            current[previous_index] = item
+            superseded_count += 1
+        else:
+            latest_by_group[group_key] = len(current)
+            current.append(item)
+
+    return current, superseded_count
+
+
 def _github_bridge_mailbox_status_projection(limit: int = DEFAULT_RECORDS_LIMIT) -> dict[str, Any]:
     messages = _latest_workspace_records(GitHubBridgeMessageRecord, limit)
     statuses = _latest_workspace_records(GitHubBridgeMailboxStatusRecord, limit)
@@ -776,13 +811,14 @@ def _github_bridge_mailbox_status_projection(limit: int = DEFAULT_RECORDS_LIMIT)
         if item.get("record", {}).get("status") in {"replied", "closed"}
         or item.get("record", {}).get("from_agent") == "jenny"
     }
-    pending = [
+    raw_pending = [
         item
         for item in messages
         if item.get("record", {}).get("status") in {"queued", "retry_requested"}
         and item.get("record", {}).get("to_agent") == "jenny"
         and item.get("record", {}).get("request_id") not in response_request_ids
     ]
+    pending, superseded_background_pending_count = _collapse_superseded_operator_pending(raw_pending)
     visible_pending = [
         item
         for item in pending
@@ -812,6 +848,7 @@ def _github_bridge_mailbox_status_projection(limit: int = DEFAULT_RECORDS_LIMIT)
         "pending_count": len(pending),
         "visible_pending_count": len(visible_pending),
         "background_pending_count": background_pending_count,
+        "superseded_background_pending_count": superseded_background_pending_count,
         "mode": latest_status.get("mode", "manual"),
         "foreground_watch_supported": True,
         "foreground_watch_running": latest_status.get("status", "").startswith("watch_") and latest_status.get("status") != "watch_stopped",

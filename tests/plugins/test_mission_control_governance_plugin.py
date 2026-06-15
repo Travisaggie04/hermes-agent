@@ -693,6 +693,64 @@ def test_workspace_github_bridge_status_is_read_only_and_manual_only(plugin_api,
     assert len(store.read_all()) == before
 
 
+def test_workspace_github_bridge_status_collapses_superseded_codex_deploy_requests(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(
+        GitHubBridgeMessageRecord(
+            request_id="codex-deploy-chat-old",
+            project_id="project-hermes",
+            from_agent="codex",
+            to_agent="jenny",
+            status="queued",
+            message="Dashboard-only deploy request. accepted-live head old.",
+            created_at="2026-06-13T00:00:00Z",
+            github_repo="Travisaggie04/hermes-agent",
+            github_issue_number=79,
+            github_comment_id="201",
+        )
+    )
+    store.append(
+        GitHubBridgeMessageRecord(
+            request_id="codex-deploy-chat-new",
+            project_id="project-hermes",
+            from_agent="codex",
+            to_agent="jenny",
+            status="queued",
+            message="Dashboard-only deploy request. accepted-live head new.",
+            created_at="2026-06-13T00:01:00Z",
+            github_repo="Travisaggie04/hermes-agent",
+            github_issue_number=79,
+            github_comment_id="202",
+        )
+    )
+    store.append(
+        GitHubBridgeMessageRecord(
+            request_id="github-req-travis-open",
+            project_id="project-hermes",
+            from_agent="travis",
+            to_agent="jenny",
+            status="queued",
+            message="Please answer Travis from Mission Control.",
+            created_at="2026-06-13T00:02:00Z",
+            github_repo="Travisaggie04/hermes-agent",
+            github_issue_number=79,
+            github_comment_id="203",
+        )
+    )
+
+    response = client.get("/api/plugins/mission-control-governance/workspace/github-bridge/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["pending_count"] == 2
+    assert payload["visible_pending_count"] == 1
+    assert payload["background_pending_count"] == 1
+    assert payload["superseded_background_pending_count"] == 1
+    pending_ids = [item["record"]["request_id"] for item in payload["pending_messages"]]
+    assert pending_ids == ["codex-deploy-chat-new", "github-req-travis-open"]
+    assert payload["visible_pending_messages"][0]["record"]["request_id"] == "github-req-travis-open"
+
+
 def test_workspace_github_bridge_outbox_create_posts_one_mailbox_message(plugin_api, client, monkeypatch):
     def fake_post_github_message(**kwargs):
         record = GitHubBridgeMessageRecord(
