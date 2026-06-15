@@ -180,6 +180,17 @@ export interface MissionControlProjectRecord {
   updated_at?: string
 }
 
+export interface MissionControlProjectCreatePayload {
+  current_goal?: string
+  mistakes_guards?: string
+  name: string
+  next_recommended_lane?: string
+  profile?: string
+  project_id?: string
+  source_of_truth?: string
+  status?: string
+}
+
 export interface MissionControlRecordEnvelope<T> {
   record: T
   record_index?: number
@@ -213,6 +224,20 @@ export interface MissionControlProjectBriefRecord {
   constraints?: string[]
   outcome?: string
   project_id: string
+  status?: string
+  success_criteria?: string[]
+}
+
+export interface MissionControlProjectBriefCreatePayload {
+  approval_rules?: string[]
+  audience?: string
+  constraints?: string[]
+  context_pack_path?: string
+  forbidden_actions?: string[]
+  name: string
+  outcome: string
+  project_id: string
+  source_of_truth?: string
   status?: string
   success_criteria?: string[]
 }
@@ -702,6 +727,16 @@ export interface MissionControlProjectsResponse {
   send_to_jenny_enabled?: boolean
 }
 
+export interface MissionControlProjectCreateResponse {
+  dispatch_enabled?: boolean
+  manual_copy_only?: boolean
+  project: MissionControlProjectRecord
+  record_index?: number
+  record_type?: string
+  send_to_jenny_enabled?: boolean
+  stored?: boolean
+}
+
 export interface MissionControlLaneRequestsResponse {
   count: number
   dispatch_enabled?: boolean
@@ -726,6 +761,16 @@ export interface MissionControlProjectBriefsResponse {
   manual_copy_only?: boolean
   project_briefs: Array<MissionControlRecordEnvelope<MissionControlProjectBriefRecord>>
   send_to_jenny_enabled?: boolean
+}
+
+export interface MissionControlProjectBriefCreateResponse {
+  dispatch_enabled?: boolean
+  manual_copy_only?: boolean
+  project_brief: MissionControlProjectBriefRecord
+  record_index?: number
+  record_type?: string
+  send_to_jenny_enabled?: boolean
+  stored?: boolean
 }
 
 export interface MissionControlChallengeReviewsResponse {
@@ -818,6 +863,16 @@ export function getMissionControlProjects(): Promise<MissionControlProjectsRespo
   return window.hermesDesktop.api<MissionControlProjectsResponse>({ path: `${MISSION_CONTROL_API}/workspace/projects` })
 }
 
+export function createMissionControlProject(
+  payload: MissionControlProjectCreatePayload
+): Promise<MissionControlProjectCreateResponse> {
+  return window.hermesDesktop.api<MissionControlProjectCreateResponse>({
+    body: payload,
+    method: 'POST',
+    path: `${MISSION_CONTROL_API}/workspace/projects/create`
+  })
+}
+
 export function getMissionControlLaneRequests(): Promise<MissionControlLaneRequestsResponse> {
   return window.hermesDesktop.api<MissionControlLaneRequestsResponse>({ path: `${MISSION_CONTROL_API}/workspace/lane-requests` })
 }
@@ -834,6 +889,16 @@ export function createMissionControlLaneRequest(
 
 export function getMissionControlProjectBriefs(): Promise<MissionControlProjectBriefsResponse> {
   return window.hermesDesktop.api<MissionControlProjectBriefsResponse>({ path: `${MISSION_CONTROL_API}/workspace/project-briefs` })
+}
+
+export function createMissionControlProjectBrief(
+  payload: MissionControlProjectBriefCreatePayload
+): Promise<MissionControlProjectBriefCreateResponse> {
+  return window.hermesDesktop.api<MissionControlProjectBriefCreateResponse>({
+    body: payload,
+    method: 'POST',
+    path: `${MISSION_CONTROL_API}/workspace/project-briefs/create`
+  })
 }
 
 export function getMissionControlChallengeReviews(): Promise<MissionControlChallengeReviewsResponse> {

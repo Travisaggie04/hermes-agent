@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createMissionControlChallengeReview,
   createMissionControlLaneRequest,
+  createMissionControlProject,
+  createMissionControlProjectBrief,
   getMissionControlChallengeReviews,
   getMissionControlLaneRequests,
   getMissionControlProjectBriefs,
@@ -43,10 +45,24 @@ describe('Mission Control desktop API helpers', () => {
     }
   })
 
-  it('uses explicit inert POST endpoints for challenge and lane draft records', async () => {
+  it('uses explicit inert POST endpoints for project intake, challenge, and lane draft records', async () => {
     const api = vi.fn().mockResolvedValue({})
     vi.stubGlobal('window', { hermesDesktop: { api } })
 
+    await createMissionControlProject({
+      current_goal: 'Make Jenny reliable.',
+      name: 'Hermes / Mission Control',
+      project_id: 'project-hermes-mission-control',
+      status: 'active'
+    })
+    await createMissionControlProjectBrief({
+      constraints: ['No gateway restart'],
+      name: 'Hermes initial brief',
+      outcome: 'Make Jenny reliable.',
+      project_id: 'project-hermes-mission-control',
+      status: 'active',
+      success_criteria: ['Chat-first project workspace']
+    })
     await createMissionControlChallengeReview({
       decision_state: 'needs_spec_first',
       project_id: 'project-hermes-mission-control',
@@ -58,6 +74,28 @@ describe('Mission Control desktop API helpers', () => {
       title: 'Read-only project room usability check'
     })
 
+    expect(api).toHaveBeenCalledWith({
+      body: {
+        current_goal: 'Make Jenny reliable.',
+        name: 'Hermes / Mission Control',
+        project_id: 'project-hermes-mission-control',
+        status: 'active'
+      },
+      method: 'POST',
+      path: '/api/plugins/mission-control-governance/workspace/projects/create'
+    })
+    expect(api).toHaveBeenCalledWith({
+      body: {
+        constraints: ['No gateway restart'],
+        name: 'Hermes initial brief',
+        outcome: 'Make Jenny reliable.',
+        project_id: 'project-hermes-mission-control',
+        status: 'active',
+        success_criteria: ['Chat-first project workspace']
+      },
+      method: 'POST',
+      path: '/api/plugins/mission-control-governance/workspace/project-briefs/create'
+    })
     expect(api).toHaveBeenCalledWith({
       body: {
         decision_state: 'needs_spec_first',

@@ -36,6 +36,8 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tip } from '@/components/ui/tooltip'
 import {
+  createMissionControlProject,
+  createMissionControlProjectBrief,
   getMissionControlProjects,
   getMissionControlProjectSessions,
   type MissionControlProjectSession,
@@ -253,6 +255,14 @@ function projectGroupsFor(groups: MissionControlProjectSessionGroup[]): SidebarS
   }))
 }
 
+function projectSlug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'project'
+}
+
+function listFromTextarea(value: string): string[] {
+  return value.split(/\r?\n|,/).map(item => item.trim()).filter(Boolean)
+}
+
 function useSortableBindings(id: string) {
   const { attributes, isDragging, listeners, setNodeRef, transform, transition } = useSortable({ id })
 
@@ -319,6 +329,16 @@ export function ChatSidebar({
   const [newSessionKbdFlash, setNewSessionKbdFlash] = useState(false)
   const [projectGroups, setProjectGroups] = useState<SidebarSessionGroup[]>([])
   const [projectGroupsLoading, setProjectGroupsLoading] = useState(false)
+  const [projectIntakeOpen, setProjectIntakeOpen] = useState(false)
+  const [projectIntakeError, setProjectIntakeError] = useState('')
+  const [projectIntakeSaving, setProjectIntakeSaving] = useState(false)
+  const [projectIntake, setProjectIntake] = useState({
+    forbidden: '',
+    goal: '',
+    name: '',
+    source: '',
+    success: ''
+  })
   const [profileLoadMorePending, setProfileLoadMorePending] = useState<Record<string, boolean>>({})
   const trimmedQuery = searchQuery.trim()
 
@@ -364,7 +384,7 @@ export function ChatSidebar({
 
   const workingSessionIdSet = useMemo(() => new Set(workingSessionIds), [workingSessionIds])
 
-  useEffect(() => {
+  const refreshProjectGroups = useCallback(() => {
     let cancelled = false
 
     setProjectGroupsLoading(true)
@@ -416,6 +436,61 @@ export function ChatSidebar({
       cancelled = true
     }
   }, [])
+
+  useEffect(() => refreshProjectGroups(), [refreshProjectGroups])
+
+  const createProjectFromIntake = useCallback(async () => {
+    const name = projectIntake.name.trim()
+    const goal = projectIntake.goal.trim()
+    const source = projectIntake.source.trim()
+    const success = listFromTextarea(projectIntake.success)
+    const forbidden = listFromTextarea(projectIntake.forbidden)
+
+    if (!name || !goal) {
+      setProjectIntakeError('Project name and goal are required.')
+
+      return
+    }
+
+    setProjectIntakeSaving(true)
+    setProjectIntakeError('')
+
+    try {
+      const projectId = `project-${projectSlug(name)}`
+      const project = await createMissionControlProject({
+        current_goal: goal,
+        mistakes_guards: forbidden.join('; '),
+        name,
+        next_recommended_lane: 'Start with a spec-first project setup review.',
+        project_id: projectId,
+        source_of_truth: source,
+        status: 'active'
+      })
+      const createdProjectId = project.project.project_id || projectId
+
+      await createMissionControlProjectBrief({
+        approval_rules: ['Jenny must challenge vague, risky, or wrong-approach requests before implementation.'],
+        constraints: forbidden,
+        forbidden_actions: forbidden,
+        name: `${name} initial brief`,
+        outcome: goal,
+        project_id: createdProjectId,
+        source_of_truth: source,
+        status: 'active',
+        success_criteria: success
+      })
+
+      setSelectedMissionControlProject(createdProjectId, project.project.name || name)
+      setProjectIntake({ forbidden: '', goal: '', name: '', source: '', success: '' })
+      setProjectIntakeOpen(false)
+      refreshProjectGroups()
+      onNewSessionInProject(createdProjectId, project.project.name || name)
+    } catch (err) {
+      setProjectIntakeError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setProjectIntakeSaving(false)
+    }
+  }, [onNewSessionInProject, projectIntake, refreshProjectGroups])
 
   // Index sessions by both their live id and their lineage-root id so a pin
   // stored as the pre-compression root resolves to the live continuation tip.
@@ -776,8 +851,40 @@ export function ChatSidebar({
                 </div>
               )
             }
+            footer={
+              projectIntakeOpen ? (
+                <ProjectIntakeForm
+                  error={projectIntakeError}
+                  onCancel={() => {
+                    setProjectIntakeOpen(false)
+                    setProjectIntakeError('')
+                  }}
+                  onChange={setProjectIntake}
+                  onSubmit={() => void createProjectFromIntake()}
+                  saving={projectIntakeSaving}
+                  value={projectIntake}
+                />
+              ) : null
+            }
             forceEmptyState={projectGroupsLoading || projectGroups.length === 0}
             groups={projectGroups}
+            headerAction={
+              <Tip label="Create a guarded project">
+                <Button
+                  aria-label="Create a guarded project"
+                  className="text-(--ui-text-tertiary) opacity-80 hover:bg-(--ui-control-hover-background) hover:text-foreground hover:opacity-100"
+                  onClick={event => {
+                    event.stopPropagation()
+                    setProjectIntakeOpen(open => !open)
+                  }}
+                  size="icon-xs"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Codicon name="add" size="0.75rem" />
+                </Button>
+              </Tip>
+            }
             label="Projects"
             labelMeta={String(projectGroups.length)}
             onArchiveSession={onArchiveSession}
@@ -963,6 +1070,79 @@ function SidebarPinnedEmptyState() {
       </span>
       <span>{t.sidebar.shiftClickHint}</span>
     </div>
+  )
+}
+
+interface ProjectIntakeValue {
+  forbidden: string
+  goal: string
+  name: string
+  source: string
+  success: string
+}
+
+interface ProjectIntakeFormProps {
+  error: string
+  onCancel: () => void
+  onChange: (value: ProjectIntakeValue) => void
+  onSubmit: () => void
+  saving: boolean
+  value: ProjectIntakeValue
+}
+
+function ProjectIntakeForm({ error, onCancel, onChange, onSubmit, saving, value }: ProjectIntakeFormProps) {
+  const update = (key: keyof ProjectIntakeValue) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    onChange({ ...value, [key]: event.currentTarget.value })
+
+  return (
+    <form
+      className="mx-1 mt-1 grid gap-1.5 rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) p-2"
+      onSubmit={event => {
+        event.preventDefault()
+        onSubmit()
+      }}
+    >
+      <div className="text-[0.75rem] font-medium text-foreground">New project</div>
+      <input
+        className="h-7 rounded border border-(--ui-stroke-tertiary) bg-transparent px-2 text-[0.75rem] text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
+        onChange={update('name')}
+        placeholder="Project name"
+        value={value.name}
+      />
+      <textarea
+        className="min-h-14 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-2 py-1.5 text-[0.75rem] text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
+        onChange={update('goal')}
+        placeholder="What should Jenny help you accomplish?"
+        value={value.goal}
+      />
+      <input
+        className="h-7 rounded border border-(--ui-stroke-tertiary) bg-transparent px-2 text-[0.75rem] text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
+        onChange={update('source')}
+        placeholder="Source of truth, repo, folder, or notes"
+        value={value.source}
+      />
+      <textarea
+        className="min-h-12 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-2 py-1.5 text-[0.75rem] text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
+        onChange={update('success')}
+        placeholder="Wins / success criteria, one per line"
+        value={value.success}
+      />
+      <textarea
+        className="min-h-12 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-2 py-1.5 text-[0.75rem] text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
+        onChange={update('forbidden')}
+        placeholder="Forbidden actions or risks, one per line"
+        value={value.forbidden}
+      />
+      {error && <div className="text-[0.6875rem] text-red-400">{error}</div>}
+      <div className="flex gap-1.5">
+        <Button className="h-7 flex-1 text-[0.75rem]" disabled={saving} type="submit" variant="default">
+          {saving ? 'Creating...' : 'Create'}
+        </Button>
+        <Button className="h-7 flex-1 text-[0.75rem]" disabled={saving} onClick={onCancel} type="button" variant="ghost">
+          Cancel
+        </Button>
+      </div>
+    </form>
   )
 }
 
