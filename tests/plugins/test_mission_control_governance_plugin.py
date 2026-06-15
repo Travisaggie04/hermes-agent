@@ -391,6 +391,7 @@ def test_workspace_jenny_bridge_api_creates_lists_and_stays_inert(plugin_api, cl
             "sender": "codex",
             "target_agent": "jenny",
             "message": "Please review PR #75 and report whether it is safe to mark ready.",
+            "user_message": "Review PR #75.",
             "ack_key": "pr75-review",
         },
     )
@@ -407,10 +408,12 @@ def test_workspace_jenny_bridge_api_creates_lists_and_stays_inert(plugin_api, cl
     assert payload["request"]["project_id"] == "project-hermes"
     assert payload["request"]["status"] == "queued"
     assert payload["request"]["metadata"]["requires_external_jenny_poller"] is True
+    assert payload["request"]["metadata"]["user_message"] == "Review PR #75."
 
     requests = JsonlRecordStore(plugin_api.record_store_path()).read_all(JennyBridgeMessageRequestRecord)
     assert len(requests) == 1
     assert requests[0].message == "Please review PR #75 and report whether it is safe to mark ready."
+    assert requests[0].metadata["user_message"] == "Review PR #75."
 
     listed = client.get(
         "/api/plugins/mission-control-governance/workspace/jenny-bridge/outbox?project_id=project-hermes&status=queued"
@@ -703,6 +706,7 @@ def test_workspace_github_bridge_outbox_create_posts_one_mailbox_message(plugin_
             github_repo="Travisaggie04/hermes-agent",
             github_issue_number=79,
             github_comment_id="103",
+            metadata={"user_message": kwargs.get("user_message", "")},
         )
         index = JsonlRecordStore(kwargs["path"]).append(record)
         return {
@@ -722,6 +726,7 @@ def test_workspace_github_bridge_outbox_create_posts_one_mailbox_message(plugin_
             "from_agent": "travis",
             "to_agent": "jenny",
             "message": "Please review Mission Control chat bridge.",
+            "user_message": "Please review the room without showing the hidden guardrail packet.",
         },
     )
 
@@ -740,8 +745,10 @@ def test_workspace_github_bridge_outbox_create_posts_one_mailbox_message(plugin_
     assert payload["message"]["request_id"] == "github-req-ui"
     assert payload["message"]["from_agent"] == "travis"
     assert payload["message"]["to_agent"] == "jenny"
+    assert payload["message"]["metadata"]["user_message"] == "Please review the room without showing the hidden guardrail packet."
     records = JsonlRecordStore(plugin_api.record_store_path()).read_all(GitHubBridgeMessageRecord)
     assert [record.request_id for record in records] == ["github-req-ui"]
+    assert records[0].metadata["user_message"] == "Please review the room without showing the hidden guardrail packet."
 
 
 def test_workspace_github_bridge_answer_once_requires_explicit_request(plugin_api, client):

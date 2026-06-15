@@ -301,6 +301,11 @@ function projectRequestPreview(value: string, maxChars: number): string {
   return compactText(candidate, maxChars)
 }
 
+function cleanChatDisplayMessage(metadata: Record<string, unknown> | undefined, fallback: string, maxChars: number): string {
+  const userMessage = typeof metadata?.user_message === 'string' ? metadata.user_message.trim() : ''
+  return compactText(userMessage || projectRequestPreview(fallback, maxChars), maxChars)
+}
+
 function chatStatusLabel(value: string | undefined): string {
   switch (value) {
     case 'queued':
@@ -1966,7 +1971,8 @@ export function MissionControlView() {
         message: mailboxMessageForProject(project),
         project_id: project.project_id,
         request_id: bridgeRequestId(),
-        to_agent: 'jenny'
+        to_agent: 'jenny',
+        user_message: projectRequest.trim()
       })
       setSnapshot(await loadMissionControlSnapshot())
       setJennyRunProgress({
@@ -2076,7 +2082,8 @@ export function MissionControlView() {
         message: buildHermesUpdateLanePacket(status),
         project_id: project.project_id,
         request_id: bridgeRequestId(),
-        to_agent: 'jenny'
+        to_agent: 'jenny',
+        user_message: HERMES_UPDATE_LANE_REQUEST
       })
       setSnapshot(await loadMissionControlSnapshot())
       setProjectRoomMessage('Sent safe Hermes update lane to Jenny mailbox. It is append-only and does not update the laptop worker node, switch runtimes, or restart gateway.')
@@ -2098,7 +2105,8 @@ export function MissionControlView() {
         message: buildHermesStorageCleanupLanePacket(status),
         project_id: project.project_id,
         request_id: bridgeRequestId(),
-        to_agent: 'jenny'
+        to_agent: 'jenny',
+        user_message: HERMES_STORAGE_CLEANUP_LANE_REQUEST
       })
       setSnapshot(await loadMissionControlSnapshot())
       setProjectRoomMessage('Sent safe Hermes storage cleanup lane to Jenny mailbox. It is append-only and does not delete, move, upload, restart, or switch anything.')
@@ -2790,7 +2798,7 @@ function ProjectRoomsWorkspace({
   const chatMessages: ProjectChatMessage[] = [
     ...visibleBridgeRequests.map(request => ({
       body: request.message,
-      displayBody: projectRequestPreview(request.message, 900),
+      displayBody: cleanChatDisplayMessage(request.metadata, request.message, 900),
       id: request.request_id || request.ack_key || request.created_at || 'bridge-request',
       meta: chatStatusLabel(request.bridge_state ?? (request.request_id && repliedRequestIds.has(request.request_id) ? 'replied' : request.status ?? 'queued')),
       speaker: 'You' as const,
@@ -2805,7 +2813,7 @@ function ProjectRoomsWorkspace({
     })),
     ...visibleGitHubBridgeMessages.map(message => ({
       body: message.message,
-      displayBody: message.from_agent === 'jenny' ? undefined : projectRequestPreview(message.message, 900),
+      displayBody: message.from_agent === 'jenny' ? undefined : cleanChatDisplayMessage(message.metadata, message.message, 900),
       id: message.github_comment_id || message.request_id || message.created_at || 'github-message',
       meta: chatStatusLabel(message.status),
       speaker: message.from_agent === 'jenny' ? 'Jenny' as const : 'You' as const,

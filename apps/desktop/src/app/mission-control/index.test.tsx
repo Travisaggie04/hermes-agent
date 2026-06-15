@@ -655,6 +655,9 @@ beforeEach(() => {
           created_at: '2026-06-13T01:00:00Z',
           from_agent: 'travis',
           message: 'Hermes / Mission Control Request: Review the Mission Control room. Current brief: Replace Discord as Travis primary workspace. Challenge state: clear_and_safe / start record-only manual-copy. Allowed: read approved context. Forbidden: no direct session send.',
+          metadata: {
+            user_message: 'Review the Mission Control room.'
+          },
           project_id: 'project-hermes-mission-control',
           request_id: 'github-bridge-request-1',
           status: 'queued',
@@ -1155,6 +1158,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Review the Mission Control room.')).toBeTruthy()
     const transcript = within(screen.getByLabelText('Project chat transcript'))
     expect(transcript.getByText('testing. tell me a short story')).toBeTruthy()
+    expect(transcript.getByText('Review the Mission Control room.')).toBeTruthy()
     expect(transcript.queryByText(/Current brief: Replace Discord as Travis primary workspace/)).toBeNull()
     expect(transcript.queryByText(/Allowed: read approved context/)).toBeNull()
     expect(transcript.queryByText(/Forbidden: no direct session send/)).toBeNull()
@@ -1210,7 +1214,8 @@ describe('MissionControlView', () => {
         message: expect.stringContaining('Project room request:'),
         project_id: 'project-hermes-mission-control',
         request_id: expect.stringContaining('mission-control-chat-'),
-        to_agent: 'jenny'
+        to_agent: 'jenny',
+        user_message: 'Make the visible Mission Control page show project rooms on laptop and phone.'
       })
     )
     expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
@@ -1260,7 +1265,8 @@ describe('MissionControlView', () => {
         message: expect.stringContaining('Hermes update lane request:'),
         project_id: 'project-hermes-mission-control',
         request_id: expect.stringContaining('mission-control-chat-'),
-        to_agent: 'jenny'
+        to_agent: 'jenny',
+        user_message: expect.stringContaining('Start a safe Hermes update readiness lane')
       })
     )
     expect(createMissionControlGitHubBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('gateway update as a separate explicit lane')
@@ -1273,7 +1279,8 @@ describe('MissionControlView', () => {
         message: expect.stringContaining('Hermes storage cleanup lane request:'),
         project_id: 'project-hermes-mission-control',
         request_id: expect.stringContaining('mission-control-chat-'),
-        to_agent: 'jenny'
+        to_agent: 'jenny',
+        user_message: expect.stringContaining('Start a safe Hermes storage cleanup lane')
       })
     )
     expect(createMissionControlGitHubBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('target of about 50% disk usage')
@@ -1314,7 +1321,8 @@ describe('MissionControlView', () => {
         from_agent: 'travis',
         message: expect.stringContaining('Spec-first request for Jenny:'),
         project_id: 'project-hermes-mission-control',
-        to_agent: 'jenny'
+        to_agent: 'jenny',
+        user_message: 'make Jenny fully functional and autonomous'
       })
     )
     expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
