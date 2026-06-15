@@ -2389,9 +2389,9 @@ export function MissionControlView() {
                   Pick a project and talk to Jenny. Safety checks stay in the background while Hermes / Mission Control is being recovered.
                 </p>
                 <p className="sr-only">Messages are saved. Higher-risk actions still need approval before anything live changes.</p>
-                <p className="mt-1 text-sm text-[#a89782]">Pick a project and chat. Guardrails stay in the background.</p>
+                <p className="sr-only">Pick a project and chat. Guardrails stay in the background.</p>
               </div>
-              <div className="flex flex-wrap justify-end gap-2">
+              <div className="sr-only flex flex-wrap justify-end gap-2">
                 <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-300">
                   guarded
                 </span>
@@ -2474,8 +2474,8 @@ export function MissionControlView() {
         </div>
       ) : null}
 
-      <details className="mt-4 rounded-lg border border-border/60 bg-background/30 p-3">
-        <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">Details</summary>
+      <details className="mt-3 rounded-lg border border-border/60 bg-background/20 p-3">
+        <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">More</summary>
         <div className="mt-4 grid gap-5">
           <HermesHealthDashboard
             activeProjects={activeProjects}
@@ -3250,8 +3250,8 @@ function ProjectRoomsWorkspace({
 
         </div>
 
-        <details aria-label="Workspace inspector" className="mt-2 rounded-md border border-[#f3ebda]/10 bg-[#1c1622]/70 px-3 py-2" role="complementary">
-          <summary className="cursor-pointer text-sm font-semibold text-[#f3ebda]">Activity, sessions, and safety details</summary>
+        <details aria-label="Workspace inspector" className="mt-2 rounded-md border border-[#f3ebda]/10 bg-[#15101a]/60 px-3 py-2" role="complementary">
+          <summary className="cursor-pointer text-sm font-semibold text-[#a59783]">More</summary>
           <div className="mt-3 grid gap-3 xl:grid-cols-2">
         <section aria-label="Jenny activity" className="rounded-lg border border-[#60a5fa]/25 bg-[#60a5fa]/10 p-3">
           <div className="flex items-center justify-between gap-2">
@@ -3310,7 +3310,7 @@ function ProjectRoomsWorkspace({
 
           </div>
         <details className="mt-3 rounded-lg border border-[#f3ebda]/10 bg-[#15101a]/60 p-3">
-          <summary className="cursor-pointer text-sm font-semibold">Safety and maintenance</summary>
+          <summary className="cursor-pointer text-sm font-semibold">Advanced</summary>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <Field label="project brief" value={compactText(brief?.outcome, 320) || 'No project brief recorded'} />
             <Field label="challenge review" value={review ? `${review.decision_state ?? 'unknown'} / ${review.recommended_path ?? 'No recommended path recorded'}` : 'No challenge review recorded'} />
