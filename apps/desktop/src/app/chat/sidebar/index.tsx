@@ -1303,7 +1303,7 @@ function SidebarSessionsSection({
   const showEmptyState = forceEmptyState || sessions.length === 0
   const dndActive = sortable && !!onReorder
 
-  const renderRow = (session: SessionInfo) => {
+  const renderRow = (session: SessionInfo, group?: SidebarSessionGroup) => {
     const rowProps = {
       isPinned: pinned,
       isSelected: session.id === activeSessionId,
@@ -1314,7 +1314,13 @@ function SidebarSessionsSection({
         ? (projectId: string, projectName: string) => onMoveSessionToProject(session, projectId, projectName)
         : undefined,
       onPin: () => onTogglePin(sessionPinId(session)),
-      onResume: () => onResumeSession(session.id),
+      onResume: () => {
+        if (group?.mode === 'project') {
+          onSelectProject?.(group.id, group.label)
+        }
+
+        onResumeSession(session.id)
+      },
       projectMoveTargets,
       session
     }
@@ -1326,15 +1332,15 @@ function SidebarSessionsSection({
     )
   }
 
-  const renderRows = (items: SessionInfo[]) => items.map(renderRow)
+  const renderRows = (items: SessionInfo[], group?: SidebarSessionGroup) => items.map(session => renderRow(session, group))
 
-  const renderSessionList = (items: SessionInfo[]) =>
+  const renderSessionList = (items: SessionInfo[], group?: SidebarSessionGroup) =>
     dndActive ? (
       <SortableContext items={items.map(s => s.id)} strategy={verticalListSortingStrategy}>
-        {renderRows(items)}
+        {renderRows(items, group)}
       </SortableContext>
     ) : (
-      renderRows(items)
+      renderRows(items, group)
     )
 
   const flatVirtualized = !showEmptyState && !groups?.length && sessions.length >= VIRTUALIZE_THRESHOLD
@@ -1423,7 +1429,7 @@ function SidebarSessionsSection({
 
 interface SidebarWorkspaceGroupProps extends React.ComponentProps<'div'> {
   group: SidebarSessionGroup
-  renderRows: (sessions: SessionInfo[]) => React.ReactNode
+  renderRows: (sessions: SessionInfo[], group?: SidebarSessionGroup) => React.ReactNode
   onNewSession?: (path: null | string) => void
   onNewSessionInProject?: (projectId: string, projectName: string) => void
   onSelectProject?: (projectId: string, projectName: string) => void
@@ -1544,7 +1550,7 @@ function SidebarWorkspaceGroup({
       {open && (
         <>
           {visibleSessions.length ? (
-            renderRows(visibleSessions)
+            renderRows(visibleSessions, group)
           ) : isProjectGroup ? (
             <div className="grid gap-1 rounded-md px-2 py-1.5 text-[0.75rem] text-(--ui-text-tertiary)">
               <span>No chats in this project yet.</span>
@@ -1582,7 +1588,7 @@ function SidebarWorkspaceGroup({
 
 interface SortableWorkspaceProps {
   group: SidebarSessionGroup
-  renderRows: (sessions: SessionInfo[]) => React.ReactNode
+  renderRows: (sessions: SessionInfo[], group?: SidebarSessionGroup) => React.ReactNode
   onNewSession?: (path: null | string) => void
   onNewSessionInProject?: (projectId: string, projectName: string) => void
   onSelectProject?: (projectId: string, projectName: string) => void
