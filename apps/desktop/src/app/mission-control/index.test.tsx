@@ -1657,6 +1657,9 @@ describe('MissionControlView', () => {
 
     expect(text).toContain('createMissionControlReport')
     expect(text).toContain('createMissionControlSessionProjectLink')
+    expect(text).toContain('isNoPendingBridgeError')
+    expect(text).toContain('normalizedBridgeError')
+    expect(text).toContain('No message is waiting for Jenny. Send a message first.')
 
     for (const forbidden of [
       '.post(',

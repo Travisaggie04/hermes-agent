@@ -804,13 +804,34 @@ function bridgeRequestId(): string {
   return `mission-control-chat-${globalThis.crypto?.randomUUID?.() ?? fallback}`
 }
 
+function isNoPendingBridgeError(value: unknown): boolean {
+  const text = String(value ?? '').toLowerCase()
+  return text.includes('no matching pending') || text.includes('no pending message') || text.includes('no pending request')
+}
+
+function normalizedBridgeError(
+  bridgeStatus: MissionControlJennyBridgePollerStatusResponse,
+  githubBridgeStatus: MissionControlGitHubBridgeStatusResponse
+): string {
+  const error = String(bridgeStatus.last_error || githubBridgeStatus.last_error || '')
+  return isNoPendingBridgeError(error) ? '' : error
+}
+
+function noReplyStatusMessage(error: unknown): string {
+  const rawError = error ?? 'no matching pending request'
+  if (isNoPendingBridgeError(rawError)) {
+    return 'No message is waiting for Jenny. Send a message first.'
+  }
+  return `Jenny did not reply: ${String(rawError)}`
+}
+
 function jennyDeliveryStatus(
   pendingCount: number,
   responseCount: number,
   bridgeStatus: MissionControlJennyBridgePollerStatusResponse,
   githubBridgeStatus: MissionControlGitHubBridgeStatusResponse
 ): string {
-  if (bridgeStatus.last_error || githubBridgeStatus.last_error) {
+  if (normalizedBridgeError(bridgeStatus, githubBridgeStatus)) {
     return 'Jenny bridge needs attention'
   }
   if (githubBridgeStatus.foreground_watch_running) {
@@ -831,7 +852,7 @@ function jennyConnectionState(
   bridgeStatus: MissionControlJennyBridgePollerStatusResponse,
   githubBridgeStatus: MissionControlGitHubBridgeStatusResponse
 ): { detail: string; label: string; tone: 'bad' | 'good' | 'idle' | 'warn' } {
-  if (bridgeStatus.last_error || githubBridgeStatus.last_error) {
+  if (normalizedBridgeError(bridgeStatus, githubBridgeStatus)) {
     return {
       detail: 'Open advanced controls, check the bridge error, then refresh replies.',
       label: 'Jenny needs attention',
@@ -918,6 +939,9 @@ function jennyActivityLabel(status: string | undefined): string {
 
 function jennyActivityDetail(record: MissionControlGitHubBridgeMailboxStatusRecord): string {
   if (record.last_error) {
+    if (isNoPendingBridgeError(record.last_error)) {
+      return 'No message is waiting for Jenny.'
+    }
     return record.last_error
   }
   if (record.handled_request_id) {
@@ -940,7 +964,7 @@ function jennyNextStep(
   bridgeStatus: MissionControlJennyBridgePollerStatusResponse,
   githubBridgeStatus: MissionControlGitHubBridgeStatusResponse
 ): string {
-  if (bridgeStatus.last_error || githubBridgeStatus.last_error) {
+  if (normalizedBridgeError(bridgeStatus, githubBridgeStatus)) {
     return 'Open safety details, check the bridge error, then refresh replies.'
   }
   if (hasRunnablePendingMessage) {
@@ -2079,13 +2103,13 @@ export function MissionControlView() {
       setJennyRunProgress({
         detail: result.answered
           ? 'Jenny replied to the latest project message.'
-          : `Jenny did not reply: ${String((result.status as { last_error?: unknown } | undefined)?.last_error ?? 'no matching pending request')}`,
+          : noReplyStatusMessage((result.status as { last_error?: unknown } | undefined)?.last_error),
         phase: result.answered ? 'complete' : 'error'
       })
       setProjectRoomMessage(
         result.answered
           ? 'Jenny replied to the latest pending project message.'
-          : `Jenny did not reply: ${String((result.status as { last_error?: unknown } | undefined)?.last_error ?? 'no matching pending request')}`
+          : noReplyStatusMessage((result.status as { last_error?: unknown } | undefined)?.last_error)
       )
     } catch (err) {
       setJennyRunProgress({
@@ -2642,7 +2666,7 @@ function JennyLiveActivityRail({
   projectRoomSaving: boolean
 }) {
   const activityItems = jennyActivityItems(githubBridgeStatus)
-  const hasError = Boolean(bridgeStatus.last_error || githubBridgeStatus.last_error)
+  const hasError = Boolean(normalizedBridgeError(bridgeStatus, githubBridgeStatus))
   const runCopy = jennyRunProgressCopy(jennyRunProgress, jennyRunElapsedSeconds)
   const runActive = isJennyRunActive(jennyRunProgress)
   const visiblePendingCount = githubBridgeStatus.visible_pending_count ?? githubBridgeStatus.pending_count ?? 0
@@ -2832,7 +2856,7 @@ function ProjectRoomsWorkspace({
   const latestReviewByResponseId = latestReplyReviewByResponseId(replyReviews)
   const runActive = isJennyRunActive(jennyRunProgress)
   const runCopy = jennyRunProgressCopy(jennyRunProgress, jennyRunElapsedSeconds)
-  const bridgeError = bridgeStatus.last_error || githubBridgeStatus.last_error || ''
+  const bridgeError = normalizedBridgeError(bridgeStatus, githubBridgeStatus)
   const hasRunnablePendingMessage = Boolean(latestPending)
   const chatMessages: ProjectChatMessage[] = [
     ...visibleBridgeRequests.map(request => ({
@@ -3638,7 +3662,7 @@ function HermesHealthDashboard({
   snapshot: MissionControlSnapshot
   status: ReturnType<typeof summarizeWorkspaceStatus>
 }) {
-  const bridgeError = snapshot.githubBridgeStatus.last_error || snapshot.jennyBridgePollerStatus.last_error || ''
+  const bridgeError = normalizedBridgeError(snapshot.jennyBridgePollerStatus, snapshot.githubBridgeStatus)
   const bridgePending = snapshot.githubBridgeStatus.visible_pending_count ?? snapshot.githubBridgeStatus.pending_count ?? snapshot.jennyBridgePollerStatus.pending_count ?? 0
   const bridgeWatching = snapshot.githubBridgeStatus.foreground_watch_running === true
   const reportCount = activeProjects.filter(project => {
