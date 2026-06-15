@@ -90,7 +90,7 @@ import {
 } from '@/store/session'
 import { setSelectedMissionControlProject } from '@/store/session'
 
-import { type AppView, ARTIFACTS_ROUTE, MESSAGING_ROUTE, MISSION_CONTROL_ROUTE, SKILLS_ROUTE } from '../../routes'
+import { type AppView, ARTIFACTS_ROUTE, MESSAGING_ROUTE, SKILLS_ROUTE } from '../../routes'
 import { SidebarPanelLabel } from '../../shell/sidebar-label'
 import type { SidebarNavItem } from '../../types'
 
@@ -124,9 +124,9 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
   { id: 'artifacts', label: 'Artifacts', icon: props => <Codicon name="files" {...props} />, route: ARTIFACTS_ROUTE },
   {
     id: 'mission-control',
-    label: 'Mission Control',
+    label: 'Jenny OS',
     icon: props => <Codicon name="dashboard" {...props} />,
-    route: MISSION_CONTROL_ROUTE
+    action: 'jenny-os'
   }
 ]
 
@@ -135,6 +135,7 @@ const WORKSPACE_PAGE = 5
 // unified list scannable, then reveal/fetch more in N-sized steps on demand.
 const PROFILE_INITIAL_PAGE = 5
 const WS_ID_PREFIX = 'workspace:'
+const HERMES_PROJECT_NAME = 'Hermes / Mission Control'
 
 const wsId = (id: string) => `${WS_ID_PREFIX}${id}`
 const parseWsId = (id: string) => (id.startsWith(WS_ID_PREFIX) ? id.slice(WS_ID_PREFIX.length) : null)
@@ -817,6 +818,7 @@ export function ChatSidebar({
                   (item.id === 'artifacts' && currentView === 'artifacts')
 
                 const isNewSession = item.id === 'new-session'
+                const isJennyOs = item.action === 'jenny-os'
                 const navLabel =
                   isNewSession && selectedMissionControlProjectId
                     ? 'New project chat'
@@ -824,6 +826,8 @@ export function ChatSidebar({
                 const navTooltip =
                   isNewSession && selectedMissionControlProjectId
                     ? `New chat in ${selectedMissionControlProjectName || selectedMissionControlProjectId}`
+                    : isJennyOs
+                      ? `Open Jenny chat in ${HERMES_PROJECT_NAME}`
                     : (s.nav[item.id] ?? item.label)
 
                 return (
