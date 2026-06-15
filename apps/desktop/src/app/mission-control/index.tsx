@@ -3171,7 +3171,12 @@ function ProjectRoomsWorkspace({
               </article>
             ) : null}
             {chatMessages.length ? (
-              chatMessages.map(chat => (
+              chatMessages.map(chat => {
+                const replyReview = latestReviewByResponseId.get(chat.id)
+                const isLatestJennyReply = chat.speaker === 'Jenny' && latestActualJennyReply?.id === chat.id
+                const showLatestReplyActions = isLatestJennyReply && !replyReview
+
+                return (
                 <article
                   className={cn(
                     'max-w-[85%] rounded-lg border px-3 py-2 text-sm shadow-[0_10px_30px_rgba(0,0,0,0.18)]',
@@ -3189,48 +3194,52 @@ function ProjectRoomsWorkspace({
                     {chat.speaker === 'You' ? chat.displayBody ?? projectRequestPreview(chat.body, 900) : compactText(chat.body, 900)}
                   </p>
                   {chat.speaker === 'Jenny' ? (
-                    <details className="sr-only mt-2 rounded-md border border-[#f3ebda]/10 bg-[#15101a]/50 px-2 py-1.5 text-xs">
-                      <summary className="cursor-pointer font-semibold text-[#a59783]">Review reply</summary>
-                      <div className="mt-2 grid gap-2">
-                      <p className={cn(
-                        'rounded border px-2 py-1 text-xs',
-                        jennyReplyContract(chat.body).tone === 'complete'
-                          ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-                          : 'border-amber-500/25 bg-amber-500/10 text-amber-100'
-                      )}>
-                        {jennyReplyContract(chat.body).label}
-                      </p>
-                      <p className="rounded border border-[#f3ebda]/10 bg-[#15101a]/60 px-2 py-1 text-xs text-[#a59783]">
-                        {jennyReplyReviewDecisionLabel(latestReviewByResponseId.get(chat.id)?.decision)}
-                      </p>
-                      <div aria-label="Jenny reply review actions" className="flex flex-wrap gap-1.5">
-                        <button
-                          className="rounded border border-[#5ab896]/30 px-2 py-1 text-xs font-semibold text-[#5ab896] hover:bg-[#5ab896]/10"
-                          onClick={() => onReviewReply('accepted', chat.id, chat.body)}
-                          type="button"
-                        >
-                          Draft acceptance note
-                        </button>
-                        <button
-                          className="rounded border border-[#60a5fa]/30 px-2 py-1 text-xs font-semibold text-[#93c5fd] hover:bg-[#60a5fa]/10"
-                          onClick={() => onReviewReply('needs_evidence', chat.id, chat.body)}
-                          type="button"
-                        >
-                          Ask for evidence
-                        </button>
-                        <button
-                          className="rounded border border-amber-500/30 px-2 py-1 text-xs font-semibold text-amber-200 hover:bg-amber-500/10"
-                          onClick={() => onReviewReply('needs_safer_plan', chat.id, chat.body)}
-                          type="button"
-                        >
-                          Challenge plan
-                        </button>
+                    <div className="mt-2 grid gap-2 border-t border-[#f3ebda]/10 pt-2 text-xs">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className={cn(
+                          'rounded-full border px-2 py-1 font-semibold',
+                          jennyReplyContract(chat.body).tone === 'complete'
+                            ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+                            : 'border-amber-500/25 bg-amber-500/10 text-amber-100'
+                        )}>
+                          {jennyReplyContract(chat.body).label}
+                        </span>
+                        {replyReview ? (
+                          <span className="rounded-full border border-[#f3ebda]/10 bg-[#15101a]/60 px-2 py-1 text-[#a59783]">
+                            {jennyReplyReviewDecisionLabel(replyReview.decision)}
+                          </span>
+                        ) : null}
                       </div>
-                      </div>
-                    </details>
+                      {showLatestReplyActions ? (
+                        <div aria-label="Review latest Jenny reply" className="flex flex-wrap gap-1.5">
+                          <button
+                            className="rounded-full border border-[#5ab896]/30 px-2.5 py-1 font-semibold text-[#5ab896] hover:bg-[#5ab896]/10"
+                            onClick={() => onReviewReply('accepted', chat.id, chat.body)}
+                            type="button"
+                          >
+                            Looks good
+                          </button>
+                          <button
+                            className="rounded-full border border-[#60a5fa]/30 px-2.5 py-1 font-semibold text-[#93c5fd] hover:bg-[#60a5fa]/10"
+                            onClick={() => onReviewReply('needs_evidence', chat.id, chat.body)}
+                            type="button"
+                          >
+                            Ask for evidence
+                          </button>
+                          <button
+                            className="rounded-full border border-amber-500/30 px-2.5 py-1 font-semibold text-amber-200 hover:bg-amber-500/10"
+                            onClick={() => onReviewReply('needs_safer_plan', chat.id, chat.body)}
+                            type="button"
+                          >
+                            Challenge
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   ) : null}
                 </article>
-              ))
+                )
+              })
             ) : (
               <div className="rounded-lg border border-dashed border-[#f3ebda]/10 p-4 text-sm text-[#a59783]">
                 Ask Jenny a bounded question or give her one safe next task below.
@@ -3242,10 +3251,9 @@ function ProjectRoomsWorkspace({
 
         <div className="mt-2 border-t border-[#f3ebda]/10 pt-2">
           {reviewRequired ? (
-            <div className="mb-2 rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-100" role="status">
-              <span className="font-semibold">Review Jenny&apos;s latest reply before relying on it.</span>
-              <span className="sr-only ml-1">Open Review reply on the latest Jenny message to accept it, ask for evidence, or challenge the plan.</span>
-            </div>
+            <p className="mb-2 text-xs font-semibold text-amber-200" role="status">
+              Review the latest Jenny reply in the chat before acting on it.
+            </p>
           ) : null}
           <label className="grid gap-1 text-sm font-medium">
             Message Jenny
