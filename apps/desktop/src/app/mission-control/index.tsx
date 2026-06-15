@@ -2316,8 +2316,8 @@ export function MissionControlView() {
 
   return (
     <section className="h-full min-h-0 overflow-hidden bg-[#0e0b12] text-[#f7efe4]">
-      <div className="grid h-full min-h-0 grid-cols-[15.5rem_minmax(0,1fr)]">
-        <aside className="hidden min-h-0 border-r border-[#f7efe4]/10 bg-[#17111f] px-5 py-6 lg:block">
+      <div className="grid h-full min-h-0 grid-cols-1">
+        <aside className="hidden">
           <div className="text-[0.68rem] font-semibold uppercase tracking-[0.26em] text-[#a89782]">Local · studio</div>
           <div className="mt-4 text-xl font-semibold tracking-tight">Agentic <span className="font-serif italic text-[#d4a574]">OS</span></div>
           <nav className="mt-10 grid gap-2 text-sm">
@@ -2352,32 +2352,25 @@ export function MissionControlView() {
           </div>
         </aside>
 
-        <main className="min-h-0 overflow-auto bg-[radial-gradient(circle_at_80%_20%,rgba(116,69,58,0.18),transparent_32%),linear-gradient(180deg,#160f1b_0%,#0e0b12_100%)] px-6 py-5">
-          <header className="mb-5 border-b border-[#f7efe4]/10 pb-5">
+        <main className="min-h-0 overflow-auto bg-[linear-gradient(180deg,#160f1b_0%,#0e0b12_100%)] px-4 py-3">
+          <header className="mb-3 border-b border-[#f7efe4]/10 pb-3">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-[0.72rem] font-semibold uppercase tracking-[0.28em] text-[#a89782]">
-                  <span className="font-serif text-xl italic text-[#d4a574]">IV.</span>
-                  <span className="ml-3">Agent · Jenny</span>
-                </div>
-                <h1 className="mt-5 text-6xl font-semibold tracking-tight text-[#fff8ed]">Jenny</h1>
+                <h1 className="text-2xl font-semibold tracking-tight text-[#fff8ed]">Jenny workspace</h1>
                 <span className="sr-only">Jenny Workspace</span>
                 <p className="sr-only">
                   Pick a project and talk to Jenny. Safety checks stay in the background while Hermes / Mission Control is being recovered.
                 </p>
                 <p className="sr-only">Messages are saved. Higher-risk actions still need approval before anything live changes.</p>
-                <p className="mt-3 text-lg text-[#a89782]">Mission Control, project rooms, guarded replies, and live bridge activity.</p>
-                <div className="mt-6 text-xs font-semibold uppercase tracking-[0.24em] text-[#a89782]">Local · studio</div>
+                <p className="mt-1 text-sm text-[#a89782]">Pick a project, message Jenny, and review the outcome. Safety details stay collapsed.</p>
               </div>
               <div className="flex flex-wrap justify-end gap-2">
-                <span className="rounded-lg border border-[#f7efe4]/10 bg-[#1b1422]/70 px-3 py-2 text-xs text-[#c9b8a2]">⌘K Command palette</span>
-                <span className="rounded-lg border border-[#f7efe4]/10 bg-[#1b1422]/70 px-3 py-2 text-xs text-[#c9b8a2]">All systems</span>
                 <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-300">
                   Jenny guarded
                 </span>
               </div>
             </div>
-            <div className="mt-8 flex min-w-0 flex-wrap gap-2">
+            <div className="sr-only">
               {['Chat', 'Talk', 'Jenny-Jarvis', 'Studio', 'Session hub', 'Workspace', 'MCPs', 'Manage', 'Control Room', 'Goal Mode'].map((tab, index) => (
                 <span
                   className={cn(
@@ -2402,17 +2395,8 @@ export function MissionControlView() {
       ) : null}
 
       {selectedProject ? (
-        <div className="grid min-h-[34rem] gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
-          <div className="xl:order-2">
-            <JennyLiveActivityRail
-              bridgeStatus={snapshot.jennyBridgePollerStatus}
-              githubBridgeStatus={snapshot.githubBridgeStatus}
-              jennyRunElapsedSeconds={jennyRunElapsedSeconds}
-              jennyRunProgress={jennyRunProgress}
-              projectRoomSaving={projectRoomSaving}
-            />
-          </div>
-          <div className="xl:order-1">
+        <div className="grid min-h-[34rem] gap-4">
+          <div>
             <ProjectRoomsWorkspace
               bridgeRequests={snapshot.jennyBridgeRequests.filter(request => request.project_id === selectedProject.project_id)}
               bridgeResponses={snapshot.jennyBridgeResponses.filter(response => response.project_id === selectedProject.project_id)}
@@ -2948,29 +2932,26 @@ function ProjectRoomsWorkspace({
           <div className="flex min-w-0 items-center gap-2">
             <span className="sr-only">IV. — Jenny workspace</span>
             <h2 className="truncate text-base font-semibold tracking-tight text-[#f3ebda]">{project.name}</h2>
-            <span className="hidden max-w-[36rem] truncate text-xs text-[#a59783] md:inline">
-              {compactText(state?.current_goal ?? project.current_goal, 130) || 'No current goal recorded.'}
-            </span>
           </div>
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-1.5">
             <span className={cn('rounded-full border px-2.5 py-1 text-xs font-semibold', jennyStatusToneClass(connectionState.tone))}>
               {connectionState.label}
             </span>
             <span className={cn(
-              'rounded-full border px-2.5 py-1 text-xs',
+              'sr-only rounded-full border px-2.5 py-1 text-xs',
               paused
                 ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
                 : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
             )}>
               {paused ? 'Paused' : readiness.label}
             </span>
-            <span className={cn('rounded-full border px-2.5 py-1 text-xs font-semibold', jennyReplyReviewStatusClass(replyReviewStatus.tone))}>
+            <span className={cn('sr-only rounded-full border px-2.5 py-1 text-xs font-semibold', jennyReplyReviewStatusClass(replyReviewStatus.tone))}>
               {replyReviewStatus.label}
             </span>
           </div>
         </div>
 
-        <details className="mt-1 rounded-md border border-[#f3ebda]/10 bg-[#1c1622]/50 px-3 py-1.5 text-xs">
+        <details className="sr-only mt-1 rounded-md border border-[#f3ebda]/10 bg-[#1c1622]/50 px-3 py-1.5 text-xs">
           <summary className="cursor-pointer font-semibold text-[#a59783]">
             Room status
             <span className="sr-only">Next step</span>
@@ -2994,58 +2975,63 @@ function ProjectRoomsWorkspace({
           </div>
         </details>
 
-        <section
-          aria-label="Jenny current status"
-          className={cn('mt-2 rounded-md border px-3 py-2 text-sm', jennyRunStatusToneClass(jennyRunProgress, connectionState.tone))}
-        >
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-            <div className="min-w-0">
-              <div className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] opacity-75">Jenny status</div>
-              <div className="mt-0.5 font-semibold">{statusCopy.label}</div>
-            </div>
-            <div className="flex flex-wrap gap-1.5 text-xs">
-              <span className="rounded-full border border-current/20 px-2 py-0.5">Pending {pendingCount}</span>
-              <span className="rounded-full border border-current/20 px-2 py-0.5">Replies {responseCount}</span>
-              {runActive ? <span className="rounded-full border border-current/20 px-2 py-0.5">Elapsed {jennyRunElapsedSeconds}s</span> : null}
-            </div>
-          </div>
-          <p className="mt-2 max-w-full text-sm leading-snug [overflow-wrap:anywhere]">{statusCopy.detail}</p>
-          <div aria-label="Jenny operator guidance" className={cn('mt-2 rounded-md border px-3 py-2 text-xs', jennyStatusToneClass(operatorGuidance.tone))}>
-            <div className="font-semibold">{operatorGuidance.label}</div>
-            <p className="mt-1 leading-snug [overflow-wrap:anywhere]">{operatorGuidance.detail}</p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <span className="rounded-full border border-current/20 px-2 py-0.5">one reply at a time</span>
-              <span className="rounded-full border border-current/20 px-2 py-0.5">evidence required</span>
-              <span className="rounded-full border border-current/20 px-2 py-0.5">no hidden execution</span>
-            </div>
-          </div>
-          <div aria-label="Jenny live status" className="mt-2 grid gap-2 text-xs sm:grid-cols-4">
-            {liveStatusItems.map(item => (
-              <div className="min-w-0 rounded border border-current/15 bg-black/10 px-2 py-1" key={item.label}>
-                <div className="text-[0.62rem] font-semibold uppercase tracking-[0.12em] opacity-70">{item.label}</div>
-                <div className="mt-0.5 truncate font-semibold">{item.value}</div>
+        <details className="sr-only mt-2 rounded-md border border-[#f3ebda]/10 bg-[#1c1622]/50 px-3 py-2 text-sm">
+          <summary className="cursor-pointer text-[#f3ebda]">
+            <span className="font-semibold">Next:</span> {latestJennyOutcome.label}. {latestJennyOutcome.nextStep}
+          </summary>
+          <section
+            aria-label="Jenny current status"
+            className={cn('mt-2 rounded-md border px-3 py-2 text-sm', jennyRunStatusToneClass(jennyRunProgress, connectionState.tone))}
+          >
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] opacity-75">Jenny status</div>
+                <div className="mt-0.5 font-semibold">{statusCopy.label}</div>
               </div>
-            ))}
-          </div>
-          {bridgeError ? <p className="mt-2 max-w-full text-xs [overflow-wrap:anywhere]">Bridge error: {bridgeError}</p> : null}
-        </section>
-
-        <section
-          aria-label="Latest Jenny outcome"
-          className={cn('mt-2 rounded-md border px-3 py-2 text-sm', jennyReplyReviewStatusClass(latestJennyOutcome.tone))}
-        >
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-            <div className="min-w-0">
-              <div className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] opacity-75">Latest Jenny outcome</div>
-              <div className="mt-0.5 font-semibold">{latestJennyOutcome.label}</div>
+              <div className="flex flex-wrap gap-1.5 text-xs">
+                <span className="rounded-full border border-current/20 px-2 py-0.5">Pending {pendingCount}</span>
+                <span className="rounded-full border border-current/20 px-2 py-0.5">Replies {responseCount}</span>
+                {runActive ? <span className="rounded-full border border-current/20 px-2 py-0.5">Elapsed {jennyRunElapsedSeconds}s</span> : null}
+              </div>
             </div>
-            <span className="rounded-full border border-current/20 px-2 py-0.5 text-xs">{latestJennyOutcome.reviewLabel}</span>
-          </div>
-          <p className="mt-2 max-w-full leading-snug [overflow-wrap:anywhere]">{latestJennyOutcome.detail}</p>
-          <p className="mt-1 max-w-full text-xs leading-snug opacity-85 [overflow-wrap:anywhere]">Next: {latestJennyOutcome.nextStep}</p>
-        </section>
+            <p className="mt-2 max-w-full text-sm leading-snug [overflow-wrap:anywhere]">{statusCopy.detail}</p>
+            <div aria-label="Jenny operator guidance" className={cn('mt-2 rounded-md border px-3 py-2 text-xs', jennyStatusToneClass(operatorGuidance.tone))}>
+              <div className="font-semibold">{operatorGuidance.label}</div>
+              <p className="mt-1 leading-snug [overflow-wrap:anywhere]">{operatorGuidance.detail}</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <span className="rounded-full border border-current/20 px-2 py-0.5">one reply at a time</span>
+                <span className="rounded-full border border-current/20 px-2 py-0.5">evidence required</span>
+                <span className="rounded-full border border-current/20 px-2 py-0.5">no hidden execution</span>
+              </div>
+            </div>
+            <div aria-label="Jenny live status" className="mt-2 grid gap-2 text-xs sm:grid-cols-4">
+              {liveStatusItems.map(item => (
+                <div className="min-w-0 rounded border border-current/15 bg-black/10 px-2 py-1" key={item.label}>
+                  <div className="text-[0.62rem] font-semibold uppercase tracking-[0.12em] opacity-70">{item.label}</div>
+                  <div className="mt-0.5 truncate font-semibold">{item.value}</div>
+                </div>
+              ))}
+            </div>
+            {bridgeError ? <p className="mt-2 max-w-full text-xs [overflow-wrap:anywhere]">Bridge error: {bridgeError}</p> : null}
+          </section>
 
-        <JennyWorkSessionTimeline steps={workSessionSteps} />
+          <section
+            aria-label="Latest Jenny outcome"
+            className={cn('mt-2 rounded-md border px-3 py-2 text-sm', jennyReplyReviewStatusClass(latestJennyOutcome.tone))}
+          >
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] opacity-75">Latest Jenny outcome</div>
+                <div className="mt-0.5 font-semibold">{latestJennyOutcome.label}</div>
+              </div>
+              <span className="rounded-full border border-current/20 px-2 py-0.5 text-xs">{latestJennyOutcome.reviewLabel}</span>
+            </div>
+            <p className="mt-2 max-w-full leading-snug [overflow-wrap:anywhere]">{latestJennyOutcome.detail}</p>
+            <p className="mt-1 max-w-full text-xs leading-snug opacity-85 [overflow-wrap:anywhere]">Next: {latestJennyOutcome.nextStep}</p>
+          </section>
+
+          <JennyWorkSessionTimeline steps={workSessionSteps} />
+        </details>
 
         <section aria-label="Project chat transcript" className="mt-2 flex min-h-0 flex-1 flex-col rounded-md border border-[#f3ebda]/10 bg-[#251d2c]/70 p-2">
           <div className="flex items-center justify-between gap-2">
@@ -3158,31 +3144,31 @@ function ProjectRoomsWorkspace({
               Refresh replies
             </button>
           </div>
-          <div className={cn(
-            'mt-2 rounded-md border px-3 py-2 text-xs',
-            requestIntake.state === 'ready'
-              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
-              : requestIntake.state === 'approval_required'
-                ? 'border-red-500/30 bg-red-500/10 text-red-200'
-                : 'border-amber-500/30 bg-amber-500/10 text-amber-100'
-          )}>
-            <span className="font-semibold">Request intake: {requestIntake.label}.</span> {requestIntake.detail}
-            {shouldAutoChallengeRequest(requestIntake) ? (
-              <span className="mt-1 block">Ask Jenny to challenge first will request a spec-first reply before any implementation plan.</span>
-            ) : null}
-          </div>
-          {shouldAutoChallengeRequest(requestIntake) ? (
-            <div aria-label="Jenny challenge checklist" className="mt-2 rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-              <div className="font-semibold">Jenny must challenge first</div>
-              <ul className="mt-1 grid gap-1">
-                <li>Question missing facts and unsafe assumptions.</li>
-                <li>Push back on protected actions or broad scope.</li>
-                <li>Return the smallest safe lane with evidence and approval needs.</li>
-              </ul>
-            </div>
-          ) : null}
           <details className="mt-2 rounded-md border border-[#f3ebda]/10 bg-[#15101a]/60 px-3 py-2 text-xs">
-            <summary className="cursor-pointer font-semibold text-[#ddd0bb]">Advanced request options</summary>
+            <summary className="cursor-pointer font-semibold text-[#a59783]">Guardrails and advanced options</summary>
+            <div className={cn(
+              'mt-2 rounded-md border px-3 py-2',
+              requestIntake.state === 'ready'
+                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                : requestIntake.state === 'approval_required'
+                  ? 'border-red-500/30 bg-red-500/10 text-red-200'
+                  : 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+            )}>
+              <span className="font-semibold">Request intake: {requestIntake.label}.</span> {requestIntake.detail}
+              {shouldAutoChallengeRequest(requestIntake) ? (
+                <span className="mt-1 block">Ask Jenny to challenge first will request a spec-first reply before any implementation plan.</span>
+              ) : null}
+            </div>
+            {shouldAutoChallengeRequest(requestIntake) ? (
+              <div aria-label="Jenny challenge checklist" className="mt-2 rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-amber-100">
+                <div className="font-semibold">Jenny must challenge first</div>
+                <ul className="mt-1 grid gap-1">
+                  <li>Question missing facts and unsafe assumptions.</li>
+                  <li>Push back on protected actions or broad scope.</li>
+                  <li>Return the smallest safe lane with evidence and approval needs.</li>
+                </ul>
+              </div>
+            ) : null}
             <p className="mt-2 text-[#a59783]">
               Use these only when you want Jenny to challenge, narrow, or formalize the request before normal work.
             </p>
@@ -3199,7 +3185,7 @@ function ProjectRoomsWorkspace({
               <p className="mt-2 text-[#a59783]">This request is currently bounded enough for a guarded Jenny reply.</p>
             )}
           </details>
-          <p className="mt-1 text-xs text-[#a59783]">
+          <p className="sr-only mt-1 text-xs text-[#a59783]">
             {paused
               ? 'This project is visible for planning context only. Resume it after the Mission Control/Jenny recovery lane is stable.'
               : 'Live reply refresh is on and read-only. Jenny can reply through the bridge; work still waits for the normal approval gates.'}
