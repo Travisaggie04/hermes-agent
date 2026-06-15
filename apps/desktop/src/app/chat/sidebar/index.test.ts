@@ -29,4 +29,11 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('window.removeEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED')
     expect(source).toContain('refreshProjectGroups()')
   })
+
+  it('selects the project before resuming a project-linked chat', () => {
+    expect(source).toContain("if (group?.mode === 'project')")
+    expect(source).toContain('onSelectProject?.(group.id, group.label)')
+    expect(source).toContain('onResumeSession(session.id)')
+    expect(source).toContain('renderRows(visibleSessions, group)')
+  })
 })
