@@ -1613,7 +1613,7 @@ function shouldAutoChallengeRequest(intake: RequestIntakeAssessment): boolean {
   return intake.state !== "ready";
 }
 
-function jennySendButtonLabel(_intake: RequestIntakeAssessment): string {
+function jennySendButtonLabel(): string {
   return "Send";
 }
 
@@ -2225,7 +2225,7 @@ export default function MissionControlCompactPage() {
   }
 
   return (
-    <main className="box-border min-h-screen w-full min-w-0 max-w-[100dvw] overflow-x-hidden bg-[#0e0b12] px-1 py-1 pb-[env(safe-area-inset-bottom)] text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 [&_*]:box-border" data-testid="mission-control-compact-route">
+    <main className="box-border min-h-screen w-full min-w-0 max-w-[100dvw] touch-pan-y overflow-x-hidden overscroll-x-none bg-[#0e0b12] px-1 py-1 pb-[env(safe-area-inset-bottom)] text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 [&_*]:box-border" data-testid="mission-control-compact-route">
       <header className="sr-only">
         <p className="sr-only max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782] [overflow-wrap:anywhere]">
           <span className="font-serif text-lg italic text-[#d4a574]">IV.</span>
@@ -2646,7 +2646,7 @@ function CompactProjectRoom({
   const activityItems = jennyActivityItems(githubBridgeStatus);
   const requestIntake = assessProjectRequest(projectRequest, review);
   const specFirstComposerText = buildSpecFirstComposerText(selectedProjectView.project.name, projectRequest, requestIntake);
-  const sendButtonLabel = jennySendButtonLabel(requestIntake);
+  const sendButtonLabel = jennySendButtonLabel();
   const latestReviewByResponseId = latestReplyReviewByResponseId(replyReviews);
   const bridgeError = normalizedBridgeError(bridgeStatus, githubBridgeStatus);
   const hasRunnablePendingMessage = Boolean(projectedVisiblePending ?? latestPending);
@@ -2732,7 +2732,7 @@ function CompactProjectRoom({
   });
   return (
     <section
-      className="mt-1 flex min-h-[calc(100dvh-3rem)] w-full min-w-0 max-w-full flex-col overflow-hidden rounded-md border border-[#d4a574]/10 bg-[#15101a] sm:h-[calc(100vh-4rem)] sm:min-h-[34rem]"
+      className="mt-1 flex min-h-[calc(100dvh-3rem)] w-full min-w-0 max-w-[calc(100dvw-0.5rem)] flex-col overflow-hidden rounded-md border border-[#d4a574]/10 bg-[#15101a] sm:h-[calc(100vh-4rem)] sm:min-h-[34rem] sm:max-w-full"
       aria-label="Project chat workspace"
     >
       <div className="w-full min-w-0 max-w-full overflow-hidden border-b border-[#f3ebda]/10 bg-[#15101a] px-2 py-2">
@@ -2934,7 +2934,7 @@ function CompactProjectRoom({
             <h3 className="text-sm font-semibold text-[#f3ebda]">Conversation</h3>
             <span className="text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
           </div>
-          <div className="mt-2 grid min-h-0 min-w-0 flex-1 content-start gap-2 overflow-y-auto overflow-x-hidden pr-1">
+          <div className="mt-2 grid min-h-0 min-w-0 max-w-full flex-1 content-start gap-2 overflow-y-auto overflow-x-hidden overscroll-contain pr-1">
             {chatMessages.length ? (
               chatMessages.map(chat => {
                 const replyReview = latestReviewByResponseId.get(chat.id)
@@ -2944,7 +2944,7 @@ function CompactProjectRoom({
                 return (
                 <article
                   className={cn(
-                    "min-w-0 max-w-full rounded-lg border px-3 py-2 text-sm [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]",
+                    "min-w-0 w-fit max-w-[min(100%,calc(100dvw-1.5rem))] rounded-lg border px-3 py-2 text-sm [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]",
                     chat.speaker === "You" ? "justify-self-end border-[#5ab896]/30 bg-[#5ab896]/10 text-[#f3ebda]" : "justify-self-start border-[#f3ebda]/10 bg-[#1c1622]/90 text-[#f3ebda]",
                   )}
                   key={`${chat.speaker}:${chat.id}`}
@@ -3010,7 +3010,7 @@ function CompactProjectRoom({
             )}
             {showJennyStatusInChat ? (
               <article className={cn(
-                "min-w-0 max-w-full justify-self-start rounded-lg border px-3 py-2 text-sm text-[#f3ebda] [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]",
+                "min-w-0 w-fit max-w-[min(100%,calc(100dvw-1.5rem))] justify-self-start rounded-lg border px-3 py-2 text-sm text-[#f3ebda] [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]",
                 effectiveJennyRunProgress?.phase === "error"
                   ? "border-red-500/30 bg-red-500/10"
                   : "border-sky-500/30 bg-sky-500/10",
