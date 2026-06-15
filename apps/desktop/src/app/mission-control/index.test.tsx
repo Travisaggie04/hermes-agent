@@ -796,7 +796,7 @@ describe('MissionControlView', () => {
     expect(getMissionControlGitHubBridgeStatus).toHaveBeenCalledTimes(1)
 
     expect(screen.getByText('Project report archive')).toBeTruthy()
-    expect(screen.getByText('Safety details and reports')).toBeTruthy()
+    expect(screen.getAllByText('Details').length).toBeGreaterThan(0)
     expect(screen.getByText('Active Jenny OS Lane')).toBeTruthy()
     expect(screen.getByText('Mission Control/Jenny stability lane only. Display-only; lane state is derived from briefs, challenge reviews, lane drafts, and reports.')).toBeTruthy()
     expect(screen.getByText('display-only / no dispatch')).toBeTruthy()
@@ -811,7 +811,7 @@ describe('MissionControlView', () => {
     expect(screen.getAllByRole('heading', { name: 'Hermes / Mission Control' }).length).toBeGreaterThan(0)
     expect(screen.getByText('Conversation')).toBeTruthy()
     expect(screen.getByText('Jenny status')).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Jenny workspace' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Jenny' })).toBeTruthy()
     expect(screen.getAllByText((_, element) => element?.textContent?.includes('Next: Review before relying') ?? false).length).toBeGreaterThan(0)
     expect(screen.getByRole('region', { name: 'Latest Jenny outcome' })).toBeTruthy()
     expect(screen.getByText('Review before relying')).toBeTruthy()
@@ -962,7 +962,7 @@ describe('MissionControlView', () => {
   it('shows paused project rooms but keeps their Jenny actions disabled', async () => {
     await renderMissionControl()
 
-    fireEvent.click((await screen.findAllByRole('button', { name: /Long-form Video/ })).at(0)!)
+    fireEvent.change(await screen.findByLabelText('Active project'), { target: { value: 'project-long-form-video' } })
 
     expect(screen.getByRole('heading', { name: 'Long-form Video' })).toBeTruthy()
     expect(screen.getAllByText('Paused').length).toBeGreaterThan(0)
@@ -1153,7 +1153,7 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText('Jenny working').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Reply received').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Review next').length).toBeGreaterThan(0)
-    expect(screen.getByText('More options')).toBeTruthy()
+    expect(screen.getAllByText('Details').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Pending \d+/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Replies \d+/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Reply quality/).length).toBeGreaterThan(0)

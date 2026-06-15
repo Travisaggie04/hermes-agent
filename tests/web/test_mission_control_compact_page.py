@@ -134,7 +134,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Evidence: exact files/commands/checks/PR/CI/runtime/links used.",
         "Approval/rollback: approval needed before live action plus rollback path.",
         "Rule: if evidence is missing, say \\\"not proven\\\"; do not present it as done.",
-        "Message sent. Replies refresh automatically; use Refresh replies under More options if you want to check now.",
+        "Message sent. Replies refresh automatically; use Refresh replies under Details if you want to check now.",
         "Live reply refresh is on and read-only",
         "setInterval",
         "clearInterval",
@@ -149,7 +149,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "onOpenSession",
         "onClick={() => onOpenSession(session)}",
         "Safety and maintenance",
-        "Safety details and reports",
+        "Details",
         "Project report archive",
         "Copy phone-safe packet",
         "Save challenge draft",
@@ -187,7 +187,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Push back on protected actions or broad scope.",
         "Return the smallest safe lane with evidence and approval needs.",
         "Use spec-first prompt",
-        "More options",
+        "Details",
         "Use these when Jenny should challenge, narrow, or formalize the request before normal work.",
         "This request is bounded enough for a guarded Jenny reply.",
         "Ask Jenny to review first will request a spec-first reply before any implementation plan.",
@@ -203,9 +203,9 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "mt-3 grid w-full min-w-0 max-w-full gap-3 overflow-hidden",
         "min-h-[calc(100dvh-8rem)]",
         "sm:h-[calc(100vh-5rem)] sm:min-h-[34rem]",
-        "grid w-full min-w-0 max-w-full gap-1 sm:hidden",
+        "grid w-full min-w-0 max-w-xl gap-1",
         "select",
-        "hidden w-full min-w-0 max-w-full gap-1.5 sm:grid",
+        "sr-only w-full min-w-0 max-w-full gap-1.5",
         "Latest Jenny activity",
         "min-w-0 max-w-full overflow-hidden rounded-md",
         "block max-w-full truncate font-semibold",
@@ -446,7 +446,7 @@ def test_compact_chat_send_uses_github_mailbox_not_local_only_outbox() -> None:
     assert 'from_agent: "travis"' in send_fn
     assert 'to_agent: "jenny"' in send_fn
     assert "bridgeRequestId()" in send_fn
-    assert "Message sent. Replies refresh automatically; use Refresh replies under More options if you want to check now." in send_fn
+    assert "Message sent. Replies refresh automatically; use Refresh replies under Details if you want to check now." in send_fn
 
 
 def test_compact_run_jenny_once_targets_visible_current_project_message() -> None:
