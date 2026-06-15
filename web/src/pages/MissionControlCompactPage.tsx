@@ -2117,19 +2117,19 @@ export default function MissionControlCompactPage() {
   }
 
   return (
-    <main className="box-border min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-[#0e0b12] px-1 py-2 text-[#f7efe4] [overflow-wrap:anywhere] sm:px-3" data-testid="mission-control-compact-route">
-      <header className="sticky top-0 z-10 mx-0 w-full max-w-full overflow-hidden border-b border-[#f7efe4]/10 bg-[#120d17]/95 px-3 pb-3 pt-2 backdrop-blur sm:px-4">
+    <main className="box-border min-h-screen w-full min-w-0 max-w-[100dvw] overflow-x-hidden bg-[#0e0b12] px-1 py-2 text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 [&_*]:box-border" data-testid="mission-control-compact-route">
+      <header className="sticky top-0 z-10 mx-0 w-full min-w-0 max-w-full overflow-hidden border-b border-[#f7efe4]/10 bg-[#120d17]/95 px-3 pb-3 pt-2 backdrop-blur sm:px-4">
         <p className="max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782] [overflow-wrap:anywhere]">
           <span className="font-serif text-lg italic text-[#d4a574]">IV.</span>
           <span className="ml-2">Agent · Jenny</span>
         </p>
         <div className="mt-2 grid min-w-0 gap-2 sm:flex sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <h1 className="text-3xl font-semibold leading-tight text-[#fff8ed]">Jenny</h1>
-            <p className="mt-1 text-xs text-[#a89782]">Mission Control, project rooms, guarded replies, and live bridge activity.</p>
+          <div className="min-w-0 max-w-full">
+            <h1 className="max-w-full text-3xl font-semibold leading-tight text-[#fff8ed] [overflow-wrap:anywhere]">Jenny</h1>
+            <p className="mt-1 max-w-full text-xs text-[#a89782] [overflow-wrap:anywhere]">Mission Control, project rooms, guarded replies, and live bridge activity.</p>
             <p className="sr-only">Chat with Jenny first; safety and project records stay collapsed below.</p>
           </div>
-          <span className="w-fit rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-300">
+          <span className="max-w-full rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-300 [overflow-wrap:anywhere]">
             guarded
           </span>
         </div>
@@ -2158,7 +2158,7 @@ export default function MissionControlCompactPage() {
       ) : null}
 
       {selectedProjectView ? (
-        <div className="mt-3 grid w-full min-w-0 max-w-full gap-3 overflow-hidden xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="mt-3 grid w-full min-w-0 max-w-full gap-3 overflow-hidden xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
           <div className="order-1 min-w-0 max-w-full overflow-hidden">
             <CompactProjectRoom
               busy={roomBusy}

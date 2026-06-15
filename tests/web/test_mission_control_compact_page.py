@@ -59,6 +59,9 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
     src = page_source()
     for expected in [
         "Project chat workspace",
+        "max-w-[100dvw]",
+        "[&_*]:box-border",
+        "xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]",
         "Local studio",
         "Projects",
         "IV. — Jenny workspace",
@@ -187,11 +190,11 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Return only the spec/challenge review and the recommended next safe lane.",
         "Queue for Jenny bridge",
         "Refresh replies",
-        "w-full max-w-[100vw] overflow-x-hidden",
-        "mx-0 w-full max-w-full overflow-hidden",
+        "w-full min-w-0 max-w-[100dvw] overflow-x-hidden",
+        "mx-0 w-full min-w-0 max-w-full overflow-hidden",
         "order-1 min-w-0 max-w-full overflow-hidden",
         "order-2 min-w-0 max-w-full overflow-hidden",
-        "w-full min-w-0 max-w-full gap-3 overflow-hidden xl:grid-cols-[minmax(0,1fr)_22rem]",
+        "w-full min-w-0 max-w-full gap-3 overflow-hidden xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]",
         "min-h-[calc(100dvh-8rem)]",
         "sm:h-[calc(100vh-5rem)] sm:min-h-[34rem]",
         "grid w-full min-w-0 max-w-full gap-1 sm:hidden",
@@ -323,7 +326,7 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
     src = page_source()
     for expected in [
         "overflow-x-hidden",
-        "max-w-[100vw]",
+        "max-w-[100dvw]",
         "min-[420px]:grid-cols-2",
         "overflow-y-auto overflow-x-hidden",
         "[overflow-wrap:anywhere]",
