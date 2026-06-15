@@ -2,7 +2,7 @@ import type { MutableRefObject } from 'react'
 import { useCallback, useRef } from 'react'
 import type { NavigateFunction } from 'react-router-dom'
 
-import { deleteSession, getSessionMessages, setSessionArchived } from '@/hermes'
+import { createMissionControlSessionProjectLink, deleteSession, getSessionMessages, setSessionArchived } from '@/hermes'
 import { type ChatMessage, chatMessageText, preserveLocalAssistantErrors, toChatMessages } from '@/lib/chat-messages'
 import { normalizePersonalityValue } from '@/lib/chat-runtime'
 import { embeddedImageUrls, textWithoutEmbeddedImages } from '@/lib/embedded-images'
@@ -16,6 +16,7 @@ import { $activeGatewayProfile, $newChatProfile, ensureGatewayProfile, normalize
 import {
   $currentCwd,
   $messages,
+  $selectedMissionControlProjectId,
   $sessions,
   $yoloActive,
   getRememberedWorkspaceCwd,
@@ -362,6 +363,22 @@ export function useSessionActions({
           // server later returns its own preview/title and supersedes this.
           upsertOptimisticSession(created, stored, null, preview?.trim() || null)
           navigate(sessionRoute(stored), { replace: true })
+
+          const projectId = $selectedMissionControlProjectId.get().trim()
+
+          if (projectId) {
+            void createMissionControlSessionProjectLink({
+              cwd_snapshot: cwd || undefined,
+              link_method: 'native_chat_project',
+              linked_by: 'desktop',
+              profile: newChatProfile || undefined,
+              project_id: projectId,
+              session_id: stored,
+              source: 'desktop-native-chat',
+              status: 'active',
+              title_snapshot: preview?.trim() || undefined
+            }).catch(() => undefined)
+          }
         }
 
         setFreshDraftReady(false)
