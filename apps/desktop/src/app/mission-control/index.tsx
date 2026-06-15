@@ -2523,7 +2523,7 @@ export function MissionControlView() {
       ) : null}
 
       <details className="mt-3 rounded-lg border border-border/60 bg-background/20 p-3">
-        <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">More</summary>
+        <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">Safety details</summary>
         <div className="mt-4 grid gap-5">
           <HermesHealthDashboard
             activeProjects={activeProjects}
@@ -3285,7 +3285,7 @@ function ProjectRoomsWorkspace({
             </button>
           </div>
           <details className="mt-2 rounded-md border border-[#f3ebda]/10 bg-[#15101a]/60 px-3 py-2 text-xs">
-            <summary className="cursor-pointer font-semibold text-[#a59783]">More</summary>
+            <summary className="cursor-pointer font-semibold text-[#a59783]">Request options</summary>
             <button className="mt-2 rounded-md border border-[#f3ebda]/10 px-3 py-2 text-sm font-semibold text-[#ddd0bb] hover:bg-[#251d2c] disabled:opacity-60" disabled={saving} onClick={onRefreshBridge} type="button">
               Refresh replies
             </button>
@@ -3339,8 +3339,8 @@ function ProjectRoomsWorkspace({
 
         </div>
 
-        <details aria-label="Workspace inspector" className="mt-2 rounded-md border border-[#f3ebda]/10 bg-[#15101a]/60 px-3 py-2" role="complementary">
-          <summary className="cursor-pointer text-sm font-semibold text-[#a59783]">More</summary>
+        <details aria-label="Safety details" className="mt-2 rounded-md border border-[#f3ebda]/10 bg-[#15101a]/60 px-3 py-2" role="complementary">
+          <summary className="cursor-pointer text-sm font-semibold text-[#a59783]">Safety details</summary>
           <div className="mt-3 grid gap-3 xl:grid-cols-2">
         <section aria-label="Jenny activity" className="rounded-lg border border-[#60a5fa]/25 bg-[#60a5fa]/10 p-3">
           <div className="flex items-center justify-between gap-2">
