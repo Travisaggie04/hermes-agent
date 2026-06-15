@@ -2286,7 +2286,7 @@ export default function MissionControlCompactPage() {
       ) : null}
 
       <details className="mt-3 max-w-full overflow-hidden rounded-xl border border-border/60 bg-card/70 p-3">
-        <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">More</summary>
+        <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">Safety details</summary>
         <div className="mt-3 grid gap-4">
           {snapshot ? (
             <CompactHermesHealthDashboard
@@ -3020,7 +3020,7 @@ function CompactProjectRoom({
             </button>
           </div>
           <details className="mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/70 px-3 py-2 text-xs">
-            <summary className="cursor-pointer text-sm font-semibold">Details</summary>
+            <summary className="cursor-pointer text-sm font-semibold">Request options</summary>
             <button className="mt-2 w-full rounded-lg border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60 sm:w-auto" disabled={busy} onClick={onRefreshBridge} type="button">
               Refresh replies
             </button>
