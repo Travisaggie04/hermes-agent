@@ -1467,6 +1467,20 @@ describe('MissionControlView', () => {
     expect(payload.message).not.toContain('bridge field is too large')
   })
 
+  it('shows plain language when the Jenny bridge is offline', async () => {
+    createMissionControlGitHubBridgeRequest.mockRejectedValueOnce(
+      new Error("Error invoking remote method 'hermes:api': Error: connect ECONNREFUSED 100.115.125.111:9119")
+    )
+    await renderMissionControl()
+
+    fireEvent.change(await screen.findByLabelText('Message Jenny'), { target: { value: 'test' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(await screen.findByText('Jenny bridge is offline. Start or reconnect the Hermes gateway, then send the message again.')).toBeTruthy()
+    expect(screen.queryByText(/ECONNREFUSED/)).toBeNull()
+    expect(answerMissionControlGitHubBridgeOnce).not.toHaveBeenCalled()
+  })
+
   it('restores Jenny working status from bridge audit records after refresh', async () => {
     getMissionControlGitHubBridgeStatus.mockResolvedValue({
       count: 1,

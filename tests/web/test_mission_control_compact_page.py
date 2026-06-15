@@ -493,6 +493,28 @@ def test_compact_chat_send_uses_github_mailbox_not_local_only_outbox() -> None:
     assert "await runJennyOnce(projectView, result.message?.request_id || requestId)" in send_fn
 
 
+def test_compact_chat_uses_plain_language_errors() -> None:
+    src = page_source()
+    helper = function_source(src, "jennyChatErrorMessage")
+    assert "Jenny bridge is offline. Start or reconnect the Hermes gateway, then send the message again." in helper
+    assert "That message was too large for the Jenny bridge. Shorten it and send one focused request." in helper
+    assert "No message is waiting for Jenny. Send a message first." in helper
+    assert "Jenny did not answer before the time limit. The request is still guarded; try again with one smaller task." in helper
+    for function_name in [
+        "queueJennyBridgeMessage",
+        "runJennyOnce",
+        "reviewJennyReply",
+        "queueHermesUpdateLane",
+        "queueHermesStorageCleanupLane",
+        "refreshBridge",
+        "saveChallengeDraft",
+        "saveReadOnlyLaneDraft",
+    ]:
+        function = function_source(src, function_name)
+        assert "jennyChatErrorMessage(err)" in function
+        assert "err instanceof Error ? err.message : String(err)" not in function
+
+
 def test_compact_chat_behaves_like_a_normal_thread_after_send() -> None:
     src = page_source()
     assert "useRef" in src
