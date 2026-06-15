@@ -87,6 +87,7 @@ interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
 
 interface ChatHeaderProps {
   activeSessionId: null | string
+  activeTurnRunning: boolean
   gatewayOpen: boolean
   isRoutedSessionView: boolean
   onDeleteSelectedSession: () => void
@@ -96,6 +97,7 @@ interface ChatHeaderProps {
 
 function ChatHeader({
   activeSessionId,
+  activeTurnRunning,
   gatewayOpen,
   isRoutedSessionView,
   onDeleteSelectedSession,
@@ -128,6 +130,7 @@ function ChatHeader({
       ? pinnedSessionIds.includes(selectedSessionId)
       : false
   const jennyStatus = nativeJennyStatus({
+    activeTurnRunning,
     bridgeStatus: bridgeStatusQuery.data,
     gatewayOpen,
     loading: bridgeStatusQuery.isLoading,
@@ -377,6 +380,7 @@ export function ChatView({
       <Backdrop />
       <ChatHeader
         activeSessionId={activeSessionId}
+        activeTurnRunning={busy && awaitingResponse}
         gatewayOpen={gatewayOpen}
         isRoutedSessionView={isRoutedSessionView}
         onDeleteSelectedSession={onDeleteSelectedSession}

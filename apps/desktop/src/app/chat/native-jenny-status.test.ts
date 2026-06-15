@@ -60,6 +60,21 @@ describe('nativeJennyStatus', () => {
     })
   })
 
+  it('shows Jenny working while the active native chat turn is running', () => {
+    expect(
+      nativeJennyStatus({
+        activeTurnRunning: true,
+        gatewayOpen: true,
+        projectId: 'project-hermes',
+        bridgeStatus: { pending_count: 0, visible_pending_count: 0 }
+      })
+    ).toMatchObject({
+      detail: 'Jenny is working on the current chat turn.',
+      label: 'Jenny working',
+      tone: 'working'
+    })
+  })
+
   it('prioritizes visible pending messages', () => {
     expect(
       nativeJennyStatus({

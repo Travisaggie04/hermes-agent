@@ -9,6 +9,7 @@ export interface NativeJennyStatus {
 }
 
 export interface NativeJennyStatusInput {
+  activeTurnRunning?: boolean
   bridgeStatus?: MissionControlGitHubBridgeStatusResponse | null
   gatewayOpen: boolean
   loading?: boolean
@@ -28,6 +29,7 @@ const WORKING_STATUSES = new Set([
 const REPLIED_STATUSES = new Set(['hermes_answer_completed', 'response_appended', 'replied'])
 
 export function nativeJennyStatus({
+  activeTurnRunning = false,
   bridgeStatus,
   gatewayOpen,
   loading = false,
@@ -55,6 +57,14 @@ export function nativeJennyStatus({
       detail: 'Could not read Jenny bridge status. Chat remains guarded.',
       label: 'Status unavailable',
       tone: 'warn'
+    }
+  }
+
+  if (activeTurnRunning) {
+    return {
+      detail: 'Jenny is working on the current chat turn.',
+      label: 'Jenny working',
+      tone: 'working'
     }
   }
 
