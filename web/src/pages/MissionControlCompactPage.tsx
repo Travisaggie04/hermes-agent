@@ -858,7 +858,7 @@ function jennyWorkSessionSteps({
       state: hasError ? "blocked" : queued && !activeRun && !hasReply ? "active" : queued || hasReply ? "done" : "idle",
     },
     {
-      detail: activeRun ? "One guarded reply is running." : hasReply ? "Jenny run finished." : "Use Get Jenny reply when ready.",
+      detail: activeRun ? "One guarded reply is running." : hasReply ? "Jenny run finished." : "Use Get Jenny's reply when ready.",
       label: "Jenny working",
       state: hasError ? "blocked" : activeRun ? "active" : hasReply ? "done" : "idle",
     },
@@ -1165,7 +1165,7 @@ function jennyNextStep(
     return "Open safety details, check the bridge error, then refresh replies.";
   }
   if (hasRunnablePendingMessage) {
-    return "Tap Get Jenny reply to ask Jenny for one response to the latest message.";
+    return "Tap Get Jenny's reply to ask Jenny for one response to the latest message.";
   }
   if (pendingCount) {
     return "A message is waiting; refresh replies or wait for the bridge.";
@@ -1173,7 +1173,7 @@ function jennyNextStep(
   if (responseCount) {
     return "Review Jenny's latest reply, then send the next bounded message.";
   }
-  return "Type one bounded project message, then tap Send to Jenny.";
+  return "Type one bounded project message, then tap Send message.";
 }
 
 function jennyOperatorGuidance({
@@ -1558,9 +1558,9 @@ function shouldAutoChallengeRequest(intake: RequestIntakeAssessment): boolean {
 
 function jennySendButtonLabel(intake: RequestIntakeAssessment): string {
   if (shouldAutoChallengeRequest(intake)) {
-    return "Ask Jenny to challenge first";
+    return "Ask Jenny to review first";
   }
-  return "Send to Jenny";
+  return "Send message";
 }
 
 function buildCompactNextLanePrompt(projectView: ProjectViewModel, workspaceStatus: WorkspaceStatus): string {
@@ -1868,10 +1868,10 @@ export default function MissionControlCompactPage() {
       });
       await refreshSnapshot();
       setJennyRunProgress({
-        detail: "Message sent. Use Get Jenny reply when you want Jenny to answer this project message.",
+        detail: "Message sent. Use Get Jenny's reply when you want Jenny to answer this project message.",
         phase: "queued",
       });
-      setRoomMessage("Sent to Jenny mailbox. Replies refresh automatically; use Refresh replies if you want to check now.");
+      setRoomMessage("Message sent. Replies refresh automatically; use Refresh replies under More options if you want to check now.");
     } catch (err) {
       setRoomMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -2621,7 +2621,7 @@ function CompactProjectRoom({
     replyReviewTone: replyReviewStatus.tone,
     responseCount,
   });
-  const getJennyReplyLabel = operatorGuidance.label === "Retry Jenny once" ? "Retry Jenny once" : "Get Jenny reply";
+  const getJennyReplyLabel = operatorGuidance.label === "Retry Jenny once" ? "Try Jenny again" : "Get Jenny's reply";
 
   return (
     <section
@@ -2910,12 +2910,12 @@ function CompactProjectRoom({
             >
               {getJennyReplyLabel}
             </button>
-            <button className="w-full rounded-lg border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60 sm:w-auto" disabled={busy} onClick={onRefreshBridge} type="button">
-              Refresh replies
-            </button>
           </div>
           <details className="mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/70 px-3 py-2 text-xs">
-            <summary className="cursor-pointer text-sm font-semibold">Guardrails and advanced options</summary>
+            <summary className="cursor-pointer text-sm font-semibold">More options</summary>
+            <button className="mt-2 w-full rounded-lg border border-border/80 px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-60 sm:w-auto" disabled={busy} onClick={onRefreshBridge} type="button">
+              Refresh replies
+            </button>
             <p className={cn(
               "mt-2 max-w-full rounded-lg border px-3 py-2 [overflow-wrap:anywhere]",
               requestIntake.state === "ready"
@@ -2926,7 +2926,7 @@ function CompactProjectRoom({
             )}>
               <span className="font-semibold">Request intake: {requestIntake.label}.</span> {requestIntake.detail}
               {shouldAutoChallengeRequest(requestIntake) ? (
-                <span className="mt-1 block">Ask Jenny to challenge first will request a spec-first reply before any implementation plan.</span>
+                <span className="mt-1 block">Ask Jenny to review first will request a spec-first reply before any implementation plan.</span>
               ) : null}
             </p>
             {shouldAutoChallengeRequest(requestIntake) ? (

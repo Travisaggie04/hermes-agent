@@ -655,7 +655,7 @@ function jennyWorkSessionSteps({
       state: hasError ? 'blocked' : queued && !activeRun && !hasReply ? 'active' : queued || hasReply ? 'done' : 'idle'
     },
     {
-      detail: activeRun ? 'One guarded reply is running.' : hasReply ? 'Jenny run finished.' : 'Use Get Jenny reply when ready.',
+      detail: activeRun ? 'One guarded reply is running.' : hasReply ? 'Jenny run finished.' : 'Use Get Jenny\'s reply when ready.',
       label: 'Jenny working',
       state: hasError ? 'blocked' : activeRun ? 'active' : hasReply ? 'done' : 'idle'
     },
@@ -968,7 +968,7 @@ function jennyNextStep(
     return 'Open safety details, check the bridge error, then refresh replies.'
   }
   if (hasRunnablePendingMessage) {
-    return 'Click Get Jenny reply to ask Jenny for one response to the latest message.'
+    return 'Click Get Jenny\'s reply to ask Jenny for one response to the latest message.'
   }
   if (pendingCount) {
     return 'A message is waiting; refresh replies or wait for the bridge.'
@@ -976,7 +976,7 @@ function jennyNextStep(
   if (responseCount) {
     return 'Review Jenny\'s latest reply, then send the next bounded message.'
   }
-  return 'Type one bounded project message, then click Send to Jenny.'
+  return 'Type one bounded project message, then click Send message.'
 }
 
 function jennyOperatorGuidance({
@@ -1671,9 +1671,9 @@ function shouldAutoChallengeRequest(intake: RequestIntakeAssessment): boolean {
 
 function jennySendButtonLabel(intake: RequestIntakeAssessment): string {
   if (shouldAutoChallengeRequest(intake)) {
-    return 'Ask Jenny to challenge first'
+    return 'Ask Jenny to review first'
   }
-  return 'Send to Jenny'
+  return 'Send message'
 }
 
 function buildPhoneSafeProjectPacket({
@@ -2055,10 +2055,10 @@ export function MissionControlView() {
       })
       setSnapshot(await loadMissionControlSnapshot())
       setJennyRunProgress({
-        detail: 'Message sent. Use Get Jenny reply when you want Jenny to answer this project message.',
+        detail: 'Message sent. Use Get Jenny\'s reply when you want Jenny to answer this project message.',
         phase: 'queued'
       })
-      setProjectRoomMessage('Sent to Jenny mailbox. Replies refresh automatically; use Refresh replies if you want to check now.')
+      setProjectRoomMessage('Message sent. Replies refresh automatically; use Refresh replies under More options if you want to check now.')
     } catch (err) {
       setProjectRoomMessage(String(err instanceof Error ? err.message : err))
     } finally {
@@ -2917,7 +2917,7 @@ function ProjectRoomsWorkspace({
     replyReviewTone: replyReviewStatus.tone,
     responseCount
   })
-  const getJennyReplyLabel = operatorGuidance.label === 'Retry Jenny once' ? 'Retry Jenny once' : 'Get Jenny reply'
+  const getJennyReplyLabel = operatorGuidance.label === 'Retry Jenny once' ? 'Try Jenny again' : 'Get Jenny\'s reply'
 
   return (
     <section
@@ -3152,7 +3152,7 @@ function ProjectRoomsWorkspace({
             />
           </label>
 
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-2 grid gap-2 sm:flex sm:flex-wrap">
             <button className="rounded-md border border-[#5ab896]/40 bg-[#5ab896]/10 px-4 py-2 text-sm font-semibold text-[#5ab896] hover:bg-[#5ab896]/15 disabled:opacity-60" disabled={saving || paused} onClick={onQueueBridge} type="button">
               {sendButtonLabel}
             </button>
@@ -3164,12 +3164,12 @@ function ProjectRoomsWorkspace({
             >
               {getJennyReplyLabel}
             </button>
-            <button className="rounded-md border border-[#f3ebda]/10 px-4 py-2 text-sm font-semibold text-[#ddd0bb] hover:bg-[#251d2c] disabled:opacity-60" disabled={saving} onClick={onRefreshBridge} type="button">
-              Refresh replies
-            </button>
           </div>
           <details className="mt-2 rounded-md border border-[#f3ebda]/10 bg-[#15101a]/60 px-3 py-2 text-xs">
-            <summary className="cursor-pointer font-semibold text-[#a59783]">Guardrails and advanced options</summary>
+            <summary className="cursor-pointer font-semibold text-[#a59783]">More options</summary>
+            <button className="mt-2 rounded-md border border-[#f3ebda]/10 px-3 py-2 text-sm font-semibold text-[#ddd0bb] hover:bg-[#251d2c] disabled:opacity-60" disabled={saving} onClick={onRefreshBridge} type="button">
+              Refresh replies
+            </button>
             <div className={cn(
               'mt-2 rounded-md border px-3 py-2',
               requestIntake.state === 'ready'
@@ -3180,7 +3180,7 @@ function ProjectRoomsWorkspace({
             )}>
               <span className="font-semibold">Request intake: {requestIntake.label}.</span> {requestIntake.detail}
               {shouldAutoChallengeRequest(requestIntake) ? (
-                <span className="mt-1 block">Ask Jenny to challenge first will request a spec-first reply before any implementation plan.</span>
+                <span className="mt-1 block">Ask Jenny to review first will request a spec-first reply before any implementation plan.</span>
               ) : null}
             </div>
             {shouldAutoChallengeRequest(requestIntake) ? (

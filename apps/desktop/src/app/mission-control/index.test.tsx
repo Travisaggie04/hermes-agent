@@ -969,8 +969,8 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Resume requirements')).toBeTruthy()
     expect(screen.getByText('Jenny challenge review clears the approach')).toBeTruthy()
     expect(screen.getByText('Travis approval is recorded before work resumes')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Ask Jenny to challenge first' })).toHaveProperty('disabled', true)
-    expect(screen.getByRole('button', { name: 'Get Jenny reply' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Ask Jenny to review first' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: "Get Jenny's reply" })).toHaveProperty('disabled', true)
     expect(screen.getByRole('button', { name: 'Save challenge draft' })).toHaveProperty('disabled', true)
     expect(screen.getByRole('button', { name: 'Save read-only lane draft' })).toHaveProperty('disabled', true)
   })
@@ -1151,7 +1151,7 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText('Jenny working').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Reply received').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Review next').length).toBeGreaterThan(0)
-    expect(screen.getByText('Guardrails and advanced options')).toBeTruthy()
+    expect(screen.getByText('More options')).toBeTruthy()
     expect(screen.getAllByText(/Pending \d+/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Replies \d+/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Reply quality/).length).toBeGreaterThan(0)
@@ -1215,7 +1215,7 @@ describe('MissionControlView', () => {
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Recommendation: one-sentence next lane.')
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('if evidence is missing, say "not proven"')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send to Jenny' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
     await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(1))
     expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1316,13 +1316,13 @@ describe('MissionControlView', () => {
 
     await waitFor(() => expect((composer as HTMLTextAreaElement).value).toBe('make Jenny fully functional and autonomous'))
     await waitFor(() => expect(screen.getAllByText(/Spec first/).length).toBeGreaterThan(0))
-    expect(screen.getAllByText(/Ask Jenny to challenge first will request a spec-first reply before any implementation plan/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Ask Jenny to review first will request a spec-first reply before any implementation plan/).length).toBeGreaterThan(0)
     expect(screen.getAllByText('Jenny must challenge first').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Question missing facts and unsafe assumptions.').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Push back on protected actions or broad scope.').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Return the smallest safe lane with evidence and approval needs.').length).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ask Jenny to challenge first' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Jenny to review first' }))
 
     await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(1))
     expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
@@ -1438,7 +1438,7 @@ describe('MissionControlView', () => {
 
     await renderMissionControl()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Get Jenny reply' }))
+    fireEvent.click(await screen.findByRole('button', { name: "Get Jenny's reply" }))
     expect((await screen.findAllByText('Waiting for Jenny')).length).toBeGreaterThanOrEqual(2)
     expect((await screen.findAllByText(/Mission Control sent the latest project message to Jenny/)).length).toBeGreaterThanOrEqual(2)
     await waitFor(() => expect(answerMissionControlGitHubBridgeOnce).toHaveBeenCalledTimes(1))

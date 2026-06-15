@@ -115,8 +115,8 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Next step",
         "Pending {pendingCount}",
         "Replies {responseCount}",
-        "Tap Get Jenny reply to ask Jenny for one response to the latest message.",
-        "Type one bounded project message, then tap Send to Jenny.",
+        "Tap Get Jenny's reply to ask Jenny for one response to the latest message.",
+        "Type one bounded project message, then tap Send message.",
         "projectRequestPreview",
         "cleanChatDisplayMessage",
         "user_message",
@@ -132,7 +132,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Evidence: exact files/commands/checks/PR/CI/runtime/links used.",
         "Approval/rollback: approval needed before live action plus rollback path.",
         "Rule: if evidence is missing, say \\\"not proven\\\"; do not present it as done.",
-        "Sent to Jenny mailbox",
+        "Message sent. Replies refresh automatically; use Refresh replies under More options if you want to check now.",
         "Live reply refresh is on and read-only",
         "setInterval",
         "clearInterval",
@@ -152,9 +152,9 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Copy phone-safe packet",
         "Save challenge draft",
         "Save read-only lane draft",
-        "Send to Jenny",
-        "Ask Jenny to challenge first",
-        "Get Jenny reply",
+        "Send message",
+        "Ask Jenny to review first",
+        "Get Jenny's reply",
         "Request intake:",
         "assessProjectRequest",
         "Approval check",
@@ -184,10 +184,10 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Push back on protected actions or broad scope.",
         "Return the smallest safe lane with evidence and approval needs.",
         "Use spec-first prompt",
-        "Guardrails and advanced options",
+        "More options",
         "Use these when Jenny should challenge, narrow, or formalize the request before normal work.",
         "This request is bounded enough for a guarded Jenny reply.",
-        "Ask Jenny to challenge first will request a spec-first reply before any implementation plan.",
+        "Ask Jenny to review first will request a spec-first reply before any implementation plan.",
         "Spec-first request for Jenny:",
         "Jenny, do not implement yet. First challenge the request like a senior engineer:",
         "Return only the spec/challenge review and the recommended next safe lane.",
@@ -443,7 +443,7 @@ def test_compact_chat_send_uses_github_mailbox_not_local_only_outbox() -> None:
     assert 'from_agent: "travis"' in send_fn
     assert 'to_agent: "jenny"' in send_fn
     assert "bridgeRequestId()" in send_fn
-    assert "Sent to Jenny mailbox" in send_fn
+    assert "Message sent. Replies refresh automatically; use Refresh replies under More options if you want to check now." in send_fn
 
 
 def test_compact_run_jenny_once_targets_visible_current_project_message() -> None:
