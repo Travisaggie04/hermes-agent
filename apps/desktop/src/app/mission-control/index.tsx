@@ -288,6 +288,9 @@ function compactText(value: string | string[] | null | undefined, maxChars: numb
 
 function projectRequestPreview(value: string, maxChars: number): string {
   const normalized = value.replace(/\s+/g, ' ').trim()
+  const specFirstRequestMatch = normalized.match(
+    /^Spec-first request for Jenny:\s*Project:\s*.+?\s+Request Travis is considering:\s*([\s\S]*?)(?=\s+Current intake:|$)/i
+  )
   const projectRoomRequestMatch = normalized.match(
     /^Project room request:\s*(?:.+?\s+)?Request:\s*([\s\S]*?)(?=\s+(?:Request intake:|Current brief:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:)|$)/i
   )
@@ -300,8 +303,12 @@ function projectRequestPreview(value: string, maxChars: number): string {
   const fallbackMatch = normalized.match(
     /^(.+?)\s+(?=Current brief:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:)/i
   )
-  const candidate = projectRoomRequestMatch?.[1] ?? requestMatch?.[1] ?? inlineRequestMatch?.[1] ?? fallbackMatch?.[1] ?? value
+  const candidate = specFirstRequestMatch?.[1] ?? projectRoomRequestMatch?.[1] ?? requestMatch?.[1] ?? inlineRequestMatch?.[1] ?? fallbackMatch?.[1] ?? value
   return compactText(candidate, maxChars)
+}
+
+function chatRequestText(value: string): string {
+  return projectRequestPreview(value, 1200)
 }
 
 function cleanChatDisplayMessage(metadata: Record<string, unknown> | undefined, fallback: string, maxChars: number): string {
@@ -574,14 +581,14 @@ function jennyRunProgressCopy(progress: JennyRunProgress | null, elapsedSeconds:
 
   if (progress.phase === 'queued') {
     return {
-      detail: progress.detail || 'Your message is queued for Jenny.',
-      label: 'Queued'
+      detail: progress.detail || 'Sent. Waiting for Jenny to start.',
+      label: 'Sent'
     }
   }
   if (progress.phase === 'complete') {
     return {
-      detail: progress.detail || 'Jenny replied. Review the latest response before sending the next message.',
-      label: 'Reply received'
+      detail: progress.detail || 'Jenny replied.',
+      label: 'Jenny replied'
     }
   }
   if (progress.phase === 'error') {
@@ -592,8 +599,8 @@ function jennyRunProgressCopy(progress: JennyRunProgress | null, elapsedSeconds:
   }
 
   return {
-    detail: `${progress.detail || 'Mission Control is waiting for Jenny to finish one guarded reply.'} Refreshing status every 2.5s. Elapsed ${elapsedSeconds}s.`,
-    label: progress.phase === 'starting' ? 'Starting Jenny' : 'Waiting for Jenny'
+    detail: `${progress.detail || 'Jenny is working on one guarded reply.'} Elapsed ${elapsedSeconds}s.`,
+    label: progress.phase === 'starting' ? 'Starting Jenny' : 'Jenny is working'
   }
 }
 
@@ -667,7 +674,7 @@ function recordBackedJennyRunProgress(
         }
       case 'message_posted':
         return {
-          detail: 'Your message is queued for Jenny. Mission Control will refresh the bridge status automatically.',
+          detail: 'Sent. Waiting for Jenny to start.',
           phase: 'queued'
         }
       default:
@@ -869,7 +876,7 @@ function normalizedBridgeError(
 function noReplyStatusMessage(error: unknown): string {
   const rawError = error ?? 'no matching pending request'
   if (isNoPendingBridgeError(rawError)) {
-    return 'No message is waiting for Jenny. Send a message first.'
+    return 'Jenny is caught up. Send a new message to start the next reply.'
   }
   return `Jenny did not reply: ${String(rawError)}`
 }
@@ -903,7 +910,7 @@ function jennyConnectionState(
 ): { detail: string; label: string; tone: 'bad' | 'good' | 'idle' | 'warn' } {
   if (normalizedBridgeError(bridgeStatus, githubBridgeStatus)) {
     return {
-      detail: 'Open advanced controls, check the bridge error, then refresh replies.',
+      detail: 'Jenny hit a guarded bridge issue. Open Safety details only if you need diagnostics.',
       label: 'Jenny needs attention',
       tone: 'bad'
     }
@@ -1014,13 +1021,13 @@ function jennyNextStep(
   githubBridgeStatus: MissionControlGitHubBridgeStatusResponse
 ): string {
   if (normalizedBridgeError(bridgeStatus, githubBridgeStatus)) {
-    return 'Open safety details, check the bridge error, then refresh replies.'
+    return 'Jenny hit a guarded bridge issue. Open Safety details only if you need diagnostics.'
   }
   if (hasRunnablePendingMessage) {
     return 'A message is waiting for Jenny; send your next message only after this reply finishes.'
   }
   if (pendingCount) {
-    return 'A message is waiting; refresh replies or wait for Jenny.'
+    return 'A message is waiting for Jenny.'
   }
   if (responseCount) {
     return 'Review Jenny\'s latest reply, then send the next bounded message.'
@@ -1047,7 +1054,7 @@ function jennyOperatorGuidance({
     return {
       detail: hasRunnablePendingMessage
         ? 'Jenny hit a guarded error. Send a short follow-up only after the error is reviewed.'
-        : 'Refresh replies first. If the error remains, inspect the bridge before sending more work.',
+        : 'Jenny hit a guarded error. Open Safety details if you need the bridge diagnostics before sending more work.',
       label: 'Jenny needs attention',
       tone: 'bad'
     }
@@ -1790,11 +1797,12 @@ function buildJennyMailboxMessage({
   state: MissionControlProjectState | null
   status: ReturnType<typeof summarizeWorkspaceStatus>
 }): string {
-  const intake = assessProjectRequest(requestText, review)
+  const request = chatRequestText(requestText)
+  const intake = assessProjectRequest(request, review)
   if (shouldAutoChallengeRequest(intake)) {
-    return buildSpecFirstComposerText(project.name, requestText, intake)
+    return buildSpecFirstComposerText(project.name, request, intake)
   }
-  return buildPhoneSafeProjectPacket({ brief, project, requestText, review, state, status })
+  return buildPhoneSafeProjectPacket({ brief, project, requestText: request, review, state, status })
 }
 
 function buildHermesUpdateLanePacket(status: ReturnType<typeof summarizeWorkspaceStatus>): string {
@@ -2057,18 +2065,7 @@ export function MissionControlView() {
     return buildPhoneSafeProjectPacket({
       brief: latestForProject(project.project_id, snapshot.projectBriefs),
       project,
-      requestText: projectRequest,
-      review: latestForProject(project.project_id, snapshot.challengeReviews),
-      state: stateForProject(project, snapshot.projectStates),
-      status
-    })
-  }
-
-  function mailboxMessageForProject(project: MissionControlProjectRecord) {
-    return buildJennyMailboxMessage({
-      brief: latestForProject(project.project_id, snapshot.projectBriefs),
-      project,
-      requestText: projectRequest,
+      requestText: chatRequestText(projectRequest),
       review: latestForProject(project.project_id, snapshot.challengeReviews),
       state: stateForProject(project, snapshot.projectStates),
       status
@@ -2081,7 +2078,8 @@ export function MissionControlView() {
   }
 
   async function queueJennyBridgeRequest(project: MissionControlProjectRecord) {
-    if (!projectRequest.trim()) {
+    const chatRequest = chatRequestText(projectRequest)
+    if (!chatRequest) {
       setProjectRoomMessage('Write one bounded request before queuing a Jenny bridge message.')
 
       return
@@ -2094,11 +2092,18 @@ export function MissionControlView() {
     try {
       const result = await createMissionControlGitHubBridgeRequest({
         from_agent: 'travis',
-        message: mailboxMessageForProject(project),
+        message: buildJennyMailboxMessage({
+          brief: latestForProject(project.project_id, snapshot.projectBriefs),
+          project,
+          requestText: chatRequest,
+          review: latestForProject(project.project_id, snapshot.challengeReviews),
+          state: stateForProject(project, snapshot.projectStates),
+          status
+        }),
         project_id: project.project_id,
         request_id: requestId,
         to_agent: 'jenny',
-        user_message: projectRequest.trim()
+        user_message: chatRequest
       })
       setJennyRunProgress({
         detail: 'Message sent. Jenny is starting one guarded reply.',
@@ -3061,7 +3066,7 @@ function ProjectRoomsWorkspace({
         </div>
         <section
           aria-label="Jenny chat status"
-          className="mt-1 flex flex-wrap items-center justify-between gap-2 border-b border-[#f3ebda]/10 px-1 pb-2 text-xs text-[#a59783]"
+          className="sr-only"
         >
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <div className="min-w-0">
@@ -3159,7 +3164,7 @@ function ProjectRoomsWorkspace({
           <JennyWorkSessionTimeline steps={workSessionSteps} />
         </details>
 
-        <section aria-label="Project chat transcript" className="mt-2 flex min-h-0 flex-1 flex-col rounded-md border border-[#f3ebda]/10 bg-[#251d2c]/70 p-2">
+        <section aria-label="Project chat transcript" className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#120d17] p-2">
           <div className="sr-only flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-[#f3ebda]">Conversation</h3>
             <span className="text-xs text-[#a59783]">{chatMessages.length ? `${chatMessages.length} recent messages` : 'No messages yet'}</span>
@@ -3262,16 +3267,16 @@ function ProjectRoomsWorkspace({
           </div>
         </section>
 
-        <div className="mt-2 border-t border-[#f3ebda]/10 pt-2">
+        <div className="mt-2 rounded-md border border-[#f3ebda]/10 bg-[#15101a] p-2">
           {reviewRequired ? (
             <p className="mb-2 text-xs font-semibold text-amber-200" role="status">
               Review the latest Jenny reply in the chat before acting on it.
             </p>
           ) : null}
           <label className="grid gap-1 text-sm font-medium">
-            Message Jenny
+            <span className="sr-only">Message Jenny</span>
             <textarea
-              className="min-h-16 rounded-md border border-[#f3ebda]/10 bg-[#15101a] px-3 py-2 text-sm text-[#f3ebda] outline-none transition placeholder:text-[#6e6353] focus:border-[#d4a574]/50"
+              className="min-h-16 rounded-md border border-[#f3ebda]/10 bg-[#0e0b12] px-3 py-2 text-sm text-[#f3ebda] outline-none transition placeholder:text-[#6e6353] focus:border-[#d4a574]/50"
               disabled={paused}
               onChange={event => onRequestChange(event.target.value)}
               placeholder={paused ? 'This project is on hold until Jenny is stable.' : 'Tell Jenny what you want to discuss or ask her to do next...'}
@@ -3279,12 +3284,12 @@ function ProjectRoomsWorkspace({
             />
           </label>
 
-          <div className="mt-2 grid gap-2 sm:flex sm:flex-wrap">
-            <button className="rounded-md border border-[#5ab896]/40 bg-[#5ab896]/10 px-4 py-2 text-sm font-semibold text-[#5ab896] hover:bg-[#5ab896]/15 disabled:opacity-60" disabled={saving || paused} onClick={onQueueBridge} type="button">
+          <div className="mt-2 flex justify-end">
+            <button className="rounded-md border border-[#5ab896]/40 bg-[#5ab896]/10 px-5 py-2 text-sm font-semibold text-[#5ab896] hover:bg-[#5ab896]/15 disabled:opacity-60" disabled={saving || paused} onClick={onQueueBridge} type="button">
               {sendButtonLabel}
             </button>
           </div>
-          <details className="mt-2 rounded-md border border-[#f3ebda]/10 bg-[#15101a]/60 px-3 py-2 text-xs">
+          <details className="hidden" hidden>
             <summary className="cursor-pointer font-semibold text-[#a59783]">Request options</summary>
             <button className="mt-2 rounded-md border border-[#f3ebda]/10 px-3 py-2 text-sm font-semibold text-[#ddd0bb] hover:bg-[#251d2c] disabled:opacity-60" disabled={saving} onClick={onRefreshBridge} type="button">
               Refresh replies
