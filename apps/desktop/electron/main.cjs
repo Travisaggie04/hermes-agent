@@ -3545,6 +3545,32 @@ function fetchJsonViaOauthSession(url, options = {}) {
   })
 }
 
+function isTransientBackendConnectionError(error) {
+  const message = String(error?.message || error || '')
+  const code = String(error?.code || '')
+  return (
+    ['ECONNREFUSED', 'ECONNRESET', 'EHOSTUNREACH', 'ENETUNREACH', 'ETIMEDOUT'].includes(code) ||
+    /\b(?:ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT)\b/i.test(message) ||
+    /Timed out connecting to Hermes backend/i.test(message)
+  )
+}
+
+async function callHermesApi(connection, request, timeoutMs) {
+  const url = `${connection.baseUrl}${request.path}`
+  if (connection.authMode === 'oauth') {
+    return fetchJsonViaOauthSession(url, {
+      method: request?.method,
+      body: request?.body,
+      timeoutMs
+    })
+  }
+  return fetchJson(url, connection.token, {
+    method: request?.method,
+    body: request?.body,
+    timeoutMs
+  })
+}
+
 // Mint a single-use WS ticket for a gated gateway. Returns the ticket string.
 // Throws (with statusCode 401) if the session cookie is missing/expired —
 // callers treat that as "needs re-login".
@@ -4890,23 +4916,18 @@ ipcMain.handle('hermes:api', async (_event, request) => {
 
   const connection = await ensureBackend(request?.profile)
   const timeoutMs = resolveTimeoutMs(request?.timeoutMs, DEFAULT_FETCH_TIMEOUT_MS)
-  const url = `${connection.baseUrl}${request.path}`
-  // OAuth gateways authenticate REST via the HttpOnly session cookie held in
-  // the OAuth partition — route through Electron's net stack bound to that
-  // session so the cookie attaches automatically. Token/local modes keep using
-  // the static session-token header.
-  if (connection.authMode === 'oauth') {
-    return fetchJsonViaOauthSession(url, {
-      method: request?.method,
-      body: request?.body,
-      timeoutMs
-    })
+  try {
+    return await callHermesApi(connection, request, timeoutMs)
+  } catch (error) {
+    if (connection.mode !== 'remote' || !isTransientBackendConnectionError(error)) {
+      throw error
+    }
+
+    rememberLog(`[api] remote backend connection failed; re-resolving once before retry: ${error.message || error}`)
+    connectionPromise = null
+    const retryConnection = await ensureBackend(request?.profile)
+    return callHermesApi(retryConnection, request, timeoutMs)
   }
-  return fetchJson(url, connection.token, {
-    method: request?.method,
-    body: request?.body,
-    timeoutMs
-  })
 })
 
 ipcMain.handle('hermes:notify', (_event, payload) => {
