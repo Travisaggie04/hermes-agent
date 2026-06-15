@@ -15,7 +15,7 @@ import { Backdrop } from '@/components/Backdrop'
 import { PromptOverlays } from '@/components/prompt-overlays'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
-import { getGlobalModelOptions, type HermesGateway } from '@/hermes'
+import { getGlobalModelOptions, getMissionControlGitHubBridgeStatus, type HermesGateway } from '@/hermes'
 import type { ChatMessage } from '@/lib/chat-messages'
 import { quickModelOptions, sessionTitle, toRuntimeMessage } from '@/lib/chat-runtime'
 import { useIncrementalExternalStoreRuntime } from '@/lib/incremental-external-store-runtime'
@@ -36,6 +36,8 @@ import {
   $introPersonality,
   $introSeed,
   $messages,
+  $selectedMissionControlProjectId,
+  $selectedMissionControlProjectName,
   $selectedStoredSessionId,
   $sessions,
   sessionPinId
@@ -53,6 +55,7 @@ import { droppedFileInlineRef, type SessionDragPayload, sessionInlineRef } from 
 import type { ChatBarState } from './composer/types'
 import type { DroppedFile } from './hooks/use-composer-actions'
 import { useFileDropZone } from './hooks/use-file-drop-zone'
+import { nativeJennyStatus, type NativeJennyStatusTone } from './native-jenny-status'
 import { SessionActionsMenu } from './sidebar/session-actions-menu'
 import { lastVisibleMessageIsUser, threadLoadingState } from './thread-loading'
 
@@ -84,6 +87,7 @@ interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
 
 interface ChatHeaderProps {
   activeSessionId: null | string
+  gatewayOpen: boolean
   isRoutedSessionView: boolean
   onDeleteSelectedSession: () => void
   onToggleSelectedPin: () => void
@@ -92,6 +96,7 @@ interface ChatHeaderProps {
 
 function ChatHeader({
   activeSessionId,
+  gatewayOpen,
   isRoutedSessionView,
   onDeleteSelectedSession,
   onToggleSelectedPin,
@@ -99,6 +104,14 @@ function ChatHeader({
 }: ChatHeaderProps) {
   const sessions = useStore($sessions)
   const pinnedSessionIds = useStore($pinnedSessionIds)
+  const selectedProjectId = useStore($selectedMissionControlProjectId)
+  const selectedProjectName = useStore($selectedMissionControlProjectName)
+  const bridgeStatusQuery = useQuery({
+    enabled: gatewayOpen && Boolean(selectedProjectId.trim()),
+    queryFn: getMissionControlGitHubBridgeStatus,
+    queryKey: ['mission-control-github-bridge-status', selectedProjectId],
+    staleTime: 10_000
+  })
 
   const activeStoredSession =
     sessions.find(session => session.id === selectedSessionId || session._lineage_root_id === selectedSessionId) || null
@@ -113,6 +126,13 @@ function ChatHeader({
     : selectedSessionId
       ? pinnedSessionIds.includes(selectedSessionId)
       : false
+  const jennyStatus = nativeJennyStatus({
+    bridgeStatus: bridgeStatusQuery.data,
+    gatewayOpen,
+    loading: bridgeStatusQuery.isLoading,
+    projectId: selectedProjectId,
+    queryError: bridgeStatusQuery.error
+  })
 
   // A brand-new session has no session to pin/delete/rename, so the header is
   // just a dead "New session" label + chevron. Drop it (and its border)
@@ -143,7 +163,35 @@ function ChatHeader({
           </Button>
         </SessionActionsMenu>
       </div>
+      <div className="ml-auto hidden min-w-0 max-w-[44vw] items-center gap-1.5 [-webkit-app-region:no-drag] min-[46rem]:flex">
+        {selectedProjectName.trim() ? (
+          <HeaderPill label={selectedProjectName.trim()} title={`Project: ${selectedProjectName.trim()}`} tone="idle" />
+        ) : null}
+        <HeaderPill label={jennyStatus.label} title={jennyStatus.detail} tone={jennyStatus.tone} />
+      </div>
     </header>
+  )
+}
+
+function HeaderPill({ label, title, tone }: { label: string; title: string; tone: NativeJennyStatusTone }) {
+  const toneClass =
+    tone === 'warn'
+      ? 'border-red-500/35 bg-red-500/10 text-red-200'
+      : tone === 'pending'
+        ? 'border-amber-500/35 bg-amber-500/10 text-amber-100'
+        : tone === 'working'
+          ? 'border-blue-400/35 bg-blue-400/10 text-blue-100'
+          : tone === 'ok'
+            ? 'border-emerald-400/35 bg-emerald-400/10 text-emerald-100'
+            : 'border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) text-(--ui-text-secondary)'
+
+  return (
+    <span
+      className={cn('max-w-56 truncate rounded-full border px-2 py-0.5 text-[0.6875rem] font-medium leading-none', toneClass)}
+      title={title}
+    >
+      {label}
+    </span>
   )
 }
 
@@ -327,6 +375,7 @@ export function ChatView({
       <Backdrop />
       <ChatHeader
         activeSessionId={activeSessionId}
+        gatewayOpen={gatewayOpen}
         isRoutedSessionView={isRoutedSessionView}
         onDeleteSelectedSession={onDeleteSelectedSession}
         onToggleSelectedPin={onToggleSelectedPin}
