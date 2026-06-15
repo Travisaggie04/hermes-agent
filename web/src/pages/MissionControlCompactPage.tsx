@@ -23,6 +23,7 @@ const WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL = "/api/plugins/mission-control-
 const WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/answer-once";
 const WORKSPACE_PROJECT_STATE_URL = "/api/plugins/mission-control-governance/workspace/project-state";
 const WORKSPACE_PROFILE_MEMORY_STORAGE_URL = "/api/plugins/mission-control-governance/workspace/profile-memory-storage";
+const COMPACT_JENNY_MESSAGE_LIMIT = 1900;
 
 const REAL_PROJECT_IDS = [
   "project-hermes-mission-control",
@@ -1676,16 +1677,23 @@ function buildPhoneSafeProjectPacket(projectView: ProjectViewModel, requestText:
     "",
     structuredJennyHandoff(projectView.project.name),
   ].join("\n").trim();
-  return packet.length <= 1900 ? packet : `${packet.slice(0, 1897).trim()}...`;
+  return boundCompactJennyMessage(packet);
+}
+
+function boundCompactJennyMessage(message: string): string {
+  const trimmed = message.trim();
+  return trimmed.length <= COMPACT_JENNY_MESSAGE_LIMIT
+    ? trimmed
+    : `${trimmed.slice(0, COMPACT_JENNY_MESSAGE_LIMIT - 3).trim()}...`;
 }
 
 function buildJennyMailboxMessage(projectView: ProjectViewModel, requestText: string, workspaceStatus: WorkspaceStatus): string {
   const request = chatRequestText(requestText);
   const intake = assessProjectRequest(request, projectView.challengeReview);
   if (shouldAutoChallengeRequest(intake)) {
-    return buildSpecFirstComposerText(projectView.project.name, request, intake);
+    return boundCompactJennyMessage(buildSpecFirstComposerText(projectView.project.name, request, intake));
   }
-  return buildPhoneSafeProjectPacket(projectView, request, workspaceStatus);
+  return boundCompactJennyMessage(buildPhoneSafeProjectPacket(projectView, request, workspaceStatus));
 }
 
 function buildHermesUpdateLanePacket(workspaceStatus: WorkspaceStatus): string {
@@ -1917,7 +1925,7 @@ export default function MissionControlCompactPage() {
           project_id: projectView.project.project_id,
           request_id: requestId,
           to_agent: "jenny",
-          user_message: chatRequest,
+          user_message: boundCompactJennyMessage(chatRequest),
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
