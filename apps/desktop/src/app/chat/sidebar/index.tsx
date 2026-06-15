@@ -907,16 +907,17 @@ export function ChatSidebar({
               <Tip label="Create a guarded project">
                 <Button
                   aria-label="Create a guarded project"
-                  className="text-(--ui-text-tertiary) opacity-80 hover:bg-(--ui-control-hover-background) hover:text-foreground hover:opacity-100"
+                  className="h-6 gap-1 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) opacity-90 hover:bg-(--ui-control-hover-background) hover:text-foreground hover:opacity-100"
                   onClick={event => {
                     event.stopPropagation()
                     setProjectIntakeOpen(open => !open)
                   }}
-                  size="icon-xs"
+                  size="sm"
                   type="button"
                   variant="ghost"
                 >
                   <Codicon name="add" size="0.75rem" />
+                  <span className="max-[46.25rem]:hidden">New project</span>
                 </Button>
               </Tip>
             }
@@ -1507,8 +1508,17 @@ function SidebarWorkspaceGroup({
           {visibleSessions.length ? (
             renderRows(visibleSessions)
           ) : isProjectGroup ? (
-            <div className="rounded-md px-2 py-1.5 text-[0.75rem] text-(--ui-text-tertiary)">
-              No linked sessions yet.
+            <div className="grid gap-1 rounded-md px-2 py-1.5 text-[0.75rem] text-(--ui-text-tertiary)">
+              <span>No chats in this project yet.</span>
+              {onNewSessionInProject ? (
+                <button
+                  className="w-fit rounded border border-(--ui-stroke-tertiary) px-2 py-1 text-[0.6875rem] font-medium text-(--ui-text-secondary) hover:bg-(--ui-control-hover-background) hover:text-foreground"
+                  onClick={() => onNewSessionInProject(group.id, group.label)}
+                  type="button"
+                >
+                  Start project chat
+                </button>
+              ) : null}
             </div>
           ) : null}
           {hiddenCount > 0 &&
