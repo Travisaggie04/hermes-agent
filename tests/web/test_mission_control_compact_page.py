@@ -163,6 +163,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Jenny instruction:",
         "jennyReplyContract",
         "Reply quality",
+        "Review reply",
         "recommendation",
         "evidence",
         "risks",

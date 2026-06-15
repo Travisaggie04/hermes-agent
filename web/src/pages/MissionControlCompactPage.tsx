@@ -2839,7 +2839,9 @@ function CompactProjectRoom({
                     {chat.speaker === "You" ? chat.displayBody ?? projectRequestPreview(chat.body, 750) : compactText(chat.body, 750)}
                   </p>
                   {chat.speaker === "Jenny" ? (
-                    <div className="mt-2 grid min-w-0 gap-2">
+                    <details className="mt-2 max-w-full overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#15101a]/50 px-2 py-1.5 text-xs">
+                      <summary className="cursor-pointer font-semibold text-[#a59783]">Review reply</summary>
+                      <div className="mt-2 grid min-w-0 gap-2">
                       <p className={cn(
                         "rounded-md border px-2 py-1 text-[0.68rem] [overflow-wrap:anywhere]",
                         jennyReplyContract(chat.body).tone === "complete"
@@ -2874,7 +2876,8 @@ function CompactProjectRoom({
                           Challenge plan
                         </button>
                       </div>
-                    </div>
+                      </div>
+                    </details>
                   ) : null}
                 </article>
               ))
