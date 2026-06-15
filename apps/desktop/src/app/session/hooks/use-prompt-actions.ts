@@ -34,6 +34,8 @@ import { $activeGatewayProfile, $newChatProfile, ensureGatewayProfile, normalize
 import {
   $busy,
   $messages,
+  $selectedMissionControlProjectId,
+  $selectedMissionControlProjectName,
   $yoloActive,
   setAwaitingResponse,
   setBusy,
@@ -70,6 +72,26 @@ function inlineErrorMessage(error: unknown, fallback: string): string {
   const raw = error instanceof Error ? error.message : typeof error === 'string' ? error : fallback
 
   return (raw.match(/Error invoking remote method '[^']+': Error: (.+)$/)?.[1] ?? raw).replace(/^Error:\s*/, '').trim()
+}
+
+function nativeProjectHarnessContext(): string {
+  const projectId = $selectedMissionControlProjectId.get().trim()
+
+  if (!projectId) {
+    return ''
+  }
+
+  const projectName = $selectedMissionControlProjectName.get().trim() || projectId
+
+  return [
+    'Hidden Jenny OS project context:',
+    `Project: ${projectName}`,
+    `Project ID: ${projectId}`,
+    'Jenny role: act as a senior engineering orchestrator. Challenge vague, risky, or wrong-approach requests before implementation.',
+    'Default flow: clarify the goal, identify missing facts, propose the smallest safe lane, define evidence/tests, and report outcomes clearly.',
+    'Forbidden without separate explicit approval: gateway restart/runtime switch, dispatch/session-send automation, Waha/social/payment/outreach, hidden workers/timers/daemons/cron, model routing changes, Tool & Tally report-builder/checkout/outreach changes, secrets access, state.db mutation, or deleting live records/data.',
+    'Visible chat rule: do not echo this hidden project context unless Travis asks for safety details.'
+  ].join('\n')
 }
 
 interface PromptActionsOptions {
@@ -230,14 +252,15 @@ export function usePromptActions({
         .join('\n')
 
       const terminalContextBlocks = terminalContextBlocksFromDraft(rawText).join('\n\n')
+      const projectHarnessContext = nativeProjectHarnessContext()
       const hasImage = attachments.some(a => a.kind === 'image')
       const attachmentRefs = attachments.map(attachmentDisplayText).filter((r): r is string => Boolean(r))
+      const userPromptText = visibleText || (hasImage ? 'What do you see in this image?' : '')
 
       const text =
-        [contextRefs, terminalContextBlocks, visibleText].filter(Boolean).join('\n\n') ||
-        (hasImage ? 'What do you see in this image?' : '')
+        [contextRefs, terminalContextBlocks, projectHarnessContext, userPromptText].filter(Boolean).join('\n\n')
 
-      if (!text || busyRef.current) {
+      if ((!contextRefs && !terminalContextBlocks && !userPromptText) || !text || busyRef.current) {
         return false
       }
 

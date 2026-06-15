@@ -3,12 +3,19 @@ import type { MutableRefObject } from 'react'
 import { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { $sessions, setSessions } from '@/store/session'
+import type { ChatMessage } from '@/lib/chat-messages'
+import {
+  $sessions,
+  setSelectedMissionControlProject,
+  setSessions
+} from '@/store/session'
 import type { SessionInfo } from '@/types/hermes'
 
 import { usePromptActions } from './use-prompt-actions'
 
 vi.mock('@/hermes', () => ({
+  getProfiles: vi.fn(async () => ({ profiles: [] })),
+  setApiRequestProfile: vi.fn(),
   transcribeAudio: vi.fn()
 }))
 
@@ -44,10 +51,12 @@ interface HarnessHandle {
 
 function Harness({
   onReady,
+  onState,
   refreshSessions,
   requestGateway
 }: {
   onReady: (handle: HarnessHandle) => void
+  onState?: (state: { messages: ChatMessage[]; busy: boolean; awaitingResponse: boolean }) => void
   refreshSessions: () => Promise<void>
   requestGateway: <T>(method: string, params?: Record<string, unknown>) => Promise<T>
 }) {
@@ -67,8 +76,11 @@ function Harness({
     selectedStoredSessionIdRef,
     startFreshSessionDraft: () => undefined,
     sttEnabled: false,
-    updateSessionState: (_sessionId, updater) =>
-      updater({ messages: [], busy: false, awaitingResponse: false } as never)
+    updateSessionState: (_sessionId, updater) => {
+      const state = updater({ messages: [], busy: false, awaitingResponse: false } as never)
+      onState?.(state as { messages: ChatMessage[]; busy: boolean; awaitingResponse: boolean })
+      return state
+    }
   })
 
   useEffect(() => {
@@ -86,6 +98,7 @@ describe('usePromptActions /title', () => {
   afterEach(() => {
     cleanup()
     vi.restoreAllMocks()
+    setSelectedMissionControlProject(null)
   })
 
   it('renames via the session.title RPC (with the runtime id), updates the sidebar store, and refreshes', async () => {
@@ -162,5 +175,54 @@ describe('usePromptActions /title', () => {
     expect(requestGateway).toHaveBeenCalledWith('session.title', expect.objectContaining({ title: 'way too long title' }))
     expect(refreshSessions).not.toHaveBeenCalled()
     expect($sessions.get()[0]?.title).toBe('Old title')
+  })
+})
+
+describe('usePromptActions project harness', () => {
+  beforeEach(() => {
+    setSessions(() => [sessionInfo()])
+    setSelectedMissionControlProject(null)
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+    setSelectedMissionControlProject(null)
+  })
+
+  it('sends hidden project context without showing it in the user message bubble', async () => {
+    setSelectedMissionControlProject('project-hermes-mission-control', 'Hermes / Mission Control')
+
+    const refreshSessions = vi.fn(async () => undefined)
+    const requestGateway = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({}) as never)
+    const states: Array<{ messages: ChatMessage[]; busy: boolean; awaitingResponse: boolean }> = []
+
+    let handle: HarnessHandle | null = null
+    render(
+      <Harness
+        onReady={h => (handle = h)}
+        onState={state => states.push(state)}
+        refreshSessions={refreshSessions}
+        requestGateway={requestGateway}
+      />
+    )
+
+    await handle!.submitText('test')
+
+    expect(requestGateway).toHaveBeenCalledWith('prompt.submit', {
+      session_id: RUNTIME_SESSION_ID,
+      text: expect.stringContaining('Hidden Jenny OS project context:')
+    })
+    const promptSubmitCall = requestGateway.mock.calls.find(call => call[0] === 'prompt.submit') as
+      | [string, { session_id: string; text: string }]
+      | undefined
+    const sentText = promptSubmitCall?.[1].text ?? ''
+    expect(sentText).toContain('Project: Hermes / Mission Control')
+    expect(sentText).toContain('Project ID: project-hermes-mission-control')
+    expect(sentText).toContain('Challenge vague, risky, or wrong-approach requests')
+    expect(sentText.trim().endsWith('test')).toBe(true)
+
+    const optimisticUser = states.flatMap(state => state.messages).find(message => message.role === 'user')
+    expect(optimisticUser?.parts).toEqual([{ type: 'text', text: 'test' }])
   })
 })
