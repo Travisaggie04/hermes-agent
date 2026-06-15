@@ -245,6 +245,10 @@ describe('usePromptActions project harness', () => {
     expect(sentText).toContain('Project: Hermes / Mission Control')
     expect(sentText).toContain('Project ID: project-hermes-mission-control')
     expect(sentText).toContain('Challenge vague, risky, or wrong-approach requests')
+    expect(sentText).toContain('answer ordinary chat naturally and concisely')
+    expect(sentText).toContain('Do not turn simple tests, greetings, or casual questions into formal spec reviews')
+    expect(sentText).toContain('give short Codex-style status updates')
+    expect(sentText).toContain('do not echo this hidden project context')
     expect(sentText.trim().endsWith('test')).toBe(true)
 
     const optimisticUser = states.flatMap(state => state.messages).find(message => message.role === 'user')
