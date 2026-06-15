@@ -19,7 +19,12 @@ describe('native project chat header', () => {
     expect(source).toContain('function ProjectJennyStatusStrip')
     expect(source).toContain('aria-label="Jenny project status"')
     expect(source).toContain('Project: <span className="font-medium text-foreground">{projectName}</span>')
-    expect(source).toContain('<ProjectJennyStatusStrip activeTurnRunning={busy && awaitingResponse} gatewayOpen={gatewayOpen} />')
+    expect(source).toContain('<ProjectJennyStatusStrip activeTurnRunning={busy} gatewayOpen={gatewayOpen} />')
+  })
+
+  it('shows Jenny as working for the full native chat busy turn', () => {
+    expect(source).toContain('activeTurnRunning={busy}')
+    expect(source).not.toContain('activeTurnRunning={busy && awaitingResponse}')
   })
 
   it('keeps the Jenny status strip hidden until a project is selected', () => {

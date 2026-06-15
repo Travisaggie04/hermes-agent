@@ -452,14 +452,14 @@ export function ChatView({
       <Backdrop />
       <ChatHeader
         activeSessionId={activeSessionId}
-        activeTurnRunning={busy && awaitingResponse}
+        activeTurnRunning={busy}
         gatewayOpen={gatewayOpen}
         isRoutedSessionView={isRoutedSessionView}
         onDeleteSelectedSession={onDeleteSelectedSession}
         onToggleSelectedPin={onToggleSelectedPin}
         selectedSessionId={selectedSessionId}
       />
-      <ProjectJennyStatusStrip activeTurnRunning={busy && awaitingResponse} gatewayOpen={gatewayOpen} />
+      <ProjectJennyStatusStrip activeTurnRunning={busy} gatewayOpen={gatewayOpen} />
 
       <PromptOverlays />
 
