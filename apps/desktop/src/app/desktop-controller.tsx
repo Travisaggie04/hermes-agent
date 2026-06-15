@@ -47,6 +47,7 @@ import {
   setCurrentModel,
   setCurrentProvider,
   setMessages,
+  setSelectedMissionControlProject,
   setSessionProfileTotals,
   setSessions,
   setSessionsLoading,
@@ -548,6 +549,7 @@ export function DesktopController() {
   const startSessionInWorkspace = useCallback(
     (path: null | string) => {
       startFreshSessionDraft()
+      setSelectedMissionControlProject(null)
 
       const target = path?.trim()
 
@@ -566,6 +568,16 @@ export function DesktopController() {
         .catch(() => undefined)
     },
     [requestGateway, startFreshSessionDraft]
+  )
+
+  const startSessionInProject = useCallback(
+    (projectId: string, projectName: string) => {
+      setSelectedMissionControlProject(projectId, projectName)
+      startFreshSessionDraft()
+      setCurrentCwd('')
+      setCurrentBranch('')
+    },
+    [startFreshSessionDraft]
   )
 
   const handleSkinCommand = useSkinCommand()
@@ -647,6 +659,7 @@ export function DesktopController() {
       onLoadMoreProfileSessions={loadMoreSessionsForProfile}
       onLoadMoreSessions={loadMoreSessions}
       onNavigate={selectSidebarItem}
+      onNewSessionInProject={startSessionInProject}
       onNewSessionInWorkspace={startSessionInWorkspace}
       onResumeSession={sessionId => navigate(sessionRoute(sessionId))}
     />

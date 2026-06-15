@@ -35,7 +35,15 @@ import {
 } from '@/components/ui/sidebar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tip } from '@/components/ui/tooltip'
-import { searchSessions, type SessionInfo, type SessionSearchResult } from '@/hermes'
+import {
+  getMissionControlProjects,
+  getMissionControlProjectSessions,
+  type MissionControlProjectSession,
+  type MissionControlProjectSessionGroup,
+  searchSessions,
+  type SessionInfo,
+  type SessionSearchResult
+} from '@/hermes'
 import { useI18n } from '@/i18n'
 import { profileColor } from '@/lib/profile-color'
 import { sessionMatchesSearch } from '@/lib/session-search'
@@ -64,6 +72,7 @@ import {
   normalizeProfileKey
 } from '@/store/profile'
 import {
+  $selectedMissionControlProjectId,
   $selectedStoredSessionId,
   $sessionProfileTotals,
   $sessions,
@@ -72,6 +81,7 @@ import {
   $workingSessionIds,
   sessionPinId
 } from '@/store/session'
+import { setSelectedMissionControlProject } from '@/store/session'
 
 import { type AppView, ARTIFACTS_ROUTE, MESSAGING_ROUTE, MISSION_CONTROL_ROUTE, SKILLS_ROUTE } from '../../routes'
 import { SidebarPanelLabel } from '../../shell/sidebar-label'
@@ -207,6 +217,42 @@ function workspaceGroupsFor(sessions: SessionInfo[], noWorkspaceLabel: string): 
   return [...groups.values()]
 }
 
+function projectSessionToSessionInfo(session: MissionControlProjectSession): SessionInfo {
+  const ts = session.last_active || session.started_at || Date.now() / 1000
+
+  return {
+    archived: false,
+    cwd: session.cwd ?? null,
+    ended_at: null,
+    id: session.durable_session_id || session.session_id,
+    _lineage_root_id: session.lineage_root_id ?? null,
+    input_tokens: 0,
+    is_active: false,
+    is_default_profile: session.is_default_profile,
+    last_active: ts,
+    message_count: session.message_count ?? 0,
+    model: null,
+    output_tokens: 0,
+    preview: session.preview ?? null,
+    profile: session.profile,
+    source: session.source ?? null,
+    started_at: session.started_at || ts,
+    title: session.title ?? null,
+    tool_call_count: session.tool_call_count ?? 0
+  }
+}
+
+function projectGroupsFor(groups: MissionControlProjectSessionGroup[]): SidebarSessionGroup[] {
+  return groups.map(group => ({
+    id: group.project_id,
+    label: group.name,
+    mode: 'project' as const,
+    path: null,
+    sessions: group.sessions.map(projectSessionToSessionInfo),
+    totalCount: group.sessions.length
+  }))
+}
+
 function useSortableBindings(id: string) {
   const { attributes, isDragging, listeners, setNodeRef, transform, transition } = useSortable({ id })
 
@@ -228,6 +274,7 @@ interface ChatSidebarProps extends React.ComponentProps<typeof Sidebar> {
   onDeleteSession: (sessionId: string) => void
   onArchiveSession: (sessionId: string) => void
   onNewSessionInWorkspace: (path: null | string) => void
+  onNewSessionInProject: (projectId: string, projectName: string) => void
 }
 
 export function ChatSidebar({
@@ -238,7 +285,8 @@ export function ChatSidebar({
   onResumeSession,
   onDeleteSession,
   onArchiveSession,
-  onNewSessionInWorkspace
+  onNewSessionInWorkspace,
+  onNewSessionInProject
 }: ChatSidebarProps) {
   const { t } = useI18n()
   const s = t.sidebar
@@ -249,6 +297,7 @@ export function ChatSidebar({
   const pinsOpen = useStore($sidebarPinsOpen)
   const agentsOpen = useStore($sidebarRecentsOpen)
   const selectedSessionId = useStore($selectedStoredSessionId)
+  const selectedMissionControlProjectId = useStore($selectedMissionControlProjectId)
   const sessions = useStore($sessions)
   const sessionsLoading = useStore($sessionsLoading)
   const sessionsTotal = useStore($sessionsTotal)
@@ -268,6 +317,8 @@ export function ChatSidebar({
   const [searchQuery, setSearchQuery] = useState('')
   const [serverMatches, setServerMatches] = useState<SessionSearchResult[]>([])
   const [newSessionKbdFlash, setNewSessionKbdFlash] = useState(false)
+  const [projectGroups, setProjectGroups] = useState<SidebarSessionGroup[]>([])
+  const [projectGroupsLoading, setProjectGroupsLoading] = useState(false)
   const [profileLoadMorePending, setProfileLoadMorePending] = useState<Record<string, boolean>>({})
   const trimmedQuery = searchQuery.trim()
 
@@ -312,6 +363,59 @@ export function ChatSidebar({
   )
 
   const workingSessionIdSet = useMemo(() => new Set(workingSessionIds), [workingSessionIds])
+
+  useEffect(() => {
+    let cancelled = false
+
+    setProjectGroupsLoading(true)
+    Promise.all([getMissionControlProjects(), getMissionControlProjectSessions()])
+      .then(([projectsResponse, sessionsResponse]) => {
+        if (cancelled) {
+          return
+        }
+
+        const byId = new Map(projectGroupsFor(sessionsResponse.groups || []).map(group => [group.id, group]))
+
+        for (const item of projectsResponse.projects || []) {
+          const project = item.record
+          const projectId = project.project_id || project.name
+
+          if (!projectId || byId.has(projectId)) {
+            continue
+          }
+
+          byId.set(projectId, {
+            id: projectId,
+            label: project.name || projectId,
+            mode: 'project',
+            path: null,
+            sessions: [],
+            totalCount: 0
+          })
+        }
+
+        const next = [...byId.values()].sort((a, b) => a.label.localeCompare(b.label))
+        setProjectGroups(next)
+
+        if (!$selectedMissionControlProjectId.get().trim() && next.length) {
+          setSelectedMissionControlProject(next[0].id, next[0].label)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProjectGroups([])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setProjectGroupsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Index sessions by both their live id and their lineage-root id so a pin
   // stored as the pre-compression root resolves to the live continuation tip.
@@ -658,6 +762,39 @@ export function ChatSidebar({
           />
         )}
 
+        {sidebarOpen && !trimmedQuery && (
+          <SidebarSessionsSection
+            activeGroupId={selectedMissionControlProjectId}
+            activeSessionId={activeSidebarSessionId}
+            contentClassName="flex min-h-10 shrink-0 flex-col gap-2 rounded-lg pb-2 pt-1"
+            emptyState={
+              projectGroupsLoading ? (
+                <SidebarSessionSkeletons />
+              ) : (
+                <div className="grid min-h-10 place-items-center rounded-lg px-2 text-center text-xs text-(--ui-text-tertiary)">
+                  No projects yet.
+                </div>
+              )
+            }
+            forceEmptyState={projectGroupsLoading || projectGroups.length === 0}
+            groups={projectGroups}
+            label="Projects"
+            labelMeta={String(projectGroups.length)}
+            onArchiveSession={onArchiveSession}
+            onDeleteSession={onDeleteSession}
+            onNewSessionInProject={onNewSessionInProject}
+            onResumeSession={onResumeSession}
+            onSelectProject={(projectId, projectName) => setSelectedMissionControlProject(projectId, projectName)}
+            onToggle={() => undefined}
+            onTogglePin={pinSession}
+            open
+            pinned={false}
+            rootClassName="shrink-0 p-0 pb-1"
+            sessions={projectGroups.flatMap(group => group.sessions)}
+            workingSessionIdSet={workingSessionIdSet}
+          />
+        )}
+
         {sidebarOpen && showSessionSections && !trimmedQuery && (
           <SidebarSessionsSection
             activeSessionId={activeSidebarSessionId}
@@ -837,7 +974,7 @@ interface SidebarSessionGroup {
   // Profile color for the ALL-profiles view; absent for workspace groups.
   color?: null | string
   loadingMore?: boolean
-  mode?: 'profile' | 'workspace'
+  mode?: 'profile' | 'project' | 'workspace'
   onLoadMore?: () => void
   totalCount?: number
 }
@@ -853,7 +990,9 @@ interface SidebarSessionsSectionProps {
   onDeleteSession: (sessionId: string) => void
   onArchiveSession: (sessionId: string) => void
   onTogglePin: (sessionId: string) => void
+  onNewSessionInProject?: (projectId: string, projectName: string) => void
   onNewSessionInWorkspace?: (path: null | string) => void
+  onSelectProject?: (projectId: string, projectName: string) => void
   pinned: boolean
   rootClassName?: string
   contentClassName?: string
@@ -862,6 +1001,7 @@ interface SidebarSessionsSectionProps {
   headerAction?: React.ReactNode
   footer?: React.ReactNode
   groups?: SidebarSessionGroup[]
+  activeGroupId?: null | string
   labelMeta?: React.ReactNode
   sortable?: boolean
   onReorder?: (event: DragEndEvent) => void
@@ -879,7 +1019,9 @@ function SidebarSessionsSection({
   onDeleteSession,
   onArchiveSession,
   onTogglePin,
+  onNewSessionInProject,
   onNewSessionInWorkspace,
+  onSelectProject,
   pinned,
   rootClassName,
   contentClassName,
@@ -888,6 +1030,7 @@ function SidebarSessionsSection({
   headerAction,
   footer,
   groups,
+  activeGroupId,
   labelMeta,
   sortable = false,
   onReorder,
@@ -936,16 +1079,22 @@ function SidebarSessionsSection({
     const groupNodes = groups.map(group =>
       dndActive ? (
         <SortableSidebarWorkspaceGroup
+          active={group.id === activeGroupId}
           group={group}
           key={group.id}
           onNewSession={onNewSessionInWorkspace}
+          onNewSessionInProject={onNewSessionInProject}
+          onSelectProject={onSelectProject}
           renderRows={renderSessionList}
         />
       ) : (
         <SidebarWorkspaceGroup
+          active={group.id === activeGroupId}
           group={group}
           key={group.id}
           onNewSession={onNewSessionInWorkspace}
+          onNewSessionInProject={onNewSessionInProject}
+          onSelectProject={onSelectProject}
           renderRows={renderSessionList}
         />
       )
@@ -1006,6 +1155,9 @@ interface SidebarWorkspaceGroupProps extends React.ComponentProps<'div'> {
   group: SidebarSessionGroup
   renderRows: (sessions: SessionInfo[]) => React.ReactNode
   onNewSession?: (path: null | string) => void
+  onNewSessionInProject?: (projectId: string, projectName: string) => void
+  onSelectProject?: (projectId: string, projectName: string) => void
+  active?: boolean
   reorderable?: boolean
   dragging?: boolean
   dragHandleProps?: React.HTMLAttributes<HTMLElement>
@@ -1015,6 +1167,9 @@ function SidebarWorkspaceGroup({
   group,
   renderRows,
   onNewSession,
+  onNewSessionInProject,
+  onSelectProject,
+  active = false,
   reorderable = false,
   dragging = false,
   dragHandleProps,
@@ -1026,6 +1181,7 @@ function SidebarWorkspaceGroup({
   const { t } = useI18n()
   const s = t.sidebar
   const isProfileGroup = group.mode === 'profile'
+  const isProjectGroup = group.mode === 'project'
   const pageStep = isProfileGroup ? PROFILE_INITIAL_PAGE : WORKSPACE_PAGE
   const [open, setOpen] = useState(true)
   const [visibleCount, setVisibleCount] = useState(pageStep)
@@ -1033,7 +1189,7 @@ function SidebarWorkspaceGroup({
   const loadedCount = group.sessions.length
   // Profile groups know their on-disk total (children excluded); workspace
   // groups only ever page within what's already loaded.
-  const totalCount = isProfileGroup ? Math.max(group.totalCount ?? loadedCount, loadedCount) : loadedCount
+  const totalCount = isProfileGroup || isProjectGroup ? Math.max(group.totalCount ?? loadedCount, loadedCount) : loadedCount
   const visibleSessions = group.sessions.slice(0, visibleCount)
   const hiddenCount = Math.max(0, totalCount - visibleSessions.length)
   const nextCount = Math.min(pageStep, hiddenCount)
@@ -1051,11 +1207,17 @@ function SidebarWorkspaceGroup({
   }
 
   return (
-    <div className={cn('grid gap-px', dragging && 'z-10 opacity-60', className)} ref={ref} style={style} {...rest}>
+    <div className={cn('grid gap-px', active && 'rounded-md bg-(--ui-control-active-background)', dragging && 'z-10 opacity-60', className)} ref={ref} style={style} {...rest}>
       <div className="group/workspace flex min-h-6 items-center gap-1 px-2 pt-1 text-[0.6875rem] font-medium text-(--ui-text-tertiary)">
         <button
           className="flex min-w-0 items-center gap-1.5 bg-transparent text-left hover:text-(--ui-text-secondary)"
-          onClick={() => setOpen(value => !value)}
+          onClick={() => {
+            if (isProjectGroup) {
+              onSelectProject?.(group.id, group.label)
+            }
+
+            setOpen(value => !value)
+          }}
           type="button"
         >
           {group.color ? (
@@ -1070,7 +1232,7 @@ function SidebarWorkspaceGroup({
             open={open}
           />
         </button>
-        {(onNewSession || isProfileGroup) && (
+        {(onNewSession || onNewSessionInProject || isProfileGroup) && (
           <Tip label={s.newSessionIn(group.label)}>
             <button
               aria-label={s.newSessionIn(group.label)}
@@ -1078,7 +1240,13 @@ function SidebarWorkspaceGroup({
               // Profile groups start a fresh session in that profile but keep the
               // all-profiles browse view (newSessionInProfile leaves the scope
               // alone); workspace groups seed the new session's cwd from the path.
-              onClick={() => (isProfileGroup ? newSessionInProfile(group.id) : onNewSession?.(group.path))}
+              onClick={() =>
+                isProfileGroup
+                  ? newSessionInProfile(group.id)
+                  : isProjectGroup
+                    ? onNewSessionInProject?.(group.id, group.label)
+                    : onNewSession?.(group.path)
+              }
               type="button"
             >
               <Codicon name="add" size="0.75rem" />
@@ -1105,7 +1273,13 @@ function SidebarWorkspaceGroup({
       </div>
       {open && (
         <>
-          {renderRows(visibleSessions)}
+          {visibleSessions.length ? (
+            renderRows(visibleSessions)
+          ) : isProjectGroup ? (
+            <div className="rounded-md px-2 py-1.5 text-[0.75rem] text-(--ui-text-tertiary)">
+              No linked sessions yet.
+            </div>
+          ) : null}
           {hiddenCount > 0 &&
             (isProfileGroup ? (
               <SidebarLoadMoreRow loading={Boolean(group.loadingMore)} onClick={handleProfileLoadMore} step={nextCount} />
@@ -1131,6 +1305,9 @@ interface SortableWorkspaceProps {
   group: SidebarSessionGroup
   renderRows: (sessions: SessionInfo[]) => React.ReactNode
   onNewSession?: (path: null | string) => void
+  onNewSessionInProject?: (projectId: string, projectName: string) => void
+  onSelectProject?: (projectId: string, projectName: string) => void
+  active?: boolean
 }
 
 function SortableSidebarWorkspaceGroup(props: SortableWorkspaceProps) {

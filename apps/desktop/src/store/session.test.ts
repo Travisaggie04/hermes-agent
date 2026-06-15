@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest'
 
 import type { SessionInfo } from '@/types/hermes'
 
-import { $attentionSessionIds, mergeSessionPage, sessionPinId, setSessionAttention } from './session'
+import {
+  $attentionSessionIds,
+  $selectedMissionControlProjectId,
+  $selectedMissionControlProjectName,
+  mergeSessionPage,
+  sessionPinId,
+  setSelectedMissionControlProject,
+  setSessionAttention
+} from './session'
 
 const session = (over: Partial<SessionInfo>): SessionInfo => ({
   archived: false,
@@ -48,6 +56,23 @@ describe('setSessionAttention', () => {
     setSessionAttention('', true)
     setSessionAttention('missing', false)
     expect($attentionSessionIds.get()).toEqual([])
+  })
+})
+
+describe('setSelectedMissionControlProject', () => {
+  it('stores the selected Mission Control project for new native chats', () => {
+    setSelectedMissionControlProject('project-hermes-mission-control', 'Hermes / Mission Control')
+
+    expect($selectedMissionControlProjectId.get()).toBe('project-hermes-mission-control')
+    expect($selectedMissionControlProjectName.get()).toBe('Hermes / Mission Control')
+  })
+
+  it('clears the selected Mission Control project', () => {
+    setSelectedMissionControlProject('project-hermes-mission-control', 'Hermes / Mission Control')
+    setSelectedMissionControlProject(null)
+
+    expect($selectedMissionControlProjectId.get()).toBe('')
+    expect($selectedMissionControlProjectName.get()).toBe('')
   })
 })
 

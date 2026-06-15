@@ -9,6 +9,8 @@ import type { SessionInfo, UsageStats } from '@/types/hermes'
 type Updater<T> = T | ((current: T) => T)
 
 const WORKSPACE_CWD_KEY = 'hermes.desktop.workspace-cwd'
+const MISSION_CONTROL_PROJECT_ID_KEY = 'hermes.desktop.mission-control-project-id'
+const MISSION_CONTROL_PROJECT_NAME_KEY = 'hermes.desktop.mission-control-project-name'
 
 export const getRememberedWorkspaceCwd = (): string => storedString(WORKSPACE_CWD_KEY)?.trim() || ''
 
@@ -100,6 +102,8 @@ export const $currentFastMode = atom(false)
 export const $yoloActive = atom(false)
 export const $currentCwd = atom(getRememberedWorkspaceCwd())
 export const $currentBranch = atom('')
+export const $selectedMissionControlProjectId = atom(storedString(MISSION_CONTROL_PROJECT_ID_KEY)?.trim() || '')
+export const $selectedMissionControlProjectName = atom(storedString(MISSION_CONTROL_PROJECT_NAME_KEY)?.trim() || '')
 export const $currentUsage = atom<UsageStats>({
   calls: 0,
   input: 0,
@@ -144,6 +148,15 @@ export const setCurrentCwd = (next: Updater<string>) => {
 }
 
 export const setCurrentBranch = (next: Updater<string>) => updateAtom($currentBranch, next)
+export const setSelectedMissionControlProject = (projectId: string | null, name?: string | null) => {
+  const normalizedId = projectId?.trim() || ''
+  const normalizedName = name?.trim() || ''
+
+  $selectedMissionControlProjectId.set(normalizedId)
+  $selectedMissionControlProjectName.set(normalizedName)
+  persistString(MISSION_CONTROL_PROJECT_ID_KEY, normalizedId || null)
+  persistString(MISSION_CONTROL_PROJECT_NAME_KEY, normalizedName || null)
+}
 export const setCurrentUsage = (next: Updater<UsageStats>) => updateAtom($currentUsage, next)
 export const setSessionStartedAt = (next: Updater<number | null>) => updateAtom($sessionStartedAt, next)
 export const setTurnStartedAt = (next: Updater<number | null>) => updateAtom($turnStartedAt, next)
