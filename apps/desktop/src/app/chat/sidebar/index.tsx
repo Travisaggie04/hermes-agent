@@ -38,6 +38,7 @@ import { Tip } from '@/components/ui/tooltip'
 import {
   createMissionControlProject,
   createMissionControlProjectBrief,
+  createMissionControlSessionProjectLink,
   getMissionControlProjects,
   getMissionControlProjectSessions,
   type MissionControlProjectSession,
@@ -47,6 +48,7 @@ import {
   type SessionSearchResult
 } from '@/hermes'
 import { useI18n } from '@/i18n'
+import { sessionTitle } from '@/lib/chat-runtime'
 import { profileColor } from '@/lib/profile-color'
 import { sessionMatchesSearch } from '@/lib/session-search'
 import { cn } from '@/lib/utils'
@@ -65,6 +67,7 @@ import {
   SIDEBAR_SESSIONS_PAGE_SIZE,
   unpinSession
 } from '@/store/layout'
+import { notify, notifyError } from '@/store/notifications'
 import {
   $newChatProfile,
   $profiles,
@@ -90,6 +93,7 @@ import { SidebarPanelLabel } from '../../shell/sidebar-label'
 import type { SidebarNavItem } from '../../types'
 
 import { ProfileRail } from './profile-switcher'
+import type { ProjectMoveTarget } from './session-actions-menu'
 import { SidebarSessionRow } from './session-row'
 import { VirtualSessionList } from './virtual-session-list'
 
@@ -492,6 +496,35 @@ export function ChatSidebar({
     }
   }, [onNewSessionInProject, projectIntake, refreshProjectGroups])
 
+  const projectMoveTargets = useMemo<ProjectMoveTarget[]>(
+    () => projectGroups.map(group => ({ name: group.label, project_id: group.id })),
+    [projectGroups]
+  )
+
+  const moveSessionToProject = useCallback(
+    async (session: SessionInfo, projectId: string, projectName: string) => {
+      try {
+        await createMissionControlSessionProjectLink({
+          cwd_snapshot: session.cwd || undefined,
+          lineage_root_id: session._lineage_root_id || undefined,
+          link_method: 'manual',
+          linked_by: 'desktop',
+          profile: session.profile || undefined,
+          project_id: projectId,
+          session_id: session.id,
+          source: 'desktop-native-chat',
+          status: 'active',
+          title_snapshot: sessionTitle(session)
+        })
+        notify({ durationMs: 2_000, kind: 'success', message: `Moved to ${projectName}` })
+        refreshProjectGroups()
+      } catch (err) {
+        notifyError(err, `Could not move session to ${projectName}`)
+      }
+    },
+    [refreshProjectGroups]
+  )
+
   // Index sessions by both their live id and their lineage-root id so a pin
   // stored as the pre-compression root resolves to the live continuation tip.
   const sessionByAnyId = useMemo(() => {
@@ -826,11 +859,13 @@ export function ChatSidebar({
             labelMeta={String(searchResults.length)}
             onArchiveSession={onArchiveSession}
             onDeleteSession={onDeleteSession}
+            onMoveSessionToProject={moveSessionToProject}
             onResumeSession={onResumeSession}
             onToggle={() => undefined}
             onTogglePin={pinSession}
             open
             pinned={false}
+            projectMoveTargets={projectMoveTargets}
             rootClassName="min-h-0 flex-1 p-0"
             sessions={searchResults}
             workingSessionIdSet={workingSessionIdSet}
@@ -889,6 +924,7 @@ export function ChatSidebar({
             labelMeta={String(projectGroups.length)}
             onArchiveSession={onArchiveSession}
             onDeleteSession={onDeleteSession}
+            onMoveSessionToProject={moveSessionToProject}
             onNewSessionInProject={onNewSessionInProject}
             onResumeSession={onResumeSession}
             onSelectProject={(projectId, projectName) => setSelectedMissionControlProject(projectId, projectName)}
@@ -896,6 +932,7 @@ export function ChatSidebar({
             onTogglePin={pinSession}
             open
             pinned={false}
+            projectMoveTargets={projectMoveTargets}
             rootClassName="shrink-0 p-0 pb-1"
             sessions={projectGroups.flatMap(group => group.sessions)}
             workingSessionIdSet={workingSessionIdSet}
@@ -911,12 +948,14 @@ export function ChatSidebar({
             label={s.pinned}
             onArchiveSession={onArchiveSession}
             onDeleteSession={onDeleteSession}
+            onMoveSessionToProject={moveSessionToProject}
             onReorder={handlePinnedDragEnd}
             onResumeSession={onResumeSession}
             onToggle={() => setSidebarPinsOpen(!pinsOpen)}
             onTogglePin={unpinSession}
             open={pinsOpen}
             pinned
+            projectMoveTargets={projectMoveTargets}
             rootClassName="shrink-0 p-0 pb-1"
             sessions={pinnedSessions}
             sortable={pinnedSessions.length > 1}
@@ -983,6 +1022,7 @@ export function ChatSidebar({
             labelMeta={recentsMeta}
             onArchiveSession={onArchiveSession}
             onDeleteSession={onDeleteSession}
+            onMoveSessionToProject={moveSessionToProject}
             onNewSessionInWorkspace={showAllProfiles ? undefined : onNewSessionInWorkspace}
             onReorder={showAllProfiles ? undefined : handleAgentDragEnd}
             onResumeSession={onResumeSession}
@@ -990,6 +1030,7 @@ export function ChatSidebar({
             onTogglePin={pinSession}
             open={agentsOpen}
             pinned={false}
+            projectMoveTargets={projectMoveTargets}
             rootClassName="min-h-0 flex-1 p-0"
             sessions={agentSessions}
             sortable={!showAllProfiles && agentSessions.length > 1}
@@ -1168,12 +1209,14 @@ interface SidebarSessionsSectionProps {
   workingSessionIdSet: Set<string>
   onResumeSession: (sessionId: string) => void
   onDeleteSession: (sessionId: string) => void
+  onMoveSessionToProject?: (session: SessionInfo, projectId: string, projectName: string) => void
   onArchiveSession: (sessionId: string) => void
   onTogglePin: (sessionId: string) => void
   onNewSessionInProject?: (projectId: string, projectName: string) => void
   onNewSessionInWorkspace?: (path: null | string) => void
   onSelectProject?: (projectId: string, projectName: string) => void
   pinned: boolean
+  projectMoveTargets?: ProjectMoveTarget[]
   rootClassName?: string
   contentClassName?: string
   emptyState: React.ReactNode
@@ -1197,12 +1240,14 @@ function SidebarSessionsSection({
   workingSessionIdSet,
   onResumeSession,
   onDeleteSession,
+  onMoveSessionToProject,
   onArchiveSession,
   onTogglePin,
   onNewSessionInProject,
   onNewSessionInWorkspace,
   onSelectProject,
   pinned,
+  projectMoveTargets,
   rootClassName,
   contentClassName,
   emptyState,
@@ -1226,8 +1271,12 @@ function SidebarSessionsSection({
       isWorking: workingSessionIdSet.has(session.id),
       onArchive: () => onArchiveSession(session.id),
       onDelete: () => onDeleteSession(session.id),
+      onMoveToProject: onMoveSessionToProject
+        ? (projectId: string, projectName: string) => onMoveSessionToProject(session, projectId, projectName)
+        : undefined,
       onPin: () => onTogglePin(sessionPinId(session)),
       onResume: () => onResumeSession(session.id),
+      projectMoveTargets,
       session
     }
 
@@ -1293,9 +1342,11 @@ function SidebarSessionsSection({
         activeSessionId={activeSessionId}
         onArchiveSession={onArchiveSession}
         onDeleteSession={onDeleteSession}
+        onMoveSessionToProject={onMoveSessionToProject}
         onResumeSession={onResumeSession}
         onTogglePin={onTogglePin}
         pinned={pinned}
+        projectMoveTargets={projectMoveTargets}
         sessions={sessions}
         sortable={sortable}
         workingSessionIdSet={workingSessionIdSet}

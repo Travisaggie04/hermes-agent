@@ -7,6 +7,7 @@ import type { SessionInfo } from '@/hermes'
 import { cn } from '@/lib/utils'
 import { sessionPinId } from '@/store/session'
 
+import type { ProjectMoveTarget } from './session-actions-menu'
 import { SidebarSessionRow } from './session-row'
 
 interface SessionRowCommonProps {
@@ -15,8 +16,10 @@ interface SessionRowCommonProps {
   isWorking: boolean
   onArchive: () => void
   onDelete: () => void
+  onMoveToProject?: (projectId: string, projectName: string) => void
   onPin: () => void
   onResume: () => void
+  projectMoveTargets?: ProjectMoveTarget[]
 }
 
 interface VirtualSessionListProps {
@@ -24,9 +27,11 @@ interface VirtualSessionListProps {
   className?: string
   onArchiveSession: (sessionId: string) => void
   onDeleteSession: (sessionId: string) => void
+  onMoveSessionToProject?: (session: SessionInfo, projectId: string, projectName: string) => void
   onResumeSession: (sessionId: string) => void
   onTogglePin: (sessionId: string) => void
   pinned: boolean
+  projectMoveTargets?: ProjectMoveTarget[]
   sessions: SessionInfo[]
   sortable: boolean
   workingSessionIdSet: Set<string>
@@ -40,9 +45,11 @@ export const VirtualSessionList: FC<VirtualSessionListProps> = ({
   className,
   onArchiveSession,
   onDeleteSession,
+  onMoveSessionToProject,
   onResumeSession,
   onTogglePin,
   pinned,
+  projectMoveTargets,
   sessions,
   sortable,
   workingSessionIdSet
@@ -78,8 +85,12 @@ export const VirtualSessionList: FC<VirtualSessionListProps> = ({
       isWorking: workingSessionIdSet.has(session.id),
       onArchive: () => onArchiveSession(session.id),
       onDelete: () => onDeleteSession(session.id),
+      onMoveToProject: onMoveSessionToProject
+        ? (projectId, projectName) => onMoveSessionToProject(session, projectId, projectName)
+        : undefined,
       onPin: () => onTogglePin(sessionPinId(session)),
-      onResume: () => onResumeSession(session.id)
+      onResume: () => onResumeSession(session.id),
+      projectMoveTargets
     }
 
     return sortable ? (

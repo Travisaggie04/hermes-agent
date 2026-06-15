@@ -11,7 +11,7 @@ import { triggerHaptic } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
 import { $attentionSessionIds } from '@/store/session'
 
-import { SessionActionsMenu, SessionContextMenu } from './session-actions-menu'
+import { type ProjectMoveTarget, SessionActionsMenu, SessionContextMenu } from './session-actions-menu'
 
 interface SidebarSessionRowProps extends React.ComponentProps<'div'> {
   session: SessionInfo
@@ -20,8 +20,10 @@ interface SidebarSessionRowProps extends React.ComponentProps<'div'> {
   isWorking: boolean
   onArchive: () => void
   onDelete: () => void
+  onMoveToProject?: (projectId: string, projectName: string) => void
   onPin: () => void
   onResume: () => void
+  projectMoveTargets?: ProjectMoveTarget[]
   reorderable?: boolean
   dragging?: boolean
   dragHandleProps?: React.HTMLAttributes<HTMLElement>
@@ -52,8 +54,10 @@ export function SidebarSessionRow({
   isWorking,
   onArchive,
   onDelete,
+  onMoveToProject,
   onPin,
   onResume,
+  projectMoveTargets,
   reorderable = false,
   dragging = false,
   dragHandleProps,
@@ -76,9 +80,11 @@ export function SidebarSessionRow({
     <SessionContextMenu
       onArchive={onArchive}
       onDelete={onDelete}
+      onMoveToProject={onMoveToProject}
       onPin={onPin}
       pinned={isPinned}
       profile={session.profile}
+      projectMoveTargets={projectMoveTargets}
       sessionId={session.id}
       title={title}
     >
@@ -192,9 +198,11 @@ export function SidebarSessionRow({
           <SessionActionsMenu
             onArchive={onArchive}
             onDelete={onDelete}
+            onMoveToProject={onMoveToProject}
             onPin={onPin}
             pinned={isPinned}
             profile={session.profile}
+            projectMoveTargets={projectMoveTargets}
             sessionId={session.id}
             title={title}
           >
