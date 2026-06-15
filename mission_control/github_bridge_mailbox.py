@@ -28,7 +28,7 @@ GITHUB_BRIDGE_MARKER = "<!-- hermes-github-bridge -->"
 DEFAULT_GITHUB_BRIDGE_REPO = "Travisaggie04/hermes-agent"
 DEFAULT_GITHUB_BRIDGE_ISSUE = 79
 DEFAULT_NOTIFY_SSH_TARGET = "jenny@100.115.125.111"
-DEFAULT_NOTIFY_REMOTE_RUNTIME = "/home/jenny/.hermes/hermes-runtime-github-bridge-mailbox-944411a"
+DEFAULT_NOTIFY_REMOTE_RUNTIME = ""
 DEFAULT_HERMES_BIN = ""
 DEFAULT_MISSION_CONTROL_PROJECT_ID = "project-hermes-mission-control"
 PENDING_STATUSES = {"queued", "retry_requested"}
@@ -939,12 +939,15 @@ def remote_poll_bridge_over_ssh(
     remote_runtime = _bounded_text(remote_runtime, max_chars=300)
     if not ssh_target:
         raise ValueError("ssh_target is required")
-    if not remote_runtime:
-        raise ValueError("remote_runtime is required")
+    if remote_runtime:
+        runtime_command = f"cd {shlex.quote(remote_runtime)}"
+        runtime_label = remote_runtime
+    else:
+        runtime_command = 'runtime=$(systemctl --user show hermes-dashboard.service -p WorkingDirectory --value) && test -n "$runtime" && cd "$runtime"'
+        runtime_label = "systemd:hermes-dashboard.service/WorkingDirectory"
     remote_command = " ".join(
         [
-            "cd",
-            shlex.quote(remote_runtime),
+            runtime_command,
             "&&",
             "python3",
             "-m",
@@ -981,7 +984,7 @@ def remote_poll_bridge_over_ssh(
         return {
             **_inert_response_flags(),
             "ssh_target": ssh_target,
-            "remote_runtime": remote_runtime,
+            "remote_runtime": runtime_label,
             "repo": repo,
             "issue_number": int(issue_number),
             "remote_poll": {
@@ -996,7 +999,7 @@ def remote_poll_bridge_over_ssh(
         return {
             **_inert_response_flags(),
             "ssh_target": ssh_target,
-            "remote_runtime": remote_runtime,
+            "remote_runtime": runtime_label,
             "repo": repo,
             "issue_number": int(issue_number),
             "remote_poll": {
@@ -1013,7 +1016,7 @@ def remote_poll_bridge_over_ssh(
     return {
         **_inert_response_flags(),
         "ssh_target": ssh_target,
-        "remote_runtime": remote_runtime,
+        "remote_runtime": runtime_label,
         "repo": repo,
         "issue_number": int(issue_number),
         "remote_poll": remote_payload,

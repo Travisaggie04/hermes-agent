@@ -521,7 +521,34 @@ def test_notify_jenny_now_posts_message_and_runs_one_ssh_poll(tmp_path: Path, mo
     assert any(item.startswith("UserKnownHostsFile=") for item in ssh_calls[0])
     assert not any("StrictHostKeyChecking=no" in item for item in ssh_calls[0])
     assert ssh_calls[0][-2] == "jenny@100.115.125.111"
+    assert "systemctl --user show hermes-dashboard.service -p WorkingDirectory --value" in ssh_calls[0][-1]
     assert "mission_control.github_bridge_mailbox poll" in ssh_calls[0][-1]
+    assert payload["remote_poll_result"]["remote_runtime"] == "systemd:hermes-dashboard.service/WorkingDirectory"
+
+
+def test_notify_jenny_now_can_use_explicit_remote_runtime(tmp_path: Path, monkeypatch):
+    records = tmp_path / "records.jsonl"
+    ssh_calls: list[list[str]] = []
+
+    monkeypatch.setattr("mission_control.github_bridge_mailbox._run_gh_api", lambda _args: {"id": 802})
+
+    def fake_run_ssh(args: list[str]):
+        ssh_calls.append(args)
+        return json.dumps({"stored": True, "new_message_count": 1, "pending_count": 1})
+
+    monkeypatch.setattr("mission_control.github_bridge_mailbox._run_ssh", fake_run_ssh)
+
+    payload = notify_jenny_now(
+        request_id="req-notify-explicit-runtime",
+        project_id="project-hermes-mission-control",
+        message="Review this bounded request.",
+        remote_runtime="/tmp/hermes-runtime-test",
+        path=records,
+    )
+
+    assert "cd /tmp/hermes-runtime-test" in ssh_calls[0][-1]
+    assert "systemctl --user show hermes-dashboard.service" not in ssh_calls[0][-1]
+    assert payload["remote_poll_result"]["remote_runtime"] == "/tmp/hermes-runtime-test"
 
 
 def test_notify_jenny_now_duplicate_skips_github_but_still_polls(tmp_path: Path, monkeypatch):
@@ -803,7 +830,7 @@ def test_notify_jenny_now_main_uses_defaults_and_known_hosts(tmp_path: Path, mon
     assert exit_code == 0
     assert gh_calls[0][0] == "repos/Travisaggie04/hermes-agent/issues/79/comments"
     assert ssh_calls[0][-2] == "jenny@100.115.125.111"
-    assert "hermes-runtime-github-bridge-mailbox-944411a" in ssh_calls[0][-1]
+    assert "systemctl --user show hermes-dashboard.service -p WorkingDirectory --value" in ssh_calls[0][-1]
     assert output["message_result"]["message"]["request_id"] == "req-cli-notify"
     assert output["remote_poll_result"]["remote_poll"]["stored"] is True
 
