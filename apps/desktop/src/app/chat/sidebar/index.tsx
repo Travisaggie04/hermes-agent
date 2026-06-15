@@ -78,6 +78,7 @@ import {
 } from '@/store/profile'
 import {
   $selectedMissionControlProjectId,
+  $selectedMissionControlProjectName,
   $selectedStoredSessionId,
   $sessionProfileTotals,
   $sessions,
@@ -312,6 +313,7 @@ export function ChatSidebar({
   const agentsOpen = useStore($sidebarRecentsOpen)
   const selectedSessionId = useStore($selectedStoredSessionId)
   const selectedMissionControlProjectId = useStore($selectedMissionControlProjectId)
+  const selectedMissionControlProjectName = useStore($selectedMissionControlProjectName)
   const sessions = useStore($sessions)
   const sessionsLoading = useStore($sessionsLoading)
   const sessionsTotal = useStore($sessionsTotal)
@@ -787,6 +789,14 @@ export function ChatSidebar({
                   (item.id === 'artifacts' && currentView === 'artifacts')
 
                 const isNewSession = item.id === 'new-session'
+                const navLabel =
+                  isNewSession && selectedMissionControlProjectId
+                    ? 'New project chat'
+                    : (s.nav[item.id] ?? item.label)
+                const navTooltip =
+                  isNewSession && selectedMissionControlProjectId
+                    ? `New chat in ${selectedMissionControlProjectName || selectedMissionControlProjectId}`
+                    : (s.nav[item.id] ?? item.label)
 
                 return (
                   <SidebarMenuItem key={item.id}>
@@ -810,14 +820,14 @@ export function ChatSidebar({
 
                         onNavigate(item)
                       }}
-                      tooltip={s.nav[item.id] ?? item.label}
+                      tooltip={navTooltip}
                       type="button"
                     >
                       <item.icon className="size-4 shrink-0 text-[color-mix(in_srgb,currentColor_72%,transparent)]" />
                       {sidebarOpen && (
                         <>
                           <span className="min-w-0 flex-1 truncate max-[46.25rem]:hidden">
-                            {s.nav[item.id] ?? item.label}
+                            {navLabel}
                           </span>
                           {isNewSession && (
                             <KbdGroup
