@@ -895,6 +895,65 @@ function jennyNextStep(
   return 'Type one bounded project message, then click Send to Jenny.'
 }
 
+function jennyOperatorGuidance({
+  bridgeError,
+  hasRunnablePendingMessage,
+  pendingCount,
+  progress,
+  replyReviewTone,
+  responseCount
+}: {
+  bridgeError: string
+  hasRunnablePendingMessage: boolean
+  pendingCount: number
+  progress: JennyRunProgress | null
+  replyReviewTone: 'accepted' | 'blocked' | 'none' | 'warn'
+  responseCount: number
+}): { detail: string; label: string; tone: 'bad' | 'good' | 'idle' | 'warn' } {
+  if (bridgeError || progress?.phase === 'error') {
+    return {
+      detail: hasRunnablePendingMessage
+        ? 'Retry Jenny once for the latest pending message. Treat the failed run as not done.'
+        : 'Refresh replies first. If the error remains, inspect the bridge before sending more work.',
+      label: hasRunnablePendingMessage ? 'Retry Jenny once' : 'Check bridge',
+      tone: 'bad'
+    }
+  }
+  if (isJennyRunActive(progress)) {
+    return {
+      detail: 'Jenny has one bounded reply in progress. Do not send another request until this finishes.',
+      label: 'Wait for Jenny',
+      tone: 'warn'
+    }
+  }
+  if (replyReviewTone === 'blocked' || replyReviewTone === 'warn') {
+    return {
+      detail: 'Review the latest Jenny answer. Ask for evidence or challenge the plan before treating it as done.',
+      label: 'Review Jenny reply',
+      tone: 'warn'
+    }
+  }
+  if (hasRunnablePendingMessage || pendingCount) {
+    return {
+      detail: 'A message is waiting. Run Jenny once when you want exactly one guarded reply.',
+      label: 'Run one reply',
+      tone: 'warn'
+    }
+  }
+  if (responseCount) {
+    return {
+      detail: 'The latest reply is available. Send the next bounded request when you are ready.',
+      label: 'Ready for next message',
+      tone: 'good'
+    }
+  }
+  return {
+    detail: 'Type one clear request. Jenny should challenge vague, unsafe, or wrong-approach work before planning.',
+    label: 'Start with one request',
+    tone: 'idle'
+  }
+}
+
 function unwrapRecords<T>(items: Array<{ record?: T } | T> | undefined): T[] {
   if (!Array.isArray(items)) {
     return []
@@ -2719,6 +2778,7 @@ function ProjectRoomsWorkspace({
   const runActive = isJennyRunActive(jennyRunProgress)
   const runCopy = jennyRunProgressCopy(jennyRunProgress, jennyRunElapsedSeconds)
   const bridgeError = bridgeStatus.last_error || githubBridgeStatus.last_error || ''
+  const hasRunnablePendingMessage = Boolean(latestPending)
   const chatMessages: ProjectChatMessage[] = [
     ...visibleBridgeRequests.map(request => ({
       body: request.message,
@@ -2761,12 +2821,21 @@ function ProjectRoomsWorkspace({
   })
   const workSessionSteps = jennyWorkSessionSteps({
     hasError: Boolean(bridgeError),
-    hasRunnablePendingMessage: Boolean(latestPending),
+    hasRunnablePendingMessage,
     pendingCount,
     progress: jennyRunProgress,
     replyReviewTone: replyReviewStatus.tone,
     responseCount
   })
+  const operatorGuidance = jennyOperatorGuidance({
+    bridgeError,
+    hasRunnablePendingMessage,
+    pendingCount,
+    progress: jennyRunProgress,
+    replyReviewTone: replyReviewStatus.tone,
+    responseCount
+  })
+  const getJennyReplyLabel = operatorGuidance.label === 'Retry Jenny once' ? 'Retry Jenny once' : 'Get Jenny reply'
 
   return (
     <section
@@ -2867,6 +2936,15 @@ function ProjectRoomsWorkspace({
             </div>
           </div>
           <p className="mt-2 max-w-full text-sm leading-snug [overflow-wrap:anywhere]">{statusCopy.detail}</p>
+          <div aria-label="Jenny operator guidance" className={cn('mt-2 rounded-md border px-3 py-2 text-xs', jennyStatusToneClass(operatorGuidance.tone))}>
+            <div className="font-semibold">{operatorGuidance.label}</div>
+            <p className="mt-1 leading-snug [overflow-wrap:anywhere]">{operatorGuidance.detail}</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <span className="rounded-full border border-current/20 px-2 py-0.5">one reply at a time</span>
+              <span className="rounded-full border border-current/20 px-2 py-0.5">evidence required</span>
+              <span className="rounded-full border border-current/20 px-2 py-0.5">no hidden execution</span>
+            </div>
+          </div>
           <div aria-label="Jenny live status" className="mt-2 grid gap-2 text-xs sm:grid-cols-4">
             {liveStatusItems.map(item => (
               <div className="min-w-0 rounded border border-current/15 bg-black/10 px-2 py-1" key={item.label}>
@@ -2985,7 +3063,7 @@ function ProjectRoomsWorkspace({
               onClick={onRunJennyOnce}
               type="button"
             >
-              Get Jenny reply
+              {getJennyReplyLabel}
             </button>
             <button className="rounded-md border border-[#f3ebda]/10 px-4 py-2 text-sm font-semibold text-[#ddd0bb] hover:bg-[#251d2c] disabled:opacity-60" disabled={saving} onClick={onRefreshBridge} type="button">
               Refresh replies
