@@ -13,6 +13,7 @@ type IntroCopyRecord = IntroCopy & {
 
 export type IntroProps = {
   personality?: string
+  projectName?: string
   seed?: number
 }
 
@@ -154,9 +155,10 @@ function resolveCopy(personality?: string, seed?: number): IntroCopy {
   return pickCopy(copies, seed)
 }
 
-export function Intro({ personality, seed }: IntroProps) {
+export function Intro({ personality, projectName, seed }: IntroProps) {
   const [mountSeed] = useState(() => Math.floor(Math.random() * 100000))
   const copy = resolveCopy(personality, mountSeed + (seed ?? 0))
+  const projectLabel = projectName?.trim() || ''
 
   return (
     <div
@@ -175,7 +177,17 @@ export function Intro({ personality, seed }: IntroProps) {
           <span aria-hidden="true">{WORDMARK}</span>
         </p>
 
-        <p className="m-0 text-center leading-normal tracking-tight">{copy.body}</p>
+        {projectLabel ? (
+          <div className="mx-auto mb-3 flex max-w-2xl flex-col items-center gap-1 text-center">
+            <p className="m-0 text-xs font-medium uppercase text-(--ui-text-tertiary)">Project chat</p>
+            <p className="m-0 max-w-full truncate text-lg font-semibold text-foreground">{projectLabel}</p>
+            <p className="m-0 text-sm leading-normal tracking-tight">
+              Talk to Jenny here. Project context and safety checks stay in the background.
+            </p>
+          </div>
+        ) : (
+          <p className="m-0 text-center leading-normal tracking-tight">{copy.body}</p>
+        )}
       </div>
     </div>
   )
