@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { sessionRoute } from '@/app/routes'
@@ -2061,6 +2061,7 @@ export function MissionControlView() {
         detail: 'Message sent. Jenny is starting one guarded reply.',
         phase: 'starting'
       })
+      setProjectRequest('')
       setProjectRoomMessage('Message sent. Jenny is answering...')
       await runJennyOnce(project, result.message?.request_id || requestId)
     } catch (err) {
@@ -2827,6 +2828,7 @@ function ProjectRoomsWorkspace({
   sessionGroup: MissionControlProjectSessionGroup | null
   state: MissionControlProjectState | null
 }) {
+  const chatEndRef = useRef<HTMLDivElement | null>(null)
   const readiness = projectReadinessLabel(brief, review)
   const sessions = state?.recent_sessions?.length ? state.recent_sessions : (sessionGroup?.sessions ?? [])
   const visibleBridgeRequests = bridgeRequests.filter(request => !isDiagnosticChatMessage(request.message))
@@ -2919,6 +2921,9 @@ function ProjectRoomsWorkspace({
     replyReviewTone: replyReviewStatus.tone,
     responseCount
   })
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView?.({ block: 'end' })
+  }, [chatMessages.length, jennyRunProgress?.phase, jennyRunElapsedSeconds, project.project_id])
   const operatorGuidance = jennyOperatorGuidance({
     bridgeError,
     hasRunnablePendingMessage,
@@ -3179,6 +3184,7 @@ function ProjectRoomsWorkspace({
                 Ask Jenny a bounded question or give her one safe next task below.
               </div>
             )}
+            <div ref={chatEndRef} />
           </div>
         </section>
 

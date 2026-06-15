@@ -454,7 +454,20 @@ def test_compact_chat_send_uses_github_mailbox_not_local_only_outbox() -> None:
     assert 'to_agent: "jenny"' in send_fn
     assert "bridgeRequestId()" in send_fn
     assert "Message sent. Jenny is answering..." in send_fn
+    assert 'setProjectRequest("")' in send_fn
     assert "await runJennyOnce(projectView, result.message?.request_id || requestId)" in send_fn
+
+
+def test_compact_chat_behaves_like_a_normal_thread_after_send() -> None:
+    src = page_source()
+    assert "useRef" in src
+    assert "chatEndRef.current?.scrollIntoView?.({ block: \"end\" })" in src
+    assert '<div ref={chatEndRef} />' in src
+    chat_start = src.index("const chatMessages: ProjectChatMessage[]")
+    chat_end = src.index("const latestReplyReview", chat_start)
+    chat_src = src[chat_start:chat_end]
+    assert "time: request.created_at" in chat_src
+    assert "time: response.created_at" in chat_src
 
 
 def test_compact_run_jenny_once_targets_visible_current_project_message() -> None:

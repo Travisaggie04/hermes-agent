@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { fetchJSON } from "@/lib/api";
@@ -1874,6 +1874,7 @@ export default function MissionControlCompactPage() {
         detail: "Message sent. Jenny is starting one guarded reply.",
         phase: "starting",
       });
+      setProjectRequest("");
       setRoomMessage("Message sent. Jenny is answering...");
       await runJennyOnce(projectView, result.message?.request_id || requestId);
     } catch (err) {
@@ -2530,6 +2531,7 @@ function CompactProjectRoom({
   replyReviews: JennyReplyReviewRecord[];
   selectedProjectView: ProjectViewModel;
 }) {
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
   const sessions = selectedProjectView.projectState?.recent_sessions ?? [];
   const review = selectedProjectView.challengeReview;
   const brief = selectedProjectView.projectBrief;
@@ -2578,14 +2580,14 @@ function CompactProjectRoom({
       id: request.request_id || request.ack_key || request.created_at || "bridge-request",
       meta: chatStatusLabel(request.bridge_state ?? (request.request_id && repliedRequestIds.has(request.request_id) ? "replied" : request.status ?? "queued")),
       speaker: "You" as const,
-      time: request.request_id,
+      time: request.created_at,
     })),
     ...visibleBridgeResponses.map(response => ({
       body: response.message,
       id: response.response_id || response.request_id || response.created_at || "bridge-response",
       meta: chatStatusLabel(response.status ?? "reply"),
       speaker: "Jenny" as const,
-      time: response.response_id,
+      time: response.created_at,
     })),
     ...visibleGitHubBridgeMessages.map(message => ({
       body: message.message,
@@ -2623,6 +2625,9 @@ function CompactProjectRoom({
     replyReviewTone: replyReviewStatus.tone,
     responseCount,
   });
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView?.({ block: "end" });
+  }, [chatMessages.length, jennyRunProgress?.phase, jennyRunElapsedSeconds, selectedProjectView.project.project_id]);
   const operatorGuidance = jennyOperatorGuidance({
     bridgeError,
     hasRunnablePendingMessage,
@@ -2911,6 +2916,7 @@ function CompactProjectRoom({
                 Ask Jenny a bounded question or give her one safe next task below.
               </p>
             )}
+            <div ref={chatEndRef} />
           </div>
         </section>
 
