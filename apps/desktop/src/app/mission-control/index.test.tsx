@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -674,6 +674,17 @@ beforeEach(() => {
       },
       {
         record: {
+          created_at: '2026-06-13T01:05:30Z',
+          from_agent: 'travis',
+          message: 'Hermes / Mission Control Request: testing. tell me a short story Current brief: Replace Discord as Travis primary workspace. Challenge state: clear_and_safe / start record-only manual-copy. Allowed: read approved context. Forbidden: no direct session send.',
+          project_id: 'project-hermes-mission-control',
+          request_id: 'github-bridge-request-replied-user',
+          status: 'replied',
+          to_agent: 'jenny'
+        }
+      },
+      {
+        record: {
           created_at: '2026-06-13T01:06:00Z',
           from_agent: 'travis',
           message: 'Local error guard smoke. This should not post a reply.',
@@ -1128,7 +1139,11 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText(/Use a bounded read-only workspace usability lane/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Request intake: Needs request/).length).toBeGreaterThan(0)
     expect(screen.getByText('Review the Mission Control room.')).toBeTruthy()
-    expect(screen.queryByText(/Current brief: Replace Discord as Travis primary workspace/)).toBeNull()
+    const transcript = within(screen.getByLabelText('Project chat transcript'))
+    expect(transcript.getByText('testing. tell me a short story')).toBeTruthy()
+    expect(transcript.queryByText(/Current brief: Replace Discord as Travis primary workspace/)).toBeNull()
+    expect(transcript.queryByText(/Allowed: read approved context/)).toBeNull()
+    expect(transcript.queryByText(/Forbidden: no direct session send/)).toBeNull()
 
     const composer = screen.getByPlaceholderText('Tell Jenny what you want to discuss or ask her to do next...')
     fireEvent.click(screen.getByRole('button', { name: 'Use spec-first prompt' }))
