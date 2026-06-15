@@ -22,9 +22,42 @@ describe('nativeJennyStatus', () => {
       nativeJennyStatus({
         gatewayOpen: true,
         projectId: 'project-hermes',
-        bridgeStatus: { last_error: 'no matching pending Mission Control mailbox request' }
+        bridgeStatus: { last_error: 'Hermes responder failed' }
       })
     ).toMatchObject({ label: 'Jenny needs attention', tone: 'warn' })
+  })
+
+  it('does not surface no-pending responder noops as scary errors', () => {
+    expect(
+      nativeJennyStatus({
+        gatewayOpen: true,
+        projectId: 'project-hermes',
+        bridgeStatus: {
+          last_error: 'no matching pending Mission Control mailbox request',
+          last_status: 'hermes_answer_noop',
+          pending_count: 0,
+          visible_pending_count: 0
+        }
+      })
+    ).toMatchObject({
+      detail: 'No project message is waiting for Jenny.',
+      label: 'Jenny ready',
+      tone: 'ok'
+    })
+  })
+
+  it('shows Jenny working while the manual Hermes answer is running', () => {
+    expect(
+      nativeJennyStatus({
+        gatewayOpen: true,
+        projectId: 'project-hermes',
+        bridgeStatus: { last_status: 'hermes_answer_started', pending_count: 1, visible_pending_count: 1 }
+      })
+    ).toMatchObject({
+      detail: 'Jenny is working on the latest project message.',
+      label: 'Jenny working',
+      tone: 'working'
+    })
   })
 
   it('prioritizes visible pending messages', () => {

@@ -16,6 +16,17 @@ export interface NativeJennyStatusInput {
   queryError?: unknown
 }
 
+const BENIGN_NO_PENDING_ERROR_RE = /no matching pending mission control mailbox request/i
+
+const WORKING_STATUSES = new Set([
+  'hermes_answer_started',
+  'manual_hermes_answer_started',
+  'watch_started',
+  'watch_poll_completed'
+])
+
+const REPLIED_STATUSES = new Set(['hermes_answer_completed', 'response_appended', 'replied'])
+
 export function nativeJennyStatus({
   bridgeStatus,
   gatewayOpen,
@@ -55,9 +66,11 @@ export function nativeJennyStatus({
     }
   }
 
-  const lastError = bridgeStatus?.last_error?.trim()
+  const lastStatus = bridgeStatus?.last_status?.trim() || ''
+  const lastError = bridgeStatus?.last_error?.trim() || ''
+  const benignNoPending = Boolean(lastError && BENIGN_NO_PENDING_ERROR_RE.test(lastError))
 
-  if (lastError) {
+  if (lastError && !benignNoPending) {
     return {
       detail: lastError,
       label: 'Jenny needs attention',
@@ -65,10 +78,10 @@ export function nativeJennyStatus({
     }
   }
 
-  if (bridgeStatus?.foreground_watch_running) {
+  if (bridgeStatus?.foreground_watch_running || WORKING_STATUSES.has(lastStatus)) {
     return {
-      detail: 'Jenny bridge watch is running in the foreground.',
-      label: 'Jenny watching',
+      detail: 'Jenny is working on the latest project message.',
+      label: 'Jenny working',
       tone: 'working'
     }
   }
@@ -83,7 +96,7 @@ export function nativeJennyStatus({
     }
   }
 
-  if (bridgeStatus?.last_response_at || bridgeStatus?.last_response_request_id) {
+  if (REPLIED_STATUSES.has(lastStatus) || bridgeStatus?.last_response_at || bridgeStatus?.last_response_request_id) {
     return {
       detail: 'Jenny replied. Review the latest answer before relying on it.',
       label: 'Jenny replied',
@@ -92,7 +105,7 @@ export function nativeJennyStatus({
   }
 
   return {
-    detail: 'Ready for one bounded project message.',
+    detail: benignNoPending ? 'No project message is waiting for Jenny.' : 'Ready for one bounded project message.',
     label: 'Jenny ready',
     tone: 'ok'
   }
