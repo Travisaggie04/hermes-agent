@@ -1854,6 +1854,24 @@ function missionControlErrorMessage(err: unknown): string {
   return String(err instanceof Error ? err.message : err)
 }
 
+function jennyChatErrorMessage(err: unknown): string {
+  const raw = missionControlErrorMessage(err)
+  const lower = raw.toLowerCase()
+  if (lower.includes('econnrefused') || lower.includes('failed to fetch') || lower.includes('gateway offline')) {
+    return 'Jenny bridge is offline. Start or reconnect the Hermes gateway, then send the message again.'
+  }
+  if (lower.includes('bridge field is too large') || lower.includes('field is too large')) {
+    return 'That message was too large for the Jenny bridge. Shorten it and send one focused request.'
+  }
+  if (lower.includes('no matching pending') || lower.includes('no pending message') || lower.includes('no pending request')) {
+    return 'No message is waiting for Jenny. Send a message first.'
+  }
+  if (lower.includes('timed out') || lower.includes('timeout')) {
+    return 'Jenny did not answer before the time limit. The request is still guarded; try again with one smaller task.'
+  }
+  return raw.replace(/^Error invoking remote method 'hermes:api':\s*/i, '').trim()
+}
+
 async function loadMissionControlEndpoint<T>(
   label: string,
   load: () => Promise<T>,
@@ -2118,7 +2136,7 @@ export function MissionControlView() {
       setProjectRoomMessage('Message sent. Jenny is answering...')
       await runJennyOnce(project, result.message?.request_id || requestId)
     } catch (err) {
-      setProjectRoomMessage(String(err instanceof Error ? err.message : err))
+      setProjectRoomMessage(jennyChatErrorMessage(err))
     } finally {
       setProjectRoomSaving(false)
     }
@@ -2173,11 +2191,12 @@ export function MissionControlView() {
           : noReplyStatusMessage((result.status as { last_error?: unknown } | undefined)?.last_error)
       )
     } catch (err) {
+      const message = jennyChatErrorMessage(err)
       setJennyRunProgress({
-        detail: String(err instanceof Error ? err.message : err),
+        detail: message,
         phase: 'error'
       })
-      setProjectRoomMessage(String(err instanceof Error ? err.message : err))
+      setProjectRoomMessage(message)
     } finally {
       setProjectRoomSaving(false)
     }
@@ -2205,7 +2224,7 @@ export function MissionControlView() {
       setSnapshot(await loadMissionControlSnapshot())
       setProjectRoomMessage(`${jennyReplyReviewDecisionLabel(decision)}. Follow-up prompt is ready to send if needed.`)
     } catch (err) {
-      setProjectRoomMessage(String(err instanceof Error ? err.message : err))
+      setProjectRoomMessage(jennyChatErrorMessage(err))
     } finally {
       setProjectRoomSaving(false)
     }
@@ -2228,7 +2247,7 @@ export function MissionControlView() {
       setSnapshot(await loadMissionControlSnapshot())
       setProjectRoomMessage('Sent safe Hermes update lane to Jenny mailbox. It is append-only and does not update the laptop worker node, switch runtimes, or restart gateway.')
     } catch (err) {
-      setProjectRoomMessage(String(err instanceof Error ? err.message : err))
+      setProjectRoomMessage(jennyChatErrorMessage(err))
     } finally {
       setProjectRoomSaving(false)
     }
@@ -2251,7 +2270,7 @@ export function MissionControlView() {
       setSnapshot(await loadMissionControlSnapshot())
       setProjectRoomMessage('Sent safe Hermes storage cleanup lane to Jenny mailbox. It is append-only and does not delete, move, upload, restart, or switch anything.')
     } catch (err) {
-      setProjectRoomMessage(String(err instanceof Error ? err.message : err))
+      setProjectRoomMessage(jennyChatErrorMessage(err))
     } finally {
       setProjectRoomSaving(false)
     }
@@ -2283,7 +2302,7 @@ export function MissionControlView() {
       setSnapshot(await loadMissionControlSnapshot())
       setProjectRoomMessage('Saved challenge draft. Jenny should question or narrow this before work starts.')
     } catch (err) {
-      setProjectRoomMessage(String(err instanceof Error ? err.message : err))
+      setProjectRoomMessage(jennyChatErrorMessage(err))
     } finally {
       setProjectRoomSaving(false)
     }
@@ -2321,7 +2340,7 @@ export function MissionControlView() {
       setSnapshot(await loadMissionControlSnapshot())
       setProjectRoomMessage('Saved read-only lane draft. It remains inert until separately approved.')
     } catch (err) {
-      setProjectRoomMessage(String(err instanceof Error ? err.message : err))
+      setProjectRoomMessage(jennyChatErrorMessage(err))
     } finally {
       setProjectRoomSaving(false)
     }
