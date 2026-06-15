@@ -6,6 +6,7 @@ import { createMissionControlSessionProjectLink, deleteSession, getSessionMessag
 import { type ChatMessage, chatMessageText, preserveLocalAssistantErrors, toChatMessages } from '@/lib/chat-messages'
 import { normalizePersonalityValue } from '@/lib/chat-runtime'
 import { embeddedImageUrls, textWithoutEmbeddedImages } from '@/lib/embedded-images'
+import { notifyMissionControlProjectLinkCreated } from '@/lib/mission-control-events'
 import { setSessionYolo } from '@/lib/yolo-session'
 import { clearComposerAttachments, clearComposerDraft } from '@/store/composer'
 import { clearQueuedPrompts } from '@/store/composer-queue'
@@ -17,6 +18,7 @@ import {
   $currentCwd,
   $messages,
   $selectedMissionControlProjectId,
+  $selectedMissionControlProjectName,
   $sessions,
   $yoloActive,
   getRememberedWorkspaceCwd,
@@ -367,6 +369,7 @@ export function useSessionActions({
           const projectId = $selectedMissionControlProjectId.get().trim()
 
           if (projectId) {
+            const projectName = $selectedMissionControlProjectName.get().trim() || projectId
             void createMissionControlSessionProjectLink({
               cwd_snapshot: cwd || undefined,
               link_method: 'manual',
@@ -377,7 +380,13 @@ export function useSessionActions({
               source: 'desktop-native-chat',
               status: 'active',
               title_snapshot: preview?.trim() || undefined
-            }).catch(() => undefined)
+            })
+              .then(() => {
+                notifyMissionControlProjectLinkCreated({ projectId, sessionId: stored })
+              })
+              .catch(err => {
+                notifyError(err, `Project chat was created, but Mission Control could not link it to ${projectName}`)
+              })
           }
         }
 
