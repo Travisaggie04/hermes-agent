@@ -208,6 +208,69 @@ function HeaderPill({ label, title, tone }: { label: string; title: string; tone
   )
 }
 
+function ProjectJennyStatusStrip({
+  activeTurnRunning,
+  gatewayOpen
+}: {
+  activeTurnRunning: boolean
+  gatewayOpen: boolean
+}) {
+  const selectedProjectId = useStore($selectedMissionControlProjectId)
+  const selectedProjectName = useStore($selectedMissionControlProjectName)
+  const projectName = selectedProjectName.trim()
+  const bridgeStatusQuery = useQuery({
+    enabled: gatewayOpen && Boolean(selectedProjectId.trim()),
+    queryFn: getMissionControlGitHubBridgeStatus,
+    queryKey: ['mission-control-github-bridge-status', selectedProjectId],
+    refetchInterval: 3_000,
+    staleTime: 10_000
+  })
+
+  if (!projectName) {
+    return null
+  }
+
+  const jennyStatus = nativeJennyStatus({
+    activeTurnRunning,
+    bridgeStatus: bridgeStatusQuery.data,
+    gatewayOpen,
+    loading: bridgeStatusQuery.isLoading,
+    projectId: selectedProjectId,
+    queryError: bridgeStatusQuery.error
+  })
+
+  const toneClass =
+    jennyStatus.tone === 'warn'
+      ? 'text-red-200'
+      : jennyStatus.tone === 'pending'
+        ? 'text-amber-100'
+        : jennyStatus.tone === 'working'
+          ? 'text-blue-100'
+          : jennyStatus.tone === 'ok'
+            ? 'text-emerald-100'
+            : 'text-(--ui-text-secondary)'
+
+  return (
+    <div
+      aria-label="Jenny project status"
+      className="relative z-10 flex min-h-8 shrink-0 items-center gap-2 border-b border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background)/95 px-4 text-[0.75rem] text-(--ui-text-secondary)"
+    >
+      <span className="min-w-0 truncate">
+        Project: <span className="font-medium text-foreground">{projectName}</span>
+      </span>
+      <span aria-hidden="true" className="text-(--ui-text-tertiary)">
+        /
+      </span>
+      <span className={cn('min-w-0 truncate font-medium', toneClass)} title={jennyStatus.detail}>
+        {jennyStatus.label}
+      </span>
+      <span className="hidden min-w-0 truncate text-(--ui-text-tertiary) min-[42rem]:inline" title={jennyStatus.detail}>
+        {jennyStatus.detail}
+      </span>
+    </div>
+  )
+}
+
 export function ChatView({
   className,
   gateway,
@@ -396,6 +459,7 @@ export function ChatView({
         onToggleSelectedPin={onToggleSelectedPin}
         selectedSessionId={selectedSessionId}
       />
+      <ProjectJennyStatusStrip activeTurnRunning={busy && awaitingResponse} gatewayOpen={gatewayOpen} />
 
       <PromptOverlays />
 

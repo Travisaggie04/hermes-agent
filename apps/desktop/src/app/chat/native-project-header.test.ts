@@ -14,4 +14,16 @@ describe('native project chat header', () => {
     expect(source).toContain('<SessionActionsMenu')
     expect(source).toContain('<div className="flex h-6 min-w-0 items-center px-2 [-webkit-app-region:no-drag]">')
   })
+
+  it('shows a slim Jenny status strip for selected project chats', () => {
+    expect(source).toContain('function ProjectJennyStatusStrip')
+    expect(source).toContain('aria-label="Jenny project status"')
+    expect(source).toContain('Project: <span className="font-medium text-foreground">{projectName}</span>')
+    expect(source).toContain('<ProjectJennyStatusStrip activeTurnRunning={busy && awaitingResponse} gatewayOpen={gatewayOpen} />')
+  })
+
+  it('keeps the Jenny status strip hidden until a project is selected', () => {
+    expect(source).toContain('if (!projectName) {')
+    expect(source).toContain('return null')
+  })
 })
