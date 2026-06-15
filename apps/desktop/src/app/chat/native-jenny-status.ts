@@ -1,0 +1,99 @@
+import type { MissionControlGitHubBridgeStatusResponse } from '@/hermes'
+
+export type NativeJennyStatusTone = 'idle' | 'ok' | 'pending' | 'working' | 'warn'
+
+export interface NativeJennyStatus {
+  detail: string
+  label: string
+  tone: NativeJennyStatusTone
+}
+
+export interface NativeJennyStatusInput {
+  bridgeStatus?: MissionControlGitHubBridgeStatusResponse | null
+  gatewayOpen: boolean
+  loading?: boolean
+  projectId?: string
+  queryError?: unknown
+}
+
+export function nativeJennyStatus({
+  bridgeStatus,
+  gatewayOpen,
+  loading = false,
+  projectId = '',
+  queryError
+}: NativeJennyStatusInput): NativeJennyStatus {
+  if (!gatewayOpen) {
+    return {
+      detail: 'Gateway is offline. Jenny cannot receive chat work yet.',
+      label: 'Gateway offline',
+      tone: 'warn'
+    }
+  }
+
+  if (!projectId.trim()) {
+    return {
+      detail: 'Pick a project so Jenny gets the right hidden context and guardrails.',
+      label: 'Pick a project',
+      tone: 'idle'
+    }
+  }
+
+  if (queryError) {
+    return {
+      detail: 'Could not read Jenny bridge status. Chat remains guarded.',
+      label: 'Status unavailable',
+      tone: 'warn'
+    }
+  }
+
+  if (loading && !bridgeStatus) {
+    return {
+      detail: 'Checking the guarded Jenny bridge.',
+      label: 'Checking Jenny',
+      tone: 'idle'
+    }
+  }
+
+  const lastError = bridgeStatus?.last_error?.trim()
+
+  if (lastError) {
+    return {
+      detail: lastError,
+      label: 'Jenny needs attention',
+      tone: 'warn'
+    }
+  }
+
+  if (bridgeStatus?.foreground_watch_running) {
+    return {
+      detail: 'Jenny bridge watch is running in the foreground.',
+      label: 'Jenny watching',
+      tone: 'working'
+    }
+  }
+
+  const pending = bridgeStatus?.visible_pending_count ?? bridgeStatus?.pending_count ?? 0
+
+  if (pending > 0) {
+    return {
+      detail: `${pending} message${pending === 1 ? '' : 's'} waiting for Jenny.`,
+      label: 'Waiting for Jenny',
+      tone: 'pending'
+    }
+  }
+
+  if (bridgeStatus?.last_response_at || bridgeStatus?.last_response_request_id) {
+    return {
+      detail: 'Jenny replied. Review the latest answer before relying on it.',
+      label: 'Jenny replied',
+      tone: 'ok'
+    }
+  }
+
+  return {
+    detail: 'Ready for one bounded project message.',
+    label: 'Jenny ready',
+    tone: 'ok'
+  }
+}
