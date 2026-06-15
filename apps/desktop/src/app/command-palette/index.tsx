@@ -203,8 +203,8 @@ export function CommandPalette() {
           {
             icon: Monitor,
             id: 'nav-mission-control',
-            keywords: ['projects', 'workspace', 'reports', 'lanes'],
-            label: 'Mission Control',
+            keywords: ['projects', 'workspace', 'reports', 'lanes', 'debug'],
+            label: 'Mission Control console',
             run: go(MISSION_CONTROL_ROUTE)
           },
           { icon: Clock, id: 'nav-cron', keywords: ['schedule', 'jobs'], label: 'Cron', run: go(CRON_ROUTE) },

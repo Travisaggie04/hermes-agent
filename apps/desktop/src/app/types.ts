@@ -74,7 +74,7 @@ export interface SidebarNavItem {
   label: string
   icon: React.ComponentType<{ className?: string }>
   route?: string
-  action?: 'new-session'
+  action?: 'jenny-os' | 'new-session'
 }
 
 export interface ClientSessionState {

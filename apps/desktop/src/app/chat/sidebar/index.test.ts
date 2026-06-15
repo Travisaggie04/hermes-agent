@@ -10,6 +10,12 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('onNewSessionInProject(group.id, group.label)')
   })
 
+  it('makes Jenny OS the primary native project chat entry', () => {
+    expect(source).toContain("label: 'Jenny OS'")
+    expect(source).toContain("action: 'jenny-os'")
+    expect(source).toContain('Open Jenny chat in ${HERMES_PROJECT_NAME}')
+  })
+
   it('labels the main new session action as project chat when a project is selected', () => {
     expect(source).toContain('New project chat')
     expect(source).toContain('New chat in ${selectedMissionControlProjectName || selectedMissionControlProjectId}')

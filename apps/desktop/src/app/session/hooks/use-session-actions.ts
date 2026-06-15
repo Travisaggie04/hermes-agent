@@ -38,6 +38,7 @@ import {
   setFreshDraftReady,
   setIntroSeed,
   setMessages,
+  setSelectedMissionControlProject,
   setSelectedStoredSessionId,
   setSessions,
   setSessionStartedAt,
@@ -50,6 +51,9 @@ import type { SessionCreateResponse, SessionInfo, SessionResumeResponse, UsageSt
 
 import { NEW_CHAT_ROUTE, sessionRoute, SETTINGS_ROUTE } from '../../routes'
 import type { ClientSessionState, SidebarNavItem } from '../../types'
+
+const HERMES_PROJECT_ID = 'project-hermes-mission-control'
+const HERMES_PROJECT_NAME = 'Hermes / Mission Control'
 
 interface SessionActionsOptions {
   activeSessionId: string | null
@@ -430,6 +434,14 @@ export function useSessionActions({
     (item: SidebarNavItem) => {
       if (item.action === 'new-session') {
         startFreshSessionDraft()
+
+        return
+      }
+
+      if (item.action === 'jenny-os') {
+        setSelectedMissionControlProject(HERMES_PROJECT_ID, HERMES_PROJECT_NAME)
+        startFreshSessionDraft()
+        navigate(NEW_CHAT_ROUTE)
 
         return
       }

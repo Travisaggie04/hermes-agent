@@ -18,4 +18,14 @@ describe('native project chat session linking', () => {
     expect(linkBlock).toContain('.catch(err => {')
     expect(linkBlock).not.toContain('catch(() => undefined)')
   })
+
+  it('routes the Jenny OS nav action into the Hermes project chat draft', () => {
+    const actionStart = source.indexOf("if (item.action === 'jenny-os')")
+    const actionEnd = source.indexOf('if (item.route)', actionStart)
+    const actionBlock = source.slice(actionStart, actionEnd)
+
+    expect(actionBlock).toContain('setSelectedMissionControlProject(HERMES_PROJECT_ID, HERMES_PROJECT_NAME)')
+    expect(actionBlock).toContain('startFreshSessionDraft()')
+    expect(actionBlock).toContain('navigate(NEW_CHAT_ROUTE)')
+  })
 })
