@@ -496,6 +496,11 @@ interface JennyWorkSessionStep {
   state: JennyWorkSessionStepState
 }
 
+interface JennyLiveStatusItem {
+  label: string
+  value: string
+}
+
 function jennyRunProgressCopy(progress: JennyRunProgress | null, elapsedSeconds: number): { detail: string; label: string } {
   if (!progress) {
     return {
@@ -527,6 +532,37 @@ function jennyRunProgressCopy(progress: JennyRunProgress | null, elapsedSeconds:
     detail: `${progress.detail || 'Mission Control is waiting for Jenny to finish one guarded reply.'} Refreshing status every 2.5s. Elapsed ${elapsedSeconds}s.`,
     label: progress.phase === 'starting' ? 'Starting Jenny' : 'Waiting for Jenny'
   }
+}
+
+function jennyLiveStatusItems({
+  elapsedSeconds,
+  latestUserMessage,
+  pendingCount,
+  progress,
+  responseCount,
+  statusLabel
+}: {
+  elapsedSeconds: number
+  latestUserMessage: string
+  pendingCount: number
+  progress: JennyRunProgress | null
+  responseCount: number
+  statusLabel: string
+}): JennyLiveStatusItem[] {
+  const phase = progress?.phase
+    ? progress.phase.replaceAll('_', ' ')
+    : pendingCount
+      ? 'waiting'
+      : responseCount
+        ? 'replied'
+        : 'ready'
+
+  return [
+    { label: 'Current phase', value: statusLabel || phase },
+    { label: 'Last sent', value: latestUserMessage || 'No message sent yet' },
+    { label: 'Reply state', value: pendingCount ? `${pendingCount} waiting` : responseCount ? `${responseCount} received` : 'No reply yet' },
+    { label: 'Elapsed', value: isJennyRunActive(progress) ? `${elapsedSeconds}s` : 'not running' }
+  ]
 }
 
 function isJennyRunActive(progress: JennyRunProgress | null): boolean {
@@ -2714,6 +2750,15 @@ function ProjectRoomsWorkspace({
   const statusCopy = jennyRunProgress
     ? runCopy
     : { detail: paused ? 'This project is paused until Jenny is stable.' : nextStep, label: connectionState.label }
+  const latestUserMessage = [...chatMessages].reverse().find(chat => chat.speaker === 'You')
+  const liveStatusItems = jennyLiveStatusItems({
+    elapsedSeconds: jennyRunElapsedSeconds,
+    latestUserMessage: latestUserMessage ? projectRequestPreview(latestUserMessage.displayBody ?? latestUserMessage.body, 96) : '',
+    pendingCount,
+    progress: jennyRunProgress,
+    responseCount,
+    statusLabel: statusCopy.label
+  })
   const workSessionSteps = jennyWorkSessionSteps({
     hasError: Boolean(bridgeError),
     hasRunnablePendingMessage: Boolean(latestPending),
@@ -2822,6 +2867,14 @@ function ProjectRoomsWorkspace({
             </div>
           </div>
           <p className="mt-2 max-w-full text-sm leading-snug [overflow-wrap:anywhere]">{statusCopy.detail}</p>
+          <div aria-label="Jenny live status" className="mt-2 grid gap-2 text-xs sm:grid-cols-4">
+            {liveStatusItems.map(item => (
+              <div className="min-w-0 rounded border border-current/15 bg-black/10 px-2 py-1" key={item.label}>
+                <div className="text-[0.62rem] font-semibold uppercase tracking-[0.12em] opacity-70">{item.label}</div>
+                <div className="mt-0.5 truncate font-semibold">{item.value}</div>
+              </div>
+            ))}
+          </div>
           {bridgeError ? <p className="mt-2 max-w-full text-xs [overflow-wrap:anywhere]">Bridge error: {bridgeError}</p> : null}
         </section>
 
