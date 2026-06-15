@@ -49,6 +49,7 @@ import {
 } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { sessionTitle } from '@/lib/chat-runtime'
+import { MISSION_CONTROL_PROJECT_LINK_CREATED } from '@/lib/mission-control-events'
 import { profileColor } from '@/lib/profile-color'
 import { sessionMatchesSearch } from '@/lib/session-search'
 import { cn } from '@/lib/utils'
@@ -445,6 +446,18 @@ export function ChatSidebar({
   }, [])
 
   useEffect(() => refreshProjectGroups(), [refreshProjectGroups])
+
+  useEffect(() => {
+    const onProjectLinkCreated = () => {
+      refreshProjectGroups()
+    }
+
+    window.addEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED, onProjectLinkCreated)
+
+    return () => {
+      window.removeEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED, onProjectLinkCreated)
+    }
+  }, [refreshProjectGroups])
 
   const createProjectFromIntake = useCallback(async () => {
     const name = projectIntake.name.trim()

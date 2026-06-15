@@ -22,4 +22,11 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('onSelectProject={selectProjectGroup}')
     expect(source).toContain('onNewSessionInProject={startProjectChat}')
   })
+
+  it('refreshes project groups when a native chat is linked to a project', () => {
+    expect(source).toContain('MISSION_CONTROL_PROJECT_LINK_CREATED')
+    expect(source).toContain('window.addEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED')
+    expect(source).toContain('window.removeEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED')
+    expect(source).toContain('refreshProjectGroups()')
+  })
 })
