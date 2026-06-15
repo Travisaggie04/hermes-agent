@@ -233,6 +233,7 @@ export function ChatView({
   const introPersonality = useStore($introPersonality)
   const introSeed = useStore($introSeed)
   const messages = useStore($messages)
+  const selectedProjectName = useStore($selectedMissionControlProjectName)
   const selectedSessionId = useStore($selectedStoredSessionId)
   const runtimeMessageCacheRef = useRef(new WeakMap<ChatMessage, ThreadMessage>())
   const isRoutedSessionView = Boolean(routeSessionId(location.pathname))
@@ -393,7 +394,11 @@ export function ChatView({
             clampToComposer={showChatBar}
             cwd={currentCwd}
             gateway={gateway}
-            intro={showIntro ? { personality: introPersonality, seed: introSeed } : undefined}
+            intro={
+              showIntro
+                ? { personality: introPersonality, projectName: selectedProjectName.trim(), seed: introSeed }
+                : undefined
+            }
             loading={threadLoading}
             onBranchInNewChat={onBranchInNewChat}
             onCancel={onCancel}
