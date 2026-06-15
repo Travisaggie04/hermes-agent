@@ -821,6 +821,7 @@ describe('MissionControlView', () => {
     expect(screen.getByRole('complementary', { name: 'Workspace inspector' })).toBeTruthy()
     expect(screen.getAllByRole('heading', { name: 'Hermes / Mission Control' }).length).toBeGreaterThan(0)
     expect(screen.getByText('Conversation')).toBeTruthy()
+    expect(screen.getByLabelText('Jenny chat status')).toBeTruthy()
     expect(screen.getByText('Jenny status')).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Jenny' })).toBeTruthy()
     expect(screen.getAllByText((_, element) => element?.textContent?.includes('Next: Review before relying') ?? false).length).toBeGreaterThan(0)

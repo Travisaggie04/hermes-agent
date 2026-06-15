@@ -2379,8 +2379,8 @@ export function MissionControlView() {
           </div>
         </aside>
 
-        <main className="min-h-0 overflow-auto bg-[linear-gradient(180deg,#160f1b_0%,#0e0b12_100%)] px-4 py-3">
-          <header className="mb-2 border-b border-[#f7efe4]/10 pb-2">
+        <main className="min-h-0 overflow-auto bg-[#0e0b12] px-3 py-2">
+          <header className="sr-only">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h1 className="text-xl font-semibold tracking-tight text-[#fff8ed]">Jenny</h1>
@@ -2926,11 +2926,11 @@ function ProjectRoomsWorkspace({
   return (
     <section
       aria-label="Project chat workspace"
-      className="mt-2 flex h-[calc(100vh-5.5rem)] min-h-[34rem] flex-col overflow-hidden rounded-md border border-[#d4a574]/15 bg-[#15101a] shadow-[0_20px_70px_rgba(0,0,0,0.28)]"
+      className="flex h-[calc(100vh-4rem)] min-h-[34rem] flex-col overflow-hidden rounded-md border border-[#d4a574]/10 bg-[#15101a]"
     >
-      <div className="border-b border-[#f3ebda]/10 bg-[#1c1622]/70 px-3 py-2">
+      <div className="border-b border-[#f3ebda]/10 bg-[#15101a] px-3 py-2">
         <label className="grid max-w-xl gap-1">
-          <span className="text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-[#a59783]">Active project</span>
+          <span className="sr-only">Active project</span>
           <select
             className="w-full rounded-md border border-[#f3ebda]/10 bg-[#100b15] px-3 py-2 text-sm font-semibold text-[#f3ebda] outline-none focus:border-[#d4a574]/45"
             onChange={event => onSelectProject(event.target.value)}
@@ -2970,7 +2970,7 @@ function ProjectRoomsWorkspace({
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col p-2">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f3ebda]/10 pb-2">
+        <div className="sr-only flex flex-wrap items-center justify-between gap-2 border-b border-[#f3ebda]/10 pb-2">
           <div className="flex min-w-0 items-center gap-2">
             <span className="sr-only">IV. — Jenny workspace</span>
             <h2 className="truncate text-base font-semibold tracking-tight text-[#f3ebda]">{project.name}</h2>
@@ -2992,9 +2992,23 @@ function ProjectRoomsWorkspace({
             </span>
           </div>
         </div>
-        <p className="mt-2 text-sm text-[#a59783]">
-          {paused ? 'This project is on hold while Jenny is stabilized.' : nextStep}
-        </p>
+        <section
+          aria-label="Jenny chat status"
+          className="mt-1 flex flex-wrap items-center justify-between gap-2 border-b border-[#f3ebda]/10 px-1 pb-2 text-xs text-[#a59783]"
+        >
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="min-w-0">
+              <div className="font-semibold text-[#f3ebda]">{paused ? 'Project paused' : statusCopy.label}</div>
+              <p className="sr-only mt-0.5 max-w-full text-xs leading-snug opacity-85 [overflow-wrap:anywhere]">
+                {paused ? 'This project is on hold while Jenny is stabilized.' : statusCopy.detail}
+              </p>
+            </div>
+            <span>Pending {pendingCount}</span>
+            <span>Replies {responseCount}</span>
+            {runActive ? <span>Elapsed {jennyRunElapsedSeconds}s</span> : null}
+          </div>
+          <p className="sr-only mt-2 max-w-full text-xs leading-snug opacity-80 [overflow-wrap:anywhere]">Next: {paused ? 'Resume this project after Jenny is stable.' : nextStep}</p>
+        </section>
 
         <details className="sr-only mt-1 rounded-md border border-[#f3ebda]/10 bg-[#1c1622]/50 px-3 py-1.5 text-xs">
           <summary className="cursor-pointer font-semibold text-[#a59783]">
@@ -3079,7 +3093,7 @@ function ProjectRoomsWorkspace({
         </details>
 
         <section aria-label="Project chat transcript" className="mt-2 flex min-h-0 flex-1 flex-col rounded-md border border-[#f3ebda]/10 bg-[#251d2c]/70 p-2">
-          <div className="flex items-center justify-between gap-2">
+          <div className="sr-only flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-[#f3ebda]">Conversation</h3>
             <span className="text-xs text-[#a59783]">{chatMessages.length ? `${chatMessages.length} recent messages` : 'No messages yet'}</span>
           </div>
@@ -3114,7 +3128,7 @@ function ProjectRoomsWorkspace({
                     {chat.speaker === 'You' ? chat.displayBody ?? projectRequestPreview(chat.body, 900) : compactText(chat.body, 900)}
                   </p>
                   {chat.speaker === 'Jenny' ? (
-                    <details className="mt-2 rounded-md border border-[#f3ebda]/10 bg-[#15101a]/50 px-2 py-1.5 text-xs">
+                    <details className="sr-only mt-2 rounded-md border border-[#f3ebda]/10 bg-[#15101a]/50 px-2 py-1.5 text-xs">
                       <summary className="cursor-pointer font-semibold text-[#a59783]">Review reply</summary>
                       <div className="mt-2 grid gap-2">
                       <p className={cn(
@@ -3196,7 +3210,7 @@ function ProjectRoomsWorkspace({
             </button>
           </div>
           <details className="mt-2 rounded-md border border-[#f3ebda]/10 bg-[#15101a]/60 px-3 py-2 text-xs">
-            <summary className="cursor-pointer font-semibold text-[#a59783]">Details</summary>
+            <summary className="cursor-pointer font-semibold text-[#a59783]">More</summary>
             <button className="mt-2 rounded-md border border-[#f3ebda]/10 px-3 py-2 text-sm font-semibold text-[#ddd0bb] hover:bg-[#251d2c] disabled:opacity-60" disabled={saving} onClick={onRefreshBridge} type="button">
               Refresh replies
             </button>
