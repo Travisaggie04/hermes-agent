@@ -2654,6 +2654,12 @@ function CompactProjectRoom({
   const replyReviewStatus = jennyReplyReviewStatus(latestReplyReview);
   const latestActualJennyReply = latestJennyReply(chatMessages);
   const latestActualReplyReview = latestActualJennyReply ? latestReviewByResponseId.get(latestActualJennyReply.id) ?? null : null;
+  const showJennyStatusInChat = Boolean(effectiveJennyRunProgress && (
+    runActive ||
+    effectiveJennyRunProgress.phase === "queued" ||
+    effectiveJennyRunProgress.phase === "error" ||
+    (effectiveJennyRunProgress.phase === "complete" && !latestActualJennyReply)
+  ));
   const latestJennyOutcome = latestJennyOutcomeStatus(latestActualJennyReply, latestActualReplyReview);
   const reviewRequired = Boolean(latestActualJennyReply && !latestActualReplyReview);
   const nextStep = replyReviewStatus.nextStep ?? bridgeNextStep;
@@ -2893,17 +2899,6 @@ function CompactProjectRoom({
             <span className="text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
           </div>
           <div className="mt-2 grid min-h-0 min-w-0 flex-1 content-start gap-2 overflow-y-auto overflow-x-hidden pr-1">
-            {runActive ? (
-              <article className="min-w-0 max-w-full justify-self-start rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm text-[#f3ebda] [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]">
-                <div className="mb-1 grid min-w-0 gap-1 text-[0.68rem] sm:flex sm:items-center sm:justify-between sm:gap-3">
-                  <span className="font-semibold">Jenny</span>
-                  <span className="min-w-0 text-sky-300 [overflow-wrap:anywhere] sm:text-right">{runCopy.label}</span>
-                </div>
-                <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                  {runCopy.detail}
-                </p>
-              </article>
-            ) : null}
             {chatMessages.length ? (
               chatMessages.map(chat => {
                 const replyReview = latestReviewByResponseId.get(chat.id)
@@ -2977,6 +2972,27 @@ function CompactProjectRoom({
                 Ask Jenny a bounded question or give her one safe next task below.
               </p>
             )}
+            {showJennyStatusInChat ? (
+              <article className={cn(
+                "min-w-0 max-w-full justify-self-start rounded-lg border px-3 py-2 text-sm text-[#f3ebda] [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]",
+                effectiveJennyRunProgress?.phase === "error"
+                  ? "border-red-500/30 bg-red-500/10"
+                  : "border-sky-500/30 bg-sky-500/10",
+              )}>
+                <div className="mb-1 grid min-w-0 gap-1 text-[0.68rem] sm:flex sm:items-center sm:justify-between sm:gap-3">
+                  <span className="font-semibold">Jenny</span>
+                  <span className={cn(
+                    "min-w-0 [overflow-wrap:anywhere] sm:text-right",
+                    effectiveJennyRunProgress?.phase === "error" ? "text-red-200" : "text-sky-300",
+                  )}>
+                    {runCopy.label}
+                  </span>
+                </div>
+                <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                  {runCopy.detail}
+                </p>
+              </article>
+            ) : null}
             <div ref={chatEndRef} />
           </div>
         </section>
