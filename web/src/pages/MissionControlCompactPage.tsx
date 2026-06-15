@@ -2118,22 +2118,22 @@ export default function MissionControlCompactPage() {
 
   return (
     <main className="box-border min-h-screen w-full min-w-0 max-w-[100dvw] overflow-x-hidden bg-[#0e0b12] px-1 py-2 text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 [&_*]:box-border" data-testid="mission-control-compact-route">
-      <header className="sticky top-0 z-10 mx-0 w-full min-w-0 max-w-full overflow-hidden border-b border-[#f7efe4]/10 bg-[#120d17]/95 px-3 pb-3 pt-2 backdrop-blur sm:px-4">
-        <p className="max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782] [overflow-wrap:anywhere]">
+      <header className="sticky top-0 z-10 mx-0 w-full min-w-0 max-w-full overflow-hidden border-b border-[#f7efe4]/10 bg-[#120d17]/95 px-3 pb-2 pt-2 backdrop-blur sm:px-4">
+        <p className="sr-only max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782] [overflow-wrap:anywhere]">
           <span className="font-serif text-lg italic text-[#d4a574]">IV.</span>
           <span className="ml-2">Agent · Jenny</span>
         </p>
         <div className="mt-2 grid min-w-0 gap-2 sm:flex sm:items-start sm:justify-between">
           <div className="min-w-0 max-w-full">
-            <h1 className="max-w-full text-3xl font-semibold leading-tight text-[#fff8ed] [overflow-wrap:anywhere]">Jenny</h1>
-            <p className="mt-1 max-w-full text-xs text-[#a89782] [overflow-wrap:anywhere]">Mission Control, project rooms, guarded replies, and live bridge activity.</p>
+            <h1 className="max-w-full text-xl font-semibold leading-tight text-[#fff8ed] [overflow-wrap:anywhere]">Jenny workspace</h1>
+            <p className="mt-1 max-w-full text-xs text-[#a89782] [overflow-wrap:anywhere]">Pick a project, message Jenny, and review the outcome.</p>
             <p className="sr-only">Chat with Jenny first; safety and project records stay collapsed below.</p>
           </div>
           <span className="max-w-full rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.68rem] font-semibold text-emerald-300 [overflow-wrap:anywhere]">
             guarded
           </span>
         </div>
-        <div className="mt-3 hidden min-w-0 max-w-full gap-2 pb-1 sm:flex sm:flex-wrap">
+        <div className="sr-only mt-3 hidden min-w-0 max-w-full gap-2 pb-1 sm:flex sm:flex-wrap">
           {["Chat", "Talk", "Studio", "Sessions", "Workspace", "MCPs", "Control"].map((tab, index) => (
             <span
               className={cn(
@@ -2158,7 +2158,7 @@ export default function MissionControlCompactPage() {
       ) : null}
 
       {selectedProjectView ? (
-        <div className="mt-3 grid w-full min-w-0 max-w-full gap-3 overflow-hidden xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+        <div className="mt-3 grid w-full min-w-0 max-w-full gap-3 overflow-hidden">
           <div className="order-1 min-w-0 max-w-full overflow-hidden">
             <CompactProjectRoom
               busy={roomBusy}
@@ -2202,7 +2202,7 @@ export default function MissionControlCompactPage() {
               selectedProjectView={selectedProjectView}
             />
           </div>
-          <div className="order-2 min-w-0 max-w-full overflow-hidden">
+          <div className="sr-only order-2 min-w-0 max-w-full overflow-hidden">
             <CompactLiveActivityRail
               bridgeStatus={snapshot?.jennyBridgePollerStatus ?? {}}
               githubBridgeStatus={snapshot?.githubBridgeStatus ?? {}}
@@ -2650,27 +2650,27 @@ function CompactProjectRoom({
           <div className="flex min-w-0 items-center gap-2">
             <span className="sr-only">IV. — Jenny workspace</span>
             <h2 className="max-w-full text-lg font-semibold leading-tight text-[#f3ebda] [overflow-wrap:anywhere]">{selectedProjectView.project.name}</h2>
-            <span className="hidden max-w-[30rem] truncate text-xs text-[#a59783] md:inline">{compactText(selectedProjectView.currentGoal, 120)}</span>
+            <span className="sr-only hidden max-w-[30rem] truncate text-xs text-[#a59783] md:inline">{compactText(selectedProjectView.currentGoal, 120)}</span>
           </div>
           <div className="grid min-w-0 grid-cols-1 gap-2 min-[360px]:grid-cols-2 sm:flex sm:flex-wrap sm:justify-end">
             <span className={cn("max-w-full rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold [overflow-wrap:anywhere]", jennyStatusToneClass(connectionState.tone))}>
               {connectionState.label}
             </span>
             <span className={cn(
-              "max-w-full rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold [overflow-wrap:anywhere]",
+              "sr-only max-w-full rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold [overflow-wrap:anywhere]",
               paused
                 ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
                 : "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
             )}>
               {paused ? "Paused" : selectedProjectView.readinessLabel}
             </span>
-            <span className={cn("max-w-full rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold [overflow-wrap:anywhere]", jennyReplyReviewStatusClass(replyReviewStatus.tone))}>
+            <span className={cn("sr-only max-w-full rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold [overflow-wrap:anywhere]", jennyReplyReviewStatusClass(replyReviewStatus.tone))}>
               {replyReviewStatus.label}
             </span>
           </div>
         </div>
 
-        <details className="mt-1 max-w-full overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#1c1622]/50 px-3 py-1.5 text-xs">
+        <details className="sr-only mt-1 max-w-full overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#1c1622]/50 px-3 py-1.5 text-xs">
           <summary className="cursor-pointer font-semibold text-muted-foreground">
             Room status
             <span className="sr-only">Next step</span>
@@ -2694,6 +2694,10 @@ function CompactProjectRoom({
             </div>
         </details>
 
+        <details className="sr-only mt-2 max-w-full overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#1c1622]/50 px-3 py-2 text-sm">
+          <summary className="cursor-pointer text-[#f3ebda]">
+            <span className="font-semibold">Next:</span> {latestJennyOutcome.label}. {latestJennyOutcome.nextStep}
+          </summary>
         <section
           className={cn("mt-2 max-w-full rounded-md border px-3 py-2 text-sm", jennyRunStatusToneClass(jennyRunProgress, connectionState.tone))}
           aria-label="Jenny current status"
@@ -2746,8 +2750,9 @@ function CompactProjectRoom({
         </section>
 
         <JennyWorkSessionTimeline steps={workSessionSteps} />
+        </details>
 
-        <details className="mt-2 min-w-0 max-w-full overflow-hidden rounded-md border border-[#60a5fa]/25 bg-[#60a5fa]/10 px-3 py-2" aria-label="Jenny activity">
+        <details className="sr-only mt-2 min-w-0 max-w-full overflow-hidden rounded-md border border-[#60a5fa]/25 bg-[#60a5fa]/10 px-3 py-2" aria-label="Jenny activity">
           <summary className="cursor-pointer text-sm font-semibold text-[#f3ebda]">Jenny activity</summary>
           <div className="grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
             <h3 className="sr-only">Jenny activity</h3>
@@ -2888,31 +2893,31 @@ function CompactProjectRoom({
               Refresh replies
             </button>
           </div>
-          <p className={cn(
-            "mt-2 max-w-full rounded-lg border px-3 py-2 text-xs [overflow-wrap:anywhere]",
-            requestIntake.state === "ready"
-              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
-              : requestIntake.state === "approval_required"
-                ? "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-200"
-                : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-100",
-          )}>
-            <span className="font-semibold">Request intake: {requestIntake.label}.</span> {requestIntake.detail}
-            {shouldAutoChallengeRequest(requestIntake) ? (
-              <span className="mt-1 block">Ask Jenny to challenge first will request a spec-first reply before any implementation plan.</span>
-            ) : null}
-          </p>
-          {shouldAutoChallengeRequest(requestIntake) ? (
-            <div aria-label="Jenny challenge checklist" className="mt-2 max-w-full rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 [overflow-wrap:anywhere] dark:text-amber-100">
-              <div className="font-semibold">Jenny must challenge first</div>
-              <ul className="mt-1 grid gap-1">
-                <li>Question missing facts and unsafe assumptions.</li>
-                <li>Push back on protected actions or broad scope.</li>
-                <li>Return the smallest safe lane with evidence and approval needs.</li>
-              </ul>
-            </div>
-          ) : null}
           <details className="mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/70 px-3 py-2 text-xs">
-            <summary className="cursor-pointer text-sm font-semibold">Advanced request options</summary>
+            <summary className="cursor-pointer text-sm font-semibold">Guardrails and advanced options</summary>
+            <p className={cn(
+              "mt-2 max-w-full rounded-lg border px-3 py-2 [overflow-wrap:anywhere]",
+              requestIntake.state === "ready"
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
+                : requestIntake.state === "approval_required"
+                  ? "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-200"
+                  : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-100",
+            )}>
+              <span className="font-semibold">Request intake: {requestIntake.label}.</span> {requestIntake.detail}
+              {shouldAutoChallengeRequest(requestIntake) ? (
+                <span className="mt-1 block">Ask Jenny to challenge first will request a spec-first reply before any implementation plan.</span>
+              ) : null}
+            </p>
+            {shouldAutoChallengeRequest(requestIntake) ? (
+              <div aria-label="Jenny challenge checklist" className="mt-2 max-w-full rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 [overflow-wrap:anywhere] dark:text-amber-100">
+                <div className="font-semibold">Jenny must challenge first</div>
+                <ul className="mt-1 grid gap-1">
+                  <li>Question missing facts and unsafe assumptions.</li>
+                  <li>Push back on protected actions or broad scope.</li>
+                  <li>Return the smallest safe lane with evidence and approval needs.</li>
+                </ul>
+              </div>
+            ) : null}
             <p className="mt-2 text-muted-foreground [overflow-wrap:anywhere]">
               Use these when Jenny should challenge, narrow, or formalize the request before normal work.
             </p>
@@ -2929,7 +2934,7 @@ function CompactProjectRoom({
               <p className="mt-2 text-muted-foreground [overflow-wrap:anywhere]">This request is bounded enough for a guarded Jenny reply.</p>
             )}
           </details>
-          <p className="mt-2 max-w-full text-xs text-muted-foreground [overflow-wrap:anywhere]">
+          <p className="sr-only mt-2 max-w-full text-xs text-muted-foreground [overflow-wrap:anywhere]">
             {paused
               ? "This project is visible for planning context only. Resume it after the Mission Control/Jenny recovery lane is stable."
               : "Live reply refresh is on and read-only. Jenny can reply through the bridge; work still waits for the normal approval gates."}
