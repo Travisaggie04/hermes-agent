@@ -9,4 +9,9 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('Start project chat')
     expect(source).toContain('onNewSessionInProject(group.id, group.label)')
   })
+
+  it('labels the main new session action as project chat when a project is selected', () => {
+    expect(source).toContain('New project chat')
+    expect(source).toContain('New chat in ${selectedMissionControlProjectName || selectedMissionControlProjectId}')
+  })
 })
