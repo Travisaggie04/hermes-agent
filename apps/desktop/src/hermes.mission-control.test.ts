@@ -5,6 +5,7 @@ import {
   createMissionControlLaneRequest,
   createMissionControlProject,
   createMissionControlProjectBrief,
+  createMissionControlSessionProjectLink,
   getMissionControlChallengeReviews,
   getMissionControlLaneRequests,
   getMissionControlProjectBriefs,
@@ -45,7 +46,7 @@ describe('Mission Control desktop API helpers', () => {
     }
   })
 
-  it('uses explicit inert POST endpoints for project intake, challenge, and lane draft records', async () => {
+  it('uses explicit inert POST endpoints for project intake, session links, challenge, and lane draft records', async () => {
     const api = vi.fn().mockResolvedValue({})
     vi.stubGlobal('window', { hermesDesktop: { api } })
 
@@ -62,6 +63,12 @@ describe('Mission Control desktop API helpers', () => {
       project_id: 'project-hermes-mission-control',
       status: 'active',
       success_criteria: ['Chat-first project workspace']
+    })
+    await createMissionControlSessionProjectLink({
+      link_method: 'manual',
+      project_id: 'project-hermes-mission-control',
+      session_id: 'session-root',
+      status: 'active'
     })
     await createMissionControlChallengeReview({
       decision_state: 'needs_spec_first',
@@ -95,6 +102,16 @@ describe('Mission Control desktop API helpers', () => {
       },
       method: 'POST',
       path: '/api/plugins/mission-control-governance/workspace/project-briefs/create'
+    })
+    expect(api).toHaveBeenCalledWith({
+      body: {
+        link_method: 'manual',
+        project_id: 'project-hermes-mission-control',
+        session_id: 'session-root',
+        status: 'active'
+      },
+      method: 'POST',
+      path: '/api/plugins/mission-control-governance/workspace/session-project-links/create'
     })
     expect(api).toHaveBeenCalledWith({
       body: {

@@ -27,12 +27,19 @@ interface SessionActions {
   title: string
   pinned?: boolean
   profile?: string
+  projectMoveTargets?: ProjectMoveTarget[]
   onPin?: () => void
   onArchive?: () => void
   onDelete?: () => void
+  onMoveToProject?: (projectId: string, projectName: string) => void
 }
 
 type MenuItem = typeof DropdownMenuItem | typeof ContextMenuItem
+
+export interface ProjectMoveTarget {
+  name: string
+  project_id: string
+}
 
 interface ItemSpec {
   className?: string
@@ -43,7 +50,17 @@ interface ItemSpec {
   variant?: 'destructive'
 }
 
-function useSessionActions({ sessionId, title, pinned = false, profile, onPin, onArchive, onDelete }: SessionActions) {
+function useSessionActions({
+  sessionId,
+  title,
+  pinned = false,
+  profile,
+  projectMoveTargets = [],
+  onPin,
+  onArchive,
+  onDelete,
+  onMoveToProject
+}: SessionActions) {
   const { t } = useI18n()
   const r = t.sidebar.row
   const [renameOpen, setRenameOpen] = useState(false)
@@ -108,8 +125,18 @@ function useSessionActions({ sessionId, title, pinned = false, profile, onPin, o
     }
   ]
 
+  const projectItems: ItemSpec[] = projectMoveTargets.map(project => ({
+    disabled: !onMoveToProject,
+    icon: 'folder-active',
+    label: `Move to ${project.name}`,
+    onSelect: () => {
+      triggerHaptic('selection')
+      onMoveToProject?.(project.project_id, project.name)
+    }
+  }))
+
   const renderItems = (Item: MenuItem) =>
-    items.map(({ className, disabled, icon, label, onSelect, variant }) => (
+    [...items, ...projectItems].map(({ className, disabled, icon, label, onSelect, variant }) => (
       <Item className={className} disabled={disabled} key={label} onSelect={onSelect} variant={variant}>
         <Codicon name={icon} size="0.875rem" />
         <span>{label}</span>
@@ -145,7 +172,7 @@ export function SessionActionsMenu({ children, align = 'end', sideOffset = 6, ..
         <DropdownMenuContent
           align={align}
           aria-label={t.sidebar.row.actionsFor(actions.title)}
-          className="w-40"
+          className="w-56"
           sideOffset={sideOffset}
         >
           {renderItems(DropdownMenuItem)}
@@ -168,7 +195,7 @@ export function SessionContextMenu({ children, ...actions }: SessionContextMenuP
     <>
       <ContextMenu>
         <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-        <ContextMenuContent aria-label={t.sidebar.row.actionsFor(actions.title)} className="w-40">
+        <ContextMenuContent aria-label={t.sidebar.row.actionsFor(actions.title)} className="w-56">
           {renderItems(ContextMenuItem)}
         </ContextMenuContent>
       </ContextMenu>

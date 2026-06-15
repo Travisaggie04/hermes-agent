@@ -369,7 +369,7 @@ export function useSessionActions({
           if (projectId) {
             void createMissionControlSessionProjectLink({
               cwd_snapshot: cwd || undefined,
-              link_method: 'native_chat_project',
+              link_method: 'manual',
               linked_by: 'desktop',
               profile: newChatProfile || undefined,
               project_id: projectId,
