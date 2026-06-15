@@ -430,6 +430,15 @@ function latestReviewedJennyReply(
   return null
 }
 
+function latestJennyReply(chatMessages: ProjectChatMessage[]): ProjectChatMessage | null {
+  for (const chat of [...chatMessages].reverse()) {
+    if (chat.speaker === 'Jenny') {
+      return chat
+    }
+  }
+  return null
+}
+
 function jennyReplyReviewStatus(review: MissionControlJennyReplyReviewRecord | null): { detail: string; label: string; nextStep: string | null; tone: 'accepted' | 'blocked' | 'none' | 'warn' } {
   if (!review) {
     return {
@@ -472,6 +481,52 @@ function jennyReplyReviewStatus(review: MissionControlJennyReplyReviewRecord | n
     label: 'Review unclear',
     nextStep: 'Ask Jenny to restate the evidence, risks, and next safe lane before proceeding.',
     tone: 'warn'
+  }
+}
+
+function latestJennyOutcomeStatus(
+  latestReply: ProjectChatMessage | null,
+  review: MissionControlJennyReplyReviewRecord | null
+): { detail: string; label: string; nextStep: string; reviewLabel: string; tone: 'accepted' | 'blocked' | 'none' | 'warn' } {
+  if (!latestReply) {
+    return {
+      detail: 'No Jenny reply is available for this project yet.',
+      label: 'Waiting for Jenny',
+      nextStep: 'Send one bounded project message, then get one Jenny reply.',
+      reviewLabel: 'No reply yet',
+      tone: 'none'
+    }
+  }
+
+  const contract = jennyReplyContract(latestReply.body)
+  const reviewStatus = jennyReplyReviewStatus(review)
+
+  if (!review) {
+    return {
+      detail: 'Jenny replied, but this latest reply has not been accepted or challenged yet.',
+      label: 'Review before relying',
+      nextStep: 'Use the reply review buttons: accept only if evidence is clear, otherwise ask for evidence or challenge the plan.',
+      reviewLabel: contract.label,
+      tone: contract.tone === 'complete' ? 'warn' : 'blocked'
+    }
+  }
+
+  if (review.decision === 'accepted') {
+    return {
+      detail: 'The latest Jenny reply was accepted and can be used as context for the next bounded lane.',
+      label: 'Usable as context',
+      nextStep: 'Continue with one bounded follow-up request.',
+      reviewLabel: reviewStatus.label,
+      tone: 'accepted'
+    }
+  }
+
+  return {
+    detail: reviewStatus.detail,
+    label: reviewStatus.tone === 'blocked' ? 'Do not proceed' : 'Do not rely yet',
+    nextStep: reviewStatus.nextStep ?? 'Ask Jenny to restate evidence, risks, and the next safe lane.',
+    reviewLabel: reviewStatus.label,
+    tone: reviewStatus.tone
   }
 }
 
@@ -2822,6 +2877,9 @@ function ProjectRoomsWorkspace({
   ].sort((left, right) => String(left.time ?? '').localeCompare(String(right.time ?? ''))).slice(-8)
   const latestReplyReview = latestReviewedJennyReply(chatMessages, latestReviewByResponseId)
   const replyReviewStatus = jennyReplyReviewStatus(latestReplyReview)
+  const latestActualJennyReply = latestJennyReply(chatMessages)
+  const latestActualReplyReview = latestActualJennyReply ? latestReviewByResponseId.get(latestActualJennyReply.id) ?? null : null
+  const latestJennyOutcome = latestJennyOutcomeStatus(latestActualJennyReply, latestActualReplyReview)
   const nextStep = replyReviewStatus.nextStep ?? bridgeNextStep
   const statusCopy = jennyRunProgress
     ? runCopy
@@ -2970,6 +3028,21 @@ function ProjectRoomsWorkspace({
             ))}
           </div>
           {bridgeError ? <p className="mt-2 max-w-full text-xs [overflow-wrap:anywhere]">Bridge error: {bridgeError}</p> : null}
+        </section>
+
+        <section
+          aria-label="Latest Jenny outcome"
+          className={cn('mt-2 rounded-md border px-3 py-2 text-sm', jennyReplyReviewStatusClass(latestJennyOutcome.tone))}
+        >
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] opacity-75">Latest Jenny outcome</div>
+              <div className="mt-0.5 font-semibold">{latestJennyOutcome.label}</div>
+            </div>
+            <span className="rounded-full border border-current/20 px-2 py-0.5 text-xs">{latestJennyOutcome.reviewLabel}</span>
+          </div>
+          <p className="mt-2 max-w-full leading-snug [overflow-wrap:anywhere]">{latestJennyOutcome.detail}</p>
+          <p className="mt-1 max-w-full text-xs leading-snug opacity-85 [overflow-wrap:anywhere]">Next: {latestJennyOutcome.nextStep}</p>
         </section>
 
         <JennyWorkSessionTimeline steps={workSessionSteps} />
