@@ -1448,6 +1448,25 @@ describe('MissionControlView', () => {
     expect(await screen.findByText('Jenny replied to the latest pending project message.')).toBeTruthy()
   })
 
+  it('bounds long desktop Jenny bridge messages before sending', async () => {
+    await renderMissionControl()
+
+    const longRequest = (
+      'Please inspect the current Mission Control bridge and report exact status for the desktop project chat grouping UI without changing files. '
+    ).repeat(45)
+
+    fireEvent.change(await screen.findByLabelText('Message Jenny'), { target: { value: longRequest } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(1))
+    const payload = createMissionControlGitHubBridgeRequest.mock.calls[0][0] as { message: string; user_message: string }
+    expect(payload.message.length).toBeLessThanOrEqual(1900)
+    expect(payload.user_message.length).toBeLessThanOrEqual(1900)
+    expect(payload.message).toContain('Project room request:')
+    expect(payload.user_message).toContain('Please inspect the current Mission Control bridge')
+    expect(payload.message).not.toContain('bridge field is too large')
+  })
+
   it('restores Jenny working status from bridge audit records after refresh', async () => {
     getMissionControlGitHubBridgeStatus.mockResolvedValue({
       count: 1,

@@ -168,6 +168,7 @@ const PAUSED_PROJECT_IDS = [
 
 const MAX_COPY_PROMPT_CHARS = 2000
 const MAX_PHONE_SAFE_PACKET_CHARS = 1900
+const MAX_JENNY_MAILBOX_MESSAGE_CHARS = 1900
 
 function text(value: unknown, fallback = 'Not recorded'): string {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback
@@ -277,6 +278,10 @@ function truncate(value: string, maxChars: number): string {
   }
 
   return `${value.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`
+}
+
+function boundJennyMailboxMessage(value: string): string {
+  return truncate(value.trim(), MAX_JENNY_MAILBOX_MESSAGE_CHARS)
 }
 
 function compactText(value: string | string[] | null | undefined, maxChars: number): string {
@@ -1800,9 +1805,9 @@ function buildJennyMailboxMessage({
   const request = chatRequestText(requestText)
   const intake = assessProjectRequest(request, review)
   if (shouldAutoChallengeRequest(intake)) {
-    return buildSpecFirstComposerText(project.name, request, intake)
+    return boundJennyMailboxMessage(buildSpecFirstComposerText(project.name, request, intake))
   }
-  return buildPhoneSafeProjectPacket({ brief, project, requestText: request, review, state, status })
+  return boundJennyMailboxMessage(buildPhoneSafeProjectPacket({ brief, project, requestText: request, review, state, status }))
 }
 
 function buildHermesUpdateLanePacket(status: ReturnType<typeof summarizeWorkspaceStatus>): string {
@@ -2103,7 +2108,7 @@ export function MissionControlView() {
         project_id: project.project_id,
         request_id: requestId,
         to_agent: 'jenny',
-        user_message: chatRequest
+        user_message: boundJennyMailboxMessage(chatRequest)
       })
       setJennyRunProgress({
         detail: 'Message sent. Jenny is starting one guarded reply.',
