@@ -119,7 +119,8 @@ function ChatHeader({
   const activeStoredSession =
     sessions.find(session => session.id === selectedSessionId || session._lineage_root_id === selectedSessionId) || null
 
-  const title = activeStoredSession ? sessionTitle(activeStoredSession) : 'New session'
+  const selectedProjectTitle = selectedProjectName.trim()
+  const title = activeStoredSession ? sessionTitle(activeStoredSession) : selectedProjectTitle ? 'New project chat' : 'New session'
 
   // Pins live on the durable lineage-root id, but selectedSessionId is the live
   // (tip) id — resolve through the loaded row so the menu reflects the pin
@@ -138,38 +139,46 @@ function ChatHeader({
     queryError: bridgeStatusQuery.error
   })
 
-  // A brand-new session has no session to pin/delete/rename, so the header is
-  // just a dead "New session" label + chevron. Drop it (and its border)
-  // entirely until there's a real session to act on.
-  if (!selectedSessionId && !activeSessionId && !isRoutedSessionView) {
+  // A brand-new generic session has no session actions yet, so hide the empty
+  // header. Project drafts keep the header visible so Jenny OS still feels
+  // project-aware before Travis sends the first message.
+  if (!selectedSessionId && !activeSessionId && !isRoutedSessionView && !selectedProjectTitle) {
     return null
   }
 
   return (
     <header className={cn(titlebarHeaderBaseClass, isRoutedSessionView && titlebarHeaderShadowClass)}>
       <div className="min-w-0 flex-1">
-        <SessionActionsMenu
-          align="start"
-          onDelete={selectedSessionId ? onDeleteSelectedSession : undefined}
-          onPin={selectedSessionId ? onToggleSelectedPin : undefined}
-          pinned={selectedIsPinned}
-          sessionId={selectedSessionId || activeSessionId || ''}
-          sideOffset={8}
-          title={title}
-        >
-          <Button
-            className="pointer-events-auto h-6 min-w-0 gap-1 border border-transparent bg-transparent px-2 py-0 text-(--ui-text-secondary) hover:border-(--ui-stroke-tertiary) hover:bg-(--ui-control-hover-background) hover:text-foreground data-[state=open]:border-(--ui-stroke-tertiary) data-[state=open]:bg-(--ui-control-active-background) [-webkit-app-region:no-drag]"
-            type="button"
-            variant="ghost"
+        {selectedSessionId || activeSessionId ? (
+          <SessionActionsMenu
+            align="start"
+            onDelete={selectedSessionId ? onDeleteSelectedSession : undefined}
+            onPin={selectedSessionId ? onToggleSelectedPin : undefined}
+            pinned={selectedIsPinned}
+            sessionId={selectedSessionId || activeSessionId || ''}
+            sideOffset={8}
+            title={title}
           >
-            <h2 className="max-w-[52vw] truncate text-[0.75rem] font-medium leading-none">{title}</h2>
-            <Codicon className="shrink-0 text-(--ui-text-tertiary)" name="chevron-down" size="0.8125rem" />
-          </Button>
-        </SessionActionsMenu>
+            <Button
+              className="pointer-events-auto h-6 min-w-0 gap-1 border border-transparent bg-transparent px-2 py-0 text-(--ui-text-secondary) hover:border-(--ui-stroke-tertiary) hover:bg-(--ui-control-hover-background) hover:text-foreground data-[state=open]:border-(--ui-stroke-tertiary) data-[state=open]:bg-(--ui-control-active-background) [-webkit-app-region:no-drag]"
+              type="button"
+              variant="ghost"
+            >
+              <h2 className="max-w-[52vw] truncate text-[0.75rem] font-medium leading-none">{title}</h2>
+              <Codicon className="shrink-0 text-(--ui-text-tertiary)" name="chevron-down" size="0.8125rem" />
+            </Button>
+          </SessionActionsMenu>
+        ) : (
+          <div className="flex h-6 min-w-0 items-center px-2 [-webkit-app-region:no-drag]">
+            <h2 className="max-w-[52vw] truncate text-[0.75rem] font-medium leading-none text-(--ui-text-secondary)">
+              {title}
+            </h2>
+          </div>
+        )}
       </div>
       <div className="ml-auto hidden min-w-0 max-w-[44vw] items-center gap-1.5 [-webkit-app-region:no-drag] min-[46rem]:flex">
-        {selectedProjectName.trim() ? (
-          <HeaderPill label={selectedProjectName.trim()} title={`Project: ${selectedProjectName.trim()}`} tone="idle" />
+        {selectedProjectTitle ? (
+          <HeaderPill label={selectedProjectTitle} title={`Project: ${selectedProjectTitle}`} tone="idle" />
         ) : null}
         <HeaderPill label={jennyStatus.label} title={jennyStatus.detail} tone={jennyStatus.tone} />
       </div>
