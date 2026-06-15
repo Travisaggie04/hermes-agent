@@ -2198,7 +2198,7 @@ export default function MissionControlCompactPage() {
   }
 
   return (
-    <main className="box-border min-h-screen w-full min-w-0 max-w-[100dvw] overflow-x-hidden bg-[#0e0b12] px-1 py-1 text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 [&_*]:box-border" data-testid="mission-control-compact-route">
+    <main className="box-border min-h-screen w-full min-w-0 max-w-[100dvw] overflow-x-hidden bg-[#0e0b12] px-1 py-1 pb-[env(safe-area-inset-bottom)] text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 [&_*]:box-border" data-testid="mission-control-compact-route">
       <header className="sr-only">
         <p className="sr-only max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782] [overflow-wrap:anywhere]">
           <span className="font-serif text-lg italic text-[#d4a574]">IV.</span>
@@ -2902,8 +2902,8 @@ function CompactProjectRoom({
           </div>
         </details>
 
-        <section className="mt-2 flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#120d17] p-2" aria-label="Project chat transcript">
-          <div className="grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
+        <section className="mt-2 flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden p-0" aria-label="Project chat transcript">
+          <div className="sr-only">
             <h3 className="text-sm font-semibold text-[#f3ebda]">Conversation</h3>
             <span className="text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
           </div>
@@ -3006,7 +3006,7 @@ function CompactProjectRoom({
           </div>
         </section>
 
-        <div className="mt-3 max-w-full overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#15101a] p-2">
+        <div className="sticky bottom-0 z-10 mt-3 max-w-full overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#15101a]/95 p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-18px_40px_rgba(14,11,18,0.88)] backdrop-blur">
           {reviewRequired ? (
             <p className="mb-2 max-w-full text-xs font-semibold text-amber-700 [overflow-wrap:anywhere] dark:text-amber-100" role="status">
               Review the latest Jenny reply in the chat before acting on it.
