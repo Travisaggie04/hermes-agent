@@ -836,6 +836,7 @@ def append_message(
     issue_number: int,
     created_at: str = "",
     github_comment_id: int | str = "",
+    metadata: dict[str, Any] | None = None,
     path: Path | None = None,
 ) -> tuple[int, GitHubBridgeMessageRecord]:
     clean = _message_payload(
@@ -852,7 +853,7 @@ def append_message(
         github_repo=repo,
         github_issue_number=int(issue_number),
         github_comment_id=str(github_comment_id or ""),
-        metadata={**INERT_METADATA, "source": "github_issue_comment_bridge_manual_send"},
+        metadata={**INERT_METADATA, "source": "github_issue_comment_bridge_manual_send", **(metadata or {})},
     )
     index = _store(path).append(record)
     return index, record
@@ -868,6 +869,7 @@ def post_github_message(
     from_agent: str = "codex",
     to_agent: str = "jenny",
     status: str = "queued",
+    user_message: str = "",
     path: Path | None = None,
     operator: str = "manual",
 ) -> dict[str, Any]:
@@ -903,6 +905,7 @@ def post_github_message(
         repo=repo,
         issue_number=issue_number,
         github_comment_id=comment_id,
+        metadata={"user_message": _bounded_text(user_message, max_chars=4000)} if user_message else None,
         path=path,
     )
     _status_index, status_record = append_status(

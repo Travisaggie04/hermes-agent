@@ -536,6 +536,7 @@ export interface MissionControlGitHubBridgeRequestCreatePayload {
   project_id: string
   request_id?: string
   to_agent?: string
+  user_message?: string
 }
 
 export interface MissionControlGitHubBridgeRequestCreateResponse {

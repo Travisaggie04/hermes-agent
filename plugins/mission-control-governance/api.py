@@ -1651,6 +1651,7 @@ def _build_jenny_report_record(payload: dict[str, Any]) -> JennyReportRecord:
 def _build_jenny_bridge_request_record(payload: dict[str, Any]) -> JennyBridgeMessageRequestRecord:
     project_id = _workspace_text(payload.get("project_id"), max_chars=120)
     message = _workspace_text(payload.get("message"), max_chars=MAX_WORKSPACE_PROMPT_CHARS)
+    user_message = _workspace_text(payload.get("user_message"), max_chars=MAX_WORKSPACE_PROMPT_CHARS)
     if not project_id:
         raise HTTPException(status_code=422, detail="project_id is required")
     if not message:
@@ -1676,6 +1677,7 @@ def _build_jenny_bridge_request_record(payload: dict[str, Any]) -> JennyBridgeMe
             "execution_enabled": False,
             "requires_external_jenny_poller": True,
             "dedupe_key": _workspace_text(payload.get("dedupe_key"), max_chars=160),
+            "user_message": user_message,
         },
     )
 
@@ -3590,6 +3592,7 @@ async def workspace_github_bridge_outbox_create(request: Request) -> dict[str, A
     request_id = _workspace_text(payload.get("request_id") or f"github-bridge-request-{uuid.uuid4().hex[:12]}", max_chars=120)
     project_id = _workspace_text(payload.get("project_id"), max_chars=120)
     message = _workspace_text(payload.get("message"), max_chars=MAX_WORKSPACE_PROMPT_CHARS)
+    user_message = _workspace_text(payload.get("user_message"), max_chars=MAX_WORKSPACE_PROMPT_CHARS)
     from_agent = _workspace_text(payload.get("from_agent") or "travis", max_chars=40)
     to_agent = _workspace_text(payload.get("to_agent") or "jenny", max_chars=40)
     if not project_id:
@@ -3605,6 +3608,7 @@ async def workspace_github_bridge_outbox_create(request: Request) -> dict[str, A
             to_agent=to_agent,
             status="queued",
             message=message,
+            user_message=user_message,
             path=record_store_path(),
             operator="mission-control-ui",
         )
