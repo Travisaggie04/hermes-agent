@@ -1155,6 +1155,7 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText(/Pending \d+/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Replies \d+/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Reply quality/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Review reply').length).toBeGreaterThan(0)
     expect(screen.getByText('Phone-safe packet')).toBeTruthy()
     expect(screen.getByText('Previous sessions')).toBeTruthy()
     expect(screen.getByText('Hermes storage cleanup lane')).toBeTruthy()

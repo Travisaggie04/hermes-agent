@@ -3093,7 +3093,9 @@ function ProjectRoomsWorkspace({
                     {chat.speaker === 'You' ? chat.displayBody ?? projectRequestPreview(chat.body, 900) : compactText(chat.body, 900)}
                   </p>
                   {chat.speaker === 'Jenny' ? (
-                    <div className="mt-2 grid gap-2">
+                    <details className="mt-2 rounded-md border border-[#f3ebda]/10 bg-[#15101a]/50 px-2 py-1.5 text-xs">
+                      <summary className="cursor-pointer font-semibold text-[#a59783]">Review reply</summary>
+                      <div className="mt-2 grid gap-2">
                       <p className={cn(
                         'rounded border px-2 py-1 text-xs',
                         jennyReplyContract(chat.body).tone === 'complete'
@@ -3128,7 +3130,8 @@ function ProjectRoomsWorkspace({
                           Challenge plan
                         </button>
                       </div>
-                    </div>
+                      </div>
+                    </details>
                   ) : null}
                 </article>
               ))
