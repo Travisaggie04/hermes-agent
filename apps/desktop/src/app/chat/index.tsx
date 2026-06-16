@@ -248,10 +248,10 @@ function ProjectHeaderSelect({
 
   return (
     <div className="flex min-w-0 items-center gap-1">
-      <label className="flex min-w-0 items-center gap-1 text-[0.6875rem] text-(--ui-text-tertiary)" title="Jenny project">
-        <span className="sr-only">Jenny project</span>
+      <label className="flex min-w-0 items-center gap-1 text-[0.6875rem] text-(--ui-text-tertiary)" title="Project">
+        <span className="sr-only">Project</span>
         <select
-          aria-label="Jenny project"
+          aria-label="Project"
           className="h-6 max-w-56 rounded-full border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) px-2 py-0 text-[0.6875rem] font-medium text-(--ui-text-secondary) outline-none hover:text-foreground focus:border-blue-400/60"
           disabled={loading && !projects.length}
           onChange={event => {
@@ -269,10 +269,10 @@ function ProjectHeaderSelect({
         </select>
       </label>
       <Button
-        aria-label="Create Jenny project"
+        aria-label="Create project"
         className="size-6 rounded-full border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) text-(--ui-text-secondary) hover:text-foreground [&_svg]:size-3.5!"
         onClick={onNewProject}
-        title="Create Jenny project"
+        title="Create project"
         type="button"
         variant="ghost"
       >
@@ -383,7 +383,7 @@ function NativeProjectIntakeDialog({
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       setError(message)
-      notifyError(err, 'Could not create Jenny project')
+      notifyError(err, 'Could not create project')
     } finally {
       setSaving(false)
     }
@@ -393,9 +393,9 @@ function NativeProjectIntakeDialog({
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Create Jenny project</DialogTitle>
+          <DialogTitle>Create project</DialogTitle>
           <DialogDescription>
-            Set up the project brief before Jenny starts work. Guardrails stay in the background.
+            Set up the project before Jenny starts work. Guardrails stay in the background.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -532,7 +532,7 @@ function ProjectJennyStatusStrip({
 
   return (
     <div
-      aria-label="Jenny project status"
+      aria-label="Project chat status"
       className="relative z-10 flex min-h-8 shrink-0 items-center gap-2 border-b border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background)/95 px-4 text-[0.75rem] text-(--ui-text-secondary)"
     >
       <span className="shrink-0 font-medium text-foreground">Jenny</span>

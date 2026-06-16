@@ -37,7 +37,7 @@ describe('Intro', () => {
       />
     )
 
-    expect(screen.getByLabelText('Jenny projects').textContent).toContain('Jenny projects')
+    expect(screen.getByLabelText('Projects').textContent).toContain('Projects')
     expect(screen.getByText('Pick a project')).toBeTruthy()
     expect(screen.getByText('Pick a project, then chat normally. Jenny gets the project brief and guardrails without extra copy/paste.')).toBeTruthy()
 
@@ -45,7 +45,7 @@ describe('Intro', () => {
 
     expect(onSelectProject).toHaveBeenCalledWith('project-hermes-mission-control', 'Hermes / Mission Control')
 
-    fireEvent.click(screen.getByText('Create Jenny project'))
+    fireEvent.click(screen.getByText('Create project'))
 
     expect(onCreateProject).toHaveBeenCalledOnce()
   })
