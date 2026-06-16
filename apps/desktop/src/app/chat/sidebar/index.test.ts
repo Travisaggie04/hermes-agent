@@ -86,6 +86,15 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('rootClassName={recentsRootClassName}')
   })
 
+  it('keeps project-linked chats out of the unfiled recents list while project mode is active', () => {
+    expect(source).toContain('const projectLinkedSessionIds = useMemo')
+    expect(source).toContain('for (const group of projectGroups)')
+    expect(source).toContain('ids.add(session.id)')
+    expect(source).toContain('ids.add(session._lineage_root_id)')
+    expect(source).toContain('if (!projectMode) {')
+    expect(source).toContain("!projectLinkedSessionIds.has(session.id) && !projectLinkedSessionIds.has(session._lineage_root_id || '')")
+  })
+
   it('keeps project groups visible if one Mission Control project endpoint is unavailable', () => {
     expect(source).toContain('Promise.allSettled([getMissionControlProjects(), getMissionControlProjectSessions()])')
     expect(source).toContain("projectsResult.status === 'fulfilled' ? nativeChatProjects")

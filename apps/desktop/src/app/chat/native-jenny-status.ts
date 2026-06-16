@@ -139,10 +139,10 @@ export function nativeJennyStatus({
 
   if (pending > 0) {
     return {
-      detail: `Jenny has ${pending} message${pending === 1 ? '' : 's'} waiting. The reply will appear in this chat.`,
-      label: 'Waiting for Jenny',
-      summary: 'Reply will appear here',
-      tone: 'pending'
+      detail: `Jenny has ${pending} older queued project message${pending === 1 ? '' : 's'}, but this chat is ready. Send a message here and Jenny will reply in this project chat.`,
+      label: 'Jenny ready',
+      summary: 'Send a message',
+      tone: 'ok'
     }
   }
 

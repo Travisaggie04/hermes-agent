@@ -692,9 +692,36 @@ export function ChatSidebar({
     return [...out.values()]
   }, [trimmedQuery, sortedSessions, serverMatches, sessionByAnyId])
 
+  const projectLinkedSessionIds = useMemo(() => {
+    const ids = new Set<string>()
+
+    for (const group of projectGroups) {
+      for (const session of group.sessions) {
+        ids.add(session.id)
+
+        if (session._lineage_root_id) {
+          ids.add(session._lineage_root_id)
+        }
+      }
+    }
+
+    return ids
+  }, [projectGroups])
+
   const unpinnedAgentSessions = useMemo(
-    () => sortedSessions.filter(s => !pinnedRealIdSet.has(s.id)),
-    [sortedSessions, pinnedRealIdSet]
+    () =>
+      sortedSessions.filter(session => {
+        if (pinnedRealIdSet.has(session.id)) {
+          return false
+        }
+
+        if (!projectMode) {
+          return true
+        }
+
+        return !projectLinkedSessionIds.has(session.id) && !projectLinkedSessionIds.has(session._lineage_root_id || '')
+      }),
+    [projectLinkedSessionIds, projectMode, sortedSessions, pinnedRealIdSet]
   )
 
   const agentSessions = useMemo(
