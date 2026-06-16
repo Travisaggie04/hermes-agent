@@ -806,6 +806,9 @@ describe('MissionControlView', () => {
     expect(getMissionControlJennyBridgePollerStatus).toHaveBeenCalledTimes(1)
     expect(getMissionControlGitHubBridgeStatus).toHaveBeenCalledTimes(1)
 
+    const auditNotice = screen.getByLabelText('Advanced audit console notice')
+    expect(auditNotice).toBeTruthy()
+    expect(auditNotice.textContent).toContain('Advanced audit console. Use Jenny OS in the sidebar for normal project chat.')
     expect(screen.getByText('Project report archive')).toBeTruthy()
     expect(screen.getAllByText('Safety details').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Request options').length).toBeGreaterThan(0)
