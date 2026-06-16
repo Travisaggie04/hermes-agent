@@ -1107,9 +1107,36 @@ function isNoPendingBridgeError(value: unknown): boolean {
   return text.includes("no matching pending") || text.includes("no pending message") || text.includes("no pending request");
 }
 
+function hasGitHubBridgeSignal(status: GitHubBridgeStatus): boolean {
+  return Boolean(
+    status.last_error ||
+    status.last_status ||
+    status.last_poll_at ||
+    status.last_response_at ||
+    status.last_response_request_id ||
+    status.mode ||
+    status.foreground_watch_supported !== undefined ||
+    status.foreground_watch_running !== undefined ||
+    status.pending_count !== undefined ||
+    status.visible_pending_count !== undefined ||
+    unwrapRecords(status.pending_messages).length ||
+    unwrapRecords(status.visible_pending_messages).length ||
+    unwrapRecords(status.recent_messages).length ||
+    unwrapRecords(status.response_messages).length ||
+    unwrapRecords(status.status_records).length,
+  );
+}
+
 function normalizedBridgeError(bridgeStatus: JennyBridgePollerStatus, githubBridgeStatus: GitHubBridgeStatus): string {
-  const error = String(bridgeStatus.last_error || githubBridgeStatus.last_error || "");
-  return isNoPendingBridgeError(error) ? "" : error;
+  const githubError = String(githubBridgeStatus.last_error || "");
+  if (githubError && !isNoPendingBridgeError(githubError)) {
+    return githubError;
+  }
+  const legacyError = String(bridgeStatus.last_error || "");
+  if (!legacyError || isNoPendingBridgeError(legacyError)) {
+    return "";
+  }
+  return hasGitHubBridgeSignal(githubBridgeStatus) ? "" : legacyError;
 }
 
 function noReplyStatusMessage(error: unknown): string {
