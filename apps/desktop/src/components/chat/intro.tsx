@@ -180,7 +180,7 @@ export function Intro({
     >
       <div className={showProjectHome ? 'pointer-events-auto w-full min-w-0' : 'pointer-events-none w-full min-w-0'}>
         <p
-          aria-label={showProjectHome ? 'Jenny projects' : WORDMARK}
+          aria-label={showProjectHome ? 'Projects' : WORDMARK}
           className={
             showProjectHome
               ? "mx-auto mb-5 text-xs font-semibold uppercase tracking-[0.26em] text-(--ui-text-tertiary)"
@@ -189,7 +189,7 @@ export function Intro({
           style={{ '--fit-text-line-height': '0.9', '--fit-text-min': '2.75rem' } as CSSProperties}
         >
           <span>
-            <span>{showProjectHome ? 'Jenny projects' : WORDMARK}</span>
+            <span>{showProjectHome ? 'Projects' : WORDMARK}</span>
           </span>
           {!showProjectHome && <span aria-hidden="true">{WORDMARK}</span>}
         </p>
@@ -235,7 +235,7 @@ export function Intro({
                 onClick={onCreateProject}
                 type="button"
               >
-                Create Jenny project
+                Create project
               </button>
             ) : null}
           </div>

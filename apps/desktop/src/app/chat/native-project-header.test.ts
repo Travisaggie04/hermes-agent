@@ -17,7 +17,7 @@ describe('native project chat header', () => {
 
   it('shows a slim Jenny status strip for selected project chats', () => {
     expect(source).toContain('function ProjectJennyStatusStrip')
-    expect(source).toContain('aria-label="Jenny project status"')
+    expect(source).toContain('aria-label="Project chat status"')
     expect(source).toContain('<span className="shrink-0 font-medium text-foreground">Jenny</span>')
     expect(source).toContain('in {projectName}')
     expect(source).toContain('{jennyStatus.summary}')
@@ -41,7 +41,7 @@ describe('native project chat header', () => {
     expect(source).toContain('getMissionControlProjects')
     expect(source).toContain("queryKey: ['mission-control-projects-native-chat']")
     expect(source).toContain('function ProjectHeaderSelect')
-    expect(source).toContain('aria-label="Jenny project"')
+    expect(source).toContain('aria-label="Project"')
     expect(source).toContain('setSelectedMissionControlProject(project?.project_id ?? null, project?.name ?? null)')
   })
 
@@ -66,7 +66,7 @@ describe('native project chat header', () => {
 
   it('lets the native chat header create a structured Jenny project brief', () => {
     expect(source).toContain('function NativeProjectIntakeDialog')
-    expect(source).toContain('Create Jenny project')
+    expect(source).toContain('Create project')
     expect(source).toContain('createMissionControlProject({')
     expect(source).toContain('createMissionControlProjectBrief({')
     expect(source).toContain('Jenny must challenge vague, risky, or wrong-approach requests before implementation.')
