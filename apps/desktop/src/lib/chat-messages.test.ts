@@ -101,6 +101,45 @@ describe('toChatMessages', () => {
     expect(chatMessageText(message)).toBe('test')
   })
 
+  it('hides legacy spec-first Jenny wrappers from saved user message display', () => {
+    const [message] = toChatMessages([
+      {
+        role: 'user',
+        content:
+          'Spec-first request for Jenny: Project: Hermes / Mission Control Request Travis is considering: testing. tell me a short story Current intake: Spec first / Request may be too broad or underspecified; Jenny should narrow it before implementation. Jenny, do not implement yet. First challenge the request like a senior engineer. Return only the spec/challenge review and the recommended next safe lane.',
+        timestamp: 1
+      }
+    ])
+
+    expect(chatMessageText(message)).toBe('testing. tell me a short story')
+  })
+
+  it('hides legacy project-room packet wrappers from saved user message display', () => {
+    const [message] = toChatMessages([
+      {
+        role: 'user',
+        content:
+          "Hermes / Mission Control Request: Testing Current brief: Replace Discord as Travis's primary laptop/phone workspace for managing Jenny/Hermes projects. Challenge state: clear_and_safe / Start record-only/manual-copy. Allowed: read approved context. Forbidden: no direct session send.",
+        timestamp: 1
+      }
+    ])
+
+    expect(chatMessageText(message)).toBe('Testing')
+  })
+
+  it('hides legacy Project Room request wrappers from saved user message display', () => {
+    const [message] = toChatMessages([
+      {
+        role: 'user',
+        content:
+          'Project room request: Hermes / Mission Control Request: fix the two way communication with codex through the bridge Current brief: Replace Discord as Travis primary workspace. Challenge state: clear_and_safe / start record-only manual-copy. Allowed: read approved context. Forbidden: no direct session send.',
+        timestamp: 1
+      }
+    ])
+
+    expect(chatMessageText(message)).toBe('fix the two way communication with codex through the bridge')
+  })
+
   it('renders MEDIA tags as assistant attachment links', () => {
     const [message] = toChatMessages([
       {
