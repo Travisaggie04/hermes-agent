@@ -42,6 +42,16 @@ describe('native project chat header', () => {
     expect(source).toContain('return out.sort((a, b) => a.name.localeCompare(b.name))')
   })
 
+  it('lets the native chat header create a structured Jenny project brief', () => {
+    expect(source).toContain('function NativeProjectIntakeDialog')
+    expect(source).toContain('Create Jenny project')
+    expect(source).toContain('createMissionControlProject({')
+    expect(source).toContain('createMissionControlProjectBrief({')
+    expect(source).toContain('Jenny must challenge vague, risky, or wrong-approach requests before implementation.')
+    expect(source).toContain('setSelectedMissionControlProject(projectId, projectName)')
+    expect(source).toContain('Start with a spec-first project setup review.')
+  })
+
   it('shows Jenny as working for the full native chat busy turn', () => {
     expect(source).toContain('activeTurnRunning={busy}')
     expect(source).not.toContain('activeTurnRunning={busy && awaitingResponse}')
