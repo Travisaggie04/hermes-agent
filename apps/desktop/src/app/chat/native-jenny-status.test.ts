@@ -24,7 +24,7 @@ describe('nativeJennyStatus', () => {
         projectId: 'project-hermes',
         bridgeStatus: { last_error: 'Hermes responder failed' }
       })
-    ).toMatchObject({ label: 'Jenny needs attention', tone: 'warn' })
+    ).toMatchObject({ detail: 'Hermes responder failed', label: 'Jenny needs attention', summary: 'Check details and retry', tone: 'warn' })
   })
 
   it('does not let background-only bridge errors dominate the native chat status', () => {
@@ -39,7 +39,7 @@ describe('nativeJennyStatus', () => {
           visible_pending_count: 0
         }
       })
-    ).toMatchObject({ label: 'Jenny ready', tone: 'ok' })
+    ).toMatchObject({ label: 'Jenny ready', summary: 'Ready', tone: 'ok' })
   })
 
   it('does not surface stale bridge errors after a newer Jenny reply', () => {
@@ -74,6 +74,7 @@ describe('nativeJennyStatus', () => {
     ).toMatchObject({
       detail: 'No project message is waiting for Jenny.',
       label: 'Jenny ready',
+      summary: 'Ready',
       tone: 'ok'
     })
   })
@@ -88,6 +89,7 @@ describe('nativeJennyStatus', () => {
     ).toMatchObject({
       detail: 'Jenny is working on the latest project message.',
       label: 'Jenny working',
+      summary: 'Working',
       tone: 'working'
     })
   })
@@ -103,6 +105,7 @@ describe('nativeJennyStatus', () => {
     ).toMatchObject({
       detail: 'Jenny is working on the current chat turn.',
       label: 'Jenny working',
+      summary: 'Working',
       tone: 'working'
     })
   })
@@ -114,7 +117,7 @@ describe('nativeJennyStatus', () => {
         projectId: 'project-hermes',
         bridgeStatus: { pending_count: 9, visible_pending_count: 2 }
       })
-    ).toMatchObject({ detail: '2 messages waiting for Jenny.', label: 'Waiting for Jenny', tone: 'pending' })
+    ).toMatchObject({ detail: '2 messages waiting for Jenny.', label: 'Waiting for Jenny', summary: '2 waiting', tone: 'pending' })
   })
 
   it('shows reviewed-ready status after a reply when nothing is pending', () => {
@@ -124,6 +127,6 @@ describe('nativeJennyStatus', () => {
         projectId: 'project-hermes',
         bridgeStatus: { last_response_request_id: 'req-1', pending_count: 0 }
       })
-    ).toMatchObject({ label: 'Jenny replied', tone: 'ok' })
+    ).toMatchObject({ label: 'Jenny replied', summary: 'Reply ready', tone: 'ok' })
   })
 })
