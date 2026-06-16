@@ -137,7 +137,7 @@ function ChatHeader({
   })
   const bridgeStatusQuery = useQuery({
     enabled: gatewayOpen && Boolean(selectedProjectId.trim()),
-    queryFn: getMissionControlGitHubBridgeStatus,
+    queryFn: () => getMissionControlGitHubBridgeStatus(selectedProjectId),
     queryKey: ['mission-control-github-bridge-status', selectedProjectId],
     refetchInterval: 3_000,
     staleTime: 10_000
@@ -496,7 +496,7 @@ function ProjectJennyStatusStrip({
   const projectName = selectedProjectName.trim()
   const bridgeStatusQuery = useQuery({
     enabled: gatewayOpen && Boolean(selectedProjectId.trim()),
-    queryFn: getMissionControlGitHubBridgeStatus,
+    queryFn: () => getMissionControlGitHubBridgeStatus(selectedProjectId),
     queryKey: ['mission-control-github-bridge-status', selectedProjectId],
     refetchInterval: 3_000,
     staleTime: 10_000

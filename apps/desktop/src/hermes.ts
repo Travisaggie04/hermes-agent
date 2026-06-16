@@ -541,6 +541,7 @@ export interface MissionControlGitHubBridgeStatusResponse {
   foreground_watch_running?: boolean
   model_routing_enabled?: boolean
   pending_count?: number
+  project_id?: string
   visible_pending_count?: number
   background_pending_count?: number
   pending_messages?: Array<MissionControlRecordEnvelope<MissionControlGitHubBridgeMessageRecord>>
@@ -965,9 +966,11 @@ export function getMissionControlJennyBridgePollerStatus(): Promise<MissionContr
   })
 }
 
-export function getMissionControlGitHubBridgeStatus(): Promise<MissionControlGitHubBridgeStatusResponse> {
+export function getMissionControlGitHubBridgeStatus(projectId?: string): Promise<MissionControlGitHubBridgeStatusResponse> {
+  const query = projectId?.trim() ? `?project_id=${encodeURIComponent(projectId.trim())}` : ''
+
   return window.hermesDesktop.api<MissionControlGitHubBridgeStatusResponse>({
-    path: `${MISSION_CONTROL_API}/workspace/github-bridge/status`
+    path: `${MISSION_CONTROL_API}/workspace/github-bridge/status${query}`
   })
 }
 
