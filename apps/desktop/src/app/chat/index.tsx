@@ -502,17 +502,15 @@ function ProjectJennyStatusStrip({
       aria-label="Jenny project status"
       className="relative z-10 flex min-h-8 shrink-0 items-center gap-2 border-b border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background)/95 px-4 text-[0.75rem] text-(--ui-text-secondary)"
     >
-      <span className="min-w-0 truncate">
-        Project: <span className="font-medium text-foreground">{projectName}</span>
-      </span>
-      <span aria-hidden="true" className="text-(--ui-text-tertiary)">
-        /
-      </span>
+      <span className="shrink-0 font-medium text-foreground">Jenny</span>
       <span className={cn('min-w-0 truncate font-medium', toneClass)} title={jennyStatus.detail}>
-        {jennyStatus.label}
-      </span>
-      <span className="hidden min-w-0 truncate text-(--ui-text-tertiary) min-[42rem]:inline" title={jennyStatus.detail}>
         {jennyStatus.summary}
+      </span>
+      <span className="hidden min-w-0 truncate text-(--ui-text-tertiary) min-[42rem]:inline" title={projectName}>
+        in {projectName}
+      </span>
+      <span className="ml-auto hidden shrink-0 text-(--ui-text-tertiary) min-[52rem]:inline" title={jennyStatus.detail}>
+        {jennyStatus.label}
       </span>
     </div>
   )
@@ -759,6 +757,9 @@ export function ChatView({
                 busy={busy}
                 cwd={currentCwd}
                 disabled={!gatewayOpen}
+                disabledPlaceholderOverride={
+                  selectedProjectTitle ? `Jenny is offline; reconnect gateway to message ${selectedProjectTitle}` : undefined
+                }
                 focusKey={activeSessionId}
                 gateway={gateway}
                 maxRecordingSeconds={maxVoiceRecordingSeconds}

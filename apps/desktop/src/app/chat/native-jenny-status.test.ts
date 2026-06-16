@@ -27,7 +27,7 @@ describe('nativeJennyStatus', () => {
     ).toMatchObject({
       detail: 'Send a message here; Jenny will reply in this project chat. Background Mission Control status is unavailable.',
       label: 'Jenny ready',
-      summary: 'Background status unavailable',
+      summary: 'Chat still works',
       tone: 'ok'
     })
   })
@@ -89,7 +89,7 @@ describe('nativeJennyStatus', () => {
           visible_pending_count: 0
         }
       })
-    ).toMatchObject({ label: 'Jenny ready', summary: 'Ready', tone: 'ok' })
+    ).toMatchObject({ label: 'Jenny ready', summary: 'Send a message', tone: 'ok' })
   })
 
   it('does not surface stale bridge errors after a newer Jenny reply', () => {
@@ -124,7 +124,7 @@ describe('nativeJennyStatus', () => {
     ).toMatchObject({
       detail: 'No project message is waiting for Jenny.',
       label: 'Jenny ready',
-      summary: 'Ready',
+      summary: 'Send a message',
       tone: 'ok'
     })
   })
@@ -139,7 +139,7 @@ describe('nativeJennyStatus', () => {
     ).toMatchObject({
       detail: 'Jenny is working on the latest project message.',
       label: 'Jenny working',
-      summary: 'Working',
+      summary: 'Progress appears here',
       tone: 'working'
     })
   })
@@ -155,7 +155,7 @@ describe('nativeJennyStatus', () => {
     ).toMatchObject({
       detail: 'Jenny is working on this chat. Progress and the final reply appear here.',
       label: 'Jenny working',
-      summary: 'Working',
+      summary: 'Progress appears here',
       tone: 'working'
     })
   })
@@ -167,7 +167,12 @@ describe('nativeJennyStatus', () => {
         projectId: 'project-hermes',
         bridgeStatus: { pending_count: 9, visible_pending_count: 2 }
       })
-    ).toMatchObject({ detail: '2 messages waiting for Jenny.', label: 'Waiting for Jenny', summary: '2 waiting', tone: 'pending' })
+    ).toMatchObject({
+      detail: 'Jenny has 2 messages waiting. The reply will appear in this chat.',
+      label: 'Waiting for Jenny',
+      summary: 'Reply will appear here',
+      tone: 'pending'
+    })
   })
 
   it('shows reviewed-ready status after a reply when nothing is pending', () => {
@@ -177,7 +182,7 @@ describe('nativeJennyStatus', () => {
         projectId: 'project-hermes',
         bridgeStatus: { last_response_request_id: 'req-1', pending_count: 0 }
       })
-    ).toMatchObject({ label: 'Jenny replied', summary: 'Reply ready', tone: 'ok' })
+    ).toMatchObject({ label: 'Jenny replied', summary: 'Review latest reply', tone: 'ok' })
   })
 
   it('makes the ready state explain that normal chat sends to Jenny', () => {
@@ -190,7 +195,7 @@ describe('nativeJennyStatus', () => {
     ).toMatchObject({
       detail: 'Send a message here; Jenny will reply in this project chat.',
       label: 'Jenny ready',
-      summary: 'Ready',
+      summary: 'Send a message',
       tone: 'ok'
     })
   })

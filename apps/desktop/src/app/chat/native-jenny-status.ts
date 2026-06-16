@@ -83,21 +83,21 @@ export function nativeJennyStatus({
     }
   }
 
-  if (queryError) {
-    return {
-      detail: 'Send a message here; Jenny will reply in this project chat. Background Mission Control status is unavailable.',
-      label: 'Jenny ready',
-      summary: 'Background status unavailable',
-      tone: 'ok'
-    }
-  }
-
   if (activeTurnRunning) {
     return {
       detail: 'Jenny is working on this chat. Progress and the final reply appear here.',
       label: 'Jenny working',
-      summary: 'Working',
+      summary: 'Progress appears here',
       tone: 'working'
+    }
+  }
+
+  if (queryError) {
+    return {
+      detail: 'Send a message here; Jenny will reply in this project chat. Background Mission Control status is unavailable.',
+      label: 'Jenny ready',
+      summary: 'Chat still works',
+      tone: 'ok'
     }
   }
 
@@ -132,16 +132,16 @@ export function nativeJennyStatus({
     return {
       detail: 'Jenny is working on the latest project message.',
       label: 'Jenny working',
-      summary: 'Working',
+      summary: 'Progress appears here',
       tone: 'working'
     }
   }
 
   if (pending > 0) {
     return {
-      detail: `${pending} message${pending === 1 ? '' : 's'} waiting for Jenny.`,
+      detail: `Jenny has ${pending} message${pending === 1 ? '' : 's'} waiting. The reply will appear in this chat.`,
       label: 'Waiting for Jenny',
-      summary: `${pending} waiting`,
+      summary: 'Reply will appear here',
       tone: 'pending'
     }
   }
@@ -150,7 +150,7 @@ export function nativeJennyStatus({
     return {
       detail: 'Jenny replied. Review the latest answer before relying on it.',
       label: 'Jenny replied',
-      summary: 'Reply ready',
+      summary: 'Review latest reply',
       tone: 'ok'
     }
   }
@@ -158,7 +158,7 @@ export function nativeJennyStatus({
   return {
     detail: benignNoPending ? 'No project message is waiting for Jenny.' : 'Send a message here; Jenny will reply in this project chat.',
     label: 'Jenny ready',
-    summary: 'Ready',
+    summary: 'Send a message',
     tone: 'ok'
   }
 }
