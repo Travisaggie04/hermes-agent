@@ -802,9 +802,33 @@ def _collapse_superseded_operator_pending(items: list[dict[str, Any]]) -> tuple[
     return current, superseded_count
 
 
-def _github_bridge_mailbox_status_projection(limit: int = DEFAULT_RECORDS_LIMIT) -> dict[str, Any]:
+def _github_bridge_mailbox_status_projection(limit: int = DEFAULT_RECORDS_LIMIT, project_id: str = "") -> dict[str, Any]:
     messages = _latest_workspace_records(GitHubBridgeMessageRecord, limit)
     statuses = _latest_workspace_records(GitHubBridgeMailboxStatusRecord, limit)
+    request_project_by_id = {
+        str(item.get("record", {}).get("request_id") or ""): str(item.get("record", {}).get("project_id") or "")
+        for item in messages
+    }
+    response_project_by_id = {
+        str(item.get("record", {}).get("request_id") or ""): str(item.get("record", {}).get("project_id") or "")
+        for item in messages
+        if item.get("record", {}).get("status") in {"replied", "closed"}
+        or item.get("record", {}).get("from_agent") == "jenny"
+    }
+    if project_id:
+        messages = [
+            item
+            for item in messages
+            if str(item.get("record", {}).get("project_id") or "") == project_id
+        ]
+        statuses = [
+            item
+            for item in statuses
+            if request_project_by_id.get(str(item.get("record", {}).get("handled_request_id") or ""))
+            == project_id
+            or response_project_by_id.get(str(item.get("record", {}).get("handled_response_id") or ""))
+            == project_id
+        ]
     response_request_ids = {
         item.get("record", {}).get("request_id", "")
         for item in messages
@@ -844,6 +868,7 @@ def _github_bridge_mailbox_status_projection(limit: int = DEFAULT_RECORDS_LIMIT)
         "discord_automation_enabled": False,
         "model_routing_enabled": False,
         "stored": False,
+        "project_id": project_id,
         "count": len(statuses),
         "pending_count": len(pending),
         "visible_pending_count": len(visible_pending),
@@ -3608,9 +3633,15 @@ async def workspace_jenny_reply_review_create(request: Request) -> dict[str, Any
 
 
 @router.get("/workspace/github-bridge/status")
-async def workspace_github_bridge_status(limit: str | None = Query(default=None)) -> dict[str, Any]:
+async def workspace_github_bridge_status(
+    limit: str | None = Query(default=None),
+    project_id: str | None = Query(default=None),
+) -> dict[str, Any]:
     applied_limit = _safe_records_limit(limit)
-    projection = _github_bridge_mailbox_status_projection(applied_limit)
+    projection = _github_bridge_mailbox_status_projection(
+        applied_limit,
+        _workspace_text(project_id, max_chars=120),
+    )
     return {
         **INERT_FLAGS,
         "stored": False,

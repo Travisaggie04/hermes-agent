@@ -751,6 +751,81 @@ def test_workspace_github_bridge_status_collapses_superseded_codex_deploy_reques
     assert payload["visible_pending_messages"][0]["record"]["request_id"] == "github-req-travis-open"
 
 
+def test_workspace_github_bridge_status_can_filter_by_project(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(
+        GitHubBridgeMessageRecord(
+            request_id="hermes-req",
+            project_id="project-hermes",
+            from_agent="travis",
+            to_agent="jenny",
+            status="queued",
+            message="Hermes project request.",
+            created_at="2026-06-13T00:00:00Z",
+            github_repo="Travisaggie04/hermes-agent",
+            github_issue_number=79,
+            github_comment_id="301",
+        )
+    )
+    store.append(
+        GitHubBridgeMessageRecord(
+            request_id="tool-req",
+            project_id="project-tool-tally",
+            from_agent="travis",
+            to_agent="jenny",
+            status="queued",
+            message="Tool project request.",
+            created_at="2026-06-13T00:01:00Z",
+            github_repo="Travisaggie04/hermes-agent",
+            github_issue_number=79,
+            github_comment_id="302",
+        )
+    )
+    store.append(
+        GitHubBridgeMailboxStatusRecord(
+            status_id="hermes-status",
+            repo="Travisaggie04/hermes-agent",
+            issue_number=79,
+            mode="manual_hermes_answer",
+            status="manual_hermes_answer_started",
+            pending_count=1,
+            handled_request_id="hermes-req",
+            created_at="2026-06-13T00:01:30Z",
+            metadata={"manual_start_only": True, "worker_enabled": False, "timer_enabled": False},
+        )
+    )
+    store.append(
+        GitHubBridgeMailboxStatusRecord(
+            status_id="tool-error",
+            repo="Travisaggie04/hermes-agent",
+            issue_number=79,
+            mode="manual_hermes_answer",
+            status="error",
+            pending_count=1,
+            handled_request_id="tool-req",
+            last_error="tool request failed",
+            created_at="2026-06-13T00:02:00Z",
+            metadata={"manual_start_only": True, "worker_enabled": False, "timer_enabled": False},
+        )
+    )
+
+    response = client.get(
+        "/api/plugins/mission-control-governance/workspace/github-bridge/status?project_id=project-hermes"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["project_id"] == "project-hermes"
+    assert payload["pending_count"] == 1
+    assert payload["visible_pending_count"] == 1
+    assert payload["background_pending_count"] == 0
+    assert payload["last_status"] == "manual_hermes_answer_started"
+    assert payload["last_error"] == ""
+    assert payload["pending_messages"][0]["record"]["request_id"] == "hermes-req"
+    assert payload["visible_pending_messages"][0]["record"]["request_id"] == "hermes-req"
+    assert [item["record"]["request_id"] for item in payload["recent_messages"]] == ["hermes-req"]
+
+
 def test_workspace_github_bridge_outbox_create_posts_one_mailbox_message(plugin_api, client, monkeypatch):
     def fake_post_github_message(**kwargs):
         record = GitHubBridgeMessageRecord(

@@ -7,6 +7,7 @@ import {
   createMissionControlProjectBrief,
   createMissionControlSessionProjectLink,
   getMissionControlChallengeReviews,
+  getMissionControlGitHubBridgeStatus,
   getMissionControlLaneRequests,
   getMissionControlProjectBriefs,
   getMissionControlProjects,
@@ -31,6 +32,7 @@ describe('Mission Control desktop API helpers', () => {
     await getMissionControlLaneRequests()
     await getMissionControlReports()
     await getMissionControlProjectState()
+    await getMissionControlGitHubBridgeStatus()
 
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace-status' })
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/projects' })
@@ -39,6 +41,7 @@ describe('Mission Control desktop API helpers', () => {
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/lane-requests' })
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/reports' })
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/project-state' })
+    expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/github-bridge/status' })
 
     for (const [request] of api.mock.calls as Array<[{ method?: string; body?: unknown }]>) {
       expect(request.method).toBeUndefined()
@@ -130,6 +133,17 @@ describe('Mission Control desktop API helpers', () => {
       },
       method: 'POST',
       path: '/api/plugins/mission-control-governance/workspace/lane-requests/create'
+    })
+  })
+
+  it('scopes GitHub bridge status to the selected project when provided', async () => {
+    const api = vi.fn().mockResolvedValue({})
+    vi.stubGlobal('window', { hermesDesktop: { api } })
+
+    await getMissionControlGitHubBridgeStatus('project-hermes/mission control')
+
+    expect(api).toHaveBeenCalledWith({
+      path: '/api/plugins/mission-control-governance/workspace/github-bridge/status?project_id=project-hermes%2Fmission%20control'
     })
   })
 })

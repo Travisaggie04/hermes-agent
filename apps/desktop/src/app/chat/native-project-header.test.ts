@@ -18,6 +18,7 @@ describe('native project chat header', () => {
   it('shows a slim Jenny status strip for selected project chats', () => {
     expect(source).toContain('function ProjectJennyStatusStrip')
     expect(source).toContain('aria-label="Project chat status"')
+    expect(source).toContain('queryFn: () => getMissionControlGitHubBridgeStatus(selectedProjectId)')
     expect(source).toContain('<span className="shrink-0 font-medium text-foreground">Jenny</span>')
     expect(source).toContain('in {projectName}')
     expect(source).toContain('{jennyStatus.summary}')
