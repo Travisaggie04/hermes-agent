@@ -1346,7 +1346,8 @@ function SidebarSessionsSection({
         onResumeSession(session.id)
       },
       projectMoveTargets,
-      session
+      session,
+      hideCurrentProjectMove: group?.mode === 'project' && group.id === activeGroupId
     }
 
     return sortable ? (
@@ -1643,14 +1644,17 @@ function SidebarCount({ children }: { children: React.ReactNode }) {
 }
 
 interface SortableSessionRowProps {
+  hideCurrentProjectMove?: boolean
   session: SessionInfo
   isPinned: boolean
   isSelected: boolean
   isWorking: boolean
   onArchive: () => void
   onDelete: () => void
+  onMoveToProject?: (projectId: string, projectName: string) => void
   onPin: () => void
   onResume: () => void
+  projectMoveTargets?: ProjectMoveTarget[]
 }
 
 function SortableSidebarSessionRow(props: SortableSessionRowProps) {
