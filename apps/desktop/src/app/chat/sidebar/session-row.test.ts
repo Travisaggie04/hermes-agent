@@ -8,7 +8,7 @@ describe('sidebar session row project filing affordance', () => {
     expect(source).toContain('$selectedMissionControlProjectId')
     expect(source).toContain('$selectedMissionControlProjectName')
     expect(source).toContain('const currentProjectMoveTarget')
-    expect(source).toContain('Move ${title} to ${currentProjectMoveTarget.name}')
+    expect(source).toContain('File ${title} in ${currentProjectMoveTarget.name}')
     expect(source).toContain('onMoveToProject(currentProjectMoveTarget.project_id, currentProjectMoveTarget.name)')
     expect(source).toContain('Codicon name="folder-active"')
   })
