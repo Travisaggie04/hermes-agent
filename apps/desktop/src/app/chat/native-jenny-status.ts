@@ -51,10 +51,10 @@ function friendlyBridgeError(message: string): string {
   }
 
   if (lower.includes('responder failed') || lower.includes('app-server startup failed') || lower.includes('timed out')) {
-    return 'Jenny failed before finishing a reply. Retry once, and review the audit console if it fails again.'
+    return 'Jenny failed before finishing a reply. Retry once, and open details if it fails again.'
   }
 
-  return 'Jenny hit a bridge error. Retry once, or open the audit console for technical details.'
+  return 'Jenny had trouble finishing that message. Retry once, or open details.'
 }
 
 export function nativeJennyStatus({
@@ -94,7 +94,7 @@ export function nativeJennyStatus({
 
   if (queryError) {
     return {
-      detail: 'Send a message here; Jenny will reply in this project chat. Background Mission Control status is unavailable.',
+      detail: 'Send a message here; Jenny will reply in this project chat. Background status is unavailable.',
       label: 'Jenny ready',
       summary: 'Chat still works',
       tone: 'ok'
@@ -103,7 +103,7 @@ export function nativeJennyStatus({
 
   if (loading && !bridgeStatus) {
     return {
-      detail: 'Checking the guarded Jenny bridge.',
+      detail: 'Checking Jenny.',
       label: 'Checking Jenny',
       summary: 'Checking',
       tone: 'idle'

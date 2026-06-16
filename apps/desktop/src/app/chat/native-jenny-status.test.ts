@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest'
 
 import { nativeJennyStatus } from './native-jenny-status'
 
+const TRANSPORT_WORDING_RE = /bridge|mailbox|mission control status|audit console/i
+
+function expectCleanVisibleStatus(status: ReturnType<typeof nativeJennyStatus>) {
+  expect(status.detail).not.toMatch(TRANSPORT_WORDING_RE)
+  expect(status.label).not.toMatch(TRANSPORT_WORDING_RE)
+  expect(status.summary).not.toMatch(TRANSPORT_WORDING_RE)
+}
+
 describe('nativeJennyStatus', () => {
   it('asks for a project before presenting Jenny as ready', () => {
     expect(nativeJennyStatus({ gatewayOpen: true }).label).toBe('Pick a project')
@@ -18,33 +26,35 @@ describe('nativeJennyStatus', () => {
   })
 
   it('keeps native chat usable when only background bridge status is unavailable', () => {
-    expect(
-      nativeJennyStatus({
-        gatewayOpen: true,
-        projectId: 'project-hermes',
-        queryError: new Error('connect ECONNREFUSED 100.115.125.111:9119')
-      })
-    ).toMatchObject({
-      detail: 'Send a message here; Jenny will reply in this project chat. Background Mission Control status is unavailable.',
+    const status = nativeJennyStatus({
+      gatewayOpen: true,
+      projectId: 'project-hermes',
+      queryError: new Error('connect ECONNREFUSED 100.115.125.111:9119')
+    })
+
+    expect(status).toMatchObject({
+      detail: 'Send a message here; Jenny will reply in this project chat. Background status is unavailable.',
       label: 'Jenny ready',
       summary: 'Chat still works',
       tone: 'ok'
     })
+    expectCleanVisibleStatus(status)
   })
 
   it('summarizes bridge record errors as Jenny attention without raw backend wording', () => {
-    expect(
-      nativeJennyStatus({
-        gatewayOpen: true,
-        projectId: 'project-hermes',
-        bridgeStatus: { last_error: 'Hermes responder failed' }
-      })
-    ).toMatchObject({
-      detail: 'Jenny failed before finishing a reply. Retry once, and review the audit console if it fails again.',
+    const status = nativeJennyStatus({
+      gatewayOpen: true,
+      projectId: 'project-hermes',
+      bridgeStatus: { last_error: 'Hermes responder failed' }
+    })
+
+    expect(status).toMatchObject({
+      detail: 'Jenny failed before finishing a reply. Retry once, and open details if it fails again.',
       label: 'Jenny needs attention',
       summary: 'Check details and retry',
       tone: 'warn'
     })
+    expectCleanVisibleStatus(status)
   })
 
   it('turns bridge size failures into an actionable native chat message', () => {
@@ -59,7 +69,7 @@ describe('nativeJennyStatus', () => {
       label: 'Jenny needs attention',
       tone: 'warn'
     })
-    expect(status.detail).not.toContain('bridge field')
+    expectCleanVisibleStatus(status)
   })
 
   it('turns gateway connection failures into an actionable native chat message', () => {
@@ -75,6 +85,23 @@ describe('nativeJennyStatus', () => {
       tone: 'warn'
     })
     expect(status.detail).not.toContain('ECONNREFUSED')
+    expectCleanVisibleStatus(status)
+  })
+
+  it('maps unknown backend errors to plain chat language', () => {
+    const status = nativeJennyStatus({
+      gatewayOpen: true,
+      projectId: 'project-hermes',
+      bridgeStatus: { last_error: 'unclassified transport failure' }
+    })
+
+    expect(status).toMatchObject({
+      detail: 'Jenny had trouble finishing that message. Retry once, or open details.',
+      label: 'Jenny needs attention',
+      summary: 'Check details and retry',
+      tone: 'warn'
+    })
+    expectCleanVisibleStatus(status)
   })
 
   it('does not let background-only bridge errors dominate the native chat status', () => {
@@ -130,18 +157,19 @@ describe('nativeJennyStatus', () => {
   })
 
   it('shows Jenny working while the manual Hermes answer is running', () => {
-    expect(
-      nativeJennyStatus({
-        gatewayOpen: true,
-        projectId: 'project-hermes',
-        bridgeStatus: { last_status: 'hermes_answer_started', pending_count: 1, visible_pending_count: 1 }
-      })
-    ).toMatchObject({
+    const status = nativeJennyStatus({
+      gatewayOpen: true,
+      projectId: 'project-hermes',
+      bridgeStatus: { last_status: 'hermes_answer_started', pending_count: 1, visible_pending_count: 1 }
+    })
+
+    expect(status).toMatchObject({
       detail: 'Jenny is working on the latest project message.',
       label: 'Jenny working',
       summary: 'Progress appears here',
       tone: 'working'
     })
+    expectCleanVisibleStatus(status)
   })
 
   it('shows Jenny working while the active native chat turn is running', () => {
@@ -161,18 +189,19 @@ describe('nativeJennyStatus', () => {
   })
 
   it('prioritizes visible pending messages', () => {
-    expect(
-      nativeJennyStatus({
-        gatewayOpen: true,
-        projectId: 'project-hermes',
-        bridgeStatus: { pending_count: 9, visible_pending_count: 2 }
-      })
-    ).toMatchObject({
+    const status = nativeJennyStatus({
+      gatewayOpen: true,
+      projectId: 'project-hermes',
+      bridgeStatus: { pending_count: 9, visible_pending_count: 2 }
+    })
+
+    expect(status).toMatchObject({
       detail: 'Jenny has 2 messages waiting. The reply will appear in this chat.',
       label: 'Waiting for Jenny',
       summary: 'Reply will appear here',
       tone: 'pending'
     })
+    expectCleanVisibleStatus(status)
   })
 
   it('shows reviewed-ready status after a reply when nothing is pending', () => {
@@ -186,17 +215,34 @@ describe('nativeJennyStatus', () => {
   })
 
   it('makes the ready state explain that normal chat sends to Jenny', () => {
-    expect(
-      nativeJennyStatus({
-        gatewayOpen: true,
-        projectId: 'project-hermes',
-        bridgeStatus: { pending_count: 0, visible_pending_count: 0 }
-      })
-    ).toMatchObject({
+    const status = nativeJennyStatus({
+      gatewayOpen: true,
+      projectId: 'project-hermes',
+      bridgeStatus: { pending_count: 0, visible_pending_count: 0 }
+    })
+
+    expect(status).toMatchObject({
       detail: 'Send a message here; Jenny will reply in this project chat.',
       label: 'Jenny ready',
       summary: 'Send a message',
       tone: 'ok'
     })
+    expectCleanVisibleStatus(status)
+  })
+
+  it('uses plain Jenny wording while status is loading', () => {
+    const status = nativeJennyStatus({
+      gatewayOpen: true,
+      loading: true,
+      projectId: 'project-hermes'
+    })
+
+    expect(status).toMatchObject({
+      detail: 'Checking Jenny.',
+      label: 'Checking Jenny',
+      summary: 'Checking',
+      tone: 'idle'
+    })
+    expectCleanVisibleStatus(status)
   })
 })
