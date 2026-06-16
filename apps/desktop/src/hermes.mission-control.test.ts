@@ -6,6 +6,7 @@ import {
   createMissionControlProject,
   createMissionControlProjectBrief,
   createMissionControlSessionProjectLink,
+  getMissionControlAsyncAgentStatus,
   getMissionControlChallengeReviews,
   getMissionControlGitHubBridgeStatus,
   getMissionControlLaneRequests,
@@ -33,6 +34,7 @@ describe('Mission Control desktop API helpers', () => {
     await getMissionControlReports()
     await getMissionControlProjectState()
     await getMissionControlGitHubBridgeStatus()
+    await getMissionControlAsyncAgentStatus()
 
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace-status' })
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/projects' })
@@ -42,6 +44,7 @@ describe('Mission Control desktop API helpers', () => {
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/reports' })
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/project-state' })
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/github-bridge/status' })
+    expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/async-agent-status' })
 
     for (const [request] of api.mock.calls as Array<[{ method?: string; body?: unknown }]>) {
       expect(request.method).toBeUndefined()
