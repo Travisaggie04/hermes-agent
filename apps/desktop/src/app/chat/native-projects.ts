@@ -47,7 +47,19 @@ export function nativeChatProjects(projects: MissionControlProjectRecord[] = [])
   const seen = new Set<string>()
   const out: MissionControlProjectRecord[] = []
 
-  for (const project of projects.length ? projects : DEFAULT_NATIVE_CHAT_PROJECTS) {
+  for (const project of projects) {
+    const id = project.project_id?.trim()
+    const name = project.name?.trim()
+
+    if (!id || !name || seen.has(id)) {
+      continue
+    }
+
+    seen.add(id)
+    out.push(project)
+  }
+
+  for (const project of DEFAULT_NATIVE_CHAT_PROJECTS) {
     const id = project.project_id?.trim()
     const name = project.name?.trim()
 
