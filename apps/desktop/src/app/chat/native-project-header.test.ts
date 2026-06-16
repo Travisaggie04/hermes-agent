@@ -25,8 +25,8 @@ describe('native project chat header', () => {
     expect(source).toContain('<ProjectJennyStatusStrip activeTurnRunning={busy} gatewayOpen={gatewayOpen} />')
   })
 
-  it('keeps the extra Jenny status strip hidden when chat is simply ready', () => {
-    expect(source).toContain("if (jennyStatus.tone === 'ok' || jennyStatus.tone === 'idle') {")
+  it('keeps the extra Jenny status strip hidden unless attention is required', () => {
+    expect(source).toContain("if (jennyStatus.tone !== 'warn') {")
     expect(source).toContain('return null')
   })
 
@@ -85,9 +85,10 @@ describe('native project chat header', () => {
     expect(source).not.toContain('activeTurnRunning={busy && awaitingResponse}')
   })
 
-  it('shows an in-chat Jenny working row while a project reply is pending', () => {
-    expect(source).toContain("threadLoading === 'response'")
-    expect(source).toContain('Jenny is working in {selectedProjectTitle}')
+  it('uses the normal thread loading row while a project reply is pending', () => {
+    expect(source).toContain('loading={threadLoading}')
+    expect(source).toContain("loadingLabel={selectedProjectTitle ? 'Jenny is working' : undefined}")
+    expect(source).not.toContain('Jenny is working in {selectedProjectTitle}')
   })
 
   it('keeps the Jenny status strip hidden until a project is selected', () => {
