@@ -27,6 +27,38 @@ describe('nativeJennyStatus', () => {
     ).toMatchObject({ label: 'Jenny needs attention', tone: 'warn' })
   })
 
+  it('does not let background-only bridge errors dominate the native chat status', () => {
+    expect(
+      nativeJennyStatus({
+        gatewayOpen: true,
+        projectId: 'project-hermes',
+        bridgeStatus: {
+          background_pending_count: 3,
+          last_error: 'bridge field is too large',
+          pending_count: 3,
+          visible_pending_count: 0
+        }
+      })
+    ).toMatchObject({ label: 'Jenny ready', tone: 'ok' })
+  })
+
+  it('does not surface stale bridge errors after a newer Jenny reply', () => {
+    expect(
+      nativeJennyStatus({
+        gatewayOpen: true,
+        projectId: 'project-hermes',
+        bridgeStatus: {
+          last_error: 'old bridge error',
+          last_poll_at: '2026-06-15T00:00:00Z',
+          last_response_at: '2026-06-15T00:00:05Z',
+          last_response_request_id: 'req-1',
+          pending_count: 0,
+          visible_pending_count: 0
+        }
+      })
+    ).toMatchObject({ label: 'Jenny replied', tone: 'ok' })
+  })
+
   it('does not surface no-pending responder noops as scary errors', () => {
     expect(
       nativeJennyStatus({

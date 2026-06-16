@@ -28,6 +28,16 @@ const WORKING_STATUSES = new Set([
 
 const REPLIED_STATUSES = new Set(['hermes_answer_completed', 'response_appended', 'replied'])
 
+function dateMs(value?: string): number {
+  if (!value) {
+    return 0
+  }
+
+  const ms = Date.parse(value)
+
+  return Number.isFinite(ms) ? ms : 0
+}
+
 export function nativeJennyStatus({
   activeTurnRunning = false,
   bridgeStatus,
@@ -79,8 +89,13 @@ export function nativeJennyStatus({
   const lastStatus = bridgeStatus?.last_status?.trim() || ''
   const lastError = bridgeStatus?.last_error?.trim() || ''
   const benignNoPending = Boolean(lastError && BENIGN_NO_PENDING_ERROR_RE.test(lastError))
+  const pending = bridgeStatus?.visible_pending_count ?? bridgeStatus?.pending_count ?? 0
+  const backgroundPending = bridgeStatus?.background_pending_count ?? 0
+  const latestReplyIsNewerThanStatus =
+    dateMs(bridgeStatus?.last_response_at) > 0 && dateMs(bridgeStatus?.last_response_at) >= dateMs(bridgeStatus?.last_poll_at)
+  const staleOrBackgroundOnlyError = pending === 0 && (backgroundPending > 0 || latestReplyIsNewerThanStatus)
 
-  if (lastError && !benignNoPending) {
+  if (lastError && !benignNoPending && !staleOrBackgroundOnlyError) {
     return {
       detail: lastError,
       label: 'Jenny needs attention',
@@ -95,8 +110,6 @@ export function nativeJennyStatus({
       tone: 'working'
     }
   }
-
-  const pending = bridgeStatus?.visible_pending_count ?? bridgeStatus?.pending_count ?? 0
 
   if (pending > 0) {
     return {
