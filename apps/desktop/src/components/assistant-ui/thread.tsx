@@ -126,6 +126,7 @@ export const Thread: FC<{
   cwd?: string | null
   gateway?: HermesGateway | null
   intro?: IntroProps
+  loadingLabel?: string
   loading?: ThreadLoadingState
   onBranchInNewChat?: (messageId: string) => void
   onCancel?: () => Promise<void> | void
@@ -136,6 +137,7 @@ export const Thread: FC<{
   cwd = null,
   gateway = null,
   intro,
+  loadingLabel,
   loading,
   onBranchInNewChat,
   onCancel,
@@ -168,7 +170,7 @@ export const Thread: FC<{
           clampToComposer={clampToComposer}
           components={messageComponents}
           emptyPlaceholder={emptyPlaceholder}
-          loadingIndicator={loading === 'response' ? <ResponseLoadingIndicator /> : null}
+          loadingIndicator={loading === 'response' ? <ResponseLoadingIndicator label={loadingLabel} /> : null}
           sessionKey={sessionKey}
         />
         {loading === 'session' && <CenteredThreadSpinner />}
@@ -284,12 +286,16 @@ const StatusRow: FC<{ children: ReactNode; label: string } & React.ComponentProp
   </div>
 )
 
-const ResponseLoadingIndicator: FC = () => {
+const DEFAULT_RESPONSE_LOADING_LABEL = 'Hermes is loading a response'
+
+const ResponseLoadingIndicator: FC<{ label?: string }> = ({ label = DEFAULT_RESPONSE_LOADING_LABEL }) => {
   const elapsed = useElapsedSeconds()
+  const showVisibleLabel = label !== DEFAULT_RESPONSE_LOADING_LABEL
 
   return (
-    <StatusRow data-slot="aui_response-loading" label="Hermes is loading a response">
+    <StatusRow data-slot="aui_response-loading" label={label}>
       <span aria-hidden="true" className="dither inline-block size-3 rounded-[2px] text-midground/80 animate-pulse" />
+      {showVisibleLabel && <span className="font-medium text-muted-foreground/82">{label}</span>}
       <ActivityTimerText seconds={elapsed} />
     </StatusRow>
   )

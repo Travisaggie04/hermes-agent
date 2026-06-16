@@ -543,20 +543,9 @@ function ProjectJennyStatusStrip({
     queryError: bridgeStatusQuery.error
   })
 
-  if (jennyStatus.tone === 'ok' || jennyStatus.tone === 'idle') {
+  if (jennyStatus.tone !== 'warn') {
     return null
   }
-
-  const toneClass =
-    jennyStatus.tone === 'warn'
-      ? 'text-red-200'
-      : jennyStatus.tone === 'pending'
-        ? 'text-amber-100'
-        : jennyStatus.tone === 'working'
-          ? 'text-blue-100'
-          : jennyStatus.tone === 'ok'
-            ? 'text-emerald-100'
-            : 'text-(--ui-text-secondary)'
 
   return (
     <div
@@ -564,7 +553,7 @@ function ProjectJennyStatusStrip({
       className="relative z-10 flex min-h-8 shrink-0 items-center gap-2 border-b border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background)/95 px-4 text-[0.75rem] text-(--ui-text-secondary)"
     >
       <span className="shrink-0 font-medium text-foreground">Jenny</span>
-      <span className={cn('min-w-0 truncate font-medium', toneClass)} title={jennyStatus.detail}>
+      <span className="min-w-0 truncate font-medium text-red-200" title={jennyStatus.detail}>
         {jennyStatus.summary}
       </span>
       <span className="hidden min-w-0 truncate text-(--ui-text-tertiary) min-[42rem]:inline" title={projectName}>
@@ -807,6 +796,7 @@ export function ChatView({
                 : undefined
             }
             loading={threadLoading}
+            loadingLabel={selectedProjectTitle ? 'Jenny is working' : undefined}
             onBranchInNewChat={onBranchInNewChat}
             onCancel={onCancel}
             sessionId={activeSessionId}
@@ -846,17 +836,6 @@ export function ChatView({
             </Suspense>
           )}
         </AssistantRuntimeProvider>
-        {selectedProjectTitle && threadLoading === 'response' && (
-          <div
-            aria-label={`Jenny is working in ${selectedProjectTitle}`}
-            aria-live="polite"
-            className="pointer-events-none absolute bottom-[calc(var(--composer-measured-height)+0.75rem)] left-4 z-20 flex max-w-[calc(100%-2rem)] items-center gap-2 rounded-full border border-blue-400/25 bg-(--ui-chat-surface-background)/90 px-3 py-1.5 text-xs text-blue-100 shadow-lg backdrop-blur"
-            role="status"
-          >
-            <span aria-hidden="true" className="dither inline-block size-3 shrink-0 rounded-[2px] text-blue-200/80 animate-pulse" />
-            <span className="truncate font-medium">Jenny is working in {selectedProjectTitle}</span>
-          </div>
-        )}
         <NativeProjectIntakeDialog
           onCreated={(projectId, projectName) => {
             setSelectedMissionControlProject(projectId, projectName)
