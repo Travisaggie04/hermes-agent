@@ -388,6 +388,9 @@ def test_compact_project_chat_keeps_primary_flow_chat_first() -> None:
     composer_src = room[composer_section_start:composer_start + 500]
     assert "sticky bottom-0 z-10" in composer_src
     assert "backdrop-blur" in composer_src
+    assert "<summary" in transcript_src
+    assert "Review reply" in transcript_src
+    assert "Review latest Jenny reply" in transcript_src
 
 
 def test_compact_route_parks_kanban_until_real_task_board_is_reliable() -> None:
