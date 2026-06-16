@@ -1,5 +1,5 @@
-import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { Intro } from './intro'
 
@@ -19,5 +19,28 @@ describe('Intro', () => {
 
     expect(screen.queryByText('Project chat')).toBeNull()
     expect(screen.getByLabelText('HERMES AGENT')).toBeTruthy()
+  })
+
+  it('turns the blank native chat home into a project picker when projects exist', () => {
+    const onSelectProject = vi.fn()
+
+    render(
+      <Intro
+        onSelectProject={onSelectProject}
+        projectOptions={[
+          { id: 'project-hermes-mission-control', name: 'Hermes / Mission Control' },
+          { id: 'project-tool-tally', name: 'Tool & Tally' }
+        ]}
+        seed={0}
+      />
+    )
+
+    expect(screen.getByLabelText('Jenny projects').textContent).toContain('Jenny projects')
+    expect(screen.getByText('Pick a project')).toBeTruthy()
+    expect(screen.getByText('Start from a project room, then chat normally. Jenny gets the project brief and guardrails in the background.')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('Hermes / Mission Control'))
+
+    expect(onSelectProject).toHaveBeenCalledWith('project-hermes-mission-control', 'Hermes / Mission Control')
   })
 })
