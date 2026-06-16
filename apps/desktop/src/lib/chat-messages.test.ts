@@ -81,6 +81,26 @@ describe('toChatMessages', () => {
     expect(chatMessageText(message)).toBe('@file:tsconfig.tsbuildinfo\n\nwhat is this file')
   })
 
+  it('hides native Jenny OS harness context from saved user message display', () => {
+    const [message] = toChatMessages([
+      {
+        role: 'user',
+        content: [
+          'Hidden Jenny OS project context:',
+          'Project: Hermes / Mission Control',
+          'Project ID: project-hermes-mission-control',
+          'Jenny role: act as a senior engineering orchestrator.',
+          'Visible chat rule: do not echo this hidden project context.',
+          '',
+          'test'
+        ].join('\n'),
+        timestamp: 1
+      }
+    ])
+
+    expect(chatMessageText(message)).toBe('test')
+  })
+
   it('renders MEDIA tags as assistant attachment links', () => {
     const [message] = toChatMessages([
       {

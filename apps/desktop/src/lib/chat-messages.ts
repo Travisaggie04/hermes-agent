@@ -113,6 +113,7 @@ export function chatMessageText(message: ChatMessage): string {
 const ATTACHED_CONTEXT_MARKER_RE = /(?:^|\n)--- Attached Context ---\s*\n/
 const CONTEXT_WARNINGS_MARKER_RE = /(?:^|\n)--- Context Warnings ---[\s\S]*$/
 const CONTEXT_REF_RE = /@(file|folder|url|image|tool|terminal):(?:"[^"\n]+"|'[^'\n]+'|`[^`\n]+`|\S+)/g
+const HIDDEN_JENNY_OS_CONTEXT_RE = /^Hidden Jenny OS project context:\s*\n[\s\S]*?\n\n/
 
 function textFromUnknown(value: unknown, depth = 0): string {
   if (typeof value === 'string') {
@@ -151,7 +152,9 @@ function textFromUnknown(value: unknown, depth = 0): string {
 }
 
 function displayContentForMessage(role: SessionMessage['role'], content: unknown): string {
-  const textContent = textFromUnknown(content)
+  const rawTextContent = textFromUnknown(content)
+  const textContent =
+    role === 'user' ? rawTextContent.replace(HIDDEN_JENNY_OS_CONTEXT_RE, '').trimStart() : rawTextContent
 
   if (role !== 'user') {
     return textContent
