@@ -14,18 +14,16 @@ export interface NativeJennyStatusInput {
   bridgeStatus?: MissionControlGitHubBridgeStatusResponse | null
   gatewayOpen: boolean
   loading?: boolean
+  nowMs?: number
   projectId?: string
   queryError?: unknown
 }
 
 const BENIGN_NO_PENDING_ERROR_RE = /no matching pending mission control mailbox request/i
+const WORKING_STATUS_FRESH_MS = 30_000
 
-const WORKING_STATUSES = new Set([
-  'hermes_answer_started',
-  'manual_hermes_answer_started',
-  'watch_started',
-  'watch_poll_completed'
-])
+const ANSWER_WORKING_STATUSES = new Set(['hermes_answer_started', 'manual_hermes_answer_started'])
+const WATCH_WORKING_STATUSES = new Set(['watch_started', 'watch_poll_completed'])
 
 const REPLIED_STATUSES = new Set(['hermes_answer_completed', 'response_appended', 'replied'])
 
@@ -37,6 +35,12 @@ function dateMs(value?: string): number {
   const ms = Date.parse(value)
 
   return Number.isFinite(ms) ? ms : 0
+}
+
+function isFreshStatus(value: string | undefined, nowMs: number): boolean {
+  const ms = dateMs(value)
+
+  return ms > 0 && nowMs >= ms && nowMs - ms <= WORKING_STATUS_FRESH_MS
 }
 
 function friendlyBridgeError(message: string): string {
@@ -62,6 +66,7 @@ export function nativeJennyStatus({
   bridgeStatus,
   gatewayOpen,
   loading = false,
+  nowMs = Date.now(),
   projectId = '',
   queryError
 }: NativeJennyStatusInput): NativeJennyStatus {
@@ -115,9 +120,14 @@ export function nativeJennyStatus({
   const benignNoPending = Boolean(lastError && BENIGN_NO_PENDING_ERROR_RE.test(lastError))
   const pending = bridgeStatus?.visible_pending_count ?? bridgeStatus?.pending_count ?? 0
   const backgroundPending = bridgeStatus?.background_pending_count ?? 0
+  const statusIsFresh = isFreshStatus(bridgeStatus?.last_poll_at, nowMs)
   const latestReplyIsNewerThanStatus =
     dateMs(bridgeStatus?.last_response_at) > 0 && dateMs(bridgeStatus?.last_response_at) >= dateMs(bridgeStatus?.last_poll_at)
   const staleOrBackgroundOnlyError = pending === 0 && (backgroundPending > 0 || latestReplyIsNewerThanStatus)
+  const answerIsWorking = ANSWER_WORKING_STATUSES.has(lastStatus) && statusIsFresh
+  const watchIsWorking = Boolean(
+    bridgeStatus?.foreground_watch_running && WATCH_WORKING_STATUSES.has(lastStatus) && statusIsFresh
+  )
 
   if (lastError && !benignNoPending && !staleOrBackgroundOnlyError) {
     return {
@@ -128,7 +138,7 @@ export function nativeJennyStatus({
     }
   }
 
-  if (bridgeStatus?.foreground_watch_running || WORKING_STATUSES.has(lastStatus)) {
+  if (answerIsWorking || watchIsWorking) {
     return {
       detail: 'Jenny is working on the latest project message.',
       label: 'Jenny working',

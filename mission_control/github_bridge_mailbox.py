@@ -34,6 +34,7 @@ DEFAULT_MISSION_CONTROL_PROJECT_ID = "project-hermes-mission-control"
 PENDING_STATUSES = {"queued", "retry_requested"}
 REPLIED_STATUSES = {"replied", "closed"}
 DEFAULT_LIMIT = 25
+FOREGROUND_WATCH_RUNNING_SECONDS = 15
 INERT_METADATA = {
     "manual_start_only": True,
     "dispatch_enabled": False,
@@ -45,6 +46,30 @@ INERT_METADATA = {
     "discord_automation_enabled": False,
     "model_routing_enabled": False,
 }
+
+
+def _iso_datetime(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+
+    return parsed.astimezone(timezone.utc)
+
+
+def _recent_watch_status_is_running(status: str, created_at: str, *, now: datetime | None = None) -> bool:
+    if not status.startswith("watch_") or status == "watch_stopped":
+        return False
+
+    created = _iso_datetime(created_at)
+    if created is None:
+        return False
+
+    current = now or datetime.now(timezone.utc)
+    return 0 <= (current - created).total_seconds() <= FOREGROUND_WATCH_RUNNING_SECONDS
 
 
 @dataclass(frozen=True)
@@ -525,7 +550,7 @@ def github_bridge_status(*, path: Path | None = None, repo: str = "", issue_numb
         "pending_count": len(pending),
         "mode": latest_status.mode if latest_status else "manual",
         "foreground_watch_supported": True,
-        "foreground_watch_running": latest_status.status.startswith("watch_") and latest_status.status != "watch_stopped" if latest_status else False,
+        "foreground_watch_running": _recent_watch_status_is_running(latest_status.status, latest_status.created_at) if latest_status else False,
         "last_poll_at": latest_status.created_at if latest_status else "",
         "last_status": latest_status.status if latest_status else "idle",
         "last_response_at": latest_response.created_at if latest_response else "",

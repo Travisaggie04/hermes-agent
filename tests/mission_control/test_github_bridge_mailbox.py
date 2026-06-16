@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 import subprocess
 import sys
@@ -194,6 +195,50 @@ def test_pending_projection_excludes_replied_requests(tmp_path: Path):
     assert status["session_send_enabled"] is False
     assert status["worker_enabled"] is False
     assert status["timer_enabled"] is False
+
+
+def test_status_does_not_report_stale_foreground_watch_as_running(tmp_path: Path):
+    records = tmp_path / "records.jsonl"
+    JsonlRecordStore(records).append(
+        GitHubBridgeMailboxStatusRecord(
+            status_id="status-stale-watch",
+            repo="Travisaggie04/hermes-agent",
+            issue_number=79,
+            mode="watch_foreground",
+            status="watch_poll_completed",
+            pending_count=0,
+            new_message_count=0,
+            created_at="2026-06-13T00:00:00Z",
+        )
+    )
+
+    status = github_bridge_status(path=records, repo="Travisaggie04/hermes-agent", issue_number=79)
+
+    assert status["foreground_watch_supported"] is True
+    assert status["foreground_watch_running"] is False
+    assert status["last_status"] == "watch_poll_completed"
+
+
+def test_status_reports_recent_foreground_watch_as_running(tmp_path: Path):
+    records = tmp_path / "records.jsonl"
+    JsonlRecordStore(records).append(
+        GitHubBridgeMailboxStatusRecord(
+            status_id="status-recent-watch",
+            repo="Travisaggie04/hermes-agent",
+            issue_number=79,
+            mode="watch_foreground",
+            status="watch_poll_completed",
+            pending_count=0,
+            new_message_count=0,
+            created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        )
+    )
+
+    status = github_bridge_status(path=records, repo="Travisaggie04/hermes-agent", issue_number=79)
+
+    assert status["foreground_watch_supported"] is True
+    assert status["foreground_watch_running"] is True
+    assert status["last_status"] == "watch_poll_completed"
 
 
 def test_respond_dedupes_by_request_id_and_appends_skipped_duplicate_status(tmp_path: Path):

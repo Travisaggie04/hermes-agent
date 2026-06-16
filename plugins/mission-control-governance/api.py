@@ -197,6 +197,7 @@ RUN_LANE_TYPES = {
 BROAD_APPROVAL_VALUES = {"*", "all", "any", "global", "everything", "unlimited"}
 JENNY_BRIDGE_PENDING_STATUSES = {"queued", "retry_requested"}
 PROFILE_STORAGE_CACHE_SECONDS = 60
+FOREGROUND_WATCH_RUNNING_SECONDS = 15
 _PROFILE_STORAGE_CACHE: dict[str, Any] = {"expires_at": 0.0, "payload": None}
 
 PROJECT_ONBOARDING_TEMPLATES = (
@@ -725,6 +726,30 @@ def _jenny_bridge_relay_packet(requests: list[dict[str, Any]]) -> str:
     return f"{packet[: MAX_JENNY_BRIDGE_RELAY_PACKET_CHARS - 16].rstrip()}\n...[truncated]"
 
 
+def _iso_datetime(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+
+    return parsed.astimezone(timezone.utc)
+
+
+def _recent_watch_status_is_running(status: str, created_at: str, *, now: datetime | None = None) -> bool:
+    if not status.startswith("watch_") or status == "watch_stopped":
+        return False
+
+    created = _iso_datetime(created_at)
+    if created is None:
+        return False
+
+    current = now or datetime.now(timezone.utc)
+    return 0 <= (current - created).total_seconds() <= FOREGROUND_WATCH_RUNNING_SECONDS
+
+
 def _jenny_bridge_poller_status_projection(limit: int = DEFAULT_RECORDS_LIMIT) -> dict[str, Any]:
     pending = _pending_jenny_bridge_requests(limit=limit)
     statuses = _latest_workspace_records(JennyBridgePollerStatusRecord, limit)
@@ -876,7 +901,7 @@ def _github_bridge_mailbox_status_projection(limit: int = DEFAULT_RECORDS_LIMIT,
         "superseded_background_pending_count": superseded_background_pending_count,
         "mode": latest_status.get("mode", "manual"),
         "foreground_watch_supported": True,
-        "foreground_watch_running": latest_status.get("status", "").startswith("watch_") and latest_status.get("status") != "watch_stopped",
+        "foreground_watch_running": _recent_watch_status_is_running(latest_status.get("status", ""), latest_status.get("created_at", "")),
         "last_poll_at": latest_status.get("created_at", ""),
         "last_status": latest_status.get("status", "idle"),
         "last_response_at": latest_response.get("created_at", ""),
