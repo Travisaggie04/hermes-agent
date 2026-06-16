@@ -18,7 +18,8 @@ describe('native project chat header', () => {
   it('shows a slim Jenny status strip for selected project chats', () => {
     expect(source).toContain('function ProjectJennyStatusStrip')
     expect(source).toContain('aria-label="Jenny project status"')
-    expect(source).toContain('Project: <span className="font-medium text-foreground">{projectName}</span>')
+    expect(source).toContain('<span className="shrink-0 font-medium text-foreground">Jenny</span>')
+    expect(source).toContain('in {projectName}')
     expect(source).toContain('{jennyStatus.summary}')
     expect(source).toContain('<ProjectJennyStatusStrip activeTurnRunning={busy} gatewayOpen={gatewayOpen} />')
   })
@@ -27,6 +28,8 @@ describe('native project chat header', () => {
     expect(source).toContain('const selectedProjectTitle = selectedProjectName.trim()')
     expect(source).toContain('placeholderOverride={')
     expect(source).toContain('Message Jenny in ${selectedProjectTitle}; she replies here')
+    expect(source).toContain('disabledPlaceholderOverride={')
+    expect(source).toContain('Jenny is offline; reconnect gateway to message ${selectedProjectTitle}')
   })
 
   it('lets the native chat header switch Jenny projects without opening Mission Control', () => {

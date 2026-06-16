@@ -100,6 +100,7 @@ export function ChatBar({
   busy,
   cwd,
   disabled,
+  disabledPlaceholderOverride,
   focusKey,
   gateway,
   maxRecordingSeconds = 120,
@@ -206,9 +207,10 @@ export function ChatBar({
   // cold start ("Starting Hermes...") from a dropped connection we're trying to
   // restore (e.g. after the Mac slept) so the stuck state reads as recoverable.
   const placeholder = disabled
-    ? gatewayState === 'closed' || gatewayState === 'error'
-      ? t.composer.placeholderReconnecting
-      : t.composer.placeholderStarting
+    ? disabledPlaceholderOverride ||
+      (gatewayState === 'closed' || gatewayState === 'error'
+        ? t.composer.placeholderReconnecting
+        : t.composer.placeholderStarting)
     : placeholderOverride || restingPlaceholder
 
   const focusInput = useCallback(() => {
