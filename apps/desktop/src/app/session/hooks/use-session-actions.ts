@@ -433,7 +433,14 @@ export function useSessionActions({
   const selectSidebarItem = useCallback(
     (item: SidebarNavItem) => {
       if (item.action === 'new-session') {
+        const projectId = $selectedMissionControlProjectId.get().trim()
+
         startFreshSessionDraft()
+
+        if (projectId) {
+          setCurrentCwd('')
+          setCurrentBranch('')
+        }
 
         return
       }
