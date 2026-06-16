@@ -93,6 +93,7 @@ import { setSelectedMissionControlProject } from '@/store/session'
 import { type AppView, ARTIFACTS_ROUTE, MESSAGING_ROUTE, SKILLS_ROUTE } from '../../routes'
 import { SidebarPanelLabel } from '../../shell/sidebar-label'
 import type { SidebarNavItem } from '../../types'
+import { fallbackProjectGroups, nativeChatProjects } from '../native-projects'
 
 import { ProfileRail } from './profile-switcher'
 import type { ProjectMoveTarget } from './session-actions-menu'
@@ -396,16 +397,19 @@ export function ChatSidebar({
     let cancelled = false
 
     setProjectGroupsLoading(true)
-    Promise.all([getMissionControlProjects(), getMissionControlProjectSessions()])
-      .then(([projectsResponse, sessionsResponse]) => {
+    Promise.allSettled([getMissionControlProjects(), getMissionControlProjectSessions()])
+      .then(results => {
         if (cancelled) {
           return
         }
 
-        const byId = new Map(projectGroupsFor(sessionsResponse.groups || []).map(group => [group.id, group]))
+        const [projectsResult, sessionsResult] = results
+        const projectRecords =
+          projectsResult.status === 'fulfilled' ? nativeChatProjects(projectsResult.value.projects.map(item => item.record)) : nativeChatProjects()
+        const sessionGroups = sessionsResult.status === 'fulfilled' ? sessionsResult.value.groups || [] : []
+        const byId = new Map(projectGroupsFor(sessionGroups).map(group => [group.id, group]))
 
-        for (const item of projectsResponse.projects || []) {
-          const project = item.record
+        for (const project of projectRecords) {
           const projectId = project.project_id || project.name
 
           if (!projectId || byId.has(projectId)) {
@@ -422,7 +426,7 @@ export function ChatSidebar({
           })
         }
 
-        const next = [...byId.values()].sort((a, b) => a.label.localeCompare(b.label))
+        const next = byId.size ? [...byId.values()].sort((a, b) => a.label.localeCompare(b.label)) : projectGroupsFor(fallbackProjectGroups())
         setProjectGroups(next)
 
         if (!$selectedMissionControlProjectId.get().trim() && next.length) {

@@ -75,6 +75,7 @@ import type { ChatBarState } from './composer/types'
 import type { DroppedFile } from './hooks/use-composer-actions'
 import { useFileDropZone } from './hooks/use-file-drop-zone'
 import { nativeJennyStatus, type NativeJennyStatusTone } from './native-jenny-status'
+import { nativeChatProjects } from './native-projects'
 import { SessionActionsMenu } from './sidebar/session-actions-menu'
 import { lastVisibleMessageIsUser, threadLoadingState } from './thread-loading'
 
@@ -224,25 +225,6 @@ function ChatHeader({
       />
     </header>
   )
-}
-
-function nativeChatProjects(projects: MissionControlProjectRecord[]): MissionControlProjectRecord[] {
-  const seen = new Set<string>()
-  const out: MissionControlProjectRecord[] = []
-
-  for (const project of projects) {
-    const id = project.project_id?.trim()
-    const name = project.name?.trim()
-
-    if (!id || !name || seen.has(id)) {
-      continue
-    }
-
-    seen.add(id)
-    out.push(project)
-  }
-
-  return out.sort((a, b) => a.name.localeCompare(b.name))
 }
 
 function ProjectHeaderSelect({
