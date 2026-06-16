@@ -10,6 +10,15 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('onNewSessionInProject(group.id, group.label)')
   })
 
+  it('makes new project setup capture evidence and approval stop rules', () => {
+    expect(source).toContain('Evidence Jenny must return, one per line')
+    expect(source).toContain('Approval or stop rules, one per line')
+    expect(source).toContain('Jenny must define evidence, tests, rollback/stop conditions, and approval needs before broad work.')
+    expect(source).toContain('Evidence required: ${item}')
+    expect(source).toContain('Approval/stop rule: ${item}')
+    expect(source).toContain("setProjectIntake({ approval: '', evidence: '', forbidden: '', goal: '', name: '', source: '', success: '' })")
+  })
+
   it('makes Jenny OS the primary native project chat entry', () => {
     expect(source).toContain("label: 'Jenny OS'")
     expect(source).toContain("action: 'jenny-os'")

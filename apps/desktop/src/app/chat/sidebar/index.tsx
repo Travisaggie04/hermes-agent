@@ -341,7 +341,9 @@ export function ChatSidebar({
   const [projectIntakeOpen, setProjectIntakeOpen] = useState(false)
   const [projectIntakeError, setProjectIntakeError] = useState('')
   const [projectIntakeSaving, setProjectIntakeSaving] = useState(false)
-  const [projectIntake, setProjectIntake] = useState({
+  const [projectIntake, setProjectIntake] = useState<ProjectIntakeValue>({
+    approval: '',
+    evidence: '',
     forbidden: '',
     goal: '',
     name: '',
@@ -470,6 +472,17 @@ export function ChatSidebar({
     const source = projectIntake.source.trim()
     const success = listFromTextarea(projectIntake.success)
     const forbidden = listFromTextarea(projectIntake.forbidden)
+    const evidence = listFromTextarea(projectIntake.evidence)
+    const approval = listFromTextarea(projectIntake.approval)
+    const approvalRules = [
+      'Jenny must challenge vague, risky, or wrong-approach requests before implementation.',
+      'Jenny must define evidence, tests, rollback/stop conditions, and approval needs before broad work.',
+      ...approval
+    ]
+    const constraints = [
+      ...evidence.map(item => `Evidence required: ${item}`),
+      ...approval.map(item => `Approval/stop rule: ${item}`)
+    ]
 
     if (!name || !goal) {
       setProjectIntakeError('Project name and goal are required.')
@@ -494,8 +507,8 @@ export function ChatSidebar({
       const createdProjectId = project.project.project_id || projectId
 
       await createMissionControlProjectBrief({
-        approval_rules: ['Jenny must challenge vague, risky, or wrong-approach requests before implementation.'],
-        constraints: forbidden,
+        approval_rules: approvalRules,
+        constraints,
         forbidden_actions: forbidden,
         name: `${name} initial brief`,
         outcome: goal,
@@ -507,7 +520,7 @@ export function ChatSidebar({
 
       setSelectedMissionControlProject(createdProjectId, project.project.name || name)
       setSidebarRecentsOpen(false)
-      setProjectIntake({ forbidden: '', goal: '', name: '', source: '', success: '' })
+      setProjectIntake({ approval: '', evidence: '', forbidden: '', goal: '', name: '', source: '', success: '' })
       setProjectIntakeOpen(false)
       refreshProjectGroups()
       onNewSessionInProject(createdProjectId, project.project.name || name)
@@ -1192,6 +1205,8 @@ function SidebarPinnedEmptyState() {
 }
 
 interface ProjectIntakeValue {
+  approval: string
+  evidence: string
   forbidden: string
   goal: string
   name: string
@@ -1244,6 +1259,18 @@ function ProjectIntakeForm({ error, onCancel, onChange, onSubmit, saving, value 
         onChange={update('success')}
         placeholder="Wins / success criteria, one per line"
         value={value.success}
+      />
+      <textarea
+        className="min-h-12 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-2 py-1.5 text-[0.75rem] text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
+        onChange={update('evidence')}
+        placeholder="Evidence Jenny must return, one per line"
+        value={value.evidence}
+      />
+      <textarea
+        className="min-h-12 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-2 py-1.5 text-[0.75rem] text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
+        onChange={update('approval')}
+        placeholder="Approval or stop rules, one per line"
+        value={value.approval}
       />
       <textarea
         className="min-h-12 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-2 py-1.5 text-[0.75rem] text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
