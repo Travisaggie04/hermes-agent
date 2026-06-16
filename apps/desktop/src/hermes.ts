@@ -556,6 +556,31 @@ export interface MissionControlGitHubBridgeStatusResponse {
   worker_enabled?: boolean
 }
 
+export interface MissionControlAsyncAgentStatusResponse {
+  async_agent_controls_available?: boolean
+  async_agent_controls_enabled?: boolean
+  async_agent_controls_expected?: string[]
+  current_mode?: string
+  daemon_enabled?: boolean
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  execution_enabled?: boolean
+  inert_context_only?: boolean
+  manual_copy_only?: boolean
+  manual_start_only?: boolean
+  model_routing_enabled?: boolean
+  policy_summary?: string
+  recommended_next_lane?: string
+  send_to_jenny_enabled?: boolean
+  session_send_enabled?: boolean
+  stored?: boolean
+  sync_delegate_task_available?: boolean
+  sync_delegate_task_durable?: boolean
+  timer_enabled?: boolean
+  trusted_for_execution?: boolean
+  worker_enabled?: boolean
+}
+
 export interface MissionControlGitHubBridgeRequestCreatePayload {
   from_agent?: string
   message: string
@@ -971,6 +996,12 @@ export function getMissionControlGitHubBridgeStatus(projectId?: string): Promise
 
   return window.hermesDesktop.api<MissionControlGitHubBridgeStatusResponse>({
     path: `${MISSION_CONTROL_API}/workspace/github-bridge/status${query}`
+  })
+}
+
+export function getMissionControlAsyncAgentStatus(): Promise<MissionControlAsyncAgentStatusResponse> {
+  return window.hermesDesktop.api<MissionControlAsyncAgentStatusResponse>({
+    path: `${MISSION_CONTROL_API}/workspace/async-agent-status`
   })
 }
 

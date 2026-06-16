@@ -826,6 +826,34 @@ def test_workspace_github_bridge_status_can_filter_by_project(plugin_api, client
     assert [item["record"]["request_id"] for item in payload["recent_messages"]] == ["hermes-req"]
 
 
+def test_workspace_async_agent_status_is_read_only_and_status_only(plugin_api, client):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    before = len(store.read_all())
+
+    response = client.get("/api/plugins/mission-control-governance/workspace/async-agent-status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    _assert_inert_workspace_payload(payload)
+    assert payload["stored"] is False
+    assert payload["manual_start_only"] is True
+    assert payload["session_send_enabled"] is False
+    assert payload["worker_enabled"] is False
+    assert payload["timer_enabled"] is False
+    assert payload["daemon_enabled"] is False
+    assert payload["model_routing_enabled"] is False
+    assert payload["sync_delegate_task_available"] is True
+    assert payload["sync_delegate_task_durable"] is False
+    assert payload["async_agent_controls_enabled"] is False
+    assert payload["async_agent_controls_expected"] == ["spawn", "check", "steer", "collect", "cancel", "list"]
+    assert payload["current_mode"] in {
+        "sync_delegate_task_only",
+        "native_async_agents_available",
+    }
+    assert "approval-gated" in payload["policy_summary"]
+    assert len(store.read_all()) == before
+
+
 def test_workspace_github_bridge_outbox_create_posts_one_mailbox_message(plugin_api, client, monkeypatch):
     def fake_post_github_message(**kwargs):
         record = GitHubBridgeMessageRecord(
@@ -2358,6 +2386,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/jenny-reply-reviews": {"GET"},
         "/workspace/jenny-reply-reviews/create": {"POST"},
         "/workspace/github-bridge/status": {"GET"},
+        "/workspace/async-agent-status": {"GET"},
         "/workspace/github-bridge/outbox/create": {"POST"},
         "/workspace/github-bridge/answer-once": {"POST"},
         "/workspace/profile-memory-storage": {"GET"},

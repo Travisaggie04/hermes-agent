@@ -890,6 +890,71 @@ def _github_bridge_mailbox_status_projection(limit: int = DEFAULT_RECORDS_LIMIT,
     }
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _safe_read_repo_text(*relative_parts: str) -> str:
+    path = _repo_root().joinpath(*relative_parts)
+    try:
+        return path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return ""
+
+
+def _async_agent_capability_projection() -> dict[str, Any]:
+    delegate_source = _safe_read_repo_text("tools", "delegate_tool.py")
+    toolsets_source = _safe_read_repo_text("toolsets.py")
+    readme_source = _safe_read_repo_text("README.md")
+    combined = "\n".join((delegate_source, toolsets_source, readme_source)).lower()
+    sync_delegate_available = "delegate_task" in combined and "delegation" in combined
+    async_control_tokens = (
+        "async_delegation",
+        "async_subagent",
+        "spawn_async",
+        "async agent",
+        "async_agents",
+    )
+    async_controls_available = any(token in combined for token in async_control_tokens)
+    current_mode = (
+        "native_async_agents_available"
+        if async_controls_available
+        else "sync_delegate_task_only"
+        if sync_delegate_available
+        else "no_delegation_detected"
+    )
+    recommended_next_lane = (
+        "Wire native chat status to Hermes async task lifecycle with approval gates before enabling task starts."
+        if async_controls_available
+        else "Keep Jenny OS status-only until the Hermes async-agent update is installed in this runtime."
+    )
+
+    return {
+        "display_only": True,
+        "manual_copy_only": True,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "execution_enabled": False,
+        "trusted_for_execution": False,
+        "inert_context_only": True,
+        "stored": False,
+        "manual_start_only": True,
+        "session_send_enabled": False,
+        "worker_enabled": False,
+        "timer_enabled": False,
+        "daemon_enabled": False,
+        "model_routing_enabled": False,
+        "current_mode": current_mode,
+        "sync_delegate_task_available": sync_delegate_available,
+        "sync_delegate_task_durable": False,
+        "async_agent_controls_available": async_controls_available,
+        "async_agent_controls_enabled": False,
+        "async_agent_controls_expected": ["spawn", "check", "steer", "collect", "cancel", "list"],
+        "policy_summary": "Native chat may show async task status, but starting or steering tasks remains approval-gated.",
+        "recommended_next_lane": recommended_next_lane,
+    }
+
+
 def _project_slug(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     return slug or "project"
@@ -3652,6 +3717,11 @@ async def workspace_github_bridge_status(
         "dispatch_enabled": False,
         **projection,
     }
+
+
+@router.get("/workspace/async-agent-status")
+async def workspace_async_agent_status() -> dict[str, Any]:
+    return _async_agent_capability_projection()
 
 
 @router.post("/workspace/github-bridge/outbox/create")

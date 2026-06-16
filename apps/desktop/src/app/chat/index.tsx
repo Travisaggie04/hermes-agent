@@ -28,9 +28,11 @@ import {
   createMissionControlProject,
   createMissionControlProjectBrief,
   getGlobalModelOptions,
+  getMissionControlAsyncAgentStatus,
   getMissionControlGitHubBridgeStatus,
   getMissionControlProjects,
   type HermesGateway,
+  type MissionControlAsyncAgentStatusResponse,
   type MissionControlProjectRecord
 } from '@/hermes'
 import type { ChatMessage } from '@/lib/chat-messages'
@@ -142,6 +144,13 @@ function ChatHeader({
     refetchInterval: 3_000,
     staleTime: 10_000
   })
+  const asyncAgentStatusQuery = useQuery({
+    enabled: gatewayOpen && Boolean(selectedProjectId.trim()),
+    queryFn: getMissionControlAsyncAgentStatus,
+    queryKey: ['mission-control-async-agent-status'],
+    refetchInterval: 60_000,
+    staleTime: 60_000
+  })
 
   const activeStoredSession =
     sessions.find(session => session.id === selectedSessionId || session._lineage_root_id === selectedSessionId) || null
@@ -167,6 +176,9 @@ function ChatHeader({
     projectId: selectedProjectId,
     queryError: bridgeStatusQuery.error
   })
+  const jennyStatusDetail = [jennyStatus.detail, nativeAsyncAgentDetail(asyncAgentStatusQuery.data)]
+    .filter(Boolean)
+    .join(' ')
 
   // A brand-new generic session has no session actions yet. Keep the header
   // visible once project records are available so the native chat home can act
@@ -213,7 +225,7 @@ function ChatHeader({
           selectedProjectId={selectedProjectId}
           selectedProjectTitle={selectedProjectTitle}
         />
-        <HeaderPill label={jennyStatus.label} title={jennyStatus.detail} tone={jennyStatus.tone} />
+        <HeaderPill label={jennyStatus.label} title={jennyStatusDetail} tone={jennyStatus.tone} />
       </div>
       <NativeProjectIntakeDialog
         onCreated={(projectId, projectName) => {
@@ -225,6 +237,22 @@ function ChatHeader({
       />
     </header>
   )
+}
+
+function nativeAsyncAgentDetail(status?: MissionControlAsyncAgentStatusResponse | null): string {
+  if (!status) {
+    return ''
+  }
+
+  if (status.async_agent_controls_available) {
+    return 'Async agent controls are available but starts and steering remain approval-gated.'
+  }
+
+  if (status.sync_delegate_task_available) {
+    return 'Current runtime has synchronous delegation; native async agents are not active yet.'
+  }
+
+  return 'Native async agent capability has not been detected in this runtime.'
 }
 
 function ProjectHeaderSelect({
