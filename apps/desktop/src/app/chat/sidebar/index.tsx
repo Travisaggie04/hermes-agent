@@ -17,7 +17,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { useStore } from '@nanostores/react'
 import type * as React from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
@@ -351,6 +351,7 @@ export function ChatSidebar({
     success: ''
   })
   const [profileLoadMorePending, setProfileLoadMorePending] = useState<Record<string, boolean>>({})
+  const recentsAutoCollapsedProjectIdRef = useRef('')
   const trimmedQuery = searchQuery.trim()
 
   // Flash the ⌘N hint full-opacity (no transition) for the press, so hitting
@@ -453,6 +454,21 @@ export function ChatSidebar({
   }, [])
 
   useEffect(() => refreshProjectGroups(), [refreshProjectGroups])
+
+  useEffect(() => {
+    const projectId = selectedMissionControlProjectId.trim()
+
+    if (!projectId) {
+      recentsAutoCollapsedProjectIdRef.current = ''
+
+      return
+    }
+
+    if (recentsAutoCollapsedProjectIdRef.current !== projectId) {
+      setSidebarRecentsOpen(false)
+      recentsAutoCollapsedProjectIdRef.current = projectId
+    }
+  }, [selectedMissionControlProjectId])
 
   useEffect(() => {
     const onProjectLinkCreated = () => {
