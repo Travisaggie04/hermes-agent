@@ -134,6 +134,7 @@ function ChatHeader({
 
   const selectedProjectTitle = selectedProjectName.trim()
   const projects = useMemo(() => nativeChatProjects(projectsQuery.data?.projects.map(item => item.record) ?? []), [projectsQuery.data])
+  const projectPickerAvailable = projectsQuery.isLoading || projects.length > 0 || Boolean(selectedProjectTitle)
   const title = activeStoredSession ? sessionTitle(activeStoredSession) : selectedProjectTitle ? 'New project chat' : 'New session'
 
   // Pins live on the durable lineage-root id, but selectedSessionId is the live
@@ -153,10 +154,10 @@ function ChatHeader({
     queryError: bridgeStatusQuery.error
   })
 
-  // A brand-new generic session has no session actions yet, so hide the empty
-  // header. Project drafts keep the header visible so Jenny OS still feels
-  // project-aware before Travis sends the first message.
-  if (!selectedSessionId && !activeSessionId && !isRoutedSessionView && !selectedProjectTitle) {
+  // A brand-new generic session has no session actions yet. Keep the header
+  // visible once project records are available so the native chat home can act
+  // like a project picker instead of forcing Travis into Mission Control.
+  if (!selectedSessionId && !activeSessionId && !isRoutedSessionView && !projectPickerAvailable) {
     return null
   }
 

@@ -6,7 +6,7 @@ describe('native project chat header', () => {
   it('keeps the header visible for a selected project draft before a session exists', () => {
     expect(source).toContain("const selectedProjectTitle = selectedProjectName.trim()")
     expect(source).toContain("selectedProjectTitle ? 'New project chat' : 'New session'")
-    expect(source).toContain('!isRoutedSessionView && !selectedProjectTitle')
+    expect(source).toContain('!isRoutedSessionView && !projectPickerAvailable')
   })
 
   it('does not attach session actions to a project draft with no backend session yet', () => {
@@ -28,6 +28,12 @@ describe('native project chat header', () => {
     expect(source).toContain('function ProjectHeaderSelect')
     expect(source).toContain('aria-label="Jenny project"')
     expect(source).toContain('setSelectedMissionControlProject(project?.project_id ?? null, project?.name ?? null)')
+  })
+
+  it('keeps the project picker visible on the blank native chat home', () => {
+    expect(source).toContain('const projectPickerAvailable = projectsQuery.isLoading || projects.length > 0 || Boolean(selectedProjectTitle)')
+    expect(source).toContain('!projectPickerAvailable')
+    expect(source).toContain('native chat home can act')
   })
 
   it('keeps the native project picker scoped to existing project records', () => {
