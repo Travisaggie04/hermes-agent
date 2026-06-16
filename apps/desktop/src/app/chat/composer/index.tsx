@@ -103,6 +103,7 @@ export function ChatBar({
   focusKey,
   gateway,
   maxRecordingSeconds = 120,
+  placeholderOverride,
   queueSessionKey,
   sessionId,
   state,
@@ -208,7 +209,7 @@ export function ChatBar({
     ? gatewayState === 'closed' || gatewayState === 'error'
       ? t.composer.placeholderReconnecting
       : t.composer.placeholderStarting
-    : restingPlaceholder
+    : placeholderOverride || restingPlaceholder
 
   const focusInput = useCallback(() => {
     focusComposerInput(editorRef.current)

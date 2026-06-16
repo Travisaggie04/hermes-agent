@@ -22,6 +22,12 @@ describe('native project chat header', () => {
     expect(source).toContain('<ProjectJennyStatusStrip activeTurnRunning={busy} gatewayOpen={gatewayOpen} />')
   })
 
+  it('makes the native composer feel project-scoped when a project is selected', () => {
+    expect(source).toContain('const selectedProjectTitle = selectedProjectName.trim()')
+    expect(source).toContain('placeholderOverride={')
+    expect(source).toContain('Message Jenny about ${selectedProjectTitle}')
+  })
+
   it('lets the native chat header switch Jenny projects without opening Mission Control', () => {
     expect(source).toContain('getMissionControlProjects')
     expect(source).toContain("queryKey: ['mission-control-projects-native-chat']")

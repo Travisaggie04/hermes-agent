@@ -576,6 +576,7 @@ export function ChatView({
   const messages = useStore($messages)
   const selectedProjectName = useStore($selectedMissionControlProjectName)
   const selectedSessionId = useStore($selectedStoredSessionId)
+  const selectedProjectTitle = selectedProjectName.trim()
   const runtimeMessageCacheRef = useRef(new WeakMap<ChatMessage, ThreadMessage>())
   const isRoutedSessionView = Boolean(routeSessionId(location.pathname))
 
@@ -769,6 +770,9 @@ export function ChatView({
                 onRemoveAttachment={onRemoveAttachment}
                 onSubmit={onSubmit}
                 onTranscribeAudio={onTranscribeAudio}
+                placeholderOverride={
+                  selectedProjectTitle ? `Message Jenny about ${selectedProjectTitle}` : undefined
+                }
                 queueSessionKey={selectedSessionId || activeSessionId}
                 sessionId={activeSessionId}
                 state={chatBarState}
