@@ -188,7 +188,7 @@ describe('nativeJennyStatus', () => {
     })
   })
 
-  it('prioritizes visible pending messages', () => {
+  it('does not let older queued project messages block normal native chat', () => {
     const status = nativeJennyStatus({
       gatewayOpen: true,
       projectId: 'project-hermes',
@@ -196,10 +196,10 @@ describe('nativeJennyStatus', () => {
     })
 
     expect(status).toMatchObject({
-      detail: 'Jenny has 2 messages waiting. The reply will appear in this chat.',
-      label: 'Waiting for Jenny',
-      summary: 'Reply will appear here',
-      tone: 'pending'
+      detail: 'Jenny has 2 older queued project messages, but this chat is ready. Send a message here and Jenny will reply in this project chat.',
+      label: 'Jenny ready',
+      summary: 'Send a message',
+      tone: 'ok'
     })
     expectCleanVisibleStatus(status)
   })
