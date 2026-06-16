@@ -19,6 +19,7 @@ describe('native project chat header', () => {
     expect(source).toContain('function ProjectJennyStatusStrip')
     expect(source).toContain('aria-label="Jenny project status"')
     expect(source).toContain('Project: <span className="font-medium text-foreground">{projectName}</span>')
+    expect(source).toContain('{jennyStatus.summary}')
     expect(source).toContain('<ProjectJennyStatusStrip activeTurnRunning={busy} gatewayOpen={gatewayOpen} />')
   })
 

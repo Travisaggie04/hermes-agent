@@ -5,6 +5,7 @@ export type NativeJennyStatusTone = 'idle' | 'ok' | 'pending' | 'working' | 'war
 export interface NativeJennyStatus {
   detail: string
   label: string
+  summary: string
   tone: NativeJennyStatusTone
 }
 
@@ -50,6 +51,7 @@ export function nativeJennyStatus({
     return {
       detail: 'Gateway is offline. Jenny cannot receive chat work yet.',
       label: 'Gateway offline',
+      summary: 'Reconnect gateway',
       tone: 'warn'
     }
   }
@@ -58,6 +60,7 @@ export function nativeJennyStatus({
     return {
       detail: 'Pick a project so Jenny gets the right hidden context and guardrails.',
       label: 'Pick a project',
+      summary: 'Choose a project',
       tone: 'idle'
     }
   }
@@ -66,6 +69,7 @@ export function nativeJennyStatus({
     return {
       detail: 'Could not read Jenny bridge status. Chat remains guarded.',
       label: 'Status unavailable',
+      summary: 'Status unavailable',
       tone: 'warn'
     }
   }
@@ -74,6 +78,7 @@ export function nativeJennyStatus({
     return {
       detail: 'Jenny is working on the current chat turn.',
       label: 'Jenny working',
+      summary: 'Working',
       tone: 'working'
     }
   }
@@ -82,6 +87,7 @@ export function nativeJennyStatus({
     return {
       detail: 'Checking the guarded Jenny bridge.',
       label: 'Checking Jenny',
+      summary: 'Checking',
       tone: 'idle'
     }
   }
@@ -99,6 +105,7 @@ export function nativeJennyStatus({
     return {
       detail: lastError,
       label: 'Jenny needs attention',
+      summary: 'Check details and retry',
       tone: 'warn'
     }
   }
@@ -107,6 +114,7 @@ export function nativeJennyStatus({
     return {
       detail: 'Jenny is working on the latest project message.',
       label: 'Jenny working',
+      summary: 'Working',
       tone: 'working'
     }
   }
@@ -115,6 +123,7 @@ export function nativeJennyStatus({
     return {
       detail: `${pending} message${pending === 1 ? '' : 's'} waiting for Jenny.`,
       label: 'Waiting for Jenny',
+      summary: `${pending} waiting`,
       tone: 'pending'
     }
   }
@@ -123,6 +132,7 @@ export function nativeJennyStatus({
     return {
       detail: 'Jenny replied. Review the latest answer before relying on it.',
       label: 'Jenny replied',
+      summary: 'Reply ready',
       tone: 'ok'
     }
   }
@@ -130,6 +140,7 @@ export function nativeJennyStatus({
   return {
     detail: benignNoPending ? 'No project message is waiting for Jenny.' : 'Ready for one bounded project message.',
     label: 'Jenny ready',
+    summary: 'Ready',
     tone: 'ok'
   }
 }

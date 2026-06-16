@@ -530,7 +530,7 @@ function ProjectJennyStatusStrip({
         {jennyStatus.label}
       </span>
       <span className="hidden min-w-0 truncate text-(--ui-text-tertiary) min-[42rem]:inline" title={jennyStatus.detail}>
-        {jennyStatus.detail}
+        {jennyStatus.summary}
       </span>
     </div>
   )
