@@ -17,7 +17,22 @@ describe('nativeJennyStatus', () => {
     ).toMatchObject({ label: 'Gateway offline', tone: 'warn' })
   })
 
-  it('surfaces bridge errors as Jenny attention', () => {
+  it('keeps native chat usable when only background bridge status is unavailable', () => {
+    expect(
+      nativeJennyStatus({
+        gatewayOpen: true,
+        projectId: 'project-hermes',
+        queryError: new Error('connect ECONNREFUSED 100.115.125.111:9119')
+      })
+    ).toMatchObject({
+      detail: 'Send a message here; Jenny will reply in this project chat. Background Mission Control status is unavailable.',
+      label: 'Jenny ready',
+      summary: 'Background status unavailable',
+      tone: 'ok'
+    })
+  })
+
+  it('surfaces bridge record errors as Jenny attention', () => {
     expect(
       nativeJennyStatus({
         gatewayOpen: true,
