@@ -14,6 +14,7 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain("label: 'Jenny OS'")
     expect(source).toContain("action: 'jenny-os'")
     expect(source).toContain('Open Jenny chat in ${HERMES_PROJECT_NAME}')
+    expect(source).toContain("item.action === 'jenny-os' && currentView === 'chat' && Boolean(selectedMissionControlProjectId.trim())")
   })
 
   it('labels the main new session action as project chat when a project is selected', () => {
