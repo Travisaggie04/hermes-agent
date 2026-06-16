@@ -851,7 +851,8 @@ export function ChatSidebar({
                 const active =
                   (item.id === 'skills' && currentView === 'skills') ||
                   (item.id === 'messaging' && currentView === 'messaging') ||
-                  (item.id === 'artifacts' && currentView === 'artifacts')
+                  (item.id === 'artifacts' && currentView === 'artifacts') ||
+                  (item.action === 'jenny-os' && currentView === 'chat' && Boolean(selectedMissionControlProjectId.trim()))
 
                 const isNewSession = item.id === 'new-session'
                 const isJennyOs = item.action === 'jenny-os'

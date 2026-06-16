@@ -35,6 +35,7 @@ import {
 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { $commandPaletteOpen, closeCommandPalette, setCommandPaletteOpen } from '@/store/command-palette'
+import { setSelectedMissionControlProject } from '@/store/session'
 import { type ThemeMode, useTheme } from '@/themes/context'
 
 import {
@@ -52,6 +53,9 @@ import {
 } from '../routes'
 import { FIELD_LABELS, SECTIONS } from '../settings/constants'
 import { prettyName } from '../settings/helpers'
+
+const HERMES_PROJECT_ID = 'project-hermes-mission-control'
+const HERMES_PROJECT_NAME = 'Hermes / Mission Control'
 
 interface PaletteItem {
   active?: boolean
@@ -181,6 +185,10 @@ export function CommandPalette() {
   }, [open])
 
   const go = useCallback((path: string) => () => navigate(path), [navigate])
+  const openJennyOsChat = useCallback(() => {
+    setSelectedMissionControlProject(HERMES_PROJECT_ID, HERMES_PROJECT_NAME)
+    navigate(NEW_CHAT_ROUTE)
+  }, [navigate])
 
   const baseGroups = useMemo<PaletteGroup[]>(() => {
     const settingsTab = (tab: string) => `${SETTINGS_ROUTE}?tab=${tab}`
@@ -201,10 +209,17 @@ export function CommandPalette() {
           { icon: MessageCircle, id: 'nav-messaging', label: 'Messaging', run: go(MESSAGING_ROUTE) },
           { icon: Package, id: 'nav-artifacts', label: 'Artifacts', run: go(ARTIFACTS_ROUTE) },
           {
+            icon: MessageCircle,
+            id: 'nav-jenny-os-chat',
+            keywords: ['mission control', 'projects', 'workspace', 'chat', 'jenny'],
+            label: 'Jenny OS project chat',
+            run: openJennyOsChat
+          },
+          {
             icon: Monitor,
             id: 'nav-mission-control',
-            keywords: ['projects', 'workspace', 'reports', 'lanes', 'debug'],
-            label: 'Mission Control console',
+            keywords: ['audit', 'reports', 'lanes', 'debug', 'guardrails'],
+            label: 'Mission Control audit console',
             run: go(MISSION_CONTROL_ROUTE)
           },
           { icon: Clock, id: 'nav-cron', keywords: ['schedule', 'jobs'], label: 'Cron', run: go(CRON_ROUTE) },
@@ -344,7 +359,7 @@ export function CommandPalette() {
     }
 
     return result
-  }, [archivedSessions, go, mcpServers, search, sessions])
+  }, [archivedSessions, go, mcpServers, openJennyOsChat, search, sessions])
 
   const groups = useMemo(() => [...baseGroups, ...searchGroups], [baseGroups, searchGroups])
 
