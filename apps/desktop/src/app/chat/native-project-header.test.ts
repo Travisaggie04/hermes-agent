@@ -49,6 +49,13 @@ describe('native project chat header', () => {
     expect(source).toContain('return out.sort((a, b) => a.name.localeCompare(b.name))')
   })
 
+  it('uses the blank native chat home as a project picker before a session exists', () => {
+    expect(source).toContain("queryKey: ['mission-control-projects-native-chat-home']")
+    expect(source).toContain('const projectHomeOptions = useMemo')
+    expect(source).toContain('projectOptions: projectHomeOptions.map(project => ({')
+    expect(source).toContain('onSelectProject: (projectId, projectName) => setSelectedMissionControlProject(projectId, projectName)')
+  })
+
   it('lets the native chat header create a structured Jenny project brief', () => {
     expect(source).toContain('function NativeProjectIntakeDialog')
     expect(source).toContain('Create Jenny project')

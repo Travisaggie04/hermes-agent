@@ -579,6 +579,16 @@ export function ChatView({
   const selectedProjectTitle = selectedProjectName.trim()
   const runtimeMessageCacheRef = useRef(new WeakMap<ChatMessage, ThreadMessage>())
   const isRoutedSessionView = Boolean(routeSessionId(location.pathname))
+  const projectHomeQuery = useQuery({
+    enabled: gatewayOpen,
+    queryFn: getMissionControlProjects,
+    queryKey: ['mission-control-projects-native-chat-home'],
+    staleTime: 30_000
+  })
+  const projectHomeOptions = useMemo(
+    () => nativeChatProjects(projectHomeQuery.data?.projects.map(item => item.record) ?? []),
+    [projectHomeQuery.data]
+  )
 
   const showIntro =
     freshDraftReady && !isRoutedSessionView && !selectedSessionId && !activeSessionId && messages.length === 0
@@ -740,7 +750,17 @@ export function ChatView({
             gateway={gateway}
             intro={
               showIntro
-                ? { personality: introPersonality, projectName: selectedProjectName.trim(), seed: introSeed }
+                ? {
+                    onSelectProject: (projectId, projectName) => setSelectedMissionControlProject(projectId, projectName),
+                    personality: introPersonality,
+                    projectName: selectedProjectName.trim(),
+                    projectOptions: projectHomeOptions.map(project => ({
+                      id: project.project_id,
+                      name: project.name
+                    })),
+                    projectsLoading: projectHomeQuery.isLoading,
+                    seed: introSeed
+                  }
                 : undefined
             }
             loading={threadLoading}

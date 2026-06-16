@@ -14,6 +14,9 @@ type IntroCopyRecord = IntroCopy & {
 export type IntroProps = {
   personality?: string
   projectName?: string
+  projectOptions?: { id: string; name: string }[]
+  projectsLoading?: boolean
+  onSelectProject?: (projectId: string, projectName: string) => void
   seed?: number
 }
 
@@ -155,26 +158,31 @@ function resolveCopy(personality?: string, seed?: number): IntroCopy {
   return pickCopy(copies, seed)
 }
 
-export function Intro({ personality, projectName, seed }: IntroProps) {
+export function Intro({ personality, projectName, projectOptions = [], projectsLoading = false, onSelectProject, seed }: IntroProps) {
   const [mountSeed] = useState(() => Math.floor(Math.random() * 100000))
   const copy = resolveCopy(personality, mountSeed + (seed ?? 0))
   const projectLabel = projectName?.trim() || ''
+  const showProjectHome = !projectLabel && (projectsLoading || projectOptions.length > 0)
 
   return (
     <div
-      className="pointer-events-none flex w-full min-w-0 flex-col items-center justify-center px-3 py-6 text-center text-muted-foreground sm:px-6 lg:px-8"
+      className="flex w-full min-w-0 flex-col items-center justify-center px-3 py-6 text-center text-muted-foreground sm:px-6 lg:px-8"
       data-slot="aui_intro"
     >
-      <div className="w-full min-w-0">
+      <div className={showProjectHome ? 'pointer-events-auto w-full min-w-0' : 'pointer-events-none w-full min-w-0'}>
         <p
-          aria-label={WORDMARK}
-          className="fit-text mx-auto mb-3 w-[88%] font-['Collapse'] font-bold uppercase leading-[0.9] tracking-[0.08em] text-midground mix-blend-plus-lighter dark:text-foreground/90"
+          aria-label={showProjectHome ? 'Jenny projects' : WORDMARK}
+          className={
+            showProjectHome
+              ? "mx-auto mb-5 text-xs font-semibold uppercase tracking-[0.26em] text-(--ui-text-tertiary)"
+              : "fit-text mx-auto mb-3 w-[88%] font-['Collapse'] font-bold uppercase leading-[0.9] tracking-[0.08em] text-midground mix-blend-plus-lighter dark:text-foreground/90"
+          }
           style={{ '--fit-text-line-height': '0.9', '--fit-text-min': '2.75rem' } as CSSProperties}
         >
           <span>
-            <span>{WORDMARK}</span>
+            <span>{showProjectHome ? 'Jenny projects' : WORDMARK}</span>
           </span>
-          <span aria-hidden="true">{WORDMARK}</span>
+          {!showProjectHome && <span aria-hidden="true">{WORDMARK}</span>}
         </p>
 
         {projectLabel ? (
@@ -184,6 +192,34 @@ export function Intro({ personality, projectName, seed }: IntroProps) {
             <p className="m-0 text-sm leading-normal tracking-tight">
               Talk to Jenny here. Project context and safety checks stay in the background.
             </p>
+          </div>
+        ) : showProjectHome ? (
+          <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-3">
+            <div className="grid gap-1 text-center">
+              <h1 className="m-0 text-2xl font-semibold text-foreground">Pick a project</h1>
+              <p className="m-0 max-w-xl text-sm leading-normal tracking-tight">
+                Start from a project room, then chat normally. Jenny gets the project brief and guardrails in the background.
+              </p>
+            </div>
+            <div className="grid w-full max-w-xl gap-2 sm:grid-cols-2">
+              {projectsLoading && !projectOptions.length ? (
+                <div className="col-span-full rounded-lg border border-(--ui-stroke-tertiary) px-3 py-2 text-sm text-(--ui-text-tertiary)">
+                  Loading projects...
+                </div>
+              ) : (
+                projectOptions.map(project => (
+                  <button
+                    className="min-w-0 rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) px-3 py-2 text-left text-sm text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent)/60 hover:bg-(--ui-control-hover-background) hover:text-foreground focus-visible:border-(--ui-accent)/70 focus-visible:outline-none"
+                    key={project.id}
+                    onClick={() => onSelectProject?.(project.id, project.name)}
+                    type="button"
+                  >
+                    <span className="block truncate font-medium">{project.name}</span>
+                    <span className="mt-0.5 block truncate text-xs text-(--ui-text-tertiary)">Open project chat</span>
+                  </button>
+                ))
+              )}
+            </div>
           </div>
         ) : (
           <p className="m-0 text-center leading-normal tracking-tight">{copy.body}</p>
