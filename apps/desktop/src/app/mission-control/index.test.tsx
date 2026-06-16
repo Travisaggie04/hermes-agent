@@ -1770,7 +1770,14 @@ describe('MissionControlView', () => {
     expect(text).toContain('createMissionControlReport')
     expect(text).toContain('createMissionControlSessionProjectLink')
     expect(text).toContain('isNoPendingBridgeError')
+    expect(text).toContain('hasGitHubBridgeSignal')
     expect(text).toContain('normalizedBridgeError')
+    expect(text).toContain('const githubError = String(githubBridgeStatus.last_error || \'\')')
+    expect(text).toContain('const legacyError = String(bridgeStatus.last_error || \'\')')
+    expect(text).toContain('hasGitHubBridgeSignal(githubBridgeStatus) ? \'\' : legacyError')
+    expect(text.indexOf('const githubError = String(githubBridgeStatus.last_error || \'\')')).toBeLessThan(
+      text.indexOf('const legacyError = String(bridgeStatus.last_error || \'\')')
+    )
     expect(text).toContain('Jenny is caught up. Send a new message to start the next reply.')
 
     for (const forbidden of [
