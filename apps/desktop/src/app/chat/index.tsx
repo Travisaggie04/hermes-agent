@@ -283,6 +283,8 @@ function ProjectHeaderSelect({
 }
 
 interface NativeProjectIntakeValue {
+  approval: string
+  evidence: string
   forbidden: string
   goal: string
   name: string
@@ -308,6 +310,8 @@ function NativeProjectIntakeDialog({
   open: boolean
 }) {
   const [value, setValue] = useState<NativeProjectIntakeValue>({
+    approval: '',
+    evidence: '',
     forbidden: '',
     goal: '',
     name: '',
@@ -325,6 +329,17 @@ function NativeProjectIntakeDialog({
     const source = value.source.trim()
     const success = listFromTextarea(value.success)
     const forbidden = listFromTextarea(value.forbidden)
+    const evidence = listFromTextarea(value.evidence)
+    const approval = listFromTextarea(value.approval)
+    const approvalRules = [
+      'Jenny must challenge vague, risky, or wrong-approach requests before implementation.',
+      'Jenny must define evidence, tests, rollback/stop conditions, and approval needs before broad work.',
+      ...approval
+    ]
+    const constraints = [
+      ...evidence.map(item => `Evidence required: ${item}`),
+      ...approval.map(item => `Approval/stop rule: ${item}`)
+    ]
 
     if (!name || !goal) {
       setError('Project name and goal are required.')
@@ -350,8 +365,8 @@ function NativeProjectIntakeDialog({
       const createdProjectName = project.project.name || name
 
       await createMissionControlProjectBrief({
-        approval_rules: ['Jenny must challenge vague, risky, or wrong-approach requests before implementation.'],
-        constraints: forbidden,
+        approval_rules: approvalRules,
+        constraints,
         forbidden_actions: forbidden,
         name: `${createdProjectName} initial brief`,
         outcome: goal,
@@ -363,7 +378,7 @@ function NativeProjectIntakeDialog({
 
       onCreated(createdProjectId, createdProjectName)
       notify({ durationMs: 2_000, kind: 'success', message: `Created ${createdProjectName}` })
-      setValue({ forbidden: '', goal: '', name: '', source: '', success: '' })
+      setValue({ approval: '', evidence: '', forbidden: '', goal: '', name: '', source: '', success: '' })
       onOpenChange(false)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -410,6 +425,20 @@ function NativeProjectIntakeDialog({
             onChange={update('success')}
             placeholder="Wins / success criteria, one per line"
             value={value.success}
+          />
+          <textarea
+            className="min-h-16 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
+            disabled={saving}
+            onChange={update('evidence')}
+            placeholder="Evidence Jenny must return, one per line"
+            value={value.evidence}
+          />
+          <textarea
+            className="min-h-16 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
+            disabled={saving}
+            onChange={update('approval')}
+            placeholder="Approval or stop rules, one per line"
+            value={value.approval}
           />
           <textarea
             className="min-h-16 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
