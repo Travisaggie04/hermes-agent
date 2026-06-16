@@ -9,7 +9,11 @@ import { type Translations, useI18n } from '@/i18n'
 import { sessionTitle } from '@/lib/chat-runtime'
 import { triggerHaptic } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
-import { $attentionSessionIds } from '@/store/session'
+import {
+  $attentionSessionIds,
+  $selectedMissionControlProjectId,
+  $selectedMissionControlProjectName
+} from '@/store/session'
 
 import { type ProjectMoveTarget, SessionActionsMenu, SessionContextMenu } from './session-actions-menu'
 
@@ -27,6 +31,7 @@ interface SidebarSessionRowProps extends React.ComponentProps<'div'> {
   reorderable?: boolean
   dragging?: boolean
   dragHandleProps?: React.HTMLAttributes<HTMLElement>
+  hideCurrentProjectMove?: boolean
 }
 
 const AGE_TICKS: ReadonlyArray<[number, 'ageDay' | 'ageHour' | 'ageMin']> = [
@@ -61,6 +66,7 @@ export function SidebarSessionRow({
   reorderable = false,
   dragging = false,
   dragHandleProps,
+  hideCurrentProjectMove = false,
   className,
   style,
   ref,
@@ -71,6 +77,15 @@ export function SidebarSessionRow({
   const title = sessionTitle(session)
   const age = formatAge(session.last_active || session.started_at, r)
   const handleLabel = `Reorder ${title}`
+  const selectedProjectId = useStore($selectedMissionControlProjectId).trim()
+  const selectedProjectName = useStore($selectedMissionControlProjectName).trim()
+  const currentProjectMoveTarget =
+    !hideCurrentProjectMove && selectedProjectId
+      ? (projectMoveTargets?.find(project => project.project_id === selectedProjectId) ?? {
+          name: selectedProjectName || selectedProjectId,
+          project_id: selectedProjectId
+        })
+      : undefined
   // Subscribe per-row (the leaf) instead of drilling a set through the list —
   // the atom is tiny and rarely non-empty. True when a clarify prompt in this
   // session is waiting on the user.
@@ -90,7 +105,7 @@ export function SidebarSessionRow({
     >
       <div
         className={cn(
-          'group relative grid min-h-[1.625rem] cursor-pointer grid-cols-[minmax(0,1fr)_1.375rem] items-center rounded-md transition-colors duration-100 ease-out hover:bg-(--ui-row-hover-background) hover:transition-none',
+          'group relative grid min-h-[1.625rem] cursor-pointer grid-cols-[minmax(0,1fr)_2.75rem] items-center rounded-md transition-colors duration-100 ease-out hover:bg-(--ui-row-hover-background) hover:transition-none',
           isSelected && 'bg-(--ui-row-active-background)',
           isWorking && 'text-foreground',
           dragging && 'z-10 cursor-grabbing opacity-60 shadow-sm',
@@ -119,7 +134,7 @@ export function SidebarSessionRow({
       >
         {isWorking && !needsInput && <span aria-hidden="true" className="arc-border" />}
         <button
-          className="z-0 flex min-w-0 items-center gap-1.5 bg-transparent py-0.5 pl-2 pr-1 text-left group-hover:pr-12"
+          className="z-0 flex min-w-0 items-center gap-1.5 bg-transparent py-0.5 pl-2 pr-1 text-left group-hover:pr-16"
           onClick={event => {
             if (event.shiftKey) {
               event.preventDefault()
@@ -189,11 +204,31 @@ export function SidebarSessionRow({
             {title}
           </span>
         </button>
-        <div className="relative z-2 grid w-[1.375rem] place-items-center">
+        <div className="relative z-2 grid w-[2.75rem] grid-cols-2 place-items-center">
           {!isWorking && (
-            <span className="pointer-events-none absolute right-6 top-1/2 min-w-6 -translate-y-1/2 text-right text-[0.625rem] leading-none text-(--ui-text-tertiary) opacity-0 transition-opacity group-hover:opacity-100">
+            <span className="pointer-events-none absolute right-12 top-1/2 min-w-6 -translate-y-1/2 text-right text-[0.625rem] leading-none text-(--ui-text-tertiary) opacity-0 transition-opacity group-hover:opacity-100">
               {age}
             </span>
+          )}
+          {currentProjectMoveTarget && onMoveToProject ? (
+            <Button
+              aria-label={`Move ${title} to ${currentProjectMoveTarget.name}`}
+              className="size-5 rounded-[4px] bg-transparent text-transparent transition-colors duration-100 hover:bg-(--ui-control-active-background) hover:text-foreground focus-visible:bg-(--ui-control-active-background) focus-visible:text-foreground focus-visible:ring-0 group-hover:text-(--ui-text-tertiary) [&_svg]:size-3.5!"
+              onClick={event => {
+                event.preventDefault()
+                event.stopPropagation()
+                triggerHaptic('selection')
+                onMoveToProject(currentProjectMoveTarget.project_id, currentProjectMoveTarget.name)
+              }}
+              size="icon"
+              title={`Move to ${currentProjectMoveTarget.name}`}
+              type="button"
+              variant="ghost"
+            >
+              <Codicon name="folder-active" size="0.875rem" />
+            </Button>
+          ) : (
+            <span aria-hidden="true" className="size-5" />
           )}
           <SessionActionsMenu
             onArchive={onArchive}
