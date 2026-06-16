@@ -11,7 +11,7 @@ describe('Intro', () => {
 
     expect(screen.getByText('Project chat')).toBeTruthy()
     expect(screen.getByText('Hermes / Mission Control')).toBeTruthy()
-    expect(screen.getByText('Talk to Jenny here. Project context and safety checks stay in the background.')).toBeTruthy()
+    expect(screen.getByText('Send normally. Jenny replies here, with project context and safety checks in the background.')).toBeTruthy()
   })
 
   it('keeps the generic intro when no project is selected', () => {
@@ -37,7 +37,7 @@ describe('Intro', () => {
 
     expect(screen.getByLabelText('Jenny projects').textContent).toContain('Jenny projects')
     expect(screen.getByText('Pick a project')).toBeTruthy()
-    expect(screen.getByText('Start from a project room, then chat normally. Jenny gets the project brief and guardrails in the background.')).toBeTruthy()
+    expect(screen.getByText('Pick a project, then chat normally. Jenny gets the project brief and guardrails without extra copy/paste.')).toBeTruthy()
 
     fireEvent.click(screen.getByText('Hermes / Mission Control'))
 

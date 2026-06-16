@@ -791,7 +791,7 @@ export function ChatView({
                 onSubmit={onSubmit}
                 onTranscribeAudio={onTranscribeAudio}
                 placeholderOverride={
-                  selectedProjectTitle ? `Message Jenny about ${selectedProjectTitle}` : undefined
+                  selectedProjectTitle ? `Message Jenny in ${selectedProjectTitle}; she replies here` : undefined
                 }
                 queueSessionKey={selectedSessionId || activeSessionId}
                 sessionId={activeSessionId}
