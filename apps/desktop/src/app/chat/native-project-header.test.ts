@@ -44,9 +44,8 @@ describe('native project chat header', () => {
   })
 
   it('keeps the native project picker scoped to existing project records', () => {
-    expect(source).toContain('function nativeChatProjects')
-    expect(source).toContain('const seen = new Set<string>()')
-    expect(source).toContain('return out.sort((a, b) => a.name.localeCompare(b.name))')
+    expect(source).toContain("import { nativeChatProjects } from './native-projects'")
+    expect(source).toContain('nativeChatProjects(projectsQuery.data?.projects.map(item => item.record) ?? [])')
   })
 
   it('uses the blank native chat home as a project picker before a session exists', () => {

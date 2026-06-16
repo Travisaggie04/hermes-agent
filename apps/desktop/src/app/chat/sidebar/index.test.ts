@@ -67,4 +67,10 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('labelMeta={projectMode ? undefined : recentsMeta}')
     expect(source).toContain('rootClassName={recentsRootClassName}')
   })
+
+  it('keeps project groups visible if one Mission Control project endpoint is unavailable', () => {
+    expect(source).toContain('Promise.allSettled([getMissionControlProjects(), getMissionControlProjectSessions()])')
+    expect(source).toContain("projectsResult.status === 'fulfilled' ? nativeChatProjects")
+    expect(source).toContain("sessionsResult.status === 'fulfilled' ? sessionsResult.value.groups || [] : []")
+  })
 })
