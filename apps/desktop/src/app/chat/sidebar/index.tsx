@@ -539,6 +539,18 @@ export function ChatSidebar({
     })
   }, [projectGroups, selectedMissionControlProjectId])
 
+  const projectMode = Boolean(selectedMissionControlProjectId.trim())
+  const recentsLabel = projectMode ? 'Other chats' : s.sessions
+  const recentsRootClassName = projectMode ? 'shrink-0 p-0 pb-1 opacity-90' : 'min-h-0 flex-1 p-0'
+  const recentsContentClassName = cn(
+    projectMode
+      ? 'flex max-h-52 shrink-0 flex-col overflow-y-auto overscroll-contain rounded-lg pb-1.75'
+      : 'flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain pb-1.75',
+    // Separate profile sections clearly in the ALL view; rows inside
+    // each group keep their own tight gap-px rhythm.
+    showAllProfiles ? 'gap-3' : 'gap-px'
+  )
+
   const moveSessionToProject = useCallback(
     async (session: SessionInfo, projectId: string, projectName: string) => {
       try {
@@ -1029,12 +1041,7 @@ export function ChatSidebar({
         {sidebarOpen && showSessionSections && !trimmedQuery && (
           <SidebarSessionsSection
             activeSessionId={activeSidebarSessionId}
-            contentClassName={cn(
-              'flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain pb-1.75',
-              // Separate profile sections clearly in the ALL view; rows inside
-              // each group keep their own tight gap-px rhythm.
-              showAllProfiles ? 'gap-3' : 'gap-px'
-            )}
+            contentClassName={recentsContentClassName}
             dndSensors={dndSensors}
             emptyState={showSessionSkeletons ? <SidebarSessionSkeletons /> : <SidebarAllPinnedState />}
             footer={
@@ -1081,8 +1088,8 @@ export function ChatSidebar({
                 ) : null}
               </div>
             }
-            label={s.sessions}
-            labelMeta={recentsMeta}
+            label={recentsLabel}
+            labelMeta={projectMode ? undefined : recentsMeta}
             onArchiveSession={onArchiveSession}
             onDeleteSession={onDeleteSession}
             onMoveSessionToProject={moveSessionToProject}
@@ -1094,12 +1101,14 @@ export function ChatSidebar({
             open={agentsOpen}
             pinned={false}
             projectMoveTargets={projectMoveTargets}
-            rootClassName="min-h-0 flex-1 p-0"
+            rootClassName={recentsRootClassName}
             sessions={agentSessions}
             sortable={!showAllProfiles && agentSessions.length > 1}
             workingSessionIdSet={workingSessionIdSet}
           />
         )}
+
+        {sidebarOpen && showSessionSections && !trimmedQuery && projectMode && <div className="min-h-0 flex-1" />}
 
         {sidebarOpen && !showSessionSections && <div className="min-h-0 flex-1" />}
 
