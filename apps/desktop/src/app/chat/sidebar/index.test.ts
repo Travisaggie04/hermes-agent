@@ -29,6 +29,21 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('onNewSessionInProject={startProjectChat}')
   })
 
+  it('pins the selected project to the top of the native project list', () => {
+    expect(source).toContain('const visibleProjectGroups = useMemo')
+    expect(source).toContain('const activeProjectId = selectedMissionControlProjectId.trim()')
+    expect(source).toContain('if (a.id === activeProjectId) {')
+    expect(source).toContain('return -1')
+    expect(source).toContain('groups={visibleProjectGroups}')
+    expect(source).toContain('sessions={visibleProjectGroups.flatMap(group => group.sessions)}')
+  })
+
+  it('marks the selected project as current instead of exposing Mission Control details', () => {
+    expect(source).toContain("active && 'rounded-md border border-(--ui-accent)/35 bg-(--ui-control-active-background)'")
+    expect(source).toContain('active && isProjectGroup')
+    expect(source).toContain('Current')
+  })
+
   it('refreshes project groups when a native chat is linked to a project', () => {
     expect(source).toContain('MISSION_CONTROL_PROJECT_LINK_CREATED')
     expect(source).toContain('window.addEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED')

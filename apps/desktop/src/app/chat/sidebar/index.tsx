@@ -519,6 +519,26 @@ export function ChatSidebar({
     [projectGroups]
   )
 
+  const visibleProjectGroups = useMemo(() => {
+    const activeProjectId = selectedMissionControlProjectId.trim()
+
+    if (!activeProjectId) {
+      return projectGroups
+    }
+
+    return [...projectGroups].sort((a, b) => {
+      if (a.id === activeProjectId) {
+        return -1
+      }
+
+      if (b.id === activeProjectId) {
+        return 1
+      }
+
+      return a.label.localeCompare(b.label)
+    })
+  }, [projectGroups, selectedMissionControlProjectId])
+
   const moveSessionToProject = useCallback(
     async (session: SessionInfo, projectId: string, projectName: string) => {
       try {
@@ -944,7 +964,7 @@ export function ChatSidebar({
               ) : null
             }
             forceEmptyState={projectGroupsLoading || projectGroups.length === 0}
-            groups={projectGroups}
+            groups={visibleProjectGroups}
             headerAction={
               <Tip label="Create a guarded project">
                 <Button
@@ -964,7 +984,7 @@ export function ChatSidebar({
               </Tip>
             }
             label="Projects"
-            labelMeta={String(projectGroups.length)}
+            labelMeta={String(visibleProjectGroups.length)}
             onArchiveSession={onArchiveSession}
             onDeleteSession={onDeleteSession}
             onMoveSessionToProject={moveSessionToProject}
@@ -977,7 +997,7 @@ export function ChatSidebar({
             pinned={false}
             projectMoveTargets={projectMoveTargets}
             rootClassName="shrink-0 p-0 pb-1"
-            sessions={projectGroups.flatMap(group => group.sessions)}
+            sessions={visibleProjectGroups.flatMap(group => group.sessions)}
             workingSessionIdSet={workingSessionIdSet}
           />
         )}
@@ -1487,7 +1507,17 @@ function SidebarWorkspaceGroup({
   }
 
   return (
-    <div className={cn('grid gap-px', active && 'rounded-md bg-(--ui-control-active-background)', dragging && 'z-10 opacity-60', className)} ref={ref} style={style} {...rest}>
+    <div
+      className={cn(
+        'grid gap-px',
+        active && 'rounded-md border border-(--ui-accent)/35 bg-(--ui-control-active-background)',
+        dragging && 'z-10 opacity-60',
+        className
+      )}
+      ref={ref}
+      style={style}
+      {...rest}
+    >
       <div className="group/workspace flex min-h-6 items-center gap-1 px-2 pt-1 text-[0.6875rem] font-medium text-(--ui-text-tertiary)">
         <button
           className="flex min-w-0 items-center gap-1.5 bg-transparent text-left hover:text-(--ui-text-secondary)"
@@ -1504,6 +1534,11 @@ function SidebarWorkspaceGroup({
             <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: group.color }} />
           ) : null}
           <span className="truncate">{group.label}</span>
+          {active && isProjectGroup ? (
+            <span className="rounded-full border border-(--ui-accent)/35 px-1.5 py-px text-[0.625rem] font-medium text-(--ui-accent)">
+              Current
+            </span>
+          ) : null}
           <SidebarCount>
             {isProfileGroup ? countLabel(visibleSessions.length, totalCount) : group.sessions.length}
           </SidebarCount>
