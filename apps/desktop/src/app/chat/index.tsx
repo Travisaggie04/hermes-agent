@@ -7,7 +7,7 @@ import {
 import { useStore } from '@nanostores/react'
 import { useQuery } from '@tanstack/react-query'
 import type * as React from 'react'
-import { Suspense, useCallback, useMemo, useRef } from 'react'
+import { Suspense, useCallback, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 
 import { Thread } from '@/components/assistant-ui/thread'
@@ -16,6 +16,17 @@ import { PromptOverlays } from '@/components/prompt-overlays'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import {
+  createMissionControlProject,
+  createMissionControlProjectBrief,
   getGlobalModelOptions,
   getMissionControlGitHubBridgeStatus,
   getMissionControlProjects,
@@ -28,6 +39,7 @@ import { useIncrementalExternalStoreRuntime } from '@/lib/incremental-external-s
 import { cn } from '@/lib/utils'
 import type { ComposerAttachment } from '@/store/composer'
 import { $pinnedSessionIds } from '@/store/layout'
+import { notify, notifyError } from '@/store/notifications'
 import { $gatewaySwapTarget } from '@/store/profile'
 import {
   $activeSessionId,
@@ -115,6 +127,7 @@ function ChatHeader({
   const pinnedSessionIds = useStore($pinnedSessionIds)
   const selectedProjectId = useStore($selectedMissionControlProjectId)
   const selectedProjectName = useStore($selectedMissionControlProjectName)
+  const [projectIntakeOpen, setProjectIntakeOpen] = useState(false)
   const projectsQuery = useQuery({
     enabled: gatewayOpen,
     queryFn: getMissionControlProjects,
@@ -194,12 +207,21 @@ function ChatHeader({
       <div className="ml-auto hidden min-w-0 max-w-[44vw] items-center gap-1.5 [-webkit-app-region:no-drag] min-[46rem]:flex">
         <ProjectHeaderSelect
           loading={projectsQuery.isLoading}
+          onNewProject={() => setProjectIntakeOpen(true)}
           projects={projects}
           selectedProjectId={selectedProjectId}
           selectedProjectTitle={selectedProjectTitle}
         />
         <HeaderPill label={jennyStatus.label} title={jennyStatus.detail} tone={jennyStatus.tone} />
       </div>
+      <NativeProjectIntakeDialog
+        onCreated={(projectId, projectName) => {
+          setSelectedMissionControlProject(projectId, projectName)
+          void projectsQuery.refetch()
+        }}
+        onOpenChange={setProjectIntakeOpen}
+        open={projectIntakeOpen}
+      />
     </header>
   )
 }
@@ -225,11 +247,13 @@ function nativeChatProjects(projects: MissionControlProjectRecord[]): MissionCon
 
 function ProjectHeaderSelect({
   loading,
+  onNewProject,
   projects,
   selectedProjectId,
   selectedProjectTitle
 }: {
   loading: boolean
+  onNewProject: () => void
   projects: MissionControlProjectRecord[]
   selectedProjectId: string
   selectedProjectTitle: string
@@ -241,26 +265,189 @@ function ProjectHeaderSelect({
   const value = selectedProjectId.trim()
 
   return (
-    <label className="flex min-w-0 items-center gap-1 text-[0.6875rem] text-(--ui-text-tertiary)" title="Jenny project">
-      <span className="sr-only">Jenny project</span>
-      <select
-        aria-label="Jenny project"
-        className="h-6 max-w-56 rounded-full border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) px-2 py-0 text-[0.6875rem] font-medium text-(--ui-text-secondary) outline-none hover:text-foreground focus:border-blue-400/60"
-        disabled={loading && !projects.length}
-        onChange={event => {
-          const project = projects.find(item => item.project_id === event.currentTarget.value)
-          setSelectedMissionControlProject(project?.project_id ?? null, project?.name ?? null)
-        }}
-        value={projects.some(project => project.project_id === value) ? value : ''}
+    <div className="flex min-w-0 items-center gap-1">
+      <label className="flex min-w-0 items-center gap-1 text-[0.6875rem] text-(--ui-text-tertiary)" title="Jenny project">
+        <span className="sr-only">Jenny project</span>
+        <select
+          aria-label="Jenny project"
+          className="h-6 max-w-56 rounded-full border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) px-2 py-0 text-[0.6875rem] font-medium text-(--ui-text-secondary) outline-none hover:text-foreground focus:border-blue-400/60"
+          disabled={loading && !projects.length}
+          onChange={event => {
+            const project = projects.find(item => item.project_id === event.currentTarget.value)
+            setSelectedMissionControlProject(project?.project_id ?? null, project?.name ?? null)
+          }}
+          value={projects.some(project => project.project_id === value) ? value : ''}
+        >
+          <option value="">{loading ? 'Loading projects...' : 'Pick project'}</option>
+          {projects.map(project => (
+            <option key={project.project_id} value={project.project_id}>
+              {project.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <Button
+        aria-label="Create Jenny project"
+        className="size-6 rounded-full border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) text-(--ui-text-secondary) hover:text-foreground [&_svg]:size-3.5!"
+        onClick={onNewProject}
+        title="Create Jenny project"
+        type="button"
+        variant="ghost"
       >
-        <option value="">{loading ? 'Loading projects...' : 'Pick project'}</option>
-        {projects.map(project => (
-          <option key={project.project_id} value={project.project_id}>
-            {project.name}
-          </option>
-        ))}
-      </select>
-    </label>
+        <Codicon name="add" size="0.875rem" />
+      </Button>
+    </div>
+  )
+}
+
+interface NativeProjectIntakeValue {
+  forbidden: string
+  goal: string
+  name: string
+  source: string
+  success: string
+}
+
+function projectSlug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'project'
+}
+
+function listFromTextarea(value: string): string[] {
+  return value.split(/\r?\n|,/).map(item => item.trim()).filter(Boolean)
+}
+
+function NativeProjectIntakeDialog({
+  onCreated,
+  onOpenChange,
+  open
+}: {
+  onCreated: (projectId: string, projectName: string) => void
+  onOpenChange: (open: boolean) => void
+  open: boolean
+}) {
+  const [value, setValue] = useState<NativeProjectIntakeValue>({
+    forbidden: '',
+    goal: '',
+    name: '',
+    source: '',
+    success: ''
+  })
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const update = (key: keyof NativeProjectIntakeValue) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setValue(current => ({ ...current, [key]: event.currentTarget.value }))
+
+  const submit = async () => {
+    const name = value.name.trim()
+    const goal = value.goal.trim()
+    const source = value.source.trim()
+    const success = listFromTextarea(value.success)
+    const forbidden = listFromTextarea(value.forbidden)
+
+    if (!name || !goal) {
+      setError('Project name and goal are required.')
+
+      return
+    }
+
+    setSaving(true)
+    setError('')
+
+    try {
+      const projectId = `project-${projectSlug(name)}`
+      const project = await createMissionControlProject({
+        current_goal: goal,
+        mistakes_guards: forbidden.join('; '),
+        name,
+        next_recommended_lane: 'Start with a spec-first project setup review.',
+        project_id: projectId,
+        source_of_truth: source,
+        status: 'active'
+      })
+      const createdProjectId = project.project.project_id || projectId
+      const createdProjectName = project.project.name || name
+
+      await createMissionControlProjectBrief({
+        approval_rules: ['Jenny must challenge vague, risky, or wrong-approach requests before implementation.'],
+        constraints: forbidden,
+        forbidden_actions: forbidden,
+        name: `${createdProjectName} initial brief`,
+        outcome: goal,
+        project_id: createdProjectId,
+        source_of_truth: source,
+        status: 'active',
+        success_criteria: success
+      })
+
+      onCreated(createdProjectId, createdProjectName)
+      notify({ durationMs: 2_000, kind: 'success', message: `Created ${createdProjectName}` })
+      setValue({ forbidden: '', goal: '', name: '', source: '', success: '' })
+      onOpenChange(false)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      setError(message)
+      notifyError(err, 'Could not create Jenny project')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Create Jenny project</DialogTitle>
+          <DialogDescription>
+            Set up the project brief before Jenny starts work. Guardrails stay in the background.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="grid gap-2"
+          onSubmit={event => {
+            event.preventDefault()
+            void submit()
+          }}
+        >
+          <Input disabled={saving} onChange={update('name')} placeholder="Project name" value={value.name} />
+          <textarea
+            className="min-h-20 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
+            disabled={saving}
+            onChange={update('goal')}
+            placeholder="What should Jenny help you accomplish?"
+            value={value.goal}
+          />
+          <Input
+            disabled={saving}
+            onChange={update('source')}
+            placeholder="Source of truth, repo, folder, or notes"
+            value={value.source}
+          />
+          <textarea
+            className="min-h-16 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
+            disabled={saving}
+            onChange={update('success')}
+            placeholder="Wins / success criteria, one per line"
+            value={value.success}
+          />
+          <textarea
+            className="min-h-16 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
+            disabled={saving}
+            onChange={update('forbidden')}
+            placeholder="Forbidden actions or risks, one per line"
+            value={value.forbidden}
+          />
+          {error && <div className="text-sm text-red-300">{error}</div>}
+          <DialogFooter>
+            <Button disabled={saving} onClick={() => onOpenChange(false)} type="button" variant="ghost">
+              Cancel
+            </Button>
+            <Button disabled={saving} type="submit">
+              {saving ? 'Creating...' : 'Create project'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 
