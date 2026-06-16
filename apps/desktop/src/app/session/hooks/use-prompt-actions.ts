@@ -87,7 +87,7 @@ function friendlyPromptFailureMessage(error: unknown): string {
   }
 
   if (lower.includes('app-server startup failed') || lower.includes('timed out')) {
-    return 'Jenny failed before finishing. Retry once; if it fails again, open the advanced audit console.'
+    return 'Jenny failed before finishing. Retry once; if it fails again, open details.'
   }
 
   return raw || 'Jenny could not finish that message. Retry once from this chat.'
