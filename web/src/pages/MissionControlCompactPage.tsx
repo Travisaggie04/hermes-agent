@@ -2225,7 +2225,7 @@ export default function MissionControlCompactPage() {
   }
 
   return (
-    <main className="box-border min-h-screen w-full min-w-0 max-w-[100dvw] touch-pan-y overflow-x-hidden overscroll-x-none bg-[#0e0b12] px-1 py-1 pb-[env(safe-area-inset-bottom)] text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 [&_*]:box-border" data-testid="mission-control-compact-route">
+    <main className="box-border flex h-[100dvh] min-h-0 w-full min-w-0 max-w-[100dvw] touch-pan-y flex-col overflow-hidden overscroll-x-none bg-[#0e0b12] px-1 py-1 pb-[env(safe-area-inset-bottom)] text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 [&_*]:box-border" data-testid="mission-control-compact-route">
       <header className="sr-only">
         <p className="sr-only max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782] [overflow-wrap:anywhere]">
           <span className="font-serif text-lg italic text-[#d4a574]">IV.</span>
@@ -2266,8 +2266,8 @@ export default function MissionControlCompactPage() {
       ) : null}
 
       {selectedProjectView ? (
-        <div className="mt-3 grid w-full min-w-0 max-w-full gap-3 overflow-hidden">
-          <div className="order-1 min-w-0 max-w-full overflow-hidden">
+        <div className="mt-0 flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden">
+          <div className="min-h-0 min-w-0 max-w-full flex-1 overflow-hidden">
             <CompactProjectRoom
               busy={roomBusy}
               message={roomMessage}
@@ -2321,7 +2321,7 @@ export default function MissionControlCompactPage() {
         </div>
       ) : null}
 
-      <details className="mt-3 max-w-full overflow-hidden rounded-xl border border-border/60 bg-card/70 p-3">
+      <details className="hidden mt-3 max-w-full overflow-hidden rounded-xl border border-border/60 bg-card/70 p-3 sm:block">
         <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">Safety details</summary>
         <div className="mt-3 grid gap-4">
           {snapshot ? (
@@ -2732,7 +2732,7 @@ function CompactProjectRoom({
   });
   return (
     <section
-      className="mt-1 flex min-h-[calc(100dvh-3rem)] w-full min-w-0 max-w-[calc(100dvw-0.5rem)] flex-col overflow-hidden rounded-md border border-[#d4a574]/10 bg-[#15101a] sm:h-[calc(100vh-4rem)] sm:min-h-[34rem] sm:max-w-full"
+      className="mt-0 flex h-full min-h-0 w-full min-w-0 max-w-full flex-col overflow-hidden rounded-md border border-[#d4a574]/10 bg-[#15101a] sm:h-[calc(100vh-4rem)] sm:min-h-[34rem]"
       aria-label="Project chat workspace"
     >
       <div className="w-full min-w-0 max-w-full overflow-hidden border-b border-[#f3ebda]/10 bg-[#15101a] px-2 py-2">
@@ -3033,7 +3033,7 @@ function CompactProjectRoom({
           </div>
         </section>
 
-        <div className="sticky bottom-0 z-10 mt-3 max-w-full overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#15101a]/95 p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-18px_40px_rgba(14,11,18,0.88)] backdrop-blur">
+        <div className="sticky bottom-0 z-10 mt-2 max-w-full overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#15101a]/95 p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-18px_40px_rgba(14,11,18,0.88)] backdrop-blur">
           {reviewRequired ? (
             <p className="mb-2 max-w-full text-xs font-semibold text-amber-700 [overflow-wrap:anywhere] dark:text-amber-100" role="status">
               Review the latest Jenny reply in the chat before acting on it.
@@ -3109,7 +3109,7 @@ function CompactProjectRoom({
 
         {message ? <p className="mt-2 max-w-full text-xs text-muted-foreground [overflow-wrap:anywhere]">{message}</p> : null}
 
-        <details className="mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background p-3">
+        <details className="hidden mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background p-3 sm:block">
           <summary className="cursor-pointer text-sm font-semibold">Previous sessions</summary>
           <div className="grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
             <h3 className="sr-only">Previous sessions</h3>
@@ -3146,7 +3146,7 @@ function CompactProjectRoom({
           </div>
         </details>
 
-        <details className="mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/60 p-3">
+        <details className="hidden mt-2 max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/60 p-3 sm:block">
           <summary className="cursor-pointer text-sm font-semibold">Advanced</summary>
           <section className="mt-3 max-w-full overflow-hidden rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
             <div className="grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between sm:gap-2">
