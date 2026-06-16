@@ -44,6 +44,12 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('Current')
   })
 
+  it('keeps the new-chat button visible for the selected project', () => {
+    expect(source).toContain("active && isProjectGroup && 'opacity-100 text-(--ui-text-secondary)'")
+    expect(source).toContain('isProjectGroup')
+    expect(source).toContain('onNewSessionInProject?.(group.id, group.label)')
+  })
+
   it('refreshes project groups when a native chat is linked to a project', () => {
     expect(source).toContain('MISSION_CONTROL_PROJECT_LINK_CREATED')
     expect(source).toContain('window.addEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED')

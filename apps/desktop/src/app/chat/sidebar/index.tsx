@@ -1565,7 +1565,10 @@ function SidebarWorkspaceGroup({
           <Tip label={s.newSessionIn(group.label)}>
             <button
               aria-label={s.newSessionIn(group.label)}
-              className="grid size-4 shrink-0 place-items-center rounded-sm bg-transparent text-(--ui-text-quaternary) opacity-0 transition-opacity hover:bg-(--ui-control-hover-background) hover:text-foreground group-hover/workspace:opacity-100"
+              className={cn(
+                'grid size-4 shrink-0 place-items-center rounded-sm bg-transparent text-(--ui-text-quaternary) opacity-0 transition-opacity hover:bg-(--ui-control-hover-background) hover:text-foreground group-hover/workspace:opacity-100',
+                active && isProjectGroup && 'opacity-100 text-(--ui-text-secondary)'
+              )}
               // Profile groups start a fresh session in that profile but keep the
               // all-profiles browse view (newSessionInProfile leaves the scope
               // alone); workspace groups seed the new session's cwd from the path.
