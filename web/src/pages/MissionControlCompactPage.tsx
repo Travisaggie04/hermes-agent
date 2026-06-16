@@ -2957,48 +2957,53 @@ function CompactProjectRoom({
                     {chat.speaker === "You" ? chat.displayBody ?? projectRequestPreview(chat.body, 750) : compactText(chat.body, 750)}
                   </p>
                   {chat.speaker === "Jenny" ? (
-                    <div className="mt-2 grid min-w-0 gap-2 border-t border-[#f3ebda]/10 pt-2 text-[0.68rem]">
-                      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                        <span className={cn(
-                          "rounded-full border px-2 py-1 font-semibold [overflow-wrap:anywhere]",
-                          jennyReplyContract(chat.body).tone === "complete"
-                            ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
-                            : "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-100",
-                        )}>
-                          {jennyReplyContract(chat.body).label}
-                        </span>
-                        {replyReview ? (
-                          <span className="rounded-full border border-[#f3ebda]/10 bg-[#15101a]/60 px-2 py-1 text-[#a59783] [overflow-wrap:anywhere]">
-                            {jennyReplyReviewDecisionLabel(replyReview.decision)}
+                    <details className="mt-2 min-w-0 border-t border-[#f3ebda]/10 pt-2 text-[0.68rem]">
+                      <summary className="cursor-pointer list-none font-semibold text-[#a59783] [overflow-wrap:anywhere] marker:hidden">
+                        Review reply
+                      </summary>
+                      <div className="mt-2 grid min-w-0 gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                          <span className={cn(
+                            "rounded-full border px-2 py-1 font-semibold [overflow-wrap:anywhere]",
+                            jennyReplyContract(chat.body).tone === "complete"
+                              ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
+                              : "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-100",
+                          )}>
+                            {jennyReplyContract(chat.body).label}
                           </span>
+                          {replyReview ? (
+                            <span className="rounded-full border border-[#f3ebda]/10 bg-[#15101a]/60 px-2 py-1 text-[#a59783] [overflow-wrap:anywhere]">
+                              {jennyReplyReviewDecisionLabel(replyReview.decision)}
+                            </span>
+                          ) : null}
+                        </div>
+                        {showLatestReplyActions ? (
+                          <div className="flex min-w-0 flex-wrap gap-1.5" aria-label="Review latest Jenny reply">
+                            <button
+                              className="rounded-full border border-emerald-500/30 px-2.5 py-1 font-semibold text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
+                              onClick={() => onReviewReply("accepted", chat.id, chat.body)}
+                              type="button"
+                            >
+                              Looks good
+                            </button>
+                            <button
+                              className="rounded-full border border-sky-500/30 px-2.5 py-1 font-semibold text-sky-700 hover:bg-sky-500/10 dark:text-sky-300"
+                              onClick={() => onReviewReply("needs_evidence", chat.id, chat.body)}
+                              type="button"
+                            >
+                              Ask for evidence
+                            </button>
+                            <button
+                              className="rounded-full border border-amber-500/30 px-2.5 py-1 font-semibold text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
+                              onClick={() => onReviewReply("needs_safer_plan", chat.id, chat.body)}
+                              type="button"
+                            >
+                              Challenge
+                            </button>
+                          </div>
                         ) : null}
                       </div>
-                      {showLatestReplyActions ? (
-                        <div className="flex min-w-0 flex-wrap gap-1.5" aria-label="Review latest Jenny reply">
-                          <button
-                            className="rounded-full border border-emerald-500/30 px-2.5 py-1 font-semibold text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
-                            onClick={() => onReviewReply("accepted", chat.id, chat.body)}
-                            type="button"
-                          >
-                            Looks good
-                          </button>
-                          <button
-                            className="rounded-full border border-sky-500/30 px-2.5 py-1 font-semibold text-sky-700 hover:bg-sky-500/10 dark:text-sky-300"
-                            onClick={() => onReviewReply("needs_evidence", chat.id, chat.body)}
-                            type="button"
-                          >
-                            Ask for evidence
-                          </button>
-                          <button
-                            className="rounded-full border border-amber-500/30 px-2.5 py-1 font-semibold text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
-                            onClick={() => onReviewReply("needs_safer_plan", chat.id, chat.body)}
-                            type="button"
-                          >
-                            Challenge
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
+                    </details>
                   ) : null}
                 </article>
                 )
