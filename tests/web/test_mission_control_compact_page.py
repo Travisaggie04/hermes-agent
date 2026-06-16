@@ -109,6 +109,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Jenny:",
         "jennyConnectionState",
         "isNoPendingBridgeError",
+        "hasGitHubBridgeSignal",
         "normalizedBridgeError",
         "Jenny is caught up. Send a new message to start the next reply.",
         "jennyRunStatusToneClass",
@@ -519,6 +520,20 @@ def test_compact_chat_uses_plain_language_errors() -> None:
         function = function_source(src, function_name)
         assert "jennyChatErrorMessage(err)" in function
         assert "err instanceof Error ? err.message : String(err)" not in function
+
+
+def test_compact_chat_prefers_current_github_mailbox_errors() -> None:
+    src = page_source()
+    signal_helper = function_source(src, "hasGitHubBridgeSignal")
+    helper = function_source(src, "normalizedBridgeError")
+    assert "status.last_error" in signal_helper
+    assert "unwrapRecords(status.status_records).length" in signal_helper
+    assert "githubBridgeStatus.last_error" in helper
+    assert "bridgeStatus.last_error" in helper
+    assert "hasGitHubBridgeSignal(githubBridgeStatus) ? \"\" : legacyError" in helper
+    assert helper.index("githubBridgeStatus.last_error") < helper.index("bridgeStatus.last_error")
+    assert "isNoPendingBridgeError(githubError)" in helper
+    assert "isNoPendingBridgeError(legacyError)" in helper
 
 
 def test_compact_chat_behaves_like_a_normal_thread_after_send() -> None:
