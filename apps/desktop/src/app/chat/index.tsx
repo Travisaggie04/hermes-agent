@@ -515,6 +515,10 @@ function ProjectJennyStatusStrip({
     queryError: bridgeStatusQuery.error
   })
 
+  if (jennyStatus.tone === 'ok' || jennyStatus.tone === 'idle') {
+    return null
+  }
+
   const toneClass =
     jennyStatus.tone === 'warn'
       ? 'text-red-200'

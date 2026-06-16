@@ -24,6 +24,11 @@ describe('native project chat header', () => {
     expect(source).toContain('<ProjectJennyStatusStrip activeTurnRunning={busy} gatewayOpen={gatewayOpen} />')
   })
 
+  it('keeps the extra Jenny status strip hidden when chat is simply ready', () => {
+    expect(source).toContain("if (jennyStatus.tone === 'ok' || jennyStatus.tone === 'idle') {")
+    expect(source).toContain('return null')
+  })
+
   it('makes the native composer feel project-scoped when a project is selected', () => {
     expect(source).toContain('const selectedProjectTitle = selectedProjectName.trim()')
     expect(source).toContain('placeholderOverride={')
