@@ -28,4 +28,16 @@ describe('native project chat session linking', () => {
     expect(actionBlock).toContain('startFreshSessionDraft()')
     expect(actionBlock).toContain('navigate(NEW_CHAT_ROUTE)')
   })
+
+  it('keeps the relabeled New project chat action from inheriting an unrelated workspace', () => {
+    const actionStart = source.indexOf("if (item.action === 'new-session')")
+    const actionEnd = source.indexOf("if (item.action === 'jenny-os')", actionStart)
+    const actionBlock = source.slice(actionStart, actionEnd)
+
+    expect(actionBlock).toContain('const projectId = $selectedMissionControlProjectId.get().trim()')
+    expect(actionBlock).toContain('startFreshSessionDraft()')
+    expect(actionBlock).toContain('if (projectId) {')
+    expect(actionBlock).toContain("setCurrentCwd('')")
+    expect(actionBlock).toContain("setCurrentBranch('')")
+  })
 })
