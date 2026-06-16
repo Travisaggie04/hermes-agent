@@ -114,6 +114,26 @@ const ATTACHED_CONTEXT_MARKER_RE = /(?:^|\n)--- Attached Context ---\s*\n/
 const CONTEXT_WARNINGS_MARKER_RE = /(?:^|\n)--- Context Warnings ---[\s\S]*$/
 const CONTEXT_REF_RE = /@(file|folder|url|image|tool|terminal):(?:"[^"\n]+"|'[^'\n]+'|`[^`\n]+`|\S+)/g
 const HIDDEN_JENNY_OS_CONTEXT_RE = /^Hidden Jenny OS project context:\s*\n[\s\S]*?\n\n/
+const LEGACY_JENNY_REQUEST_STOP_LABELS =
+  'Current intake:|Request intake:|Current brief:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:'
+const LEGACY_SPEC_FIRST_REQUEST_RE =
+  /^Spec-first request for Jenny:\s*Project:\s*.+?\s+Request Travis is considering:\s*([\s\S]*?)(?=\s+Current intake:|$)/i
+const LEGACY_PROJECT_ROOM_REQUEST_RE = new RegExp(
+  `^Project room request:\\s*(?:.+?\\s+)?Request:\\s*([\\s\\S]*?)(?=\\s+(?:${LEGACY_JENNY_REQUEST_STOP_LABELS})|$)`,
+  'i'
+)
+const LEGACY_GENERIC_REQUEST_RE = new RegExp(
+  `(?:^|[\\s/])Request:\\s*([\\s\\S]*?)(?=\\s+(?:${LEGACY_JENNY_REQUEST_STOP_LABELS})|$)`,
+  'i'
+)
+const LEGACY_INLINE_PROJECT_REQUEST_RE = new RegExp(
+  `^[\\w &/-]+ Request:\\s*([\\s\\S]*?)(?=\\s+(?:${LEGACY_JENNY_REQUEST_STOP_LABELS})|$)`,
+  'i'
+)
+const LEGACY_FALLBACK_REQUEST_RE = new RegExp(
+  `^(.+?)\\s+(?=${LEGACY_JENNY_REQUEST_STOP_LABELS})`,
+  'i'
+)
 
 function textFromUnknown(value: unknown, depth = 0): string {
   if (typeof value === 'string') {
@@ -151,10 +171,45 @@ function textFromUnknown(value: unknown, depth = 0): string {
   return String(value)
 }
 
+function legacyJennyRequestText(value: string): string | null {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+
+  if (!normalized) {
+    return null
+  }
+
+  const matches = [
+    normalized.match(LEGACY_SPEC_FIRST_REQUEST_RE),
+    normalized.match(LEGACY_PROJECT_ROOM_REQUEST_RE),
+    normalized.match(LEGACY_GENERIC_REQUEST_RE),
+    normalized.match(LEGACY_INLINE_PROJECT_REQUEST_RE),
+    normalized.match(LEGACY_FALLBACK_REQUEST_RE)
+  ]
+
+  for (const match of matches) {
+    const candidate = match?.[1]?.trim()
+
+    if (candidate) {
+      return candidate
+    }
+  }
+
+  return null
+}
+
+function visibleUserMessageText(value: string): string {
+  const withoutHiddenContext = value.replace(HIDDEN_JENNY_OS_CONTEXT_RE, '').trimStart()
+
+  if (withoutHiddenContext !== value) {
+    return withoutHiddenContext
+  }
+
+  return legacyJennyRequestText(value) ?? value
+}
+
 function displayContentForMessage(role: SessionMessage['role'], content: unknown): string {
   const rawTextContent = textFromUnknown(content)
-  const textContent =
-    role === 'user' ? rawTextContent.replace(HIDDEN_JENNY_OS_CONTEXT_RE, '').trimStart() : rawTextContent
+  const textContent = role === 'user' ? visibleUserMessageText(rawTextContent) : rawTextContent
 
   if (role !== 'user') {
     return textContent
