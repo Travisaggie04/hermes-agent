@@ -51,6 +51,7 @@ describe('native project chat header', () => {
   it('uses the blank native chat home as a project picker before a session exists', () => {
     expect(source).toContain("queryKey: ['mission-control-projects-native-chat-home']")
     expect(source).toContain('const projectHomeOptions = useMemo')
+    expect(source).toContain('onCreateProject: () => setProjectIntakeOpen(true)')
     expect(source).toContain('projectOptions: projectHomeOptions.map(project => ({')
     expect(source).toContain('onSelectProject: (projectId, projectName) => setSelectedMissionControlProject(projectId, projectName)')
   })

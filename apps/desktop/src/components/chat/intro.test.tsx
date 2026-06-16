@@ -23,9 +23,11 @@ describe('Intro', () => {
 
   it('turns the blank native chat home into a project picker when projects exist', () => {
     const onSelectProject = vi.fn()
+    const onCreateProject = vi.fn()
 
     render(
       <Intro
+        onCreateProject={onCreateProject}
         onSelectProject={onSelectProject}
         projectOptions={[
           { id: 'project-hermes-mission-control', name: 'Hermes / Mission Control' },
@@ -42,5 +44,9 @@ describe('Intro', () => {
     fireEvent.click(screen.getByText('Hermes / Mission Control'))
 
     expect(onSelectProject).toHaveBeenCalledWith('project-hermes-mission-control', 'Hermes / Mission Control')
+
+    fireEvent.click(screen.getByText('Create Jenny project'))
+
+    expect(onCreateProject).toHaveBeenCalledOnce()
   })
 })
