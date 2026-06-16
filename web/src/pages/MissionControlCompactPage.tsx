@@ -2225,7 +2225,7 @@ export default function MissionControlCompactPage() {
   }
 
   return (
-    <main className="box-border flex h-[100dvh] min-h-0 w-full min-w-0 max-w-[100dvw] touch-pan-y flex-col overflow-hidden overscroll-x-none bg-[#0e0b12] px-1 py-1 pb-[env(safe-area-inset-bottom)] text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 [&_*]:box-border" data-testid="mission-control-compact-route">
+    <main className="box-border flex h-[100dvh] min-h-0 w-dvw min-w-0 max-w-dvw touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none bg-[#0e0b12] px-1 py-1 pb-[env(safe-area-inset-bottom)] text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 [&_*]:box-border" data-testid="mission-control-compact-route">
       <header className="sr-only">
         <p className="sr-only max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782] [overflow-wrap:anywhere]">
           <span className="font-serif text-lg italic text-[#d4a574]">IV.</span>
@@ -2266,7 +2266,7 @@ export default function MissionControlCompactPage() {
       ) : null}
 
       {selectedProjectView ? (
-        <div className="mt-0 flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden">
+        <div className="mt-0 flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden overflow-x-clip">
           <div className="min-h-0 min-w-0 max-w-full flex-1 overflow-hidden">
             <CompactProjectRoom
               busy={roomBusy}
@@ -2732,14 +2732,14 @@ function CompactProjectRoom({
   });
   return (
     <section
-      className="mt-0 flex h-full min-h-0 w-full min-w-0 max-w-full flex-col overflow-hidden rounded-md border border-[#d4a574]/10 bg-[#15101a] sm:h-[calc(100vh-4rem)] sm:min-h-[34rem]"
+      className="mt-0 flex h-full min-h-0 w-full min-w-0 max-w-full flex-col overflow-hidden overflow-x-clip rounded-md border border-[#d4a574]/10 bg-[#15101a] sm:h-[calc(100vh-4rem)] sm:min-h-[34rem]"
       aria-label="Project chat workspace"
     >
-      <div className="w-full min-w-0 max-w-full overflow-hidden border-b border-[#f3ebda]/10 bg-[#15101a] px-2 py-2">
+      <div className="w-full min-w-0 max-w-full overflow-hidden overflow-x-clip border-b border-[#f3ebda]/10 bg-[#15101a] px-2 py-2">
         <label className="grid w-full min-w-0 max-w-xl gap-1">
           <span className="sr-only">Active project</span>
           <select
-            className="w-full min-w-0 max-w-full rounded-md border border-[#f3ebda]/10 bg-[#100b15] px-3 py-2 text-sm font-semibold text-[#f3ebda] outline-none [overflow-wrap:anywhere]"
+            className="w-full min-w-0 max-w-full truncate rounded-md border border-[#f3ebda]/10 bg-[#100b15] px-3 py-2 text-sm font-semibold text-[#f3ebda] outline-none [overflow-wrap:anywhere] [word-break:break-word]"
             onChange={event => onSelectProject(event.target.value)}
             value={selectedProjectView.project.project_id}
           >
@@ -2929,7 +2929,7 @@ function CompactProjectRoom({
           </div>
         </details>
 
-        <section className="mt-2 flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden p-0" aria-label="Project chat transcript">
+        <section className="mt-2 flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden overflow-x-clip p-0" aria-label="Project chat transcript">
           <div className="sr-only">
             <h3 className="text-sm font-semibold text-[#f3ebda]">Conversation</h3>
             <span className="text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
@@ -2944,7 +2944,7 @@ function CompactProjectRoom({
                 return (
                 <article
                   className={cn(
-                    "min-w-0 w-fit max-w-[min(100%,calc(100dvw-1.5rem))] rounded-lg border px-3 py-2 text-sm [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]",
+                    "min-w-0 w-fit max-w-[calc(100%-0.25rem)] rounded-lg border px-3 py-2 text-sm [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]",
                     chat.speaker === "You" ? "justify-self-end border-[#5ab896]/30 bg-[#5ab896]/10 text-[#f3ebda]" : "justify-self-start border-[#f3ebda]/10 bg-[#1c1622]/90 text-[#f3ebda]",
                   )}
                   key={`${chat.speaker}:${chat.id}`}
@@ -3010,7 +3010,7 @@ function CompactProjectRoom({
             )}
             {showJennyStatusInChat ? (
               <article className={cn(
-                "min-w-0 w-fit max-w-[min(100%,calc(100dvw-1.5rem))] justify-self-start rounded-lg border px-3 py-2 text-sm text-[#f3ebda] [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]",
+                "min-w-0 w-fit max-w-[calc(100%-0.25rem)] justify-self-start rounded-lg border px-3 py-2 text-sm text-[#f3ebda] [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]",
                 effectiveJennyRunProgress?.phase === "error"
                   ? "border-red-500/30 bg-red-500/10"
                   : "border-sky-500/30 bg-sky-500/10",
@@ -3033,7 +3033,7 @@ function CompactProjectRoom({
           </div>
         </section>
 
-        <div className="sticky bottom-0 z-10 mt-2 max-w-full overflow-hidden rounded-md border border-[#f3ebda]/10 bg-[#15101a]/95 p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-18px_40px_rgba(14,11,18,0.88)] backdrop-blur">
+        <div className="sticky bottom-0 z-10 mt-2 max-w-full overflow-hidden overflow-x-clip rounded-md border border-[#f3ebda]/10 bg-[#15101a]/95 p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-18px_40px_rgba(14,11,18,0.88)] backdrop-blur">
           {reviewRequired ? (
             <p className="mb-2 max-w-full text-xs font-semibold text-amber-700 [overflow-wrap:anywhere] dark:text-amber-100" role="status">
               Review the latest Jenny reply in the chat before acting on it.
@@ -3042,7 +3042,7 @@ function CompactProjectRoom({
           <label className="grid gap-1 text-sm font-medium">
             <span className="sr-only">Message Jenny</span>
             <textarea
-              className="min-h-16 w-full min-w-0 max-w-full rounded-md border border-[#f3ebda]/10 bg-[#0e0b12] px-3 py-2 text-sm text-[#f3ebda] outline-none transition placeholder:text-[#6e6353] focus:border-[#d4a574]/50"
+              className="min-h-16 w-full min-w-0 max-w-full rounded-md border border-[#f3ebda]/10 bg-[#0e0b12] px-3 py-2 text-sm text-[#f3ebda] outline-none transition placeholder:text-[#6e6353] focus:border-[#d4a574]/50 [overflow-wrap:anywhere] [word-break:break-word]"
               disabled={paused}
               onChange={event => onRequestChange(event.target.value)}
               placeholder={paused ? "This project is on hold until Jenny is stable." : "Tell Jenny what you want to discuss or ask her to do next..."}
