@@ -76,7 +76,7 @@ export function nativeJennyStatus({
 
   if (activeTurnRunning) {
     return {
-      detail: 'Jenny is working on the current chat turn.',
+      detail: 'Jenny is working on this chat. Progress and the final reply appear here.',
       label: 'Jenny working',
       summary: 'Working',
       tone: 'working'
@@ -138,7 +138,7 @@ export function nativeJennyStatus({
   }
 
   return {
-    detail: benignNoPending ? 'No project message is waiting for Jenny.' : 'Ready for one bounded project message.',
+    detail: benignNoPending ? 'No project message is waiting for Jenny.' : 'Send a message here; Jenny will reply in this project chat.',
     label: 'Jenny ready',
     summary: 'Ready',
     tone: 'ok'

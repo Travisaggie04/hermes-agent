@@ -103,7 +103,7 @@ describe('nativeJennyStatus', () => {
         bridgeStatus: { pending_count: 0, visible_pending_count: 0 }
       })
     ).toMatchObject({
-      detail: 'Jenny is working on the current chat turn.',
+      detail: 'Jenny is working on this chat. Progress and the final reply appear here.',
       label: 'Jenny working',
       summary: 'Working',
       tone: 'working'
@@ -128,5 +128,20 @@ describe('nativeJennyStatus', () => {
         bridgeStatus: { last_response_request_id: 'req-1', pending_count: 0 }
       })
     ).toMatchObject({ label: 'Jenny replied', summary: 'Reply ready', tone: 'ok' })
+  })
+
+  it('makes the ready state explain that normal chat sends to Jenny', () => {
+    expect(
+      nativeJennyStatus({
+        gatewayOpen: true,
+        projectId: 'project-hermes',
+        bridgeStatus: { pending_count: 0, visible_pending_count: 0 }
+      })
+    ).toMatchObject({
+      detail: 'Send a message here; Jenny will reply in this project chat.',
+      label: 'Jenny ready',
+      summary: 'Ready',
+      tone: 'ok'
+    })
   })
 })

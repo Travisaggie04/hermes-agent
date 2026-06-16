@@ -26,7 +26,7 @@ describe('native project chat header', () => {
   it('makes the native composer feel project-scoped when a project is selected', () => {
     expect(source).toContain('const selectedProjectTitle = selectedProjectName.trim()')
     expect(source).toContain('placeholderOverride={')
-    expect(source).toContain('Message Jenny about ${selectedProjectTitle}')
+    expect(source).toContain('Message Jenny in ${selectedProjectTitle}; she replies here')
   })
 
   it('lets the native chat header switch Jenny projects without opening Mission Control', () => {

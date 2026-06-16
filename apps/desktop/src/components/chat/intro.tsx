@@ -190,7 +190,7 @@ export function Intro({ personality, projectName, projectOptions = [], projectsL
             <p className="m-0 text-xs font-medium uppercase text-(--ui-text-tertiary)">Project chat</p>
             <p className="m-0 max-w-full truncate text-lg font-semibold text-foreground">{projectLabel}</p>
             <p className="m-0 text-sm leading-normal tracking-tight">
-              Talk to Jenny here. Project context and safety checks stay in the background.
+              Send normally. Jenny replies here, with project context and safety checks in the background.
             </p>
           </div>
         ) : showProjectHome ? (
@@ -198,7 +198,7 @@ export function Intro({ personality, projectName, projectOptions = [], projectsL
             <div className="grid gap-1 text-center">
               <h1 className="m-0 text-2xl font-semibold text-foreground">Pick a project</h1>
               <p className="m-0 max-w-xl text-sm leading-normal tracking-tight">
-                Start from a project room, then chat normally. Jenny gets the project brief and guardrails in the background.
+                Pick a project, then chat normally. Jenny gets the project brief and guardrails without extra copy/paste.
               </p>
             </div>
             <div className="grid w-full max-w-xl gap-2 sm:grid-cols-2">
