@@ -116,9 +116,9 @@ const REAL_PROJECT_NAMES = [
 
 const CANONICAL_REAL_PROJECTS: MissionControlProjectRecord[] = [
   {
-    current_goal: 'Make Mission Control the primary Jenny workspace before resuming other projects.',
+    current_goal: 'Make Jenny OS native chat the primary workspace while Mission Control stays audit/recovery.',
     name: 'Hermes / Mission Control',
-    next_recommended_lane: 'Continue the Mission Control/Jenny recovery lane.',
+    next_recommended_lane: 'Continue the Jenny OS native chat recovery lane.',
     project_id: 'project-hermes-mission-control',
     source_of_truth: 'Mission Control recovery records',
     status: 'Active recovery lane'
@@ -1404,7 +1404,7 @@ const PROJECT_LANE_TEMPLATES: Record<string, ProjectLaneTemplate> = {
   'project-hermes-mission-control': {
     allowed: 'Read APIs, inspect Desktop/backend state, edit scoped Desktop source/tests only when implementation is explicitly approved.',
     forbidden: 'No deploy, restart, runtime switch, records/config mutation, dispatch, queue/model routing, enforcement, hidden workers, or secrets.',
-    objective: 'Improve Mission Control as the primary Desktop workspace while keeping backend source-of-truth and manual-copy controls.',
+    objective: 'Improve Jenny OS native project chat as the primary Desktop workspace while keeping Mission Control audit/recovery controls in the background.',
     preflight: 'Confirm accepted runtime/head, Runtime Worktree Guard=pass, dispatch=false, active_lane_count=0, stale_warnings=[].',
     report: 'preflight, changed files, UI/source proof, tests, PR/status, no-forbidden-mutation confirmation.',
     stop: 'Stop if live runtime drifts, guard fails, dispatch enables, stale warnings appear, or a deploy/restart would be needed.'

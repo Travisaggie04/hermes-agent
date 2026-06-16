@@ -29,6 +29,8 @@ def test_mobile_compact_route_is_registered() -> None:
 
 def test_renders_five_real_projects_in_compact_mode() -> None:
     src = page_source()
+    assert "Make Jenny OS native chat the primary workspace" in src
+    assert "Make Mission Control the primary Jenny workspace" not in src
     for expected in [
         "Hermes / Mission Control",
         "Long-form Video",

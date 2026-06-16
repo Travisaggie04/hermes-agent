@@ -154,6 +154,9 @@ def test_workspace_project_template_seed_creates_defaults_and_skips_duplicates(p
     assert all(project.metadata.get("default_guards") for project in projects)
     assert all(project.metadata.get("send_to_jenny_enabled") is False for project in projects)
     assert all(project.metadata.get("dispatch_enabled") is False for project in projects)
+    hermes_project = next(project for project in projects if project.project_id == "project-hermes-mission-control")
+    assert "Jenny OS native chat" in hermes_project.current_goal
+    assert "Make Mission Control the obvious operating surface" not in hermes_project.current_goal
 
     reseed = client.post("/api/plugins/mission-control-governance/workspace/projects/seed-defaults", json={})
     assert reseed.status_code == 200
