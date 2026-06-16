@@ -67,10 +67,10 @@ export function nativeJennyStatus({
 
   if (queryError) {
     return {
-      detail: 'Could not read Jenny bridge status. Chat remains guarded.',
-      label: 'Status unavailable',
-      summary: 'Status unavailable',
-      tone: 'warn'
+      detail: 'Send a message here; Jenny will reply in this project chat. Background Mission Control status is unavailable.',
+      label: 'Jenny ready',
+      summary: 'Background status unavailable',
+      tone: 'ok'
     }
   }
 
