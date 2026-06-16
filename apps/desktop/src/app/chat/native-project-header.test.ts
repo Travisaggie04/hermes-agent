@@ -70,6 +70,11 @@ describe('native project chat header', () => {
     expect(source).not.toContain('activeTurnRunning={busy && awaitingResponse}')
   })
 
+  it('shows an in-chat Jenny working row while a project reply is pending', () => {
+    expect(source).toContain("threadLoading === 'response'")
+    expect(source).toContain('Jenny is working in {selectedProjectTitle}')
+  })
+
   it('keeps the Jenny status strip hidden until a project is selected', () => {
     expect(source).toContain('if (!projectName) {')
     expect(source).toContain('return null')

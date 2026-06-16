@@ -782,6 +782,17 @@ export function ChatView({
             </Suspense>
           )}
         </AssistantRuntimeProvider>
+        {selectedProjectTitle && threadLoading === 'response' && (
+          <div
+            aria-label={`Jenny is working in ${selectedProjectTitle}`}
+            aria-live="polite"
+            className="pointer-events-none absolute bottom-[calc(var(--composer-measured-height)+0.75rem)] left-4 z-20 flex max-w-[calc(100%-2rem)] items-center gap-2 rounded-full border border-blue-400/25 bg-(--ui-chat-surface-background)/90 px-3 py-1.5 text-xs text-blue-100 shadow-lg backdrop-blur"
+            role="status"
+          >
+            <span aria-hidden="true" className="dither inline-block size-3 shrink-0 rounded-[2px] text-blue-200/80 animate-pulse" />
+            <span className="truncate font-medium">Jenny is working in {selectedProjectTitle}</span>
+          </div>
+        )}
         <ChatDropOverlay kind={dragKind} />
         <ChatSwapOverlay profile={gatewaySwapTarget} />
       </div>
