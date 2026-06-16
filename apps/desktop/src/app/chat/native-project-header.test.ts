@@ -22,6 +22,20 @@ describe('native project chat header', () => {
     expect(source).toContain('<ProjectJennyStatusStrip activeTurnRunning={busy} gatewayOpen={gatewayOpen} />')
   })
 
+  it('lets the native chat header switch Jenny projects without opening Mission Control', () => {
+    expect(source).toContain('getMissionControlProjects')
+    expect(source).toContain("queryKey: ['mission-control-projects-native-chat']")
+    expect(source).toContain('function ProjectHeaderSelect')
+    expect(source).toContain('aria-label="Jenny project"')
+    expect(source).toContain('setSelectedMissionControlProject(project?.project_id ?? null, project?.name ?? null)')
+  })
+
+  it('keeps the native project picker scoped to existing project records', () => {
+    expect(source).toContain('function nativeChatProjects')
+    expect(source).toContain('const seen = new Set<string>()')
+    expect(source).toContain('return out.sort((a, b) => a.name.localeCompare(b.name))')
+  })
+
   it('shows Jenny as working for the full native chat busy turn', () => {
     expect(source).toContain('activeTurnRunning={busy}')
     expect(source).not.toContain('activeTurnRunning={busy && awaitingResponse}')

@@ -15,7 +15,13 @@ import { Backdrop } from '@/components/Backdrop'
 import { PromptOverlays } from '@/components/prompt-overlays'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
-import { getGlobalModelOptions, getMissionControlGitHubBridgeStatus, type HermesGateway } from '@/hermes'
+import {
+  getGlobalModelOptions,
+  getMissionControlGitHubBridgeStatus,
+  getMissionControlProjects,
+  type HermesGateway,
+  type MissionControlProjectRecord
+} from '@/hermes'
 import type { ChatMessage } from '@/lib/chat-messages'
 import { quickModelOptions, sessionTitle, toRuntimeMessage } from '@/lib/chat-runtime'
 import { useIncrementalExternalStoreRuntime } from '@/lib/incremental-external-store-runtime'
@@ -40,7 +46,8 @@ import {
   $selectedMissionControlProjectName,
   $selectedStoredSessionId,
   $sessions,
-  sessionPinId
+  sessionPinId,
+  setSelectedMissionControlProject
 } from '@/store/session'
 import type { ModelOptionsResponse } from '@/types/hermes'
 
@@ -108,6 +115,12 @@ function ChatHeader({
   const pinnedSessionIds = useStore($pinnedSessionIds)
   const selectedProjectId = useStore($selectedMissionControlProjectId)
   const selectedProjectName = useStore($selectedMissionControlProjectName)
+  const projectsQuery = useQuery({
+    enabled: gatewayOpen,
+    queryFn: getMissionControlProjects,
+    queryKey: ['mission-control-projects-native-chat'],
+    staleTime: 30_000
+  })
   const bridgeStatusQuery = useQuery({
     enabled: gatewayOpen && Boolean(selectedProjectId.trim()),
     queryFn: getMissionControlGitHubBridgeStatus,
@@ -120,6 +133,7 @@ function ChatHeader({
     sessions.find(session => session.id === selectedSessionId || session._lineage_root_id === selectedSessionId) || null
 
   const selectedProjectTitle = selectedProjectName.trim()
+  const projects = useMemo(() => nativeChatProjects(projectsQuery.data?.projects.map(item => item.record) ?? []), [projectsQuery.data])
   const title = activeStoredSession ? sessionTitle(activeStoredSession) : selectedProjectTitle ? 'New project chat' : 'New session'
 
   // Pins live on the durable lineage-root id, but selectedSessionId is the live
@@ -177,12 +191,75 @@ function ChatHeader({
         )}
       </div>
       <div className="ml-auto hidden min-w-0 max-w-[44vw] items-center gap-1.5 [-webkit-app-region:no-drag] min-[46rem]:flex">
-        {selectedProjectTitle ? (
-          <HeaderPill label={selectedProjectTitle} title={`Project: ${selectedProjectTitle}`} tone="idle" />
-        ) : null}
+        <ProjectHeaderSelect
+          loading={projectsQuery.isLoading}
+          projects={projects}
+          selectedProjectId={selectedProjectId}
+          selectedProjectTitle={selectedProjectTitle}
+        />
         <HeaderPill label={jennyStatus.label} title={jennyStatus.detail} tone={jennyStatus.tone} />
       </div>
     </header>
+  )
+}
+
+function nativeChatProjects(projects: MissionControlProjectRecord[]): MissionControlProjectRecord[] {
+  const seen = new Set<string>()
+  const out: MissionControlProjectRecord[] = []
+
+  for (const project of projects) {
+    const id = project.project_id?.trim()
+    const name = project.name?.trim()
+
+    if (!id || !name || seen.has(id)) {
+      continue
+    }
+
+    seen.add(id)
+    out.push(project)
+  }
+
+  return out.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+function ProjectHeaderSelect({
+  loading,
+  projects,
+  selectedProjectId,
+  selectedProjectTitle
+}: {
+  loading: boolean
+  projects: MissionControlProjectRecord[]
+  selectedProjectId: string
+  selectedProjectTitle: string
+}) {
+  if (!projects.length && !selectedProjectTitle && !loading) {
+    return null
+  }
+
+  const value = selectedProjectId.trim()
+
+  return (
+    <label className="flex min-w-0 items-center gap-1 text-[0.6875rem] text-(--ui-text-tertiary)" title="Jenny project">
+      <span className="sr-only">Jenny project</span>
+      <select
+        aria-label="Jenny project"
+        className="h-6 max-w-56 rounded-full border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) px-2 py-0 text-[0.6875rem] font-medium text-(--ui-text-secondary) outline-none hover:text-foreground focus:border-blue-400/60"
+        disabled={loading && !projects.length}
+        onChange={event => {
+          const project = projects.find(item => item.project_id === event.currentTarget.value)
+          setSelectedMissionControlProject(project?.project_id ?? null, project?.name ?? null)
+        }}
+        value={projects.some(project => project.project_id === value) ? value : ''}
+      >
+        <option value="">{loading ? 'Loading projects...' : 'Pick project'}</option>
+        {projects.map(project => (
+          <option key={project.project_id} value={project.project_id}>
+            {project.name}
+          </option>
+        ))}
+      </select>
+    </label>
   )
 }
 
