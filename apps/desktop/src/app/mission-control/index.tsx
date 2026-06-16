@@ -2457,6 +2457,14 @@ export function MissionControlView() {
         </aside>
 
         <main className="min-h-0 overflow-auto bg-[#0e0b12] px-3 py-2">
+          <section
+            aria-label="Advanced audit console notice"
+            className="mb-3 rounded-lg border border-[#f7efe4]/10 bg-[#15101a]/80 px-3 py-2 text-sm text-[#c9b8a2]"
+          >
+            <span className="font-semibold text-[#f7efe4]">Advanced audit console.</span>{' '}
+            Use <span className="font-semibold text-[#f7efe4]">Jenny OS</span> in the sidebar for normal project chat.
+            This page is for records, diagnostics, and manual recovery tools.
+          </section>
           <header className="sr-only">
             <div className="flex items-start justify-between gap-4">
               <div>

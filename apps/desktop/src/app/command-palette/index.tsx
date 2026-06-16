@@ -211,15 +211,15 @@ export function CommandPalette() {
           {
             icon: MessageCircle,
             id: 'nav-jenny-os-chat',
-            keywords: ['mission control', 'projects', 'workspace', 'chat', 'jenny'],
+            keywords: ['mission control', 'projects', 'workspace', 'chat', 'jenny', 'primary'],
             label: 'Jenny OS project chat',
             run: openJennyOsChat
           },
           {
             icon: Monitor,
             id: 'nav-mission-control',
-            keywords: ['audit', 'reports', 'lanes', 'debug', 'guardrails'],
-            label: 'Mission Control audit console',
+            keywords: ['advanced', 'audit', 'reports', 'lanes', 'debug', 'guardrails'],
+            label: 'Advanced audit console',
             run: go(MISSION_CONTROL_ROUTE)
           },
           { icon: Clock, id: 'nav-cron', keywords: ['schedule', 'jobs'], label: 'Cron', run: go(CRON_ROUTE) },
