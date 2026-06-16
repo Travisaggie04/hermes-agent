@@ -145,6 +145,47 @@ Definition of done:
 
 Goal: add execution only after the record loop is reliable.
 
+## Phase 6A - Goal Mode Engineering Loop
+
+Goal: make `/goal` safe for long engineering tasks Travis can let run while
+Jenny remains auditable and interruptible.
+
+Current baseline:
+
+- `/goal` already persists a standing goal per session.
+- A judge checks each completed turn and decides whether to continue.
+- The loop has turn budgets plus pause, resume, status, and clear controls.
+- Gateway continuation emits goal status updates and chains the next turn only
+  after the current turn releases the running guard.
+
+Build/verify before relying on it for real overnight work:
+
+- Goal kickoff should convert broad user text into a visible engineering
+  contract: objective, scope, explicit non-goals, protected surfaces, expected
+  evidence, stop conditions, and user approvals needed.
+- Each continuation should carry forward the latest plan state, completed
+  checklist, evidence gathered, open risks, and next smallest action instead
+  of only saying "continue working."
+- The status stream should show concise Codex-style progress: planning,
+  running checks, editing files, waiting on CI, blocked, or complete.
+- Goal completion should require evidence against the contract, not just a
+  confident summary.
+- Blocked states should stop the loop with the exact missing input, failing
+  command, or external dependency.
+- The loop must keep respecting Mission Control protected surfaces:
+  no gateway restart, deploy, dispatch/session-send, Waha/social/payment,
+  checkout/outreach, hidden worker/timer/daemon, model routing, secrets, or
+  live record deletion without a separate approved lane.
+- Long goal runs should leave a compact final report suitable for Mission
+  Control records: changed files, tests/checks, PRs, live/deployed state,
+  residual risks, rollback path, and recommended next lane.
+
+Definition of done:
+
+- Travis can start a bounded engineering goal, walk away, and return to a
+  clear status trail showing what Jenny did, what evidence proves it, what
+  remains blocked, and whether any human approval is needed.
+
 Candidate Level 2/3 actions:
 
 - read-only repo audit,
@@ -179,6 +220,7 @@ Definition of done:
    consistently.
 4. Add a project-scoped request ID display and copy button in Project Rooms.
 5. Add a read-only bridge transcript view grouped by project and request ID.
+6. Harden `/goal` into the long-task engineering loop described in Phase 6A.
 
 ## Morning Definition Of Done
 
