@@ -255,6 +255,67 @@ describe('usePromptActions project harness', () => {
     expect(optimisticUser?.parts).toEqual([{ type: 'text', text: 'test' }])
   })
 
+  it('shows a concise chat error when Jenny cannot reach the gateway', async () => {
+    setSelectedMissionControlProject('project-hermes-mission-control', 'Hermes / Mission Control')
+
+    const refreshSessions = vi.fn(async () => undefined)
+    const requestGateway = vi.fn(async (method: string) => {
+      if (method === 'prompt.submit') {
+        throw new Error("Error invoking remote method 'hermes:api': Error: connect ECONNREFUSED 100.115.125.111:9119")
+      }
+
+      return {} as never
+    })
+    const states: Array<{ messages: ChatMessage[]; busy: boolean; awaitingResponse: boolean }> = []
+
+    let handle: HarnessHandle | null = null
+    render(
+      <Harness
+        onReady={h => (handle = h)}
+        onState={state => states.push(state)}
+        refreshSessions={refreshSessions}
+        requestGateway={requestGateway}
+      />
+    )
+
+    await handle!.submitText('test')
+
+    const assistantError = states.flatMap(state => state.messages).findLast(message => message.role === 'assistant' && message.error)
+    expect(assistantError?.error).toBe('Jenny cannot reach the Hermes gateway. Reconnect the gateway, then retry from this chat.')
+    expect(assistantError?.error).not.toContain('ECONNREFUSED')
+    expect(assistantError?.error).not.toContain('100.115.125.111')
+  })
+
+  it('shows a concise chat error when the guarded bridge payload is too large', async () => {
+    setSelectedMissionControlProject('project-hermes-mission-control', 'Hermes / Mission Control')
+
+    const refreshSessions = vi.fn(async () => undefined)
+    const requestGateway = vi.fn(async (method: string) => {
+      if (method === 'prompt.submit') {
+        throw new Error("Error invoking remote method 'hermes:api': Error: bridge field is too large")
+      }
+
+      return {} as never
+    })
+    const states: Array<{ messages: ChatMessage[]; busy: boolean; awaitingResponse: boolean }> = []
+
+    let handle: HarnessHandle | null = null
+    render(
+      <Harness
+        onReady={h => (handle = h)}
+        onState={state => states.push(state)}
+        refreshSessions={refreshSessions}
+        requestGateway={requestGateway}
+      />
+    )
+
+    await handle!.submitText('test')
+
+    const assistantError = states.flatMap(state => state.messages).findLast(message => message.role === 'assistant' && message.error)
+    expect(assistantError?.error).toBe('Jenny could not process that message because it was too large. Send one smaller task and try again.')
+    expect(assistantError?.error).not.toContain('bridge field')
+  })
+
   it('keeps hidden project context when regenerating a project chat reply', async () => {
     setSelectedMissionControlProject('project-hermes-mission-control', 'Hermes / Mission Control')
     const initialMessages: ChatMessage[] = [

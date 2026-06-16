@@ -74,6 +74,25 @@ function inlineErrorMessage(error: unknown, fallback: string): string {
   return (raw.match(/Error invoking remote method '[^']+': Error: (.+)$/)?.[1] ?? raw).replace(/^Error:\s*/, '').trim()
 }
 
+function friendlyPromptFailureMessage(error: unknown): string {
+  const raw = inlineErrorMessage(error, 'Prompt failed')
+  const lower = raw.toLowerCase()
+
+  if (lower.includes('connect econnrefused') || lower.includes('gateway offline')) {
+    return 'Jenny cannot reach the Hermes gateway. Reconnect the gateway, then retry from this chat.'
+  }
+
+  if (lower.includes('bridge field is too large') || lower.includes('field is too large')) {
+    return 'Jenny could not process that message because it was too large. Send one smaller task and try again.'
+  }
+
+  if (lower.includes('app-server startup failed') || lower.includes('timed out')) {
+    return 'Jenny failed before finishing. Retry once; if it fails again, open the advanced audit console.'
+  }
+
+  return raw || 'Jenny could not finish that message. Retry once from this chat.'
+}
+
 function nativeProjectHarnessContext(): string {
   const projectId = $selectedMissionControlProjectId.get().trim()
 
@@ -374,7 +393,7 @@ export function usePromptActions({
 
         return true
       } catch (err) {
-        const message = inlineErrorMessage(err, 'Prompt failed')
+        const message = friendlyPromptFailureMessage(err)
 
         releaseBusy()
         updateSessionState(sessionId, state => ({
