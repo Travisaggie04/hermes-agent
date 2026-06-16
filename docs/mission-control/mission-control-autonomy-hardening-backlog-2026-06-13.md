@@ -211,6 +211,39 @@ Definition of done:
 - Jenny performs small PR lanes with evidence, and Mission Control shows every
   stage before any action can become live.
 
+## Phase 6B - Local Model Helper Deferred
+
+Goal: keep local LM Studio/Qwen experiments out of the active Jenny control
+loop until the core desktop and phone orchestration path is stable.
+
+Decision:
+
+- Do not integrate a local laptop model into Mission Control, Jenny bridge
+  routing, PR review, deploy decisions, or `/goal` continuations right now.
+- Treat local model smoke results as lab notes only, not authority.
+- If revisited later, the local model may only act as an advisory helper for
+  low-risk summaries, request classification, draft challenge questions, and
+  evidence checklist suggestions.
+
+Requirements before any future integration:
+
+- The helper must be manually enabled, project-scoped, and visibly labeled as
+  advisory.
+- Qwen-style prompts must use `/no_think` or an equivalent budget control when
+  needed.
+- Structured output must use schema validation; raw JSON prompting is not
+  sufficient.
+- Codex or Jenny must validate every helper output before it affects a lane.
+- The helper must never approve PRs, merge, deploy, restart services, dispatch
+  sessions, route models, mutate records, or touch protected surfaces.
+- The helper must not run as a hidden worker, timer, daemon, or automatic
+  background loop.
+
+Definition of done before revisiting:
+
+- Travis can use the normal Hermes desktop chat and phone surface for Jenny
+  without relying on Discord or a local-model workaround.
+
 ## Recommended Next Build Lanes
 
 1. Add a Mission Control status badge for "merged but not deployed" versus
@@ -221,6 +254,8 @@ Definition of done:
 4. Add a project-scoped request ID display and copy button in Project Rooms.
 5. Add a read-only bridge transcript view grouped by project and request ID.
 6. Harden `/goal` into the long-task engineering loop described in Phase 6A.
+7. Revisit the local model helper only after Phase 6A and the native Jenny chat
+   path are stable.
 
 ## Morning Definition Of Done
 
