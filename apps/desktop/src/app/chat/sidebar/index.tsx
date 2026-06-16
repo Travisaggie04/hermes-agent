@@ -573,7 +573,7 @@ export function ChatSidebar({
   }, [projectGroups, selectedMissionControlProjectId])
 
   const projectMode = Boolean(selectedMissionControlProjectId.trim())
-  const recentsLabel = projectMode ? 'Unfiled chats' : s.sessions
+  const recentsLabel = projectMode ? 'Other chats' : s.sessions
   const recentsRootClassName = projectMode ? 'shrink-0 p-0 pb-1 opacity-90' : 'min-h-0 flex-1 p-0'
   const recentsContentClassName = cn(
     projectMode
@@ -1568,7 +1568,7 @@ function SidebarWorkspaceGroup({
   const isProfileGroup = group.mode === 'profile'
   const isProjectGroup = group.mode === 'project'
   const pageStep = isProfileGroup ? PROFILE_INITIAL_PAGE : WORKSPACE_PAGE
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(() => !isProjectGroup || active)
   const [visibleCount, setVisibleCount] = useState(pageStep)
 
   const loadedCount = group.sessions.length
@@ -1590,6 +1590,12 @@ function SidebarWorkspaceGroup({
       group.onLoadMore?.()
     }
   }
+
+  useEffect(() => {
+    if (active && isProjectGroup) {
+      setOpen(true)
+    }
+  }, [active, isProjectGroup])
 
   return (
     <div
