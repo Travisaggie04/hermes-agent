@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest'
 import { nativeJennyStatus } from './native-jenny-status'
 
 const TRANSPORT_WORDING_RE = /bridge|mailbox|mission control status|audit console/i
+const NOW_MS = Date.parse('2026-06-16T20:00:00Z')
+const RECENT_STATUS_AT = '2026-06-16T19:59:45Z'
+const STALE_STATUS_AT = '2026-06-16T19:58:00Z'
 
 function expectCleanVisibleStatus(status: ReturnType<typeof nativeJennyStatus>) {
   expect(status.detail).not.toMatch(TRANSPORT_WORDING_RE)
@@ -160,11 +163,82 @@ describe('nativeJennyStatus', () => {
     const status = nativeJennyStatus({
       gatewayOpen: true,
       projectId: 'project-hermes',
-      bridgeStatus: { last_status: 'hermes_answer_started', pending_count: 1, visible_pending_count: 1 }
+      nowMs: NOW_MS,
+      bridgeStatus: {
+        last_poll_at: RECENT_STATUS_AT,
+        last_status: 'hermes_answer_started',
+        pending_count: 1,
+        visible_pending_count: 1
+      }
     })
 
     expect(status).toMatchObject({
       detail: 'Jenny is working on the latest project message.',
+      label: 'Jenny working',
+      summary: 'Progress appears here',
+      tone: 'working'
+    })
+    expectCleanVisibleStatus(status)
+  })
+
+  it('does not show stale answer-started records as active work', () => {
+    const status = nativeJennyStatus({
+      gatewayOpen: true,
+      projectId: 'project-hermes',
+      nowMs: NOW_MS,
+      bridgeStatus: {
+        last_poll_at: STALE_STATUS_AT,
+        last_status: 'hermes_answer_started',
+        pending_count: 1,
+        visible_pending_count: 1
+      }
+    })
+
+    expect(status).toMatchObject({
+      label: 'Jenny ready',
+      summary: 'Send a message',
+      tone: 'ok'
+    })
+    expectCleanVisibleStatus(status)
+  })
+
+  it('does not show stale completed watch polls as active work', () => {
+    const status = nativeJennyStatus({
+      gatewayOpen: true,
+      projectId: 'project-hermes',
+      nowMs: NOW_MS,
+      bridgeStatus: {
+        foreground_watch_running: true,
+        last_poll_at: STALE_STATUS_AT,
+        last_status: 'watch_poll_completed',
+        pending_count: 0,
+        visible_pending_count: 0
+      }
+    })
+
+    expect(status).toMatchObject({
+      label: 'Jenny ready',
+      summary: 'Send a message',
+      tone: 'ok'
+    })
+    expectCleanVisibleStatus(status)
+  })
+
+  it('shows a fresh foreground watch poll as active work', () => {
+    const status = nativeJennyStatus({
+      gatewayOpen: true,
+      projectId: 'project-hermes',
+      nowMs: NOW_MS,
+      bridgeStatus: {
+        foreground_watch_running: true,
+        last_poll_at: RECENT_STATUS_AT,
+        last_status: 'watch_poll_completed',
+        pending_count: 0,
+        visible_pending_count: 0
+      }
+    })
+
+    expect(status).toMatchObject({
       label: 'Jenny working',
       summary: 'Progress appears here',
       tone: 'working'

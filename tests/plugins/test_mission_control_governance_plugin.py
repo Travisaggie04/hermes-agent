@@ -687,7 +687,7 @@ def test_workspace_github_bridge_status_is_read_only_and_manual_only(plugin_api,
     assert payload["background_pending_count"] == 1
     assert payload["mode"] == "watch_foreground"
     assert payload["foreground_watch_supported"] is True
-    assert payload["foreground_watch_running"] is True
+    assert payload["foreground_watch_running"] is False
     assert payload["last_status"] == "watch_poll_completed"
     assert payload["pending_messages"][0]["record"]["request_id"] == "github-req-open"
     assert payload["visible_pending_messages"][0]["record"]["request_id"] == "github-req-travis-open"
