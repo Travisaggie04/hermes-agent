@@ -212,8 +212,8 @@ export function SidebarSessionRow({
           )}
           {currentProjectMoveTarget && onMoveToProject ? (
             <Button
-              aria-label={`Move ${title} to ${currentProjectMoveTarget.name}`}
-              className="size-5 rounded-[4px] bg-transparent text-transparent transition-colors duration-100 hover:bg-(--ui-control-active-background) hover:text-foreground focus-visible:bg-(--ui-control-active-background) focus-visible:text-foreground focus-visible:ring-0 group-hover:text-(--ui-text-tertiary) [&_svg]:size-3.5!"
+              aria-label={`File ${title} in ${currentProjectMoveTarget.name}`}
+              className="size-5 rounded-[4px] bg-transparent text-(--ui-text-quaternary) transition-colors duration-100 hover:bg-(--ui-control-active-background) hover:text-foreground focus-visible:bg-(--ui-control-active-background) focus-visible:text-foreground focus-visible:ring-0 group-hover:text-(--ui-text-secondary) [&_svg]:size-3.5!"
               onClick={event => {
                 event.preventDefault()
                 event.stopPropagation()
@@ -221,7 +221,7 @@ export function SidebarSessionRow({
                 onMoveToProject(currentProjectMoveTarget.project_id, currentProjectMoveTarget.name)
               }}
               size="icon"
-              title={`Move to ${currentProjectMoveTarget.name}`}
+              title={`File in ${currentProjectMoveTarget.name}`}
               type="button"
               variant="ghost"
             >
