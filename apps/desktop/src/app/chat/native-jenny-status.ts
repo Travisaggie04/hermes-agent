@@ -39,6 +39,24 @@ function dateMs(value?: string): number {
   return Number.isFinite(ms) ? ms : 0
 }
 
+function friendlyBridgeError(message: string): string {
+  const lower = message.toLowerCase()
+
+  if (lower.includes('bridge field is too large') || lower.includes('field is too large')) {
+    return 'Jenny could not process that message because it was too large. Send a shorter request or split it into one smaller task.'
+  }
+
+  if (lower.includes('connect econnrefused') || lower.includes('gateway offline')) {
+    return 'Jenny could not reach the Hermes gateway. Check the gateway connection, then retry from this chat.'
+  }
+
+  if (lower.includes('responder failed') || lower.includes('app-server startup failed') || lower.includes('timed out')) {
+    return 'Jenny failed before finishing a reply. Retry once, and review the audit console if it fails again.'
+  }
+
+  return 'Jenny hit a bridge error. Retry once, or open the audit console for technical details.'
+}
+
 export function nativeJennyStatus({
   activeTurnRunning = false,
   bridgeStatus,
@@ -103,7 +121,7 @@ export function nativeJennyStatus({
 
   if (lastError && !benignNoPending && !staleOrBackgroundOnlyError) {
     return {
-      detail: lastError,
+      detail: friendlyBridgeError(lastError),
       label: 'Jenny needs attention',
       summary: 'Check details and retry',
       tone: 'warn'

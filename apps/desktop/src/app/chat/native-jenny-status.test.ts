@@ -32,14 +32,49 @@ describe('nativeJennyStatus', () => {
     })
   })
 
-  it('surfaces bridge record errors as Jenny attention', () => {
+  it('summarizes bridge record errors as Jenny attention without raw backend wording', () => {
     expect(
       nativeJennyStatus({
         gatewayOpen: true,
         projectId: 'project-hermes',
         bridgeStatus: { last_error: 'Hermes responder failed' }
       })
-    ).toMatchObject({ detail: 'Hermes responder failed', label: 'Jenny needs attention', summary: 'Check details and retry', tone: 'warn' })
+    ).toMatchObject({
+      detail: 'Jenny failed before finishing a reply. Retry once, and review the audit console if it fails again.',
+      label: 'Jenny needs attention',
+      summary: 'Check details and retry',
+      tone: 'warn'
+    })
+  })
+
+  it('turns bridge size failures into an actionable native chat message', () => {
+    const status = nativeJennyStatus({
+      gatewayOpen: true,
+      projectId: 'project-hermes',
+      bridgeStatus: { last_error: 'bridge field is too large' }
+    })
+
+    expect(status).toMatchObject({
+      detail: 'Jenny could not process that message because it was too large. Send a shorter request or split it into one smaller task.',
+      label: 'Jenny needs attention',
+      tone: 'warn'
+    })
+    expect(status.detail).not.toContain('bridge field')
+  })
+
+  it('turns gateway connection failures into an actionable native chat message', () => {
+    const status = nativeJennyStatus({
+      gatewayOpen: true,
+      projectId: 'project-hermes',
+      bridgeStatus: { last_error: 'Error invoking remote method: connect ECONNREFUSED 100.115.125.111:9119' }
+    })
+
+    expect(status).toMatchObject({
+      detail: 'Jenny could not reach the Hermes gateway. Check the gateway connection, then retry from this chat.',
+      label: 'Jenny needs attention',
+      tone: 'warn'
+    })
+    expect(status.detail).not.toContain('ECONNREFUSED')
   })
 
   it('does not let background-only bridge errors dominate the native chat status', () => {
