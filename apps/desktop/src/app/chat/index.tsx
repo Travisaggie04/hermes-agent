@@ -558,6 +558,7 @@ export function ChatView({
   const messages = useStore($messages)
   const selectedProjectName = useStore($selectedMissionControlProjectName)
   const selectedSessionId = useStore($selectedStoredSessionId)
+  const [projectIntakeOpen, setProjectIntakeOpen] = useState(false)
   const selectedProjectTitle = selectedProjectName.trim()
   const runtimeMessageCacheRef = useRef(new WeakMap<ChatMessage, ThreadMessage>())
   const isRoutedSessionView = Boolean(routeSessionId(location.pathname))
@@ -733,6 +734,7 @@ export function ChatView({
             intro={
               showIntro
                 ? {
+                    onCreateProject: () => setProjectIntakeOpen(true),
                     onSelectProject: (projectId, projectName) => setSelectedMissionControlProject(projectId, projectName),
                     personality: introPersonality,
                     projectName: selectedProjectName.trim(),
@@ -793,6 +795,14 @@ export function ChatView({
             <span className="truncate font-medium">Jenny is working in {selectedProjectTitle}</span>
           </div>
         )}
+        <NativeProjectIntakeDialog
+          onCreated={(projectId, projectName) => {
+            setSelectedMissionControlProject(projectId, projectName)
+            void projectHomeQuery.refetch()
+          }}
+          onOpenChange={setProjectIntakeOpen}
+          open={projectIntakeOpen}
+        />
         <ChatDropOverlay kind={dragKind} />
         <ChatSwapOverlay profile={gatewaySwapTarget} />
       </div>

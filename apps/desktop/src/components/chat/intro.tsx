@@ -16,6 +16,7 @@ export type IntroProps = {
   projectName?: string
   projectOptions?: { id: string; name: string }[]
   projectsLoading?: boolean
+  onCreateProject?: () => void
   onSelectProject?: (projectId: string, projectName: string) => void
   seed?: number
 }
@@ -158,7 +159,15 @@ function resolveCopy(personality?: string, seed?: number): IntroCopy {
   return pickCopy(copies, seed)
 }
 
-export function Intro({ personality, projectName, projectOptions = [], projectsLoading = false, onSelectProject, seed }: IntroProps) {
+export function Intro({
+  personality,
+  projectName,
+  projectOptions = [],
+  projectsLoading = false,
+  onCreateProject,
+  onSelectProject,
+  seed
+}: IntroProps) {
   const [mountSeed] = useState(() => Math.floor(Math.random() * 100000))
   const copy = resolveCopy(personality, mountSeed + (seed ?? 0))
   const projectLabel = projectName?.trim() || ''
@@ -220,6 +229,15 @@ export function Intro({ personality, projectName, projectOptions = [], projectsL
                 ))
               )}
             </div>
+            {onCreateProject ? (
+              <button
+                className="rounded-full border border-(--ui-stroke-tertiary) bg-transparent px-3 py-1.5 text-xs font-medium text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent)/60 hover:bg-(--ui-control-hover-background) hover:text-foreground focus-visible:border-(--ui-accent)/70 focus-visible:outline-none"
+                onClick={onCreateProject}
+                type="button"
+              >
+                Create Jenny project
+              </button>
+            ) : null}
           </div>
         ) : (
           <p className="m-0 text-center leading-normal tracking-tight">{copy.body}</p>
