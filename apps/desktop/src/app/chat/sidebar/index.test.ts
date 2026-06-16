@@ -5,6 +5,8 @@ import source from './index.tsx?raw'
 describe('chat sidebar project workspace affordances', () => {
   it('makes project creation and empty project chats visible', () => {
     expect(source).toContain('New project')
+    expect(source).toContain('aria-label="Create project"')
+    expect(source).not.toContain('Create a guarded project')
     expect(source).toContain('No chats in this project yet.')
     expect(source).toContain('Start project chat')
     expect(source).toContain('onNewSessionInProject(group.id, group.label)')

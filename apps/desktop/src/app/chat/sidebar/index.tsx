@@ -996,9 +996,9 @@ export function ChatSidebar({
             forceEmptyState={projectGroupsLoading || projectGroups.length === 0}
             groups={visibleProjectGroups}
             headerAction={
-              <Tip label="Create a guarded project">
+              <Tip label="Create project">
                 <Button
-                  aria-label="Create a guarded project"
+                  aria-label="Create project"
                   className="h-6 gap-1 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) opacity-90 hover:bg-(--ui-control-hover-background) hover:text-foreground hover:opacity-100"
                   onClick={event => {
                     event.stopPropagation()
