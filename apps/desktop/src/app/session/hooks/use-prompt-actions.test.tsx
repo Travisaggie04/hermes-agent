@@ -316,6 +316,40 @@ describe('usePromptActions project harness', () => {
     expect(assistantError?.error).not.toContain('bridge field')
   })
 
+  it('shows a plain chat error when Jenny times out before replying', async () => {
+    setSelectedMissionControlProject('project-hermes-mission-control', 'Hermes / Mission Control')
+
+    const refreshSessions = vi.fn(async () => undefined)
+    const requestGateway = vi.fn(async (method: string) => {
+      if (method === 'prompt.submit') {
+        throw new Error(
+          "Error invoking remote method 'hermes:api': Error: codex app-server startup failed: codex app-server method 'initialize' timed out after 10.0s"
+        )
+      }
+
+      return {} as never
+    })
+    const states: Array<{ messages: ChatMessage[]; busy: boolean; awaitingResponse: boolean }> = []
+
+    let handle: HarnessHandle | null = null
+    render(
+      <Harness
+        onReady={h => (handle = h)}
+        onState={state => states.push(state)}
+        refreshSessions={refreshSessions}
+        requestGateway={requestGateway}
+      />
+    )
+
+    await handle!.submitText('test')
+
+    const assistantError = states.flatMap(state => state.messages).findLast(message => message.role === 'assistant' && message.error)
+    expect(assistantError?.error).toBe('Jenny failed before finishing. Retry once; if it fails again, open details.')
+    expect(assistantError?.error).not.toContain('timed out')
+    expect(assistantError?.error).not.toContain('app-server')
+    expect(assistantError?.error).not.toContain('audit console')
+  })
+
   it('keeps hidden project context when regenerating a project chat reply', async () => {
     setSelectedMissionControlProject('project-hermes-mission-control', 'Hermes / Mission Control')
     const initialMessages: ChatMessage[] = [
