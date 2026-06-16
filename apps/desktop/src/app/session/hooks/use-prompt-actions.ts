@@ -1,7 +1,7 @@
 import type { AppendMessage, ThreadMessage } from '@assistant-ui/react'
 import { type MutableRefObject, useCallback } from 'react'
 
-import { getProfiles, transcribeAudio } from '@/hermes'
+import { createMissionControlSessionProjectLink, getProfiles, transcribeAudio } from '@/hermes'
 import { appendTextPart, branchGroupForUser, type ChatMessage, chatMessageText, textPart } from '@/lib/chat-messages'
 import {
   attachmentDisplayText,
@@ -18,6 +18,7 @@ import {
   isDesktopSlashCommand
 } from '@/lib/desktop-slash-commands'
 import { triggerHaptic } from '@/lib/haptics'
+import { notifyMissionControlProjectLinkCreated } from '@/lib/mission-control-events'
 import { setMutableRef } from '@/lib/mutable-ref'
 import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { setSessionYolo } from '@/lib/yolo-session'
@@ -33,6 +34,7 @@ import { requestDesktopOnboarding } from '@/store/onboarding'
 import { $activeGatewayProfile, $newChatProfile, ensureGatewayProfile, normalizeProfileKey } from '@/store/profile'
 import {
   $busy,
+  $currentCwd,
   $messages,
   $selectedMissionControlProjectId,
   $selectedMissionControlProjectName,
@@ -120,6 +122,45 @@ function withNativeProjectHarnessContext(text: string): string {
   const projectHarnessContext = nativeProjectHarnessContext()
 
   return [projectHarnessContext, body].filter(Boolean).join('\n\n')
+}
+
+const nativeProjectSessionLinkCache = new Set<string>()
+
+function ensureNativeProjectSessionLink(storedSessionId: string | null, preview?: string) {
+  const sessionId = storedSessionId?.trim()
+  const projectId = $selectedMissionControlProjectId.get().trim()
+
+  if (!sessionId || !projectId) {
+    return
+  }
+
+  const profile = normalizeProfileKey($activeGatewayProfile.get())
+  const cacheKey = `${profile}:${projectId}:${sessionId}`
+
+  if (nativeProjectSessionLinkCache.has(cacheKey)) {
+    return
+  }
+
+  const projectName = $selectedMissionControlProjectName.get().trim() || projectId
+
+  createMissionControlSessionProjectLink({
+    cwd_snapshot: $currentCwd.get().trim() || undefined,
+    link_method: 'chat-send',
+    linked_by: 'desktop',
+    profile: profile === 'default' ? undefined : profile,
+    project_id: projectId,
+    session_id: sessionId,
+    source: 'desktop-native-chat',
+    status: 'active',
+    title_snapshot: preview?.trim() || undefined
+  })
+    .then(() => {
+      nativeProjectSessionLinkCache.add(cacheKey)
+      notifyMissionControlProjectLinkCreated({ projectId, sessionId })
+    })
+    .catch(err => {
+      notifyError(err, `Jenny can still reply, but this chat could not be filed under ${projectName}`)
+    })
 }
 
 interface PromptActionsOptions {
@@ -382,6 +423,7 @@ export function usePromptActions({
       }
 
       try {
+        ensureNativeProjectSessionLink(selectedStoredSessionIdRef.current, visibleText)
         await syncImageAttachmentsForSubmit(sessionId, attachments, {
           updateComposerAttachments: usingComposerAttachments
         })

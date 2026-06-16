@@ -4,6 +4,7 @@ import type { MutableRefObject } from 'react'
 import { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { createMissionControlSessionProjectLink } from '@/hermes'
 import type { ChatMessage } from '@/lib/chat-messages'
 import {
   $messages,
@@ -18,6 +19,7 @@ import type { SessionInfo } from '@/types/hermes'
 import { usePromptActions } from './use-prompt-actions'
 
 vi.mock('@/hermes', () => ({
+  createMissionControlSessionProjectLink: vi.fn(async () => ({ ok: true })),
   getProfiles: vi.fn(async () => ({ profiles: [] })),
   setApiRequestProfile: vi.fn(),
   transcribeAudio: vi.fn()
@@ -238,6 +240,17 @@ describe('usePromptActions project harness', () => {
       session_id: RUNTIME_SESSION_ID,
       text: expect.stringContaining('Hidden Jenny OS project context:')
     })
+    expect(createMissionControlSessionProjectLink).toHaveBeenCalledWith({
+      cwd_snapshot: undefined,
+      link_method: 'chat-send',
+      linked_by: 'desktop',
+      profile: undefined,
+      project_id: 'project-hermes-mission-control',
+      session_id: RUNTIME_SESSION_ID,
+      source: 'desktop-native-chat',
+      status: 'active',
+      title_snapshot: 'test'
+    })
     const promptSubmitCall = requestGateway.mock.calls.find(call => call[0] === 'prompt.submit') as
       | [string, { session_id: string; text: string }]
       | undefined
@@ -253,6 +266,25 @@ describe('usePromptActions project harness', () => {
 
     const optimisticUser = states.flatMap(state => state.messages).find(message => message.role === 'user')
     expect(optimisticUser?.parts).toEqual([{ type: 'text', text: 'test' }])
+  })
+
+  it('does not block Jenny replies if background project filing fails', async () => {
+    setSelectedMissionControlProject('project-tool-tally', 'Tool & Tally')
+    vi.mocked(createMissionControlSessionProjectLink).mockRejectedValueOnce(new Error('record store unavailable'))
+
+    const refreshSessions = vi.fn(async () => undefined)
+    const requestGateway = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({}) as never)
+
+    let handle: HarnessHandle | null = null
+    render(<Harness onReady={h => (handle = h)} refreshSessions={refreshSessions} requestGateway={requestGateway} />)
+
+    await handle!.submitText('keep going')
+
+    expect(createMissionControlSessionProjectLink).toHaveBeenCalled()
+    expect(requestGateway).toHaveBeenCalledWith('prompt.submit', {
+      session_id: RUNTIME_SESSION_ID,
+      text: expect.stringContaining('keep going')
+    })
   })
 
   it('shows a concise chat error when Jenny cannot reach the gateway', async () => {
