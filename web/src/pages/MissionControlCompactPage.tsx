@@ -63,9 +63,9 @@ const REAL_PROJECT_NAMES = [
 
 const CANONICAL_REAL_PROJECTS: ProjectRecord[] = [
   {
-    current_goal: "Make Mission Control the primary Jenny workspace before resuming other projects.",
+    current_goal: "Make Jenny OS native chat the primary workspace while Mission Control stays audit/recovery.",
     name: "Hermes / Mission Control",
-    next_recommended_lane: "Continue the Mission Control/Jenny recovery lane.",
+    next_recommended_lane: "Continue the Jenny OS native chat recovery lane.",
     project_id: "project-hermes-mission-control",
     source_of_truth: "Mission Control recovery records",
     status: "Active recovery lane",

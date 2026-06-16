@@ -274,9 +274,9 @@
     {
       name: "Hermes / Mission Control",
       status: "Live accepted baseline; workspace v1 is display/manual-copy only.",
-      current_goal: "Make Mission Control the obvious operating surface before enabling any execution path.",
+      current_goal: "Make Jenny OS native chat the obvious operating surface before enabling any execution path.",
       last_report_summary: "PR #51 deployed the handoff builder usability fix and accepted the handoffbuilder baseline.",
-      next_recommended_lane: "Project Workspace v1 static cards PR: no backend, no records, no dispatch.",
+      next_recommended_lane: "Jenny OS workspace static cards PR: no backend, no records, no dispatch.",
       mistakes_guards: "Guard against gateway restarts, token printing, stale baseline drift, and accidental runtime enforcement.",
     },
     {

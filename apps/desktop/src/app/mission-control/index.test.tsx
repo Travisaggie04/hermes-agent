@@ -311,7 +311,7 @@ beforeEach(() => {
         record: {
           approval_rules: ['explicit approval before send path'],
           constraints: ['manual-copy only'],
-          outcome: 'Make Mission Control the obvious operating surface before enabling execution.',
+          outcome: 'Make Jenny OS native chat the obvious operating surface before enabling execution.',
           project_id: 'project-hermes-mission-control',
           status: 'active',
           success_criteria: ['project rooms visible', 'challenge gate visible']
@@ -1727,6 +1727,7 @@ describe('MissionControlView', () => {
     expect(longForm).toContain('adult animated explainer')
     expect(longForm).toContain('reusable character/prop workflow')
     expect(longForm).not.toContain('Improve Mission Control as the primary Desktop workspace')
+    expect(longForm).not.toContain('Make Mission Control the primary Jenny workspace')
 
     const toolTally = promptFor('project-tool-tally', 'Tool & Tally')
     expect(toolTally).toContain('No payments')
