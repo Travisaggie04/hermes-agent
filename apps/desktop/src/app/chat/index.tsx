@@ -60,7 +60,8 @@ import {
   $selectedMissionControlProjectName,
   $selectedStoredSessionId,
   $sessions,
-  sessionPinId
+  sessionPinId,
+  setSelectedMissionControlProject
 } from '@/store/session'
 import { $subagentsBySession, activeSubagentCount } from '@/store/subagents'
 import type { ModelOptionsResponse } from '@/types/hermes'
@@ -231,6 +232,7 @@ function ChatHeader({
       <div className="ml-auto hidden min-w-0 max-w-[44vw] items-center gap-1.5 [-webkit-app-region:no-drag] min-[46rem]:flex">
         <ProjectHeaderSelect
           loading={projectsQuery.isLoading}
+          onClearProject={() => setSelectedMissionControlProject(null)}
           onNewProject={() => setProjectIntakeOpen(true)}
           onSelectProject={onStartProjectChat}
           projects={projects}
@@ -304,6 +306,7 @@ function latestVisibleAssistantErrorMessage(messages: readonly ChatMessage[]): C
 
 function ProjectHeaderSelect({
   loading,
+  onClearProject,
   onNewProject,
   onSelectProject,
   projects,
@@ -311,6 +314,7 @@ function ProjectHeaderSelect({
   selectedProjectTitle
 }: {
   loading: boolean
+  onClearProject: () => void
   onNewProject: () => void
   onSelectProject: (projectId: string, projectName: string) => void
   projects: MissionControlProjectRecord[]
@@ -332,14 +336,21 @@ function ProjectHeaderSelect({
           className="h-6 max-w-56 rounded-full border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) px-2 py-0 text-[0.6875rem] font-medium text-(--ui-text-secondary) outline-none hover:text-foreground focus:border-blue-400/60"
           disabled={loading && !projects.length}
           onChange={event => {
-            const project = projects.find(item => item.project_id === event.currentTarget.value)
+            const nextValue = event.currentTarget.value
+
+            if (!nextValue) {
+              onClearProject()
+              return
+            }
+
+            const project = projects.find(item => item.project_id === nextValue)
             if (project) {
               onSelectProject(project.project_id, project.name)
             }
           }}
           value={projects.some(project => project.project_id === value) ? value : ''}
         >
-          <option value="">{loading ? 'Loading projects...' : 'Pick project'}</option>
+          <option value="">{loading ? 'Loading projects...' : 'Other chats'}</option>
           {projects.map(project => (
             <option key={project.project_id} value={project.project_id}>
               {project.name}
