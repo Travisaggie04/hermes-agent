@@ -55,12 +55,12 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('onNewSessionInProject={startProjectChat}')
   })
 
-  it('opens a clean project chat when a project folder is selected', () => {
-    expect(source).toContain('onOpenProjectChat={startProjectChat}')
-    expect(source).toContain('onOpenProjectChat?: (projectId: string, projectName: string) => void')
-    expect(source).toContain('onOpenProjectChat?.(group.id, group.label)')
-    expect(source).toContain('if (!active) {')
+  it('selects project folders without spawning a new chat', () => {
+    expect(source).not.toContain('onOpenProjectChat')
+    expect(source).toContain('onSelectProject?.(group.id, group.label)')
     expect(source).toContain('setOpen(true)')
+    expect(source).toContain('onNewSessionInProject={startProjectChat}')
+    expect(source).toContain('onNewSessionInProject?.(group.id, group.label)')
   })
 
   it('pins the selected project to the top of the native project list', () => {
