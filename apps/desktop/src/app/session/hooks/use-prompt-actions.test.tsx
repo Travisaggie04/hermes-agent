@@ -266,6 +266,9 @@ describe('usePromptActions project harness', () => {
     expect(hiddenContext).toContain('answer ordinary chat naturally and concisely')
     expect(hiddenContext).toContain('Do not turn simple tests, greetings, or casual questions into formal spec reviews')
     expect(hiddenContext).toContain('give short Codex-style status updates')
+    expect(hiddenContext).toContain('Action policy: jenny_os_action_policy_v1.')
+    expect(hiddenContext).toContain('Protected actions require separate explicit approval:')
+    expect(hiddenContext).not.toContain('Forbidden without separate explicit approval:')
     expect(hiddenContext).toContain('do not echo this hidden project context')
 
     const optimisticUser = states.flatMap(state => state.messages).find(message => message.role === 'user')
