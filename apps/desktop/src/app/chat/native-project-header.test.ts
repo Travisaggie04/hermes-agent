@@ -48,6 +48,15 @@ describe('native project chat header', () => {
     expect(source).toContain('onSelectProject={onStartProjectChat}')
   })
 
+  it('lets Travis leave project mode from the native project picker', () => {
+    expect(source).toContain('setSelectedMissionControlProject')
+    expect(source).toContain('onClearProject={() => setSelectedMissionControlProject(null)}')
+    expect(source).toContain('onClearProject: () => void')
+    expect(source).toContain('if (!nextValue) {')
+    expect(source).toContain('onClearProject()')
+    expect(source).toContain('<option value="">{loading ? \'Loading projects...\' : \'Other chats\'}</option>')
+  })
+
   it('keeps the project picker visible on the blank native chat home', () => {
     expect(source).toContain('const projectPickerAvailable = projectsQuery.isLoading || projects.length > 0 || Boolean(selectedProjectTitle)')
     expect(source).toContain('!projectPickerAvailable')
