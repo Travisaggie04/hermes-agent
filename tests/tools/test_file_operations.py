@@ -335,6 +335,47 @@ class TestShellFileOpsHelpers:
         # Normal text -> not binary
         assert file_ops._is_likely_binary("unknown", "Hello world\nLine 2\n") is False
 
+    def test_has_command_uses_posix_command_v(self, mock_env):
+        def side_effect(command, **kwargs):
+            if command.startswith("command -v rg"):
+                return {"output": "", "returncode": 0}
+            raise AssertionError(f"unexpected command: {command}")
+
+        mock_env.execute.side_effect = side_effect
+        ops = ShellFileOperations(mock_env)
+
+        assert ops._has_command("rg") is True
+
+    def test_has_command_falls_back_to_windows_where(self, mock_env):
+        commands = []
+
+        def side_effect(command, **kwargs):
+            commands.append(command)
+            if command.startswith("command -v rg"):
+                return {"output": "", "returncode": 1}
+            if command.startswith("where.exe rg"):
+                return {"output": "C:\\Tools\\rg.exe\r\n", "returncode": 0}
+            raise AssertionError(f"unexpected command: {command}")
+
+        mock_env.execute.side_effect = side_effect
+        ops = ShellFileOperations(mock_env)
+
+        assert ops._has_command("rg") is True
+        assert commands == ["command -v rg >/dev/null 2>&1", "where.exe rg"]
+
+    def test_has_command_missing_when_posix_and_windows_checks_fail(self, mock_env):
+        def side_effect(command, **kwargs):
+            if command.startswith("command -v missingtool"):
+                return {"output": "", "returncode": 1}
+            if command.startswith("where.exe missingtool"):
+                return {"output": "INFO: Could not find files.\r\n", "returncode": 1}
+            raise AssertionError(f"unexpected command: {command}")
+
+        mock_env.execute.side_effect = side_effect
+        ops = ShellFileOperations(mock_env)
+
+        assert ops._has_command("missingtool") is False
+
     def test_is_image(self, file_ops):
         assert file_ops._is_image("photo.png") is True
         assert file_ops._is_image("pic.jpg") is True
