@@ -423,6 +423,39 @@ describe('usePromptActions project harness', () => {
     expect(promptSubmitCall?.[1].hidden_context).toContain('Project: Hermes / Mission Control')
   })
 
+  it('shows a chat retry error when regenerating a project reply fails', async () => {
+    setSelectedMissionControlProject('project-hermes-mission-control', 'Hermes / Mission Control')
+    const initialMessages: ChatMessage[] = [
+      { id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'recheck the plan' }] },
+      { id: 'assistant-1', role: 'assistant', parts: [{ type: 'text', text: 'old reply' }] }
+    ]
+    $messages.set(initialMessages)
+
+    const refreshSessions = vi.fn(async () => undefined)
+    const requestGateway = vi.fn(async () => {
+      throw new Error("Error invoking remote method 'hermes:api': Error: bridge field is too large")
+    })
+    const states: Array<{ messages: ChatMessage[]; busy: boolean; awaitingResponse: boolean }> = []
+
+    let handle: HarnessHandle | null = null
+    render(
+      <Harness
+        initialMessages={initialMessages}
+        onReady={h => (handle = h)}
+        onState={state => states.push(state)}
+        refreshSessions={refreshSessions}
+        requestGateway={requestGateway}
+      />
+    )
+
+    await handle!.reloadFromMessage('assistant-1')
+
+    const assistantError = states.flatMap(state => state.messages).findLast(message => message.role === 'assistant' && message.error)
+    expect(assistantError?.error).toBe('Jenny could not process that message because it was too large. Send one smaller task and try again.')
+    expect(assistantError?.error).not.toContain('bridge field')
+    expect(assistantError?.branchGroupId).toBe('branch:user-1')
+  })
+
   it('keeps hidden project context when editing and resending a project chat message', async () => {
     setSelectedMissionControlProject('project-hermes-mission-control', 'Hermes / Mission Control')
     const initialMessages: ChatMessage[] = [
@@ -456,5 +489,41 @@ describe('usePromptActions project harness', () => {
     expect(promptSubmitCall?.[1].text).toBe('edited request')
     expect(promptSubmitCall?.[1].hidden_context).toContain('Hidden Jenny OS project context:')
     expect(promptSubmitCall?.[1].hidden_context).toContain('Project: Hermes / Mission Control')
+  })
+
+  it('shows a chat retry error when editing and resending fails', async () => {
+    setSelectedMissionControlProject('project-hermes-mission-control', 'Hermes / Mission Control')
+    const initialMessages: ChatMessage[] = [
+      { id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'old request' }] },
+      { id: 'assistant-1', role: 'assistant', parts: [{ type: 'text', text: 'old reply' }] }
+    ]
+    $messages.set(initialMessages)
+
+    const refreshSessions = vi.fn(async () => undefined)
+    const requestGateway = vi.fn(async () => {
+      throw new Error("Error invoking remote method 'hermes:api': Error: codex app-server startup failed")
+    })
+    const states: Array<{ messages: ChatMessage[]; busy: boolean; awaitingResponse: boolean }> = []
+
+    let handle: HarnessHandle | null = null
+    render(
+      <Harness
+        initialMessages={initialMessages}
+        onReady={h => (handle = h)}
+        onState={state => states.push(state)}
+        refreshSessions={refreshSessions}
+        requestGateway={requestGateway}
+      />
+    )
+
+    await handle!.editMessage({
+      content: [{ type: 'text', text: 'edited request' }],
+      role: 'user',
+      sourceId: 'user-1'
+    } as unknown as AppendMessage)
+
+    const assistantError = states.flatMap(state => state.messages).findLast(message => message.role === 'assistant' && message.error)
+    expect(assistantError?.error).toBe('Jenny failed before finishing. Retry once; if it fails again, open details.')
+    expect(assistantError?.error).not.toContain('app-server')
   })
 })
