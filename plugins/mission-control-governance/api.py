@@ -18,6 +18,10 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from hermes_constants import get_hermes_home
+from mission_control.action_policy_guardrails import (
+    evaluate_action_policy,
+    get_action_policy_guardrails,
+)
 from mission_control.domain_governance import get_domain_governance_policies
 from mission_control.global_resource_guard import (
     evaluate_global_resource_guard,
@@ -3000,6 +3004,34 @@ async def global_resource_guard() -> dict[str, Any]:
         "display_only": True,
         "source": "mission_control.global_resource_guard",
         "guard": guard,
+    }
+
+
+@router.get("/action-policy")
+async def action_policy() -> dict[str, Any]:
+    policy = get_action_policy_guardrails()
+    return {
+        **INERT_FLAGS,
+        "enforcement_enabled": False,
+        "dry_run_only": True,
+        "display_only": True,
+        "source": "mission_control.action_policy_guardrails",
+        "policy": policy,
+    }
+
+
+@router.post("/action-policy/evaluate")
+async def action_policy_evaluate(request: Request) -> dict[str, Any]:
+    payload = await _read_json_object_body(request)
+    result = evaluate_action_policy(payload)
+    return {
+        **INERT_FLAGS,
+        "enforcement_enabled": False,
+        "dry_run_only": True,
+        "display_only": True,
+        "source": "caller_supplied_action_request",
+        "stored": False,
+        **result,
     }
 
 
