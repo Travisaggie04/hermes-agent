@@ -23,10 +23,25 @@ STORAGE_GUARD_POLICY: dict[str, Any] = {
     "guard_id": "storage_guard_v1",
     **_INERT_STORAGE_FLAGS,
     "disk_thresholds": {
-        "disk_warning_threshold_percent": "placeholder",
-        "disk_block_threshold_percent": "placeholder",
-        "minimum_free_gib_placeholder": "placeholder",
-        "per_project_local_budget_gib_placeholder": "placeholder",
+        "lean_target_percent": 50,
+        "disk_warning_threshold_percent": 65,
+        "disk_block_threshold_percent": 80,
+        "disk_critical_threshold_percent": 90,
+        "minimum_free_gib": 100,
+        "per_project_local_budget_gib": 25,
+    },
+    "lean_runtime_retention_policy": {
+        "keep_current_live_runtime": True,
+        "keep_rollback_runtimes": 2,
+        "keep_active_review_worktrees": True,
+        "keep_accepted_live_repo": True,
+        "remove_clean_merged_pr_worktrees": True,
+        "remove_clean_stale_review_worktrees": True,
+        "remove_clean_stale_dashboard_runtimes": True,
+        "remove_build_outputs_after_packaging": True,
+        "remove_test_and_package_caches": True,
+        "never_remove_dirty_worktrees": True,
+        "never_remove_records_state_db_or_secrets": True,
     },
     "artifact_manifest_rules": {
         "artifact_manifest_required_before_done": True,
@@ -55,11 +70,11 @@ STORAGE_GUARD_POLICY: dict[str, Any] = {
         "no_cloud_upload_in_dry_run": True,
     },
     "local_artifact_policy": {
-        "local_large_artifact_threshold_placeholder": "placeholder",
-        "raw_intermediate_retention_policy_placeholder": "placeholder",
-        "review_package_retention_policy_placeholder": "placeholder",
-        "codex_log_retention_policy_placeholder": "placeholder",
-        "cache_cleanup_policy_placeholder": "placeholder",
+        "local_large_artifact_threshold_gib": 5,
+        "raw_intermediate_retention_days": 3,
+        "review_package_retention_days": 14,
+        "codex_log_retention_days": 14,
+        "cache_cleanup_policy": "safe caches may be removed after reproducible validation",
     },
     "project_specific_posture": {
         "signal_room_video_requires_artifact_manifest_and_archive_plan": True,
@@ -68,15 +83,6 @@ STORAGE_GUARD_POLICY: dict[str, Any] = {
         "generic_coding_prs_report_storage_delta_when_artifacts_generated": True,
     },
     "unresolved_policy_fields": (
-        "disk_warning_threshold_percent",
-        "disk_block_threshold_percent",
-        "minimum_free_gib_placeholder",
-        "per_project_local_budget_gib_placeholder",
-        "local_large_artifact_threshold_placeholder",
-        "raw_intermediate_retention_policy_placeholder",
-        "review_package_retention_policy_placeholder",
-        "codex_log_retention_policy_placeholder",
-        "cache_cleanup_policy_placeholder",
         "future_enforcement_wiring",
         "approved_archive_targets",
     ),
@@ -104,12 +110,26 @@ _OBSERVED_STORAGE_FIELDS = {
     "disk_used_percent",
     "disk_warning_threshold_percent",
     "disk_block_threshold_percent",
+    "disk_critical_threshold_percent",
+    "lean_target_percent",
+    "minimum_free_gib",
+    "free_gib",
     "project_domain",
     "external_archive_or_upload_requested",
     "waha_external_upload_approved",
     "archive_plan_present",
     "production_evidence_delete_requested",
     "audit_artifact_preservation_confirmed",
+    "cleanup_dry_run_manifest_present",
+    "current_live_runtime_protected",
+    "rollback_runtimes_protected",
+    "accepted_live_repo_protected",
+    "records_state_db_secrets_protected",
+    "dirty_worktree_cleanup_requested",
+    "stale_clean_runtime_count",
+    "stale_clean_worktree_count",
+    "build_output_cleanup_requested",
+    "cache_cleanup_requested",
 }
 
 
@@ -210,14 +230,56 @@ def evaluate_storage_guard(observed_state: dict[str, Any] | None) -> dict[str, A
             _add_unique(reasons, "large file delta is missing")
             _add_unique(blocked_actions, "complete artifact-heavy task")
 
+    thresholds = policy["disk_thresholds"]
     disk_used = _as_float(state.get("disk_used_percent"))
-    block_threshold = _as_float(state.get("disk_block_threshold_percent"))
-    warning_threshold = _as_float(state.get("disk_warning_threshold_percent"))
+    block_threshold = _as_float(state.get("disk_block_threshold_percent")) or _as_float(
+        thresholds.get("disk_block_threshold_percent")
+    )
+    warning_threshold = _as_float(state.get("disk_warning_threshold_percent")) or _as_float(
+        thresholds.get("disk_warning_threshold_percent")
+    )
+    critical_threshold = _as_float(state.get("disk_critical_threshold_percent")) or _as_float(
+        thresholds.get("disk_critical_threshold_percent")
+    )
+    lean_target = _as_float(state.get("lean_target_percent")) or _as_float(thresholds.get("lean_target_percent"))
+    minimum_free_gib = _as_float(state.get("minimum_free_gib")) or _as_float(thresholds.get("minimum_free_gib"))
+    free_gib = _as_float(state.get("free_gib"))
+
+    if disk_used is not None and critical_threshold is not None and disk_used >= critical_threshold:
+        _add_unique(reasons, "observed disk usage is at or above lean critical threshold")
+        _add_unique(blocked_actions, "start non-cleanup work")
     if disk_used is not None and block_threshold is not None and disk_used >= block_threshold:
         _add_unique(reasons, "observed disk usage is at or above supplied block threshold")
         _add_unique(blocked_actions, "start artifact-heavy work")
     elif disk_used is not None and warning_threshold is not None and disk_used >= warning_threshold:
-        _add_unique(reasons, "observed disk usage is at or above supplied warning threshold")
+        _add_unique(reasons, "observed disk usage is at or above lean warning threshold")
+    if free_gib is not None and minimum_free_gib is not None and free_gib < minimum_free_gib:
+        _add_unique(reasons, "observed free disk is below lean minimum free space")
+        _add_unique(blocked_actions, "start artifact-heavy work")
+
+    cleanup_requested = _as_bool(state.get("cleanup_requested"))
+    if cleanup_requested:
+        if not _as_bool(state.get("cleanup_dry_run_manifest_present")):
+            _add_unique(reasons, "cleanup requested without dry-run cleanup manifest")
+            _add_unique(blocked_actions, "perform storage cleanup")
+        for key, reason in (
+            ("current_live_runtime_protected", "cleanup did not confirm current live runtime is protected"),
+            ("rollback_runtimes_protected", "cleanup did not confirm rollback runtimes are protected"),
+            ("accepted_live_repo_protected", "cleanup did not confirm accepted-live repo is protected"),
+            ("records_state_db_secrets_protected", "cleanup did not confirm records/state/secrets are protected"),
+        ):
+            if not _as_bool(state.get(key)):
+                _add_unique(reasons, reason)
+                _add_unique(blocked_actions, "perform storage cleanup")
+    if _as_bool(state.get("dirty_worktree_cleanup_requested")):
+        _add_unique(reasons, "dirty worktree cleanup is forbidden by lean-runtime policy")
+        _add_unique(blocked_actions, "delete dirty worktrees")
+    if disk_used is not None and lean_target is not None and cleanup_requested and disk_used > lean_target:
+        _add_unique(reasons, "cleanup target is not yet met")
+    if (_as_float(state.get("stale_clean_runtime_count")) or 0) > 0 and not cleanup_requested:
+        _add_unique(reasons, "clean stale runtimes are eligible for a cleanup lane")
+    if (_as_float(state.get("stale_clean_worktree_count")) or 0) > 0 and not cleanup_requested:
+        _add_unique(reasons, "clean stale worktrees are eligible for a cleanup lane")
 
     project_domain = str(state.get("project_domain") or "").lower()
     if project_domain in {"waha", "wahainspection"} and _as_bool(state.get("external_archive_or_upload_requested")):
