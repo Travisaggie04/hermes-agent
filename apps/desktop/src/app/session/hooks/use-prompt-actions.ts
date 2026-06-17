@@ -279,6 +279,33 @@ export function usePromptActions({
     [selectedStoredSessionIdRef, updateSessionState]
   )
 
+  const appendAssistantErrorMessage = useCallback(
+    (sessionId: string, error: unknown, branchGroupId?: string) => {
+      const message = friendlyPromptFailureMessage(error)
+
+      updateSessionState(sessionId, state => ({
+        ...state,
+        messages: [
+          ...state.messages,
+          {
+            id: `assistant-error-${Date.now()}`,
+            role: 'assistant',
+            parts: [],
+            error: message || 'Jenny could not finish that message. Retry once from this chat.',
+            branchGroupId: branchGroupId ?? state.pendingBranchGroup ?? undefined
+          }
+        ],
+        busy: false,
+        awaitingResponse: false,
+        pendingBranchGroup: null,
+        sawAssistantPayload: true
+      }))
+
+      return message
+    },
+    [updateSessionState]
+  )
+
   const syncImageAttachmentsForSubmit = useCallback(
     async (
       sessionId: string,
@@ -443,26 +470,8 @@ export function usePromptActions({
 
         return true
       } catch (err) {
-        const message = friendlyPromptFailureMessage(err)
-
         releaseBusy()
-        updateSessionState(sessionId, state => ({
-          ...state,
-          messages: [
-            ...state.messages,
-            {
-              id: `assistant-error-${Date.now()}`,
-              role: 'assistant',
-              parts: [],
-              error: message || 'Prompt failed',
-              branchGroupId: state.pendingBranchGroup ?? undefined
-            }
-          ],
-          busy: false,
-          awaitingResponse: false,
-          pendingBranchGroup: null,
-          sawAssistantPayload: true
-        }))
+        appendAssistantErrorMessage(sessionId, err)
 
         if (isProviderSetupError(err)) {
           requestDesktopOnboarding('Add a provider credential before sending your first message.')
@@ -912,15 +921,11 @@ export function usePromptActions({
           truncate_before_user_ordinal: truncateBeforeUserOrdinal
         })
       } catch (err) {
-        updateSessionState(activeSessionId, state => ({
-          ...state,
-          busy: false,
-          awaitingResponse: false
-        }))
+        appendAssistantErrorMessage(activeSessionId, err, branchGroupId)
         notifyError(err, 'Regenerate failed')
       }
     },
-    [activeSessionId, requestGateway, updateSessionState]
+    [activeSessionId, appendAssistantErrorMessage, requestGateway, updateSessionState]
   )
 
   const editMessage = useCallback(
@@ -988,11 +993,11 @@ export function usePromptActions({
         setMutableRef(busyRef, false)
         setBusy(false)
         setAwaitingResponse(false)
-        updateSessionState(sessionId, state => ({ ...state, busy: false, awaitingResponse: false }))
+        appendAssistantErrorMessage(sessionId, surfaced)
         notifyError(surfaced, 'Edit failed')
       }
     },
-    [activeSessionId, activeSessionIdRef, busyRef, requestGateway, updateSessionState]
+    [activeSessionId, activeSessionIdRef, appendAssistantErrorMessage, busyRef, requestGateway, updateSessionState]
   )
 
   const handleThreadMessagesChange = useCallback(
