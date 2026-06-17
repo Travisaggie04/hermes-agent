@@ -105,9 +105,11 @@ describe('native project chat header', () => {
     expect(source).toContain('onStartProjectChat(projectId, projectName)')
   })
 
-  it('shows Jenny as working for the full native chat busy turn', () => {
+  it('shows Jenny as queued before the first reply update and working after that', () => {
     expect(source).toContain('activeTurnRunning={busy}')
     expect(source).not.toContain('activeTurnRunning={busy && awaitingResponse}')
+    expect(source).toContain('awaitingResponse={awaitingResponse}')
+    expect(source).toContain("awaitingResponse ? 'Waiting for Jenny' : 'Jenny is working'")
   })
 
   it('lets native chat failures drive Jenny status before stale background records', () => {
@@ -126,7 +128,9 @@ describe('native project chat header', () => {
 
   it('uses the normal thread loading row while a project reply is pending', () => {
     expect(source).toContain('loading={threadLoading}')
-    expect(source).toContain("loadingLabel={selectedProjectTitle ? 'Jenny is working' : undefined}")
+    expect(source).toContain(
+      "loadingLabel={selectedProjectTitle ? (awaitingResponse ? 'Waiting for Jenny' : 'Jenny is working') : undefined}"
+    )
     expect(source).not.toContain('Jenny is working in {selectedProjectTitle}')
   })
 

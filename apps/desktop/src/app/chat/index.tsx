@@ -112,6 +112,7 @@ interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
 interface ChatHeaderProps {
   activeSessionId: null | string
   activeTurnRunning: boolean
+  awaitingResponse: boolean
   gatewayOpen: boolean
   isRoutedSessionView: boolean
   messages: ChatMessage[]
@@ -124,6 +125,7 @@ interface ChatHeaderProps {
 function ChatHeader({
   activeSessionId,
   activeTurnRunning,
+  awaitingResponse,
   gatewayOpen,
   isRoutedSessionView,
   messages,
@@ -181,6 +183,7 @@ function ChatHeader({
       : false
   const jennyStatus = nativeJennyStatus({
     activeTurnRunning,
+    awaitingResponse,
     bridgeStatus: bridgeStatusQuery.data,
     gatewayOpen,
     latestChatError: latestVisibleAssistantError(messages),
@@ -581,11 +584,13 @@ function HeaderPill({ label, title, tone }: { label: string; title: string; tone
 
 function ProjectJennyStatusStrip({
   activeTurnRunning,
+  awaitingResponse,
   gatewayOpen,
   messages,
   onRetry
 }: {
   activeTurnRunning: boolean
+  awaitingResponse: boolean
   gatewayOpen: boolean
   messages: ChatMessage[]
   onRetry: (messageId: string) => void
@@ -607,6 +612,7 @@ function ProjectJennyStatusStrip({
 
   const jennyStatus = nativeJennyStatus({
     activeTurnRunning,
+    awaitingResponse,
     bridgeStatus: bridgeStatusQuery.data,
     gatewayOpen,
     latestChatError: latestVisibleAssistantError(messages),
@@ -847,6 +853,7 @@ export function ChatView({
       <ChatHeader
         activeSessionId={activeSessionId}
         activeTurnRunning={busy}
+        awaitingResponse={awaitingResponse}
         gatewayOpen={gatewayOpen}
         isRoutedSessionView={isRoutedSessionView}
         messages={messages}
@@ -857,6 +864,7 @@ export function ChatView({
       />
       <ProjectJennyStatusStrip
         activeTurnRunning={busy}
+        awaitingResponse={awaitingResponse}
         gatewayOpen={gatewayOpen}
         messages={messages}
         onRetry={messageId => void onReload(messageId)}
@@ -890,7 +898,7 @@ export function ChatView({
                 : undefined
             }
             loading={threadLoading}
-            loadingLabel={selectedProjectTitle ? 'Jenny is working' : undefined}
+            loadingLabel={selectedProjectTitle ? (awaitingResponse ? 'Waiting for Jenny' : 'Jenny is working') : undefined}
             onBranchInNewChat={onBranchInNewChat}
             onCancel={onCancel}
             sessionId={activeSessionId}
