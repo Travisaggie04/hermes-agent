@@ -53,6 +53,14 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('onNewSessionInProject={startProjectChat}')
   })
 
+  it('opens a clean project chat when a project folder is selected', () => {
+    expect(source).toContain('onOpenProjectChat={startProjectChat}')
+    expect(source).toContain('onOpenProjectChat?: (projectId: string, projectName: string) => void')
+    expect(source).toContain('onOpenProjectChat?.(group.id, group.label)')
+    expect(source).toContain('if (!active) {')
+    expect(source).toContain('setOpen(true)')
+  })
+
   it('pins the selected project to the top of the native project list', () => {
     expect(source).toContain('const visibleProjectGroups = useMemo')
     expect(source).toContain('const activeProjectId = selectedMissionControlProjectId.trim()')

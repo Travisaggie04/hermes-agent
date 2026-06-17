@@ -1070,6 +1070,7 @@ export function ChatSidebar({
             onDeleteSession={onDeleteSession}
             onMoveSessionToProject={moveSessionToProject}
             onNewSessionInProject={startProjectChat}
+            onOpenProjectChat={startProjectChat}
             onResumeSession={onResumeSession}
             onSelectProject={selectProjectGroup}
             onToggle={() => undefined}
@@ -1369,6 +1370,7 @@ interface SidebarSessionsSectionProps {
   onTogglePin: (sessionId: string) => void
   onNewSessionInProject?: (projectId: string, projectName: string) => void
   onNewSessionInWorkspace?: (path: null | string) => void
+  onOpenProjectChat?: (projectId: string, projectName: string) => void
   onSelectProject?: (projectId: string, projectName: string) => void
   pinned: boolean
   projectMoveTargets?: ProjectMoveTarget[]
@@ -1400,6 +1402,7 @@ function SidebarSessionsSection({
   onTogglePin,
   onNewSessionInProject,
   onNewSessionInWorkspace,
+  onOpenProjectChat,
   onSelectProject,
   pinned,
   projectMoveTargets,
@@ -1475,6 +1478,7 @@ function SidebarSessionsSection({
           key={group.id}
           onNewSession={onNewSessionInWorkspace}
           onNewSessionInProject={onNewSessionInProject}
+          onOpenProjectChat={onOpenProjectChat}
           onSelectProject={onSelectProject}
           renderRows={renderSessionList}
         />
@@ -1485,6 +1489,7 @@ function SidebarSessionsSection({
           key={group.id}
           onNewSession={onNewSessionInWorkspace}
           onNewSessionInProject={onNewSessionInProject}
+          onOpenProjectChat={onOpenProjectChat}
           onSelectProject={onSelectProject}
           renderRows={renderSessionList}
         />
@@ -1549,6 +1554,7 @@ interface SidebarWorkspaceGroupProps extends React.ComponentProps<'div'> {
   renderRows: (sessions: SessionInfo[], group?: SidebarSessionGroup) => React.ReactNode
   onNewSession?: (path: null | string) => void
   onNewSessionInProject?: (projectId: string, projectName: string) => void
+  onOpenProjectChat?: (projectId: string, projectName: string) => void
   onSelectProject?: (projectId: string, projectName: string) => void
   active?: boolean
   reorderable?: boolean
@@ -1561,6 +1567,7 @@ function SidebarWorkspaceGroup({
   renderRows,
   onNewSession,
   onNewSessionInProject,
+  onOpenProjectChat,
   onSelectProject,
   active = false,
   reorderable = false,
@@ -1623,6 +1630,11 @@ function SidebarWorkspaceGroup({
           onClick={() => {
             if (isProjectGroup) {
               onSelectProject?.(group.id, group.label)
+              if (!active) {
+                onOpenProjectChat?.(group.id, group.label)
+              }
+              setOpen(true)
+              return
             }
 
             setOpen(value => !value)
@@ -1732,6 +1744,7 @@ interface SortableWorkspaceProps {
   renderRows: (sessions: SessionInfo[], group?: SidebarSessionGroup) => React.ReactNode
   onNewSession?: (path: null | string) => void
   onNewSessionInProject?: (projectId: string, projectName: string) => void
+  onOpenProjectChat?: (projectId: string, projectName: string) => void
   onSelectProject?: (projectId: string, projectName: string) => void
   active?: boolean
 }
