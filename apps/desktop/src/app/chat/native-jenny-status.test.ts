@@ -246,10 +246,28 @@ describe('nativeJennyStatus', () => {
     expectCleanVisibleStatus(status)
   })
 
-  it('shows Jenny working while the active native chat turn is running', () => {
+  it('shows Jenny queued while native chat is waiting for the first reply update', () => {
     expect(
       nativeJennyStatus({
         activeTurnRunning: true,
+        awaitingResponse: true,
+        gatewayOpen: true,
+        projectId: 'project-hermes',
+        bridgeStatus: { pending_count: 0, visible_pending_count: 0 }
+      })
+    ).toMatchObject({
+      detail: 'Your message was sent. Jenny is preparing the first reply update.',
+      label: 'Jenny queued',
+      summary: 'Waiting for Jenny',
+      tone: 'pending'
+    })
+  })
+
+  it('shows Jenny working while the active native chat turn is running after the first reply update', () => {
+    expect(
+      nativeJennyStatus({
+        activeTurnRunning: true,
+        awaitingResponse: false,
         gatewayOpen: true,
         projectId: 'project-hermes',
         bridgeStatus: { pending_count: 0, visible_pending_count: 0 }

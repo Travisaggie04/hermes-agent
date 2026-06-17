@@ -11,6 +11,7 @@ export interface NativeJennyStatus {
 
 export interface NativeJennyStatusInput {
   activeTurnRunning?: boolean
+  awaitingResponse?: boolean
   bridgeStatus?: MissionControlGitHubBridgeStatusResponse | null
   gatewayOpen: boolean
   latestChatError?: string
@@ -64,6 +65,7 @@ function friendlyBridgeError(message: string): string {
 
 export function nativeJennyStatus({
   activeTurnRunning = false,
+  awaitingResponse = false,
   bridgeStatus,
   gatewayOpen,
   latestChatError,
@@ -91,6 +93,15 @@ export function nativeJennyStatus({
   }
 
   if (activeTurnRunning) {
+    if (awaitingResponse) {
+      return {
+        detail: 'Your message was sent. Jenny is preparing the first reply update.',
+        label: 'Jenny queued',
+        summary: 'Waiting for Jenny',
+        tone: 'pending'
+      }
+    }
+
     return {
       detail: 'Jenny is working on this chat. Progress and the final reply appear here.',
       label: 'Jenny working',
