@@ -91,6 +91,50 @@ CONTINUATION_PROMPT_WITH_SUBGOALS_TEMPLATE = (
     "and stop."
 )
 
+ENGINEERING_GOAL_KICKOFF_TEMPLATE = (
+    "[Engineering goal kickoff]\n"
+    "Objective:\n{goal}\n\n"
+    "{subgoals_section}"
+    "Operate as a senior engineering agent. Before broad implementation, "
+    "turn this objective into a short working contract:\n"
+    "- objective in plain English\n"
+    "- in-scope work and explicit non-goals\n"
+    "- protected surfaces that need approval before touching\n"
+    "- evidence required to prove completion\n"
+    "- rollback or stop conditions\n"
+    "- the next smallest concrete action\n\n"
+    "Then start that next action if it is safe. If the request is vague, "
+    "risky, or points at the wrong approach, challenge it and narrow the "
+    "lane before implementing. Do not mark the goal complete without "
+    "specific evidence from files, commands, tests, PR state, or runtime "
+    "checks."
+)
+
+ENGINEERING_GOAL_CONTINUATION_TEMPLATE = (
+    "[Continuing engineering goal]\n"
+    "Objective:\n{goal}\n\n"
+    "{subgoals_section}"
+    "Goal loop state:\n"
+    "- turns used: {turns_used}/{max_turns}\n"
+    "- last judge verdict: {last_verdict}\n"
+    "- last judge reason: {last_reason}\n\n"
+    "Continue from the latest repo/runtime evidence, not from memory alone. "
+    "Carry forward a concise working state:\n"
+    "- completed checklist items\n"
+    "- evidence already gathered\n"
+    "- open risks, blockers, or approval needs\n"
+    "- next smallest concrete action\n\n"
+    "Take the next safe action now. If blocked, stop with the exact missing "
+    "input, failing command, or external dependency. If complete, provide a "
+    "compact final report with changed files, tests/checks, PR or live state, "
+    "risks, rollback notes, and the recommended next lane. Do not declare "
+    "completion without evidence."
+)
+
+ENGINEERING_GOAL_SUBGOALS_SECTION_TEMPLATE = (
+    "Additional user criteria:\n{subgoals_block}\n\n"
+)
+
 
 JUDGE_SYSTEM_PROMPT = (
     "You are a strict judge evaluating whether an autonomous agent has "
@@ -615,6 +659,30 @@ class GoalManager:
             return "(no subgoals — use /subgoal <text> to add criteria)"
         return self._state.render_subgoals_block()
 
+    # --- prompts fed back into the agent loop -------------------------
+
+    def kickoff_prompt(self) -> Optional[str]:
+        """Return the first user-role prompt for a newly-set engineering goal.
+
+        The stored goal stays raw for status and persistence. The message fed
+        to the agent is a working contract so long-running goal mode starts
+        with scope, evidence, approvals, and stop conditions instead of a bare
+        objective.
+        """
+        if not self._state or self._state.status != "active":
+            return None
+        return ENGINEERING_GOAL_KICKOFF_TEMPLATE.format(
+            goal=self._state.goal,
+            subgoals_section=self._engineering_subgoals_section(),
+        )
+
+    def _engineering_subgoals_section(self) -> str:
+        if not self._state or not self._state.subgoals:
+            return ""
+        return ENGINEERING_GOAL_SUBGOALS_SECTION_TEMPLATE.format(
+            subgoals_block=self._state.render_subgoals_block()
+        )
+
     # --- the main entry point called after every turn -----------------
 
     def evaluate_after_turn(
@@ -739,12 +807,14 @@ class GoalManager:
     def next_continuation_prompt(self) -> Optional[str]:
         if not self._state or self._state.status != "active":
             return None
-        if self._state.subgoals:
-            return CONTINUATION_PROMPT_WITH_SUBGOALS_TEMPLATE.format(
-                goal=self._state.goal,
-                subgoals_block=self._state.render_subgoals_block(),
-            )
-        return CONTINUATION_PROMPT_TEMPLATE.format(goal=self._state.goal)
+        return ENGINEERING_GOAL_CONTINUATION_TEMPLATE.format(
+            goal=self._state.goal,
+            subgoals_section=self._engineering_subgoals_section(),
+            turns_used=self._state.turns_used,
+            max_turns=self._state.max_turns,
+            last_verdict=self._state.last_verdict or "none yet",
+            last_reason=self._state.last_reason or "none yet",
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -899,6 +969,9 @@ __all__ = [
     "GoalManager",
     "CONTINUATION_PROMPT_TEMPLATE",
     "CONTINUATION_PROMPT_WITH_SUBGOALS_TEMPLATE",
+    "ENGINEERING_GOAL_KICKOFF_TEMPLATE",
+    "ENGINEERING_GOAL_CONTINUATION_TEMPLATE",
+    "ENGINEERING_GOAL_SUBGOALS_SECTION_TEMPLATE",
     "JUDGE_USER_PROMPT_TEMPLATE",
     "JUDGE_USER_PROMPT_WITH_SUBGOALS_TEMPLATE",
     "KANBAN_GOAL_CONTINUATION_TEMPLATE",

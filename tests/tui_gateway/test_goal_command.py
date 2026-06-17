@@ -108,7 +108,9 @@ def test_goal_set_returns_send_with_notice(server, session):
     r = _call(server, "command.dispatch", name="goal", arg="build a rocket", session_id=sid)
     result = r["result"]
     assert result["type"] == "send"
-    assert result["message"] == "build a rocket"
+    assert "Engineering goal kickoff" in result["message"]
+    assert "build a rocket" in result["message"]
+    assert "evidence required to prove completion" in result["message"]
     assert "notice" in result
     assert "Goal set" in result["notice"]
     assert "20-turn budget" in result["notice"]

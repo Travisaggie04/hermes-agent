@@ -2909,7 +2909,11 @@ class GatewayRunner:
         suppressing them.
         """
         text = getattr(event_or_text, "text", event_or_text) or ""
-        return str(text).startswith("[Continuing toward your standing goal]\nGoal:")
+        return str(text).startswith((
+            "[Continuing toward your standing goal]\nGoal:",
+            "[Engineering goal kickoff]\nObjective:",
+            "[Continuing engineering goal]\nObjective:",
+        ))
 
     def _clear_goal_pending_continuations(self, session_key: str, adapter: Any) -> int:
         """Remove queued synthetic /goal continuations for one session.
@@ -11666,7 +11670,7 @@ class GatewayRunner:
         if adapter and _quick_key:
             try:
                 kickoff_event = MessageEvent(
-                    text=state.goal,
+                    text=mgr.kickoff_prompt() or state.goal,
                     message_type=MessageType.TEXT,
                     source=event.source,
                     message_id=event.message_id,

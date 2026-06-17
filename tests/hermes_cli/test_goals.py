@@ -323,17 +323,36 @@ class TestGoalManager:
         assert d2["should_continue"] is False
 
     def test_continuation_prompt_shape(self, hermes_home):
-        """The continuation prompt must include the goal text verbatim —
-        and must be safe to inject as a user-role message (prompt-cache
-        invariants: no system-prompt mutation)."""
+        """The continuation prompt must include an engineering work contract
+        while staying a normal user-role message (no system-prompt mutation)."""
         from hermes_cli.goals import GoalManager
 
         mgr = GoalManager(session_id="cont-sid")
         mgr.set("port goal command to hermes")
         prompt = mgr.next_continuation_prompt()
         assert prompt is not None
+        assert "Continuing engineering goal" in prompt
         assert "port goal command to hermes" in prompt
+        assert "evidence already gathered" in prompt
+        assert "next smallest concrete action" in prompt
+        assert "Do not declare completion without evidence" in prompt
         assert prompt.strip()  # non-empty
+
+    def test_kickoff_prompt_includes_engineering_contract(self, hermes_home):
+        """Goal kickoff should prime the agent with scope/evidence/stop
+        conditions instead of sending only the raw objective."""
+        from hermes_cli.goals import GoalManager
+
+        mgr = GoalManager(session_id="kickoff-sid")
+        mgr.set("make Jenny safer for long engineering work")
+        prompt = mgr.kickoff_prompt()
+        assert prompt is not None
+        assert "Engineering goal kickoff" in prompt
+        assert "make Jenny safer for long engineering work" in prompt
+        assert "in-scope work and explicit non-goals" in prompt
+        assert "protected surfaces" in prompt
+        assert "evidence required to prove completion" in prompt
+        assert "rollback or stop conditions" in prompt
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -634,7 +653,7 @@ class TestContinuationPromptWithSubgoals:
         prompt = mgr.next_continuation_prompt()
         assert prompt is not None
         assert "ship the feature" in prompt
-        assert "Additional criteria" in prompt
+        assert "Additional user criteria" in prompt
         assert "1. write tests" in prompt
         assert "2. update docs" in prompt
 

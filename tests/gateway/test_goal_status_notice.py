@@ -8,7 +8,7 @@ from gateway.config import Platform
 from gateway.platforms.base import MessageEvent, MessageType
 from gateway.run import GatewayRunner
 from gateway.session import SessionSource
-from hermes_cli.goals import CONTINUATION_PROMPT_TEMPLATE
+from hermes_cli.goals import GoalManager
 
 
 class FakeAdapter:
@@ -33,8 +33,10 @@ class FakeAdapter:
 
 
 def _goal_continuation_event(source, goal="finish the task"):
+    mgr = GoalManager(session_id=f"queued-{goal}")
+    mgr.set(goal)
     return MessageEvent(
-        text=CONTINUATION_PROMPT_TEMPLATE.format(goal=goal),
+        text=mgr.next_continuation_prompt(),
         message_type=MessageType.TEXT,
         source=source,
     )
