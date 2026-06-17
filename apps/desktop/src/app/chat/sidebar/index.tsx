@@ -266,6 +266,7 @@ function projectGroupsFor(groups: MissionControlProjectSessionGroup[]): SidebarS
     mode: 'project' as const,
     path: null,
     sessions: group.sessions.map(projectSessionToSessionInfo),
+    linkedSessionIds: group.linked_session_ids ?? [],
     totalCount: group.linked_session_count ?? group.sessions.length
   }))
 }
@@ -714,6 +715,10 @@ export function ChatSidebar({
     const ids = new Set<string>()
 
     for (const group of projectGroups) {
+      for (const linkedSessionId of group.linkedSessionIds ?? []) {
+        ids.add(linkedSessionId)
+      }
+
       for (const session of group.sessions) {
         ids.add(session.id)
 
@@ -1348,6 +1353,7 @@ interface SidebarSessionGroup {
   label: string
   path: null | string
   sessions: SessionInfo[]
+  linkedSessionIds?: string[]
   // Profile color for the ALL-profiles view; absent for workspace groups.
   color?: null | string
   loadingMore?: boolean

@@ -117,6 +117,8 @@ describe('chat sidebar project workspace affordances', () => {
   it('keeps project-linked chats out of the unfiled recents list while project mode is active', () => {
     expect(source).toContain('const projectLinkedSessionIds = useMemo')
     expect(source).toContain('for (const group of projectGroups)')
+    expect(source).toContain('for (const linkedSessionId of group.linkedSessionIds ?? [])')
+    expect(source).toContain('ids.add(linkedSessionId)')
     expect(source).toContain('ids.add(session.id)')
     expect(source).toContain('ids.add(session._lineage_root_id)')
     expect(source).toContain('if (!projectMode) {')
@@ -126,6 +128,7 @@ describe('chat sidebar project workspace affordances', () => {
   it('keeps the backend unassigned group out of the visible project folders', () => {
     expect(source).toContain("const UNASSIGNED_PROJECT_GROUP_ID = 'unassigned-general'")
     expect(source).toContain('groups.filter(group => group.project_id !== UNASSIGNED_PROJECT_GROUP_ID).map')
+    expect(source).toContain('linkedSessionIds: group.linked_session_ids ?? []')
     expect(source).toContain('totalCount: group.linked_session_count ?? group.sessions.length')
   })
 

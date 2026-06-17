@@ -1491,6 +1491,7 @@ def test_project_session_projection_counts_links_outside_recent_session_window(p
     groups = {item["project_id"]: item for item in grouped_payload["groups"]}
     assert grouped_payload["active_link_count"] == 2
     assert groups["project-hermes"]["linked_session_count"] == 2
+    assert set(groups["project-hermes"]["linked_session_ids"]) == {"root-recent", "root-older"}
     assert [session["session_id"] for session in groups["project-hermes"]["sessions"]] == ["session-recent"]
 
     state = client.get("/api/plugins/mission-control-governance/workspace/project-state")
