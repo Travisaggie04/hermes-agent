@@ -15,6 +15,25 @@ Jenny OS should move toward the native Hermes chat surface:
 - Jenny shows Codex-like status while working
 - async/subagent work is visible and bounded, not hidden autonomy
 
+## Worker Architecture Decision
+
+The laptop should move away from being a Hermes worker node. The target
+division of labor is:
+
+- VPS: Jenny/Hermes control plane, project memory, approvals, audit records,
+  and phone/desktop coordination
+- laptop: optional Codex engineering worker when the laptop is online
+
+Codex is the preferred laptop worker for repo edits, tests, builds, local
+desktop validation, PR creation, and Windows/VPS diagnostics. Jenny should
+orchestrate, challenge requests, queue bounded work, review returned evidence,
+and summarize results.
+
+The laptop can be offline during travel. Jenny must treat the Codex worker as
+opportunistic: keep work queued, do VPS-safe read-only planning, or report that
+Codex-worker execution is waiting for the laptop. Do not let a laptop Hermes
+worker and Codex worker execute the same lane independently.
+
 ## Upstream Hermes Async Agent Inventory
 
 Compared against upstream Hermes at `5e01a5dbf1b7bc0144d9057be706da1ea9f065c3`.
@@ -110,6 +129,16 @@ Make long-running Jenny engineering work resumable:
 - context-compaction continuation
 - evidence-based done checks
 - clear blocked/retry states
+
+### PR I - Codex Worker Handoff
+
+Add a bounded Jenny-to-Codex handoff after the chat-first loop is stable:
+
+- Jenny produces a small work packet for Codex
+- Codex executes from the laptop harness when the laptop is online
+- Codex returns changed files, tests, PR links, blockers, and evidence
+- Jenny reviews the evidence before reporting the work as done
+- no hidden daemon or always-on Codex worker in the first version
 
 ## Guardrails For All PRs
 
