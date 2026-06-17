@@ -171,7 +171,10 @@ function ChatHeader({
   const title = activeStoredSession ? sessionTitle(activeStoredSession) : selectedProjectTitle ? 'New project chat' : 'New session'
   const sessionSubagents = activeSessionId ? (subagentsBySession[activeSessionId] ?? []) : []
   const runningSubagents = activeSubagentCount(sessionSubagents)
-  const showActivity = sessionSubagents.length > 0
+  const asyncAgentActivityAvailable = Boolean(
+    asyncAgentStatusQuery.data?.async_agent_controls_available || asyncAgentStatusQuery.data?.sync_delegate_task_available
+  )
+  const showActivity = sessionSubagents.length > 0 || asyncAgentActivityAvailable
 
   // Pins live on the durable lineage-root id, but selectedSessionId is the live
   // (tip) id — resolve through the loaded row so the menu reflects the pin
