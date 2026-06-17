@@ -262,6 +262,10 @@ function nativeAsyncAgentDetail(status?: MissionControlAsyncAgentStatusResponse 
 }
 
 function latestVisibleAssistantError(messages: readonly ChatMessage[]): string {
+  return latestVisibleAssistantErrorMessage(messages)?.error ?? ''
+}
+
+function latestVisibleAssistantErrorMessage(messages: readonly ChatMessage[]): ChatMessage | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]
 
@@ -270,15 +274,15 @@ function latestVisibleAssistantError(messages: readonly ChatMessage[]): string {
     }
 
     if (message.role === 'user') {
-      return ''
+      return null
     }
 
     if (message.role === 'assistant' && typeof message.error === 'string' && message.error.trim()) {
-      return message.error
+      return message
     }
   }
 
-  return ''
+  return null
 }
 
 function ProjectHeaderSelect({
@@ -545,11 +549,13 @@ function HeaderPill({ label, title, tone }: { label: string; title: string; tone
 function ProjectJennyStatusStrip({
   activeTurnRunning,
   gatewayOpen,
-  messages
+  messages,
+  onRetry
 }: {
   activeTurnRunning: boolean
   gatewayOpen: boolean
   messages: ChatMessage[]
+  onRetry: (messageId: string) => void
 }) {
   const selectedProjectId = useStore($selectedMissionControlProjectId)
   const selectedProjectName = useStore($selectedMissionControlProjectName)
@@ -575,6 +581,7 @@ function ProjectJennyStatusStrip({
     projectId: selectedProjectId,
     queryError: bridgeStatusQuery.error
   })
+  const latestErrorMessage = latestVisibleAssistantErrorMessage(messages)
 
   if (jennyStatus.tone !== 'warn') {
     return null
@@ -595,6 +602,17 @@ function ProjectJennyStatusStrip({
       <span className="ml-auto hidden shrink-0 text-(--ui-text-tertiary) min-[52rem]:inline" title={jennyStatus.detail}>
         {jennyStatus.label}
       </span>
+      {latestErrorMessage && (
+        <Button
+          className="ml-auto h-6 shrink-0 px-2 text-[0.6875rem] min-[52rem]:ml-0"
+          onClick={() => onRetry(latestErrorMessage.id)}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Retry
+        </Button>
+      )}
     </div>
   )
 }
@@ -804,7 +822,12 @@ export function ChatView({
         onToggleSelectedPin={onToggleSelectedPin}
         selectedSessionId={selectedSessionId}
       />
-      <ProjectJennyStatusStrip activeTurnRunning={busy} gatewayOpen={gatewayOpen} messages={messages} />
+      <ProjectJennyStatusStrip
+        activeTurnRunning={busy}
+        gatewayOpen={gatewayOpen}
+        messages={messages}
+        onRetry={messageId => void onReload(messageId)}
+      />
 
       <PromptOverlays />
 
