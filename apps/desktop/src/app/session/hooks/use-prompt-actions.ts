@@ -195,6 +195,9 @@ interface PromptActionsOptions {
 
 interface SubmitTextOptions {
   attachments?: ComposerAttachment[]
+  omitUserMessage?: boolean
+  titlePreview?: string
+  visibleText?: string
   fromQueue?: boolean
 }
 
@@ -349,9 +352,11 @@ export function usePromptActions({
 
   const submitPromptText = useCallback(
     async (rawText: string, options?: SubmitTextOptions) => {
-      const visibleText = rawText.trim()
+      const submitText = rawText.trim()
+      const visibleText = (options?.visibleText ?? rawText).trim()
       const usingComposerAttachments = !options?.attachments
       const attachments = options?.attachments ?? $composerAttachments.get()
+      const omitUserMessage = options?.omitUserMessage === true
 
       const contextRefs = attachments
         .map(a => a.refText)
@@ -361,7 +366,7 @@ export function usePromptActions({
       const terminalContextBlocks = terminalContextBlocksFromDraft(rawText).join('\n\n')
       const hasImage = attachments.some(a => a.kind === 'image')
       const attachmentRefs = attachments.map(attachmentDisplayText).filter((r): r is string => Boolean(r))
-      const userPromptText = visibleText || (hasImage ? 'What do you see in this image?' : '')
+      const userPromptText = submitText || (hasImage ? 'What do you see in this image?' : '')
 
       const text = [contextRefs, terminalContextBlocks, userPromptText].filter(Boolean).join('\n\n')
 
@@ -391,7 +396,7 @@ export function usePromptActions({
           sid,
           state => ({
             ...state,
-            messages: state.messages.some(m => m.id === optimisticId)
+            messages: omitUserMessage || state.messages.some(m => m.id === optimisticId)
               ? state.messages
               : [...state.messages, userMessage],
             busy: true,
@@ -432,13 +437,13 @@ export function usePromptActions({
 
       if (sessionId) {
         seedOptimistic(sessionId)
-      } else {
+      } else if (!omitUserMessage) {
         setMessages(current => [...current, userMessage])
       }
 
       if (!sessionId) {
         try {
-          sessionId = await createBackendSessionForSend(visibleText)
+          sessionId = await createBackendSessionForSend(options?.titlePreview ?? visibleText)
         } catch (err) {
           dropOptimistic(null)
           releaseBusy()
@@ -459,7 +464,7 @@ export function usePromptActions({
       }
 
       try {
-        ensureNativeProjectSessionLink(selectedStoredSessionIdRef.current, visibleText)
+        ensureNativeProjectSessionLink(selectedStoredSessionIdRef.current, options?.titlePreview ?? visibleText)
         await syncImageAttachmentsForSubmit(sessionId, attachments, {
           updateComposerAttachments: usingComposerAttachments
         })
@@ -740,6 +745,17 @@ export function usePromptActions({
 
           if (busyRef.current) {
             renderSlashOutput('session busy — /interrupt the current turn before sending this command')
+
+            return
+          }
+
+          if (dispatch.type === 'send' && normalizedName === 'goal') {
+            renderSlashOutput(dispatch.notice || `Goal set: ${arg.trim() || 'standing goal'}`)
+            await submitPromptText(message, {
+              omitUserMessage: true,
+              titlePreview: arg.trim() ? `/goal ${arg.trim()}` : '/goal',
+              visibleText: ''
+            })
 
             return
           }

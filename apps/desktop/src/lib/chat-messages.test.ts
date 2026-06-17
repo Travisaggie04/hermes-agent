@@ -101,6 +101,48 @@ describe('toChatMessages', () => {
     expect(chatMessageText(message)).toBe('test')
   })
 
+  it('collapses engineering goal kickoff prompts in saved user message display', () => {
+    const [message] = toChatMessages([
+      {
+        role: 'user',
+        content: [
+          '[Engineering goal kickoff]',
+          'Objective:',
+          'Make Jenny reliable from desktop and phone.',
+          '',
+          'Operate as a senior engineering agent. Before broad implementation, turn this objective into a short working contract:',
+          '- objective in plain English',
+          '- evidence required to prove completion'
+        ].join('\n'),
+        timestamp: 1
+      }
+    ])
+
+    expect(chatMessageText(message)).toBe('Goal: Make Jenny reliable from desktop and phone.')
+  })
+
+  it('collapses engineering goal continuation prompts in saved user message display', () => {
+    const [message] = toChatMessages([
+      {
+        role: 'user',
+        content: [
+          '[Continuing engineering goal]',
+          'Objective:',
+          'Make Jenny reliable from desktop and phone.',
+          '',
+          'Goal loop state:',
+          '- turns used: 2/20',
+          '',
+          'Last progress checkpoint:',
+          'Merged the previous PR.'
+        ].join('\n'),
+        timestamp: 1
+      }
+    ])
+
+    expect(chatMessageText(message)).toBe('Continuing goal: Make Jenny reliable from desktop and phone.')
+  })
+
   it('hides legacy spec-first Jenny wrappers from saved user message display', () => {
     const [message] = toChatMessages([
       {

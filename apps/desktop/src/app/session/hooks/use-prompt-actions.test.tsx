@@ -5,7 +5,7 @@ import { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createMissionControlSessionProjectLink } from '@/hermes'
-import type { ChatMessage } from '@/lib/chat-messages'
+import { type ChatMessage, chatMessageText } from '@/lib/chat-messages'
 import {
   $messages,
   $sessions,
@@ -324,6 +324,57 @@ describe('usePromptActions project harness', () => {
     expect(assistantError?.error).toBe('Jenny cannot reach the Hermes gateway. Reconnect the gateway, then retry from this chat.')
     expect(assistantError?.error).not.toContain('ECONNREFUSED')
     expect(assistantError?.error).not.toContain('100.115.125.111')
+  })
+
+  it('starts /goal without rendering the engineering kickoff as Travis visible text', async () => {
+    const refreshSessions = vi.fn(async () => undefined)
+    const requestGateway = vi.fn(async (method: string) => {
+      if (method === 'slash.exec') {
+        throw new Error('route through command.dispatch')
+      }
+
+      if (method === 'command.dispatch') {
+        return {
+          type: 'send',
+          notice: 'Goal set (20-turn budget): Make Jenny reliable.',
+          message: [
+            '[Engineering goal kickoff]',
+            'Objective:',
+            'Make Jenny reliable.',
+            '',
+            'Operate as a senior engineering agent. Before broad implementation, turn this objective into a short working contract:',
+            '- objective in plain English',
+            '- evidence required to prove completion'
+          ].join('\n')
+        } as never
+      }
+
+      return {} as never
+    })
+    const states: Array<{ messages: ChatMessage[]; busy: boolean; awaitingResponse: boolean }> = []
+
+    let handle: HarnessHandle | null = null
+    render(
+      <Harness
+        onReady={h => (handle = h)}
+        onState={state => states.push(state)}
+        refreshSessions={refreshSessions}
+        requestGateway={requestGateway}
+      />
+    )
+
+    await handle!.submitText('/goal Make Jenny reliable.')
+
+    const promptSubmitCall = requestGateway.mock.calls.find(call => call[0] === 'prompt.submit') as
+      | [string, { session_id: string; text: string }]
+      | undefined
+    expect(promptSubmitCall?.[1].text).toContain('[Engineering goal kickoff]')
+    expect(promptSubmitCall?.[1].text).toContain('Objective:\nMake Jenny reliable.')
+
+    const allMessages = states.flatMap(state => state.messages)
+    expect(allMessages.filter(message => message.role === 'user')).toHaveLength(0)
+    expect(allMessages.some(message => message.role === 'system' && chatMessageText(message).includes('Goal set'))).toBe(true)
+    expect(allMessages.map(chatMessageText).join('\n')).not.toContain('Operate as a senior engineering agent')
   })
 
   it('shows a concise chat error when the guarded bridge payload is too large', async () => {
