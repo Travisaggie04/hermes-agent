@@ -133,4 +133,12 @@ describe('native project chat header', () => {
     expect(source).not.toContain('Run async agent')
     expect(source).not.toContain('Start async agent')
   })
+
+  it('keeps detailed Jenny activity behind the existing Agents overlay', () => {
+    expect(source).toContain("import { AGENTS_ROUTE, routeSessionId } from '../routes'")
+    expect(source).toContain('const sessionSubagents = activeSessionId ? (subagentsBySession[activeSessionId] ?? []) : []')
+    expect(source).toContain('const showActivity = sessionSubagents.length > 0')
+    expect(source).toContain('onClick={() => navigate(AGENTS_ROUTE)}')
+    expect(source).toContain("runningSubagents > 0 ? `Activity ${runningSubagents}` : 'Activity'")
+  })
 })
