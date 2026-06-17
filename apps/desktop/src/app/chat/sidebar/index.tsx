@@ -137,6 +137,7 @@ const WORKSPACE_PAGE = 5
 const PROFILE_INITIAL_PAGE = 5
 const WS_ID_PREFIX = 'workspace:'
 const HERMES_PROJECT_NAME = 'Hermes / Mission Control'
+const UNASSIGNED_PROJECT_GROUP_ID = 'unassigned-general'
 
 const wsId = (id: string) => `${WS_ID_PREFIX}${id}`
 const parseWsId = (id: string) => (id.startsWith(WS_ID_PREFIX) ? id.slice(WS_ID_PREFIX.length) : null)
@@ -253,13 +254,13 @@ function projectSessionToSessionInfo(session: MissionControlProjectSession): Ses
 }
 
 function projectGroupsFor(groups: MissionControlProjectSessionGroup[]): SidebarSessionGroup[] {
-  return groups.map(group => ({
+  return groups.filter(group => group.project_id !== UNASSIGNED_PROJECT_GROUP_ID).map(group => ({
     id: group.project_id,
     label: group.name,
     mode: 'project' as const,
     path: null,
     sessions: group.sessions.map(projectSessionToSessionInfo),
-    totalCount: group.sessions.length
+    totalCount: group.linked_session_count ?? group.sessions.length
   }))
 }
 

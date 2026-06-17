@@ -104,6 +104,12 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain("!projectLinkedSessionIds.has(session.id) && !projectLinkedSessionIds.has(session._lineage_root_id || '')")
   })
 
+  it('keeps the backend unassigned group out of the visible project folders', () => {
+    expect(source).toContain("const UNASSIGNED_PROJECT_GROUP_ID = 'unassigned-general'")
+    expect(source).toContain('groups.filter(group => group.project_id !== UNASSIGNED_PROJECT_GROUP_ID).map')
+    expect(source).toContain('totalCount: group.linked_session_count ?? group.sessions.length')
+  })
+
   it('keeps project groups visible if one Mission Control project endpoint is unavailable', () => {
     expect(source).toContain('Promise.allSettled([getMissionControlProjects(), getMissionControlProjectSessions()])')
     expect(source).toContain("projectsResult.status === 'fulfilled' ? nativeChatProjects")
