@@ -8,7 +8,7 @@ import { useStore } from '@nanostores/react'
 import { useQuery } from '@tanstack/react-query'
 import type * as React from 'react'
 import { Suspense, useCallback, useMemo, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 import { Thread } from '@/components/assistant-ui/thread'
 import { Backdrop } from '@/components/Backdrop'
@@ -62,9 +62,10 @@ import {
   $sessions,
   sessionPinId
 } from '@/store/session'
+import { $subagentsBySession, activeSubagentCount } from '@/store/subagents'
 import type { ModelOptionsResponse } from '@/types/hermes'
 
-import { routeSessionId } from '../routes'
+import { AGENTS_ROUTE, routeSessionId } from '../routes'
 import { titlebarHeaderBaseClass, titlebarHeaderShadowClass } from '../shell/titlebar'
 
 import { ChatDropOverlay } from './chat-drop-overlay'
@@ -130,10 +131,12 @@ function ChatHeader({
   onToggleSelectedPin,
   selectedSessionId
 }: ChatHeaderProps) {
+  const navigate = useNavigate()
   const sessions = useStore($sessions)
   const pinnedSessionIds = useStore($pinnedSessionIds)
   const selectedProjectId = useStore($selectedMissionControlProjectId)
   const selectedProjectName = useStore($selectedMissionControlProjectName)
+  const subagentsBySession = useStore($subagentsBySession)
   const [projectIntakeOpen, setProjectIntakeOpen] = useState(false)
   const projectsQuery = useQuery({
     enabled: gatewayOpen,
@@ -163,6 +166,9 @@ function ChatHeader({
   const projects = useMemo(() => nativeChatProjects(projectsQuery.data?.projects.map(item => item.record) ?? []), [projectsQuery.data])
   const projectPickerAvailable = projectsQuery.isLoading || projects.length > 0 || Boolean(selectedProjectTitle)
   const title = activeStoredSession ? sessionTitle(activeStoredSession) : selectedProjectTitle ? 'New project chat' : 'New session'
+  const sessionSubagents = activeSessionId ? (subagentsBySession[activeSessionId] ?? []) : []
+  const runningSubagents = activeSubagentCount(sessionSubagents)
+  const showActivity = sessionSubagents.length > 0
 
   // Pins live on the durable lineage-root id, but selectedSessionId is the live
   // (tip) id — resolve through the loaded row so the menu reflects the pin
@@ -232,6 +238,17 @@ function ChatHeader({
           selectedProjectTitle={selectedProjectTitle}
         />
         <HeaderPill label={jennyStatus.label} title={jennyStatusDetail} tone={jennyStatus.tone} />
+        {showActivity && (
+          <Button
+            className="h-6 shrink-0 px-2 text-[0.6875rem]"
+            onClick={() => navigate(AGENTS_ROUTE)}
+            title="Open live Jenny activity"
+            type="button"
+            variant="outline"
+          >
+            {runningSubagents > 0 ? `Activity ${runningSubagents}` : 'Activity'}
+          </Button>
+        )}
       </div>
       <NativeProjectIntakeDialog
         onCreated={(projectId, projectName) => {
