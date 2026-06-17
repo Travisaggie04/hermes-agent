@@ -10,6 +10,7 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('No chats in this project yet.')
     expect(source).toContain('Start project chat')
     expect(source).toContain('onNewSessionInProject(group.id, group.label)')
+    expect(source).toContain('const showEmptyState = forceEmptyState || (!groups?.length && sessions.length === 0)')
   })
 
   it('makes new project setup capture evidence and approval stop rules', () => {
@@ -131,5 +132,11 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('Promise.allSettled([getMissionControlProjects(), getMissionControlProjectSessions()])')
     expect(source).toContain("projectsResult.status === 'fulfilled' ? nativeChatProjects")
     expect(source).toContain("sessionsResult.status === 'fulfilled' ? sessionsResult.value.groups || [] : []")
+  })
+
+  it('does not auto-select the first project just because projects loaded', () => {
+    expect(source).toContain('setProjectGroups(next)')
+    expect(source).not.toContain('setSelectedMissionControlProject(next[0].id, next[0].label)')
+    expect(source).not.toContain('setSidebarRecentsOpen(false)\n        }')
   })
 })
