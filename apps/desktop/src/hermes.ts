@@ -327,6 +327,7 @@ export interface MissionControlProjectSession {
 
 export interface MissionControlProjectSessionGroup {
   linked_session_count?: number
+  linked_session_ids?: string[]
   name: string
   project_id: string
   sessions: MissionControlProjectSession[]
