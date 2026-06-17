@@ -2509,6 +2509,68 @@ def test_prompt_submit_expands_context_refs(monkeypatch):
     assert captured["prompt"] == "expanded prompt"
 
 
+def test_prompt_submit_keeps_hidden_context_out_of_saved_history(monkeypatch):
+    captured = {}
+    hidden_context = "Hidden Jenny OS project context:\nProject: Hermes / Mission Control"
+
+    class _Agent:
+        def run_conversation(
+            self, prompt, conversation_history=None, stream_callback=None
+        ):
+            captured["prompt"] = prompt
+            captured["history"] = list(conversation_history or [])
+            return {
+                "final_response": "ok",
+                "messages": [
+                    *(conversation_history or []),
+                    {"role": "user", "content": prompt},
+                    {"role": "assistant", "content": "ok"},
+                ],
+            }
+
+    class _ImmediateThread:
+        def __init__(self, target=None, daemon=None):
+            self._target = target
+
+        def start(self):
+            self._target()
+
+    server._sessions["sid"] = _session(agent=_Agent())
+    monkeypatch.setattr(server.threading, "Thread", _ImmediateThread)
+    monkeypatch.setattr(server, "_emit", lambda *args, **kwargs: None)
+    monkeypatch.setattr(server, "make_stream_renderer", lambda cols: None)
+    monkeypatch.setattr(server, "render_message", lambda raw, cols: None)
+
+    try:
+        server.handle_request(
+            {
+                "id": "1",
+                "method": "prompt.submit",
+                "params": {
+                    "session_id": "sid",
+                    "text": "test",
+                    "hidden_context": hidden_context,
+                },
+            }
+        )
+
+        assert captured["prompt"] == "test"
+        assert captured["history"][-1] == {
+            "role": "system",
+            "content": hidden_context,
+            "metadata": {"hidden_context": "prompt.submit"},
+        }
+        saved_history = server._sessions["sid"]["history"]
+        assert {"role": "user", "content": "test"} in saved_history
+        assert all(message.get("content") != hidden_context for message in saved_history)
+        assert all(
+            message.get("metadata", {}).get("hidden_context") != "prompt.submit"
+            for message in saved_history
+        )
+    finally:
+        server._sessions.pop("sid", None)
+
+
 def test_image_attach_appends_local_image(monkeypatch):
     fake_cli = types.ModuleType("cli")
     fake_cli._IMAGE_EXTENSIONS = {".png"}
@@ -4100,7 +4162,11 @@ def test_prompt_submit_auto_titles_session_on_complete(monkeypatch):
             {
                 "id": "1",
                 "method": "prompt.submit",
-                "params": {"session_id": "sid", "text": "Tell me about Rome"},
+                "params": {
+                    "session_id": "sid",
+                    "text": "Tell me about Rome",
+                    "hidden_context": "Hidden Jenny OS project context:\nProject: Rome",
+                },
             }
         )
 

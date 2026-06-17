@@ -4225,6 +4225,7 @@ def _(rid, params: dict) -> dict:
 @method("prompt.submit")
 def _(rid, params: dict) -> dict:
     sid, text = params.get("session_id", ""), params.get("text", "")
+    hidden_context = _normalize_prompt_hidden_context(params.get("hidden_context", ""))
     truncate_user_ordinal = params.get("truncate_before_user_ordinal")
     session, err = _sess_nowait(params, rid)
     if err:
@@ -4278,7 +4279,7 @@ def _(rid, params: dict) -> dict:
                 session["running"] = False
                 _clear_inflight_turn(session)
             return
-        _run_prompt_submit(rid, sid, session, text)
+        _run_prompt_submit(rid, sid, session, text, hidden_context=hidden_context)
 
     threading.Thread(target=run_after_agent_ready, daemon=True).start()
     return _ok(rid, {"status": "streaming"})
@@ -4475,7 +4476,47 @@ def _start_notification_poller(sid: str, session: dict) -> threading.Event:
     return stop
 
 
-def _run_prompt_submit(rid, sid: str, session: dict, text: Any) -> None:
+_PROMPT_HIDDEN_CONTEXT_MARKER = "prompt.submit"
+
+
+def _normalize_prompt_hidden_context(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    return value.strip()
+
+
+def _prompt_hidden_context_message(hidden_context: str) -> dict:
+    return {
+        "role": "system",
+        "content": hidden_context,
+        "metadata": {"hidden_context": _PROMPT_HIDDEN_CONTEXT_MARKER},
+    }
+
+
+def _strip_prompt_hidden_context_messages(messages: list, hidden_context: str) -> list:
+    cleaned = []
+    for message in messages:
+        if isinstance(message, dict) and message.get("role") == "system":
+            metadata = message.get("metadata")
+            marked_hidden = (
+                isinstance(metadata, dict)
+                and metadata.get("hidden_context") == _PROMPT_HIDDEN_CONTEXT_MARKER
+            )
+            same_content = hidden_context and str(message.get("content") or "") == hidden_context
+            if marked_hidden or same_content:
+                continue
+        cleaned.append(message)
+    return cleaned
+
+
+def _run_prompt_submit(
+    rid,
+    sid: str,
+    session: dict,
+    text: Any,
+    *,
+    hidden_context: str = "",
+) -> None:
     with session["history_lock"]:
         history = list(session["history"])
         history_version = int(session.get("history_version", 0))
@@ -4611,8 +4652,12 @@ def _run_prompt_submit(rid, sid: str, session: dict, text: Any) -> None:
                     payload["rendered"] = r
                 _emit("message.delta", sid, payload)
 
+            conversation_history = list(history)
+            if hidden_context:
+                conversation_history.append(_prompt_hidden_context_message(hidden_context))
+
             run_kwargs = {
-                "conversation_history": list(history),
+                "conversation_history": conversation_history,
                 "stream_callback": _stream,
             }
             try:
@@ -4629,7 +4674,10 @@ def _run_prompt_submit(rid, sid: str, session: dict, text: Any) -> None:
                     with session["history_lock"]:
                         current_version = int(session.get("history_version", 0))
                         if current_version == history_version:
-                            session["history"] = result["messages"]
+                            session["history"] = _strip_prompt_hidden_context_messages(
+                                result["messages"],
+                                hidden_context,
+                            )
                             session["history_version"] = history_version + 1
                         else:
                             # History mutated externally during the turn
