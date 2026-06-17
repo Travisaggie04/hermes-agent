@@ -22,10 +22,19 @@ describe('chat sidebar project workspace affordances', () => {
   })
 
   it('makes Jenny OS the primary native project chat entry', () => {
+    expect(source).toContain("id: 'jenny-os'")
     expect(source).toContain("label: 'Jenny OS'")
     expect(source).toContain("action: 'jenny-os'")
     expect(source).toContain('Open Jenny chat in ${HERMES_PROJECT_NAME}')
     expect(source).toContain("item.action === 'jenny-os' && currentView === 'chat' && Boolean(selectedMissionControlProjectId.trim())")
+  })
+
+  it('keeps Mission Control available only as the advanced audit route', () => {
+    expect(source).toContain('MISSION_CONTROL_ROUTE')
+    expect(source).toContain("id: 'advanced-audit'")
+    expect(source).toContain("label: 'Advanced / Audit'")
+    expect(source).toContain('route: MISSION_CONTROL_ROUTE')
+    expect(source).toContain("item.id === 'advanced-audit' && currentView === 'mission-control'")
   })
 
   it('labels the main new session action as project chat when a project is selected', () => {

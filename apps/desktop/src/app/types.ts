@@ -61,8 +61,10 @@ export type CommandDispatchResponse =
   | SendCommandDispatchResponse
 
 export type SidebarNavId =
+  | 'advanced-audit'
   | 'artifacts'
   | 'command-center'
+  | 'jenny-os'
   | 'messaging'
   | 'mission-control'
   | 'new-session'
