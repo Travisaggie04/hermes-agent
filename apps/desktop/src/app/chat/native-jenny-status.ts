@@ -13,6 +13,7 @@ export interface NativeJennyStatusInput {
   activeTurnRunning?: boolean
   bridgeStatus?: MissionControlGitHubBridgeStatusResponse | null
   gatewayOpen: boolean
+  latestChatError?: string
   loading?: boolean
   nowMs?: number
   projectId?: string
@@ -65,6 +66,7 @@ export function nativeJennyStatus({
   activeTurnRunning = false,
   bridgeStatus,
   gatewayOpen,
+  latestChatError,
   loading = false,
   nowMs = Date.now(),
   projectId = '',
@@ -94,6 +96,15 @@ export function nativeJennyStatus({
       label: 'Jenny working',
       summary: 'Progress appears here',
       tone: 'working'
+    }
+  }
+
+  if (latestChatError?.trim()) {
+    return {
+      detail: friendlyBridgeError(latestChatError),
+      label: 'Jenny failed',
+      summary: 'Retry available',
+      tone: 'warn'
     }
   }
 
