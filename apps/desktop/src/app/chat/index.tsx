@@ -35,7 +35,7 @@ import {
   type MissionControlAsyncAgentStatusResponse,
   type MissionControlProjectRecord
 } from '@/hermes'
-import type { ChatMessage } from '@/lib/chat-messages'
+import { type ChatMessage, chatMessageText } from '@/lib/chat-messages'
 import { quickModelOptions, sessionTitle, toRuntimeMessage } from '@/lib/chat-runtime'
 import { useIncrementalExternalStoreRuntime } from '@/lib/incremental-external-store-runtime'
 import { cn } from '@/lib/utils'
@@ -187,6 +187,7 @@ function ChatHeader({
     bridgeStatus: bridgeStatusQuery.data,
     gatewayOpen,
     latestChatError: latestVisibleAssistantError(messages),
+    latestChatReplied: latestVisibleAssistantReply(messages),
     loading: bridgeStatusQuery.isLoading,
     projectId: selectedProjectId,
     queryError: bridgeStatusQuery.error
@@ -285,6 +286,26 @@ function nativeAsyncAgentDetail(status?: MissionControlAsyncAgentStatusResponse 
 
 function latestVisibleAssistantError(messages: readonly ChatMessage[]): string {
   return latestVisibleAssistantErrorMessage(messages)?.error ?? ''
+}
+
+function latestVisibleAssistantReply(messages: readonly ChatMessage[]): boolean {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+
+    if (message.hidden) {
+      continue
+    }
+
+    if (message.role === 'user') {
+      return false
+    }
+
+    if (message.role === 'assistant') {
+      return !message.error && chatMessageText(message).trim().length > 0
+    }
+  }
+
+  return false
 }
 
 function latestVisibleAssistantErrorMessage(messages: readonly ChatMessage[]): ChatMessage | null {
@@ -616,6 +637,7 @@ function ProjectJennyStatusStrip({
     bridgeStatus: bridgeStatusQuery.data,
     gatewayOpen,
     latestChatError: latestVisibleAssistantError(messages),
+    latestChatReplied: latestVisibleAssistantReply(messages),
     loading: bridgeStatusQuery.isLoading,
     projectId: selectedProjectId,
     queryError: bridgeStatusQuery.error

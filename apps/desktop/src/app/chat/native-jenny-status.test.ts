@@ -329,6 +329,26 @@ describe('nativeJennyStatus', () => {
     ).toMatchObject({ label: 'Jenny replied', summary: 'Review latest reply', tone: 'ok' })
   })
 
+  it('shows reviewed-ready status from the latest native chat reply before background bridge records', () => {
+    expect(
+      nativeJennyStatus({
+        gatewayOpen: true,
+        latestChatReplied: true,
+        projectId: 'project-hermes',
+        bridgeStatus: {
+          last_error: 'stale bridge field is too large',
+          pending_count: 0,
+          visible_pending_count: 0
+        }
+      })
+    ).toMatchObject({
+      detail: 'Jenny replied. Review the latest answer before relying on it.',
+      label: 'Jenny replied',
+      summary: 'Review latest reply',
+      tone: 'ok'
+    })
+  })
+
   it('makes the ready state explain that normal chat sends to Jenny', () => {
     const status = nativeJennyStatus({
       gatewayOpen: true,

@@ -15,6 +15,7 @@ export interface NativeJennyStatusInput {
   bridgeStatus?: MissionControlGitHubBridgeStatusResponse | null
   gatewayOpen: boolean
   latestChatError?: string
+  latestChatReplied?: boolean
   loading?: boolean
   nowMs?: number
   projectId?: string
@@ -69,6 +70,7 @@ export function nativeJennyStatus({
   bridgeStatus,
   gatewayOpen,
   latestChatError,
+  latestChatReplied = false,
   loading = false,
   nowMs = Date.now(),
   projectId = '',
@@ -116,6 +118,15 @@ export function nativeJennyStatus({
       label: 'Jenny failed',
       summary: 'Retry available',
       tone: 'warn'
+    }
+  }
+
+  if (latestChatReplied) {
+    return {
+      detail: 'Jenny replied. Review the latest answer before relying on it.',
+      label: 'Jenny replied',
+      summary: 'Review latest reply',
+      tone: 'ok'
     }
   }
 

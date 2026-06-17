@@ -119,6 +119,12 @@ describe('native project chat header', () => {
     expect(source).toContain("if (message.role === 'user') {")
   })
 
+  it('lets native assistant replies drive Jenny replied status before stale background records', () => {
+    expect(source).toContain('function latestVisibleAssistantReply')
+    expect(source).toContain('chatMessageText(message).trim().length > 0')
+    expect(source).toContain('latestChatReplied: latestVisibleAssistantReply(messages)')
+  })
+
   it('offers retry only for the latest failed native Jenny reply', () => {
     expect(source).toContain('const latestErrorMessage = latestVisibleAssistantErrorMessage(messages)')
     expect(source).toContain('{latestErrorMessage && (')
