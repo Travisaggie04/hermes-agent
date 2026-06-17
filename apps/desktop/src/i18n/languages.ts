@@ -7,17 +7,11 @@ export const LOCALE_OPTIONS = [
     id: 'en',
     name: 'English',
     configValue: 'en'
-  },
-  {
-    id: 'zh',
-    name: '简体中文',
-    configValue: 'zh'
   }
 ] as const satisfies readonly { configValue: string; id: Locale; name: string }[]
 
-// Endonyms (native names) for the language picker so users recognize their
-// language regardless of the current UI language. No country flags:
-// languages are not countries.
+// Travis's build is English-only. Keep unsupported saved locale values from
+// activating non-English UI while leaving upstream locale files untouched.
 export const LOCALE_META: Record<Locale, { name: string }> = Object.fromEntries(
   LOCALE_OPTIONS.map(locale => [locale.id, { name: locale.name }])
 ) as Record<Locale, { name: string }>
@@ -25,14 +19,7 @@ export const LOCALE_META: Record<Locale, { name: string }> = Object.fromEntries(
 const LOCALE_ALIASES: Record<string, Locale> = {
   en: 'en',
   'en-us': 'en',
-  en_us: 'en',
-  zh: 'zh',
-  'zh-cn': 'zh',
-  zh_cn: 'zh',
-  'zh-hans': 'zh',
-  zh_hans: 'zh',
-  'zh-hans-cn': 'zh',
-  zh_hans_cn: 'zh'
+  en_us: 'en'
 }
 
 export function isLocale(value: unknown): value is Locale {

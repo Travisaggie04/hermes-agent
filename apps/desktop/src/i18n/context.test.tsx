@@ -6,7 +6,7 @@ import type { HermesConfigRecord } from '@/hermes'
 import { type I18nConfigClient, I18nProvider, useI18n } from './context'
 import type { Locale } from './types'
 
-function LanguageProbe({ target = 'zh' }: { target?: Locale }) {
+function LanguageProbe({ target = 'en' }: { target?: Locale }) {
   const { isLoadingConfig, isSavingLocale, locale, saveError, setLocale, t } = useI18n()
 
   return (
@@ -40,15 +40,15 @@ describe('I18nProvider', () => {
     expect(screen.getByTestId('label').textContent).toBe('Language')
   })
 
-  it('normalizes an initial locale alias and switches translations', async () => {
+  it('falls back to English for a non-English initial locale alias', async () => {
     render(
       <I18nProvider configClient={null} initialLocale="zh-CN">
         <LanguageProbe target="en" />
       </I18nProvider>
     )
 
-    expect(screen.getByTestId('locale').textContent).toBe('zh')
-    expect(screen.getByTestId('label').textContent).toBe('语言')
+    expect(screen.getByTestId('locale').textContent).toBe('en')
+    expect(screen.getByTestId('label').textContent).toBe('Language')
 
     fireEvent.click(screen.getByRole('button', { name: 'switch' }))
 
@@ -70,8 +70,8 @@ describe('I18nProvider', () => {
 
     await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'))
 
-    expect(screen.getByTestId('locale').textContent).toBe('zh')
-    expect(screen.getByTestId('label').textContent).toBe('语言')
+    expect(screen.getByTestId('locale').textContent).toBe('en')
+    expect(screen.getByTestId('label').textContent).toBe('Language')
     expect(configClient.saveConfig).not.toHaveBeenCalled()
   })
 
@@ -140,7 +140,7 @@ describe('I18nProvider', () => {
 
     await waitFor(() => expect(saveConfig).toHaveBeenCalledTimes(1))
     expect(saveConfig).toHaveBeenCalledWith({
-      display: { language: 'zh', skin: 'slate' },
+      display: { language: 'en', skin: 'slate' },
       terminal: { cwd: '/new' }
     })
   })

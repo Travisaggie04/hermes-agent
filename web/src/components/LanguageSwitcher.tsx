@@ -15,12 +15,7 @@ import { cn } from "@/lib/utils";
  * of all supported locales when clicked.  Persists choice to localStorage via
  * the I18n context.
  *
- * Replaces the older two-state EN↔ZH toggle now that we ship 16 locales
- * (en, zh, zh-hant, ja, de, es, fr, tr, uk, af, ko, it, ga, pt, ru, hu).
- *
- * No country flags by design — languages aren't countries, and flag pairings
- * inevitably create political mismappings (e.g. Mandarin variants ≠ any single
- * jurisdiction, English ≠ GB, Portuguese ≠ PT). Endonyms are unambiguous.
+ * Replaces the older two-state language toggle with the visible locale list.
  *
  * When placed at the bottom of the sidebar (next to ThemeSwitcher), pass
  * `dropUp` so the list opens above the trigger and avoids clipping below the
@@ -59,7 +54,9 @@ export function LanguageSwitcher({ collapsed = false, dropUp = false }: Language
   }, [open, useMobileSheet]);
 
   const current = LOCALE_META[locale];
-  const allLocales = Object.entries(LOCALE_META) as Array<[Locale, typeof current]>;
+  const allLocales = Object.entries(LOCALE_META).filter(
+    ([code]) => code !== "zh" && code !== "zh-hant",
+  ) as Array<[Locale, typeof current]>;
   const sheetTitle = t.language.switchTo;
 
   return (
