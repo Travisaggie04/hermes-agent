@@ -230,6 +230,10 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
+      "multiLanguageInstaller": false,
+      "installerLanguages": [
+        "en_US"
+      ],
       "shortcutName": "Hermes",
       "uninstallDisplayName": "Hermes",
       "warningsAsErrors": false

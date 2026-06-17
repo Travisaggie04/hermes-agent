@@ -662,7 +662,7 @@ export function ChatBar({
     // IME composition: Enter confirms composed text, not a message submission.
     // We check both composingRef (set by compositionstart/compositionend, robust
     // across browsers) and nativeEvent.isComposing (Chromium fallback).  Without
-    // this guard, pressing Enter to finalise a Korean/Japanese/Chinese IME
+    // this guard, pressing Enter to finalise an East Asian IME
     // preedit fires submitDraft() and splits the message mid-word.
     if (composingRef.current || event.nativeEvent.isComposing) {
       return
