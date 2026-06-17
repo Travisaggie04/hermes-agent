@@ -1,8 +1,6 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
 import type { Locale, Translations } from "./types";
 import { en } from "./en";
-import { zh } from "./zh";
-import { zhHant } from "./zh-hant";
 import { ja } from "./ja";
 import { de } from "./de";
 import { es } from "./es";
@@ -19,8 +17,6 @@ import { hu } from "./hu";
 
 const TRANSLATIONS: Record<Locale, Translations> = {
   en,
-  zh,
-  "zh-hant": zhHant,
   ja,
   de,
   es,
@@ -41,8 +37,6 @@ const TRANSLATIONS: Record<Locale, Translations> = {
 // can share the same list.
 export const LOCALE_META: Record<Locale, { name: string }> = {
   en: { name: "English" },
-  zh: { name: "Chinese (Simplified)" },
-  "zh-hant": { name: "Chinese (Traditional)" },
   ja: { name: "日本語" },
   de: { name: "Deutsch" },
   es: { name: "Español" },
@@ -58,11 +52,7 @@ export const LOCALE_META: Record<Locale, { name: string }> = {
   hu: { name: "Magyar" },
 };
 
-const HIDDEN_LOCALES = new Set<Locale>(["zh", "zh-hant"]);
-const VISIBLE_LOCALES = (Object.keys(TRANSLATIONS) as Locale[]).filter(
-  (locale) => !HIDDEN_LOCALES.has(locale),
-);
-const SUPPORTED_LOCALES = VISIBLE_LOCALES;
+const SUPPORTED_LOCALES = Object.keys(TRANSLATIONS) as Locale[];
 const STORAGE_KEY = "hermes-locale";
 
 function isLocale(value: string): value is Locale {
