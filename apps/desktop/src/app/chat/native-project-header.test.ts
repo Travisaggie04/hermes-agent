@@ -43,7 +43,8 @@ describe('native project chat header', () => {
     expect(source).toContain("queryKey: ['mission-control-projects-native-chat']")
     expect(source).toContain('function ProjectHeaderSelect')
     expect(source).toContain('aria-label="Project"')
-    expect(source).toContain('setSelectedMissionControlProject(project?.project_id ?? null, project?.name ?? null)')
+    expect(source).toContain('onSelectProject(project.project_id, project.name)')
+    expect(source).toContain('onSelectProject={onStartProjectChat}')
   })
 
   it('keeps the project picker visible on the blank native chat home', () => {
@@ -66,7 +67,7 @@ describe('native project chat header', () => {
     expect(source).toContain('const showIntro = blankNativeChat && (freshDraftReady || showProjectHomeIntro)')
     expect(source).toContain('onCreateProject: () => setProjectIntakeOpen(true)')
     expect(source).toContain('projectOptions: projectHomeOptions.map(project => ({')
-    expect(source).toContain('onSelectProject: (projectId, projectName) => setSelectedMissionControlProject(projectId, projectName)')
+    expect(source).toContain('onSelectProject: onStartProjectChat')
   })
 
   it('lets the native chat header create a structured Jenny project brief', () => {
@@ -80,8 +81,16 @@ describe('native project chat header', () => {
     expect(source).toContain('Approval or stop rules, one per line')
     expect(source).toContain('Evidence required: ${item}')
     expect(source).toContain('Approval/stop rule: ${item}')
-    expect(source).toContain('setSelectedMissionControlProject(projectId, projectName)')
+    expect(source).toContain('onStartProjectChat(projectId, projectName)')
     expect(source).toContain('Start with a spec-first project setup review.')
+  })
+
+  it('uses the same clean project chat action for header, home, and newly created projects', () => {
+    expect(source).toContain('onStartProjectChat: (projectId: string, projectName: string) => void')
+    expect(source).toContain('onStartProjectChat={onStartProjectChat}')
+    expect(source).toContain('onSelectProject={onStartProjectChat}')
+    expect(source).toContain('onSelectProject: onStartProjectChat')
+    expect(source).toContain('onStartProjectChat(projectId, projectName)')
   })
 
   it('shows Jenny as working for the full native chat busy turn', () => {

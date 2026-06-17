@@ -60,8 +60,7 @@ import {
   $selectedMissionControlProjectName,
   $selectedStoredSessionId,
   $sessions,
-  sessionPinId,
-  setSelectedMissionControlProject
+  sessionPinId
 } from '@/store/session'
 import type { ModelOptionsResponse } from '@/types/hermes'
 
@@ -104,6 +103,7 @@ interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
   onThreadMessagesChange: (messages: readonly ThreadMessage[]) => void
   onEdit: (message: AppendMessage) => Promise<void>
   onReload: (parentId: string | null) => Promise<void>
+  onStartProjectChat: (projectId: string, projectName: string) => void
   onTranscribeAudio?: (audio: Blob) => Promise<string>
 }
 
@@ -113,6 +113,7 @@ interface ChatHeaderProps {
   gatewayOpen: boolean
   isRoutedSessionView: boolean
   onDeleteSelectedSession: () => void
+  onStartProjectChat: (projectId: string, projectName: string) => void
   onToggleSelectedPin: () => void
   selectedSessionId: null | string
 }
@@ -123,6 +124,7 @@ function ChatHeader({
   gatewayOpen,
   isRoutedSessionView,
   onDeleteSelectedSession,
+  onStartProjectChat,
   onToggleSelectedPin,
   selectedSessionId
 }: ChatHeaderProps) {
@@ -221,6 +223,7 @@ function ChatHeader({
         <ProjectHeaderSelect
           loading={projectsQuery.isLoading}
           onNewProject={() => setProjectIntakeOpen(true)}
+          onSelectProject={onStartProjectChat}
           projects={projects}
           selectedProjectId={selectedProjectId}
           selectedProjectTitle={selectedProjectTitle}
@@ -229,7 +232,7 @@ function ChatHeader({
       </div>
       <NativeProjectIntakeDialog
         onCreated={(projectId, projectName) => {
-          setSelectedMissionControlProject(projectId, projectName)
+          onStartProjectChat(projectId, projectName)
           void projectsQuery.refetch()
         }}
         onOpenChange={setProjectIntakeOpen}
@@ -258,12 +261,14 @@ function nativeAsyncAgentDetail(status?: MissionControlAsyncAgentStatusResponse 
 function ProjectHeaderSelect({
   loading,
   onNewProject,
+  onSelectProject,
   projects,
   selectedProjectId,
   selectedProjectTitle
 }: {
   loading: boolean
   onNewProject: () => void
+  onSelectProject: (projectId: string, projectName: string) => void
   projects: MissionControlProjectRecord[]
   selectedProjectId: string
   selectedProjectTitle: string
@@ -284,7 +289,9 @@ function ProjectHeaderSelect({
           disabled={loading && !projects.length}
           onChange={event => {
             const project = projects.find(item => item.project_id === event.currentTarget.value)
-            setSelectedMissionControlProject(project?.project_id ?? null, project?.name ?? null)
+            if (project) {
+              onSelectProject(project.project_id, project.name)
+            }
           }}
           value={projects.some(project => project.project_id === value) ? value : ''}
         >
@@ -587,6 +594,7 @@ export function ChatView({
   onThreadMessagesChange,
   onEdit,
   onReload,
+  onStartProjectChat,
   onTranscribeAudio
 }: ChatViewProps) {
   const location = useLocation()
@@ -765,6 +773,7 @@ export function ChatView({
         gatewayOpen={gatewayOpen}
         isRoutedSessionView={isRoutedSessionView}
         onDeleteSelectedSession={onDeleteSelectedSession}
+        onStartProjectChat={onStartProjectChat}
         onToggleSelectedPin={onToggleSelectedPin}
         selectedSessionId={selectedSessionId}
       />
@@ -785,7 +794,7 @@ export function ChatView({
               showIntro
                 ? {
                     onCreateProject: () => setProjectIntakeOpen(true),
-                    onSelectProject: (projectId, projectName) => setSelectedMissionControlProject(projectId, projectName),
+                    onSelectProject: onStartProjectChat,
                     personality: introPersonality,
                     projectName: selectedProjectName.trim(),
                     projectOptions: projectHomeOptions.map(project => ({
@@ -840,7 +849,7 @@ export function ChatView({
         </AssistantRuntimeProvider>
         <NativeProjectIntakeDialog
           onCreated={(projectId, projectName) => {
-            setSelectedMissionControlProject(projectId, projectName)
+            onStartProjectChat(projectId, projectName)
             void projectHomeQuery.refetch()
           }}
           onOpenChange={setProjectIntakeOpen}
