@@ -2,6 +2,7 @@
 
 from mission_control.storage_guard import (
     STORAGE_GUARD_POLICY,
+    build_storage_cleanup_manifest,
     evaluate_storage_guard,
     get_storage_guard_policy,
 )
@@ -18,8 +19,14 @@ def test_storage_guard_policy_is_inert_dry_run_and_display_only():
     assert policy["enforcement_enabled"] is False
     assert policy["dry_run_only"] is True
     assert policy["display_only"] is True
-    assert policy["disk_thresholds"]["disk_warning_threshold_percent"] == "placeholder"
-    assert policy["disk_thresholds"]["disk_block_threshold_percent"] == "placeholder"
+    assert policy["disk_thresholds"]["lean_target_percent"] == 50
+    assert policy["disk_thresholds"]["disk_warning_threshold_percent"] == 65
+    assert policy["disk_thresholds"]["disk_block_threshold_percent"] == 80
+    assert policy["disk_thresholds"]["disk_critical_threshold_percent"] == 90
+    assert policy["lean_runtime_retention_policy"]["keep_current_live_runtime"] is True
+    assert policy["lean_runtime_retention_policy"]["keep_rollback_runtimes"] == 2
+    assert policy["lean_runtime_retention_policy"]["remove_clean_stale_dashboard_runtimes"] is True
+    assert policy["lean_runtime_retention_policy"]["never_remove_dirty_worktrees"] is True
     assert policy["artifact_manifest_rules"]["artifact_manifest_required_before_done"] is True
     assert policy["storage_delta_rules"]["storage_delta_required_before_done"] is True
     assert policy["archive_delete_rules"]["archive_verification_required_before_delete"] is True
@@ -28,8 +35,8 @@ def test_storage_guard_policy_is_inert_dry_run_and_display_only():
     assert "littleton-google-drive" in policy["cloud_archive_policy"]["allowed_archive_targets_placeholder"]
     assert policy["project_specific_posture"]["signal_room_video_requires_artifact_manifest_and_archive_plan"] is True
     assert policy["project_specific_posture"]["waha_external_archive_upload_requires_explicit_approval"] is True
-    assert "disk_warning_threshold_percent" in policy["unresolved_policy_fields"]
-    assert "local_large_artifact_threshold_placeholder" in policy["unresolved_policy_fields"]
+    assert "future_enforcement_wiring" in policy["unresolved_policy_fields"]
+    assert "approved_archive_targets" in policy["unresolved_policy_fields"]
 
 
 def test_storage_guard_policy_returns_display_copy_only():
@@ -129,6 +136,98 @@ def test_storage_guard_blocks_supplied_disk_percent_above_block_threshold():
     assert "start artifact-heavy work" in result["blocked_actions"]
 
 
+def test_storage_guard_blocks_non_cleanup_work_above_critical_threshold():
+    result = evaluate_storage_guard(
+        {
+            "disk_used_percent": 91,
+            "free_gib": 80,
+        }
+    )
+
+    assert result["decision_state"] == "would_block"
+    assert result["would_block"] is True
+    assert "observed disk usage is at or above lean critical threshold" in result["reasons"]
+    assert "observed free disk is below lean minimum free space" in result["reasons"]
+    assert "start non-cleanup work" in result["blocked_actions"]
+    assert "start artifact-heavy work" in result["blocked_actions"]
+
+
+def test_storage_guard_blocks_cleanup_without_manifest_and_runtime_protection():
+    result = evaluate_storage_guard(
+        {
+            "cleanup_requested": True,
+            "artifact_manifest_present": True,
+            "cleanup_dry_run_manifest_present": False,
+            "current_live_runtime_protected": False,
+            "rollback_runtimes_protected": False,
+            "accepted_live_repo_protected": True,
+            "records_state_db_secrets_protected": True,
+        }
+    )
+
+    assert result["decision_state"] == "would_block"
+    assert result["would_block"] is True
+    assert "cleanup requested without dry-run cleanup manifest" in result["reasons"]
+    assert "cleanup did not confirm current live runtime is protected" in result["reasons"]
+    assert "cleanup did not confirm rollback runtimes are protected" in result["reasons"]
+    assert "perform storage cleanup" in result["blocked_actions"]
+
+
+def test_storage_guard_blocks_dirty_worktree_deletion():
+    result = evaluate_storage_guard(
+        {
+            "cleanup_requested": True,
+            "artifact_manifest_present": True,
+            "cleanup_dry_run_manifest_present": True,
+            "current_live_runtime_protected": True,
+            "rollback_runtimes_protected": True,
+            "accepted_live_repo_protected": True,
+            "records_state_db_secrets_protected": True,
+            "dirty_worktree_cleanup_requested": True,
+        }
+    )
+
+    assert result["decision_state"] == "would_block"
+    assert result["would_block"] is True
+    assert "dirty worktree cleanup is forbidden by lean-runtime policy" in result["reasons"]
+    assert "delete dirty worktrees" in result["blocked_actions"]
+
+
+def test_storage_guard_warns_when_cleanup_target_is_not_met():
+    result = evaluate_storage_guard(
+        {
+            "cleanup_requested": True,
+            "artifact_manifest_present": True,
+            "cleanup_dry_run_manifest_present": True,
+            "current_live_runtime_protected": True,
+            "rollback_runtimes_protected": True,
+            "accepted_live_repo_protected": True,
+            "records_state_db_secrets_protected": True,
+            "disk_used_percent": 75,
+        }
+    )
+
+    assert result["decision_state"] == "warn"
+    assert result["would_block"] is False
+    assert "observed disk usage is at or above lean warning threshold" in result["reasons"]
+    assert "cleanup target is not yet met" in result["reasons"]
+
+
+def test_storage_guard_warns_when_stale_clean_artifacts_are_eligible():
+    result = evaluate_storage_guard(
+        {
+            "artifact_heavy_lane": False,
+            "stale_clean_runtime_count": 3,
+            "stale_clean_worktree_count": 4,
+        }
+    )
+
+    assert result["decision_state"] == "warn"
+    assert result["would_block"] is False
+    assert "clean stale runtimes are eligible for a cleanup lane" in result["reasons"]
+    assert "clean stale worktrees are eligible for a cleanup lane" in result["reasons"]
+
+
 def test_storage_guard_blocks_waha_external_upload_without_approval():
     result = evaluate_storage_guard(
         {
@@ -177,7 +276,7 @@ def test_storage_guard_blocks_tool_tally_evidence_deletion_without_preservation(
     assert "delete Tool & Tally production evidence" in result["blocked_actions"]
 
 
-def test_storage_guard_warns_on_safe_state_with_unresolved_threshold_placeholders():
+def test_storage_guard_warns_on_safe_state_with_unresolved_enforcement_fields():
     result = evaluate_storage_guard(
         {
             "task_marked_done": False,
@@ -191,8 +290,8 @@ def test_storage_guard_warns_on_safe_state_with_unresolved_threshold_placeholder
 
     assert result["decision_state"] == "warn"
     assert result["would_block"] is False
-    assert "disk_warning_threshold_percent" in result["unresolved_policy_fields"]
-    assert "local_large_artifact_threshold_placeholder" in result["unresolved_policy_fields"]
+    assert "future_enforcement_wiring" in result["unresolved_policy_fields"]
+    assert "approved_archive_targets" in result["unresolved_policy_fields"]
 
 
 def test_storage_guard_unknown_for_artifact_heavy_lane_without_storage_state():
@@ -211,3 +310,106 @@ def test_storage_guard_unknown_without_observed_state():
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
     assert "caller-supplied observed storage state is incomplete" in result["reasons"]
+
+
+def test_cleanup_manifest_is_dry_run_and_protects_live_paths():
+    manifest = build_storage_cleanup_manifest(
+        {
+            "current_live_runtime": "/home/jenny/.hermes/hermes-runtime-live",
+            "accepted_live_repo": "/home/jenny/.hermes/hermes-agent",
+            "rollback_runtimes": ["/home/jenny/.hermes/hermes-runtime-rollback"],
+            "candidates": [
+                {
+                    "path": "/home/jenny/.hermes/hermes-runtime-live",
+                    "kind": "dashboard_runtime",
+                    "clean": True,
+                    "size_gib": 9,
+                },
+                {
+                    "path": "/home/jenny/.hermes/hermes-runtime-old",
+                    "kind": "stale_runtime",
+                    "clean": True,
+                    "merged": True,
+                    "size_gib": 12,
+                },
+            ],
+        }
+    )
+
+    assert manifest["dry_run_only"] is True
+    assert manifest["delete_enabled"] is False
+    assert manifest["upload_enabled"] is False
+    assert manifest["current_live_runtime_protected"] is True
+    assert manifest["rollback_runtimes_protected"] is True
+    assert manifest["accepted_live_repo_protected"] is True
+    assert manifest["records_state_db_secrets_protected"] is True
+    assert manifest["summary"]["protected_count"] == 1
+    assert manifest["summary"]["eligible_count"] == 1
+    assert manifest["eligible"][0]["path"] == "/home/jenny/.hermes/hermes-runtime-old"
+    assert manifest["summary"]["eligible_gib"] == 12
+
+
+def test_cleanup_manifest_blocks_dirty_worktrees_and_state_or_secret_paths():
+    manifest = build_storage_cleanup_manifest(
+        {
+            "current_live_runtime": "/runtime/live",
+            "accepted_live_repo": "/repo/accepted-live",
+            "rollback_runtimes": ["/runtime/rollback"],
+            "candidates": [
+                {
+                    "path": "/home/jenny/.hermes/worktrees/review-pr99",
+                    "kind": "review_worktree",
+                    "clean": False,
+                    "dirty": True,
+                    "size_gib": 4,
+                },
+                {
+                    "path": "/home/jenny/.hermes/mission-control/records.jsonl",
+                    "kind": "records",
+                    "clean": True,
+                    "size_gib": 0.1,
+                },
+                {
+                    "path": "/home/jenny/.hermes/.env",
+                    "kind": "config",
+                    "clean": True,
+                    "size_gib": 0.01,
+                },
+            ],
+        }
+    )
+
+    assert manifest["summary"]["blocked_count"] == 3
+    reasons = {item["reason"] for item in manifest["blocked"]}
+    assert "dirty worktrees are never cleanup candidates" in reasons
+    assert "records, state.db, or secrets are never cleanup candidates" in reasons
+
+
+def test_cleanup_manifest_routes_archives_and_unknowns_to_review():
+    manifest = build_storage_cleanup_manifest(
+        {
+            "current_live_runtime": "/runtime/live",
+            "accepted_live_repo": "/repo/accepted-live",
+            "rollback_runtimes": ["/runtime/rollback"],
+            "candidates": [
+                {
+                    "path": "/home/jenny/reports/tool-tally-report-bundle.zip",
+                    "kind": "report_package",
+                    "clean": True,
+                    "size_gib": 8,
+                },
+                {
+                    "path": "/home/jenny/mystery",
+                    "kind": "unknown",
+                    "clean": True,
+                    "size_gib": 3,
+                },
+            ],
+        }
+    )
+
+    assert manifest["summary"]["needs_review_count"] == 2
+    assert manifest["summary"]["needs_review_gib"] == 11
+    assert "archive or large artifact needs cloud/archive decision before cleanup" in {
+        item["reason"] for item in manifest["needs_review"]
+    }

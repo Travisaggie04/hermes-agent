@@ -3614,7 +3614,64 @@ def test_storage_guard_dry_run_endpoint_uses_caller_supplied_state_only(client):
     assert "upload artifacts to cloud" in payload["blocked_actions"]
     assert "delete artifacts" in payload["blocked_actions"]
     assert "explicit cloud upload approval" in payload["required_approvals"]
-    assert "disk_warning_threshold_percent" in payload["unresolved_policy_fields"]
+    assert "future_enforcement_wiring" in payload["unresolved_policy_fields"]
+    assert "approved_archive_targets" in payload["unresolved_policy_fields"]
+
+
+def test_storage_guard_cleanup_manifest_endpoint_is_dry_run_only(client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/storage-guard/cleanup-manifest",
+        json={
+            "current_live_runtime": "/home/jenny/.hermes/hermes-runtime-live",
+            "accepted_live_repo": "/home/jenny/.hermes/hermes-agent",
+            "rollback_runtimes": ["/home/jenny/.hermes/hermes-runtime-rollback"],
+            "candidates": [
+                {
+                    "path": "/home/jenny/.hermes/hermes-runtime-live",
+                    "kind": "dashboard_runtime",
+                    "clean": True,
+                    "size_gib": 10,
+                },
+                {
+                    "path": "/home/jenny/.hermes/hermes-runtime-old",
+                    "kind": "stale_runtime",
+                    "clean": True,
+                    "merged": True,
+                    "size_gib": 14,
+                },
+                {
+                    "path": "/home/jenny/.hermes/worktrees/dirty-pr",
+                    "kind": "review_worktree",
+                    "clean": False,
+                    "dirty": True,
+                    "size_gib": 3,
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["enforcement_enabled"] is False
+    assert payload["dry_run_only"] is True
+    assert payload["display_only"] is True
+    assert payload["stored"] is False
+    assert payload["delete_enabled"] is False
+    assert payload["upload_enabled"] is False
+    assert payload["source"] == "caller_supplied_cleanup_inventory"
+    assert payload["current_live_runtime_protected"] is True
+    assert payload["rollback_runtimes_protected"] is True
+    assert payload["accepted_live_repo_protected"] is True
+    assert payload["records_state_db_secrets_protected"] is True
+    assert payload["summary"]["protected_count"] == 1
+    assert payload["summary"]["eligible_count"] == 1
+    assert payload["summary"]["blocked_count"] == 1
+    assert payload["eligible"][0]["path"] == "/home/jenny/.hermes/hermes-runtime-old"
+    assert "dirty worktrees are never cleanup candidates" in {
+        item["reason"] for item in payload["blocked"]
+    }
 
 
 def test_verifier_workflow_endpoint_exposes_inert_dry_run_policy(client):
