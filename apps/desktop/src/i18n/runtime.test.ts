@@ -12,9 +12,9 @@ describe('desktop i18n runtime translator', () => {
   })
 
   it('translates string paths for the active runtime locale', () => {
-    setRuntimeI18nLocale('zh')
+    setRuntimeI18nLocale('en')
 
-    expect(translateNow('boot.ready')).toBe('Hermes Desktop 已就绪')
+    expect(translateNow('boot.ready')).toBe('Hermes Desktop is ready')
   })
 
   it('passes arguments to function translations', () => {
@@ -22,7 +22,7 @@ describe('desktop i18n runtime translator', () => {
   })
 
   it('returns the key when no locale can resolve a path', () => {
-    setRuntimeI18nLocale('zh')
+    setRuntimeI18nLocale('en')
 
     expect(translateNow('missing.path')).toBe('missing.path')
   })

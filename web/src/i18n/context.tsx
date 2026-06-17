@@ -36,19 +36,13 @@ const TRANSLATIONS: Record<Locale, Translations> = {
   hu,
 };
 
-// Display metadata for the language picker — endonym (native name) so users
-// recognize their language even if they don't speak the current UI language.
+// Display metadata for the language picker.
 // Exposed as a constant so the LanguageSwitcher and any future settings page
 // can share the same list.
-//
-// We intentionally do NOT pair locales with country flags. Languages are not
-// countries (English ≠ GB, Portuguese ≠ PT, Spanish ≠ ES, Chinese variants ≠
-// any single jurisdiction). Endonyms are unambiguous and avoid the political
-// mismapping that flag pairings inevitably create.
 export const LOCALE_META: Record<Locale, { name: string }> = {
   en: { name: "English" },
-  zh: { name: "简体中文" },
-  "zh-hant": { name: "繁體中文" },
+  zh: { name: "Chinese (Simplified)" },
+  "zh-hant": { name: "Chinese (Traditional)" },
   ja: { name: "日本語" },
   de: { name: "Deutsch" },
   es: { name: "Español" },
@@ -64,7 +58,11 @@ export const LOCALE_META: Record<Locale, { name: string }> = {
   hu: { name: "Magyar" },
 };
 
-const SUPPORTED_LOCALES = Object.keys(TRANSLATIONS) as Locale[];
+const HIDDEN_LOCALES = new Set<Locale>(["zh", "zh-hant"]);
+const VISIBLE_LOCALES = (Object.keys(TRANSLATIONS) as Locale[]).filter(
+  (locale) => !HIDDEN_LOCALES.has(locale),
+);
+const SUPPORTED_LOCALES = VISIBLE_LOCALES;
 const STORAGE_KEY = "hermes-locale";
 
 function isLocale(value: string): value is Locale {
