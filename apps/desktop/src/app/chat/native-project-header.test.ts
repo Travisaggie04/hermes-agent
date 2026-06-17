@@ -102,8 +102,19 @@ describe('native project chat header', () => {
     expect(source).toContain('Approval or stop rules, one per line')
     expect(source).toContain('Evidence required: ${item}')
     expect(source).toContain('Approval/stop rule: ${item}')
+    expect(source).toContain('notifyMissionControlProjectCreated({ projectId: createdProjectId, projectName: createdProjectName })')
     expect(source).toContain('onStartProjectChat(projectId, projectName)')
     expect(source).toContain('Start with a spec-first project setup review.')
+  })
+
+  it('refreshes native project pickers when any surface creates a project', () => {
+    expect(source).toContain('MISSION_CONTROL_PROJECT_CREATED')
+    expect(source).toContain('const refetchHeaderProjects = projectsQuery.refetch')
+    expect(source).toContain('void refetchHeaderProjects()')
+    expect(source).toContain('const refetchProjectHome = projectHomeQuery.refetch')
+    expect(source).toContain('void refetchProjectHome()')
+    expect(source).toContain('window.addEventListener(MISSION_CONTROL_PROJECT_CREATED')
+    expect(source).toContain('window.removeEventListener(MISSION_CONTROL_PROJECT_CREATED')
   })
 
   it('uses the same clean project chat action for header, home, and newly created projects', () => {

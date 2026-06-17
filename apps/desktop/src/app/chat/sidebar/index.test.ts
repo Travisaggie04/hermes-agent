@@ -86,9 +86,17 @@ describe('chat sidebar project workspace affordances', () => {
 
   it('refreshes project groups when a native chat is linked to a project', () => {
     expect(source).toContain('MISSION_CONTROL_PROJECT_LINK_CREATED')
+    expect(source).toContain('MISSION_CONTROL_PROJECT_CREATED')
     expect(source).toContain('window.addEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED')
+    expect(source).toContain('window.addEventListener(MISSION_CONTROL_PROJECT_CREATED')
     expect(source).toContain('window.removeEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED')
+    expect(source).toContain('window.removeEventListener(MISSION_CONTROL_PROJECT_CREATED')
     expect(source).toContain('refreshProjectGroups()')
+  })
+
+  it('broadcasts sidebar-created projects so native chat pickers stay in sync', () => {
+    expect(source).toContain('notifyMissionControlProjectCreated')
+    expect(source).toContain('notifyMissionControlProjectCreated({ projectId: createdProjectId, projectName: project.project.name || name })')
   })
 
   it('selects the project before resuming a project-linked chat', () => {
