@@ -28,6 +28,7 @@ interface SidebarSessionRowProps extends React.ComponentProps<'div'> {
   onPin: () => void
   onResume: () => void
   projectMoveTargets?: ProjectMoveTarget[]
+  suggestedProjectMoveTarget?: ProjectMoveTarget
   reorderable?: boolean
   dragging?: boolean
   dragHandleProps?: React.HTMLAttributes<HTMLElement>
@@ -63,6 +64,7 @@ export function SidebarSessionRow({
   onPin,
   onResume,
   projectMoveTargets,
+  suggestedProjectMoveTarget,
   reorderable = false,
   dragging = false,
   dragHandleProps,
@@ -86,6 +88,7 @@ export function SidebarSessionRow({
           project_id: selectedProjectId
         })
       : undefined
+  const fileProjectMoveTarget = currentProjectMoveTarget ?? suggestedProjectMoveTarget
   // Subscribe per-row (the leaf) instead of drilling a set through the list —
   // the atom is tiny and rarely non-empty. True when a clarify prompt in this
   // session is waiting on the user.
@@ -210,18 +213,18 @@ export function SidebarSessionRow({
               {age}
             </span>
           )}
-          {currentProjectMoveTarget && onMoveToProject ? (
+          {fileProjectMoveTarget && onMoveToProject ? (
             <Button
-              aria-label={`File ${title} in ${currentProjectMoveTarget.name}`}
+              aria-label={`File ${title} in ${fileProjectMoveTarget.name}`}
               className="size-5 rounded-[4px] bg-transparent text-(--ui-text-quaternary) transition-colors duration-100 hover:bg-(--ui-control-active-background) hover:text-foreground focus-visible:bg-(--ui-control-active-background) focus-visible:text-foreground focus-visible:ring-0 group-hover:text-(--ui-text-secondary) [&_svg]:size-3.5!"
               onClick={event => {
                 event.preventDefault()
                 event.stopPropagation()
                 triggerHaptic('selection')
-                onMoveToProject(currentProjectMoveTarget.project_id, currentProjectMoveTarget.name)
+                onMoveToProject(fileProjectMoveTarget.project_id, fileProjectMoveTarget.name)
               }}
               size="icon"
-              title={`File in ${currentProjectMoveTarget.name}`}
+              title={`File in ${fileProjectMoveTarget.name}`}
               type="button"
               variant="ghost"
             >

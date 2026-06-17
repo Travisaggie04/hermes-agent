@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import source from './index.tsx?raw'
+import virtualSource from './virtual-session-list.tsx?raw'
 
 describe('chat sidebar project workspace affordances', () => {
   it('makes project creation and empty project chats visible', () => {
@@ -141,6 +142,28 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('groups.filter(group => group.project_id !== UNASSIGNED_PROJECT_GROUP_ID).map')
     expect(source).toContain('linkedSessionIds: group.linked_session_ids ?? []')
     expect(source).toContain('totalCount: group.linked_session_count ?? group.sessions.length')
+  })
+
+  it('surfaces backend project suggestions for unfiled Other chats', () => {
+    expect(source).toContain('const [suggestedProjectMoveTargets, setSuggestedProjectMoveTargets]')
+    expect(source).toContain('const projectTargets = new Map(projectRecords.map(project => [project.project_id')
+    expect(source).toContain('const unassigned = sessionGroups.find(group => group.project_id === UNASSIGNED_PROJECT_GROUP_ID)')
+    expect(source).toContain('session.suggested_project_id ? projectTargets.get(session.suggested_project_id) : undefined')
+    expect(source).toContain('suggestionTargets[id] = target')
+    expect(source).toContain('setSuggestedProjectMoveTargets(suggestionTargets)')
+    expect(source).toContain('suggestedProjectMoveTargets={suggestedProjectMoveTargets}')
+  })
+
+  it('passes suggested project filing targets through row and virtualized session lists', () => {
+    expect(source).toContain('suggestedProjectMoveTargets?: Record<string, ProjectMoveTarget>')
+    expect(source).toContain("group?.mode === 'project'")
+    expect(source).toContain('suggestedProjectMoveTargets?.[session.id]')
+    expect(source).toContain('session._lineage_root_id ? suggestedProjectMoveTargets?.[session._lineage_root_id] : undefined')
+    expect(source).toContain('suggestedProjectMoveTarget,')
+    expect(source).toContain('suggestedProjectMoveTargets={suggestedProjectMoveTargets}')
+    expect(virtualSource).toContain('suggestedProjectMoveTargets?: Record<string, ProjectMoveTarget>')
+    expect(virtualSource).toContain('suggestedProjectMoveTarget:')
+    expect(virtualSource).toContain('suggestedProjectMoveTargets?.[session.id]')
   })
 
   it('shows project linked-session totals without creating a dead load-more control', () => {
