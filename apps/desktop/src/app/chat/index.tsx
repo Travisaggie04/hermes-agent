@@ -485,7 +485,7 @@ function NativeProjectIntakeDialog({
         <DialogHeader>
           <DialogTitle>Create project</DialogTitle>
           <DialogDescription>
-            Set up the project before Jenny starts work. Guardrails stay in the background.
+            Name the work, give Jenny the goal, and keep detailed guardrails optional.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -516,27 +516,32 @@ function NativeProjectIntakeDialog({
             placeholder="Wins / success criteria, one per line"
             value={value.success}
           />
-          <textarea
-            className="min-h-16 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
-            disabled={saving}
-            onChange={update('evidence')}
-            placeholder="Evidence Jenny must return, one per line"
-            value={value.evidence}
-          />
-          <textarea
-            className="min-h-16 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
-            disabled={saving}
-            onChange={update('approval')}
-            placeholder="Approval or stop rules, one per line"
-            value={value.approval}
-          />
-          <textarea
-            className="min-h-16 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
-            disabled={saving}
-            onChange={update('forbidden')}
-            placeholder="Forbidden actions or risks, one per line"
-            value={value.forbidden}
-          />
+          <details className="grid gap-2 rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background)/40 p-2 text-sm">
+            <summary className="cursor-pointer text-(--ui-text-secondary)">Advanced setup</summary>
+            <div className="mt-2 grid gap-2">
+              <textarea
+                className="min-h-16 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
+                disabled={saving}
+                onChange={update('evidence')}
+                placeholder="Evidence Jenny must return, one per line"
+                value={value.evidence}
+              />
+              <textarea
+                className="min-h-16 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
+                disabled={saving}
+                onChange={update('approval')}
+                placeholder="Approval or stop rules, one per line"
+                value={value.approval}
+              />
+              <textarea
+                className="min-h-16 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
+                disabled={saving}
+                onChange={update('forbidden')}
+                placeholder="Forbidden actions or risks, one per line"
+                value={value.forbidden}
+              />
+            </div>
+          </details>
           {error && <div className="text-sm text-red-300">{error}</div>}
           <DialogFooter>
             <Button disabled={saving} onClick={() => onOpenChange(false)} type="button" variant="ghost">
