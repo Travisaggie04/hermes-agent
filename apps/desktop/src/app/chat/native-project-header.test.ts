@@ -167,7 +167,10 @@ describe('native project chat header', () => {
   it('keeps detailed Jenny activity behind the existing Agents overlay', () => {
     expect(source).toContain("import { AGENTS_ROUTE, routeSessionId } from '../routes'")
     expect(source).toContain('const sessionSubagents = activeSessionId ? (subagentsBySession[activeSessionId] ?? []) : []')
-    expect(source).toContain('const showActivity = sessionSubagents.length > 0')
+    expect(source).toContain('const asyncAgentActivityAvailable = Boolean(')
+    expect(source).toContain('asyncAgentStatusQuery.data?.async_agent_controls_available')
+    expect(source).toContain('asyncAgentStatusQuery.data?.sync_delegate_task_available')
+    expect(source).toContain('const showActivity = sessionSubagents.length > 0 || asyncAgentActivityAvailable')
     expect(source).toContain('onClick={() => navigate(AGENTS_ROUTE)}')
     expect(source).toContain("runningSubagents > 0 ? `Activity ${runningSubagents}` : 'Activity'")
   })
