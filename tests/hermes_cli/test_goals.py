@@ -782,6 +782,16 @@ class TestContinuationPromptWithSubgoals:
 
 
 class TestJudgeGoalWithSubgoals:
+    def test_judge_system_prompt_requires_concrete_evidence(self):
+        from hermes_cli.goals import JUDGE_SYSTEM_PROMPT
+
+        assert "concrete evidence" in JUDGE_SYSTEM_PROMPT
+        assert "changed files" in JUDGE_SYSTEM_PROMPT
+        assert "command/test output" in JUDGE_SYSTEM_PROMPT
+        assert "PR state" in JUDGE_SYSTEM_PROMPT
+        assert "Do not accept generic phrases" in JUDGE_SYSTEM_PROMPT
+        assert "it works" in JUDGE_SYSTEM_PROMPT
+
     def test_judge_uses_subgoals_template_when_provided(self, hermes_home):
         """judge_goal switches templates when subgoals is non-empty.
 
@@ -827,6 +837,8 @@ class TestJudgeGoalWithSubgoals:
         assert "Additional criteria" in user_msg
         assert "1. write tests" in user_msg
         assert "2. update docs" in user_msg
+        assert "concrete evidence" in user_msg
+        assert "specific evidence" in user_msg
         assert "every additional criterion" in user_msg
         assert verdict == "done"
 
@@ -860,6 +872,12 @@ class TestJudgeGoalWithSubgoals:
         user_msg = next((m["content"] for m in sent_messages if m["role"] == "user"), "")
         assert "Additional criteria" not in user_msg
         assert "ship it" in user_msg
+        assert "concrete evidence" in user_msg
+        assert "generic completion claims" in user_msg
+        assert "files changed" in user_msg
+        assert "command output" in user_msg
+        assert "test results" in user_msg
+        assert "return CONTINUE" in user_msg
 
 
 class TestStatusLineSubgoalCount:
