@@ -2252,7 +2252,7 @@ export default function MissionControlCompactPage() {
   }
 
   return (
-    <main className="box-border flex h-[100dvh] min-h-0 w-dvw min-w-0 max-w-dvw touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none bg-[#0e0b12] px-1 py-1 pb-[env(safe-area-inset-bottom)] text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 [&_*]:box-border" data-testid="mission-control-compact-route">
+    <main className="box-border flex h-[100dvh] min-h-0 w-full min-w-0 max-w-full touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none bg-[#0e0b12] px-1 py-1 pb-[env(safe-area-inset-bottom)] text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 [&_*]:box-border" data-testid="mission-control-compact-route">
       <header className="sr-only">
         <p className="sr-only max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782] [overflow-wrap:anywhere]">
           <span className="font-serif text-lg italic text-[#d4a574]">IV.</span>
