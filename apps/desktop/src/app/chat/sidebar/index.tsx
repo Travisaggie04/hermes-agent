@@ -438,11 +438,6 @@ export function ChatSidebar({
 
         const next = byId.size ? [...byId.values()].sort((a, b) => a.label.localeCompare(b.label)) : projectGroupsFor(fallbackProjectGroups())
         setProjectGroups(next)
-
-        if (!$selectedMissionControlProjectId.get().trim() && next.length) {
-          setSelectedMissionControlProject(next[0].id, next[0].label)
-          setSidebarRecentsOpen(false)
-        }
       })
       .catch(() => {
         if (!cancelled) {
@@ -1419,7 +1414,7 @@ function SidebarSessionsSection({
   onReorder,
   dndSensors
 }: SidebarSessionsSectionProps) {
-  const showEmptyState = forceEmptyState || sessions.length === 0
+  const showEmptyState = forceEmptyState || (!groups?.length && sessions.length === 0)
   const dndActive = sortable && !!onReorder
 
   const renderRow = (session: SessionInfo, group?: SidebarSessionGroup) => {
