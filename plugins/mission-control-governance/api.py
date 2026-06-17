@@ -1375,6 +1375,11 @@ def _project_sessions_projection(limit: int) -> dict[str, Any]:
         for item in projects
     ]
     by_project = {group["project_id"]: group for group in groups}
+    linked_counts_by_project = {project_id: 0 for project_id in by_project}
+    for link_item in active_links.values():
+        project_id = link_item.get("record", {}).get("project_id", "")
+        if project_id in linked_counts_by_project:
+            linked_counts_by_project[project_id] += 1
     unassigned = {
         "project_id": "unassigned-general",
         "name": "Unassigned / General",
@@ -1396,7 +1401,7 @@ def _project_sessions_projection(limit: int) -> dict[str, Any]:
         if payload["suggested_project_id"]:
             unassigned["unassigned_suggestion_count"] += 1
     for group in groups:
-        group["linked_session_count"] = len(group["sessions"])
+        group["linked_session_count"] = linked_counts_by_project.get(group["project_id"], len(group["sessions"]))
         group["sessions"] = group["sessions"][:5]
     unassigned["sessions"] = unassigned["sessions"][:10]
     return {
