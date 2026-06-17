@@ -266,13 +266,16 @@ function ChatHeader({
         />
         {showActivity && (
           <Button
-            className="hidden h-6 shrink-0 px-2 text-[0.6875rem] min-[46rem]:inline-flex"
+            className="h-6 shrink-0 px-2 text-[0.6875rem]"
             onClick={() => navigate(AGENTS_ROUTE)}
             title="Open live Jenny activity"
             type="button"
             variant="outline"
           >
-            {runningSubagents > 0 ? `Activity ${runningSubagents}` : 'Activity'}
+            <span className="hidden min-[46rem]:inline">
+              {runningSubagents > 0 ? `Activity ${runningSubagents}` : 'Activity'}
+            </span>
+            <span className="min-[46rem]:hidden">{runningSubagents > 0 ? runningSubagents : 'Activity'}</span>
           </Button>
         )}
       </div>
