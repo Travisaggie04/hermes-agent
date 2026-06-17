@@ -1,9 +1,15 @@
 # Hermes Version Inventory - 2026-06-13
 
 This is a read-only version inventory for Travis's laptop/Codex checkout,
-Travis's laptop Hermes worker node, and Jenny's VPS runtimes. It does not
+the legacy laptop Hermes worker node, and Jenny's VPS runtimes. It does not
 approve an update, deploy, restart, runtime switch, laptop worker-node trigger,
 record mutation, dispatch/session-send, Waha action, or gateway change.
+
+Update 2026-06-17: the Jenny OS architecture now treats the laptop Hermes
+worker-node path as legacy. The intended laptop worker is Codex, used
+opportunistically when the laptop is online. Keep normal Hermes Desktop
+available, but do not re-enable the separate laptop Hermes worker-node
+autostart unless a future lane explicitly chooses that architecture again.
 
 ## Local Accepted-Live Checkout
 
@@ -55,10 +61,10 @@ restart or switch either service.
 - The laptop worker-node updater may be using an installer/update channel that
   is separate from GitHub Releases. That channel still needs to be identified
   before changing laptop or VPS versions.
-- Travis clarified that the laptop Hermes install is a worker node and that the
-  VPS historically triggered laptop Hermes updates. The update source should
-  therefore be inventoried as a VPS-triggered worker-node path, not assumed to
-  be a standalone laptop click-to-update flow.
+- Travis clarified that the laptop Hermes install had been used as a worker
+  node and that the VPS historically triggered laptop Hermes updates. That path
+  remains useful historical context, but the current plan is to retire the
+  worker-node autostart and use Codex as the optional laptop engineering worker.
 - The VPS dashboard is intentionally behind the current accepted-live branch
   after later docs/record work. That is not automatically an update problem:
   dashboard-only switch remains a separate deploy lane.
@@ -68,10 +74,12 @@ restart or switch either service.
 
 ## Recommended Safe Update Sequence
 
-1. Identify the VPS-triggered laptop worker-node updater source, command, target
-   version, and rollback path before triggering any laptop update.
-2. Keep laptop worker-node update as a separate explicit approval step; do not
-   trigger it as part of dashboard-only Mission Control deployment.
+1. Identify the VPS-triggered legacy laptop worker-node updater source,
+   command, target version, and rollback path before re-enabling or triggering
+   any worker-node update.
+2. Keep any legacy laptop worker-node update/re-enable action as a separate
+   explicit approval step; do not trigger it as part of dashboard-only Mission
+   Control deployment.
 3. Smoke-check laptop Mission Control after a separately approved worker-node
    update:
    - app opens,
