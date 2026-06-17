@@ -129,6 +129,12 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('totalCount: group.linked_session_count ?? group.sessions.length')
   })
 
+  it('shows project linked-session totals without creating a dead load-more control', () => {
+    expect(source).toContain('const totalCount = isProfileGroup || isProjectGroup')
+    expect(source).toContain('(isProfileGroup ? totalCount : loadedCount) - visibleSessions.length')
+    expect(source).toContain('isProjectGroup ? countLabel(loadedCount, totalCount) : loadedCount')
+  })
+
   it('keeps project groups visible if one Mission Control project endpoint is unavailable', () => {
     expect(source).toContain('Promise.allSettled([getMissionControlProjects(), getMissionControlProjectSessions()])')
     expect(source).toContain("projectsResult.status === 'fulfilled' ? nativeChatProjects")

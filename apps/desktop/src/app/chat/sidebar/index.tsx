@@ -1591,7 +1591,7 @@ function SidebarWorkspaceGroup({
   // groups only ever page within what's already loaded.
   const totalCount = isProfileGroup || isProjectGroup ? Math.max(group.totalCount ?? loadedCount, loadedCount) : loadedCount
   const visibleSessions = group.sessions.slice(0, visibleCount)
-  const hiddenCount = Math.max(0, totalCount - visibleSessions.length)
+  const hiddenCount = Math.max(0, (isProfileGroup ? totalCount : loadedCount) - visibleSessions.length)
   const nextCount = Math.min(pageStep, hiddenCount)
 
   // Reveal already-loaded rows first; only hit the backend when the next page
@@ -1651,7 +1651,7 @@ function SidebarWorkspaceGroup({
             </span>
           ) : null}
           <SidebarCount>
-            {isProfileGroup ? countLabel(visibleSessions.length, totalCount) : group.sessions.length}
+            {isProfileGroup ? countLabel(visibleSessions.length, totalCount) : isProjectGroup ? countLabel(loadedCount, totalCount) : loadedCount}
           </SidebarCount>
           <DisclosureCaret
             className="text-(--ui-text-tertiary) opacity-0 transition group-hover/workspace:opacity-100"
