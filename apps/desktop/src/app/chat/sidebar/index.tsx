@@ -345,6 +345,7 @@ export function ChatSidebar({
   const [serverMatches, setServerMatches] = useState<SessionSearchResult[]>([])
   const [newSessionKbdFlash, setNewSessionKbdFlash] = useState(false)
   const [projectGroups, setProjectGroups] = useState<SidebarSessionGroup[]>([])
+  const [suggestedProjectMoveTargets, setSuggestedProjectMoveTargets] = useState<Record<string, ProjectMoveTarget>>({})
   const [projectGroupsLoading, setProjectGroupsLoading] = useState(false)
   const [projectIntakeOpen, setProjectIntakeOpen] = useState(false)
   const [projectIntakeError, setProjectIntakeError] = useState('')
@@ -418,7 +419,24 @@ export function ChatSidebar({
         const projectRecords =
           projectsResult.status === 'fulfilled' ? nativeChatProjects(projectsResult.value.projects.map(item => item.record)) : nativeChatProjects()
         const sessionGroups = sessionsResult.status === 'fulfilled' ? sessionsResult.value.groups || [] : []
+        const projectTargets = new Map(projectRecords.map(project => [project.project_id, { name: project.name, project_id: project.project_id }]))
         const byId = new Map(projectGroupsFor(sessionGroups).map(group => [group.id, group]))
+        const suggestionTargets: Record<string, ProjectMoveTarget> = {}
+        const unassigned = sessionGroups.find(group => group.project_id === UNASSIGNED_PROJECT_GROUP_ID)
+
+        for (const session of unassigned?.sessions ?? []) {
+          const target = session.suggested_project_id ? projectTargets.get(session.suggested_project_id) : undefined
+
+          if (!target) {
+            continue
+          }
+
+          for (const id of [session.session_id, session.durable_session_id, session.lineage_root_id]) {
+            if (id) {
+              suggestionTargets[id] = target
+            }
+          }
+        }
 
         for (const project of projectRecords) {
           const projectId = project.project_id || project.name
@@ -439,10 +457,12 @@ export function ChatSidebar({
 
         const next = byId.size ? [...byId.values()].sort((a, b) => a.label.localeCompare(b.label)) : projectGroupsFor(fallbackProjectGroups())
         setProjectGroups(next)
+        setSuggestedProjectMoveTargets(suggestionTargets)
       })
       .catch(() => {
         if (!cancelled) {
           setProjectGroups([])
+          setSuggestedProjectMoveTargets({})
         }
       })
       .finally(() => {
@@ -1014,6 +1034,7 @@ export function ChatSidebar({
             projectMoveTargets={projectMoveTargets}
             rootClassName="min-h-0 flex-1 p-0"
             sessions={searchResults}
+            suggestedProjectMoveTargets={suggestedProjectMoveTargets}
             workingSessionIdSet={workingSessionIdSet}
           />
         )}
@@ -1083,6 +1104,7 @@ export function ChatSidebar({
             projectMoveTargets={projectMoveTargets}
             rootClassName="shrink-0 p-0 pb-1"
             sessions={visibleProjectGroups.flatMap(group => group.sessions)}
+            suggestedProjectMoveTargets={suggestedProjectMoveTargets}
             workingSessionIdSet={workingSessionIdSet}
           />
         )}
@@ -1107,6 +1129,7 @@ export function ChatSidebar({
             rootClassName="shrink-0 p-0 pb-1"
             sessions={pinnedSessions}
             sortable={pinnedSessions.length > 1}
+            suggestedProjectMoveTargets={suggestedProjectMoveTargets}
             workingSessionIdSet={workingSessionIdSet}
           />
         )}
@@ -1177,6 +1200,7 @@ export function ChatSidebar({
             rootClassName={recentsRootClassName}
             sessions={agentSessions}
             sortable={!showAllProfiles && agentSessions.length > 1}
+            suggestedProjectMoveTargets={suggestedProjectMoveTargets}
             workingSessionIdSet={workingSessionIdSet}
           />
         )}
@@ -1383,6 +1407,7 @@ interface SidebarSessionsSectionProps {
   onSelectProject?: (projectId: string, projectName: string) => void
   pinned: boolean
   projectMoveTargets?: ProjectMoveTarget[]
+  suggestedProjectMoveTargets?: Record<string, ProjectMoveTarget>
   rootClassName?: string
   contentClassName?: string
   emptyState: React.ReactNode
@@ -1415,6 +1440,7 @@ function SidebarSessionsSection({
   onSelectProject,
   pinned,
   projectMoveTargets,
+  suggestedProjectMoveTargets,
   rootClassName,
   contentClassName,
   emptyState,
@@ -1432,6 +1458,11 @@ function SidebarSessionsSection({
   const dndActive = sortable && !!onReorder
 
   const renderRow = (session: SessionInfo, group?: SidebarSessionGroup) => {
+    const suggestedProjectMoveTarget =
+      group?.mode === 'project'
+        ? undefined
+        : suggestedProjectMoveTargets?.[session.id] ??
+          (session._lineage_root_id ? suggestedProjectMoveTargets?.[session._lineage_root_id] : undefined)
     const rowProps = {
       isPinned: pinned,
       isSelected: session.id === activeSessionId,
@@ -1450,6 +1481,7 @@ function SidebarSessionsSection({
         onResumeSession(session.id)
       },
       projectMoveTargets,
+      suggestedProjectMoveTarget,
       session,
       hideCurrentProjectMove: group?.mode === 'project' && group.id === activeGroupId
     }
@@ -1525,6 +1557,7 @@ function SidebarSessionsSection({
         projectMoveTargets={projectMoveTargets}
         sessions={sessions}
         sortable={sortable}
+        suggestedProjectMoveTargets={suggestedProjectMoveTargets}
         workingSessionIdSet={workingSessionIdSet}
       />
     )
@@ -1778,6 +1811,7 @@ interface SortableSessionRowProps {
   onPin: () => void
   onResume: () => void
   projectMoveTargets?: ProjectMoveTarget[]
+  suggestedProjectMoveTarget?: ProjectMoveTarget
 }
 
 function SortableSidebarSessionRow(props: SortableSessionRowProps) {

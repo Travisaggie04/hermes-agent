@@ -20,6 +20,7 @@ interface SessionRowCommonProps {
   onPin: () => void
   onResume: () => void
   projectMoveTargets?: ProjectMoveTarget[]
+  suggestedProjectMoveTarget?: ProjectMoveTarget
 }
 
 interface VirtualSessionListProps {
@@ -33,6 +34,7 @@ interface VirtualSessionListProps {
   pinned: boolean
   projectMoveTargets?: ProjectMoveTarget[]
   sessions: SessionInfo[]
+  suggestedProjectMoveTargets?: Record<string, ProjectMoveTarget>
   sortable: boolean
   workingSessionIdSet: Set<string>
 }
@@ -51,6 +53,7 @@ export const VirtualSessionList: FC<VirtualSessionListProps> = ({
   pinned,
   projectMoveTargets,
   sessions,
+  suggestedProjectMoveTargets,
   sortable,
   workingSessionIdSet
 }) => {
@@ -90,7 +93,10 @@ export const VirtualSessionList: FC<VirtualSessionListProps> = ({
         : undefined,
       onPin: () => onTogglePin(sessionPinId(session)),
       onResume: () => onResumeSession(session.id),
-      projectMoveTargets
+      projectMoveTargets,
+      suggestedProjectMoveTarget:
+        suggestedProjectMoveTargets?.[session.id] ??
+        (session._lineage_root_id ? suggestedProjectMoveTargets?.[session._lineage_root_id] : undefined)
     }
 
     return sortable ? (
