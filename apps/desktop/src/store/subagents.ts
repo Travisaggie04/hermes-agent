@@ -14,6 +14,8 @@ export interface SubagentProgress {
   id: string
   parentId: null | string
   goal: string
+  /** Child stored session id for opening or inspecting the subagent session. */
+  sessionId?: string
   model?: string
   status: SubagentStatus
   taskCount: number
@@ -159,6 +161,7 @@ function toProgress(payload: SubagentPayload, prev: SubagentProgress | undefined
     id: prev?.id ?? idOf(payload),
     parentId: str(payload.parent_id) || prev?.parentId || null,
     goal: str(payload.goal) || prev?.goal || 'Subagent',
+    sessionId: str(payload.child_session_id) || prev?.sessionId,
     model: str(payload.model) || prev?.model,
     status,
     taskCount: num(payload.task_count) ?? prev?.taskCount ?? 1,
