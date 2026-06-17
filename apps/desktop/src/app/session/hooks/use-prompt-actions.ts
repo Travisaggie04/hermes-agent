@@ -760,7 +760,10 @@ export function usePromptActions({
             return
           }
 
-          await submitPromptText(message)
+          await submitPromptText(message, {
+            titlePreview: command,
+            visibleText: command
+          })
         } catch (err) {
           renderSlashOutput(`error: ${err instanceof Error ? err.message : String(err)}`)
         }

@@ -377,6 +377,49 @@ describe('usePromptActions project harness', () => {
     expect(allMessages.map(chatMessageText).join('\n')).not.toContain('Operate as a senior engineering agent')
   })
 
+  it('shows the typed slash command instead of expanded send payloads', async () => {
+    const refreshSessions = vi.fn(async () => undefined)
+    const requestGateway = vi.fn(async (method: string) => {
+      if (method === 'slash.exec') {
+        throw new Error('route through command.dispatch')
+      }
+
+      if (method === 'command.dispatch') {
+        return {
+          type: 'send',
+          message:
+            'Spec-first request for Jenny: Project: Hermes / Mission Control Request Travis is considering: test Current intake: Spec first. Allowed: read approved context. Forbidden: no direct session send.'
+        } as never
+      }
+
+      return {} as never
+    })
+    const states: Array<{ messages: ChatMessage[]; busy: boolean; awaitingResponse: boolean }> = []
+
+    let handle: HarnessHandle | null = null
+    render(
+      <Harness
+        onReady={h => (handle = h)}
+        onState={state => states.push(state)}
+        refreshSessions={refreshSessions}
+        requestGateway={requestGateway}
+      />
+    )
+
+    await handle!.submitText('/queue test')
+
+    const promptSubmitCall = requestGateway.mock.calls.find(call => call[0] === 'prompt.submit') as
+      | [string, { session_id: string; text: string }]
+      | undefined
+    expect(promptSubmitCall?.[1].text).toContain('Spec-first request for Jenny:')
+    expect(promptSubmitCall?.[1].text).toContain('Request Travis is considering: test')
+
+    const optimisticUser = states.flatMap(state => state.messages).find(message => message.role === 'user')
+    expect(chatMessageText(optimisticUser!)).toBe('/queue test')
+    expect(chatMessageText(optimisticUser!)).not.toContain('Spec-first request for Jenny')
+    expect(chatMessageText(optimisticUser!)).not.toContain('Allowed: read approved context')
+  })
+
   it('shows a concise chat error when the guarded bridge payload is too large', async () => {
     setSelectedMissionControlProject('project-hermes-mission-control', 'Hermes / Mission Control')
 
