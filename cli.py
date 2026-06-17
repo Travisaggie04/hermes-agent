@@ -9708,7 +9708,7 @@ class HermesCLI:
 
         # Bare /goal or /goal status → show current state
         if not arg or lower == "status":
-            _cprint(f"  {mgr.status_line()}")
+            _cprint(f"  {mgr.status_report()}")
             return
 
         if lower == "pause":

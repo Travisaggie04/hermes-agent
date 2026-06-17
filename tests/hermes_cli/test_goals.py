@@ -414,6 +414,46 @@ class TestGoalManager:
         assert "Changed hermes_cli/goals.py" in continuation
         assert "last judge reason: needs evidence" in continuation
 
+    def test_status_report_includes_progress_and_next_step(self, hermes_home):
+        from hermes_cli import goals
+        from hermes_cli.goals import GoalManager
+
+        mgr = GoalManager(session_id="status-report-sid")
+        mgr.set("ship a reliable goal loop")
+        with patch.object(
+            goals,
+            "judge_goal",
+            return_value=("continue", "needs one more check", False),
+        ):
+            mgr.evaluate_after_turn("Ran focused tests and found one missing status field.")
+
+        report = mgr.status_report()
+        assert "Goal (active, 1/20 turns)" in report
+        assert "Last verdict: continue" in report
+        assert "Last reason: needs one more check" in report
+        assert "Last progress checkpoint:" in report
+        assert "Ran focused tests" in report
+        assert "Hermes will continue after the current turn" in report
+
+    def test_status_report_for_blocked_goal_points_to_resume_or_clear(self, hermes_home):
+        from hermes_cli import goals
+        from hermes_cli.goals import GoalManager
+
+        mgr = GoalManager(session_id="status-report-blocked-sid")
+        mgr.set("ship a reliable goal loop")
+        with patch.object(
+            goals,
+            "judge_goal",
+            return_value=("continue", "blocked: missing approval", False),
+        ):
+            mgr.evaluate_after_turn("Cannot continue without approval.")
+
+        report = mgr.status_report()
+        assert "Goal (blocked" in report
+        assert "blocked: missing approval" in report
+        assert "use /goal resume" in report
+        assert "use /goal clear" in report
+
     def test_kickoff_prompt_includes_engineering_contract(self, hermes_home):
         """Goal kickoff should prime the agent with scope/evidence/stop
         conditions instead of sending only the raw objective."""

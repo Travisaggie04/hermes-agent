@@ -6434,7 +6434,7 @@ def _(rid, params: dict) -> dict:
 
         lower = arg.strip().lower()
         if not arg.strip() or lower == "status":
-            return _ok(rid, {"type": "exec", "output": mgr.status_line()})
+            return _ok(rid, {"type": "exec", "output": mgr.status_report()})
         if lower == "pause":
             state = mgr.pause(reason="user-paused")
             out = "No goal set." if state is None else f"⏸ Goal paused: {state.goal}"
