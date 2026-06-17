@@ -678,10 +678,18 @@ function ProjectJennyStatusStrip({
     queryError: bridgeStatusQuery.error
   })
   const latestErrorMessage = latestVisibleAssistantErrorMessage(messages)
+  const visibleStatusTones = new Set<NativeJennyStatusTone>(['pending', 'working', 'warn'])
 
-  if (jennyStatus.tone !== 'warn') {
+  if (!visibleStatusTones.has(jennyStatus.tone)) {
     return null
   }
+
+  const summaryClass =
+    jennyStatus.tone === 'warn'
+      ? 'text-red-200'
+      : jennyStatus.tone === 'pending'
+        ? 'text-amber-100'
+        : 'text-blue-100'
 
   return (
     <div
@@ -689,7 +697,7 @@ function ProjectJennyStatusStrip({
       className="relative z-10 flex min-h-8 shrink-0 items-center gap-2 border-b border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background)/95 px-4 text-[0.75rem] text-(--ui-text-secondary)"
     >
       <span className="shrink-0 font-medium text-foreground">Jenny</span>
-      <span className="min-w-0 truncate font-medium text-red-200" title={jennyStatus.detail}>
+      <span className={cn('min-w-0 truncate font-medium', summaryClass)} title={jennyStatus.detail}>
         {jennyStatus.summary}
       </span>
       <span className="hidden min-w-0 truncate text-(--ui-text-tertiary) min-[42rem]:inline" title={projectName}>
