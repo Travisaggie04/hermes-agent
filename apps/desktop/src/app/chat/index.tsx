@@ -7,7 +7,7 @@ import {
 import { useStore } from '@nanostores/react'
 import { useQuery } from '@tanstack/react-query'
 import type * as React from 'react'
-import { Suspense, useCallback, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import { Thread } from '@/components/assistant-ui/thread'
@@ -38,6 +38,7 @@ import {
 import { type ChatMessage, chatMessageText } from '@/lib/chat-messages'
 import { quickModelOptions, sessionTitle, toRuntimeMessage } from '@/lib/chat-runtime'
 import { useIncrementalExternalStoreRuntime } from '@/lib/incremental-external-store-runtime'
+import { MISSION_CONTROL_PROJECT_CREATED, notifyMissionControlProjectCreated } from '@/lib/mission-control-events'
 import { cn } from '@/lib/utils'
 import type { ComposerAttachment } from '@/store/composer'
 import { $pinnedSessionIds } from '@/store/layout'
@@ -161,6 +162,17 @@ function ChatHeader({
     refetchInterval: 60_000,
     staleTime: 60_000
   })
+  const refetchHeaderProjects = projectsQuery.refetch
+
+  useEffect(() => {
+    const onProjectCreated = () => {
+      void refetchHeaderProjects()
+    }
+
+    window.addEventListener(MISSION_CONTROL_PROJECT_CREATED, onProjectCreated)
+
+    return () => window.removeEventListener(MISSION_CONTROL_PROJECT_CREATED, onProjectCreated)
+  }, [refetchHeaderProjects])
 
   const activeStoredSession =
     sessions.find(session => session.id === selectedSessionId || session._lineage_root_id === selectedSessionId) || null
@@ -498,6 +510,7 @@ function NativeProjectIntakeDialog({
         success_criteria: success
       })
 
+      notifyMissionControlProjectCreated({ projectId: createdProjectId, projectName: createdProjectName })
       onCreated(createdProjectId, createdProjectName)
       notify({ durationMs: 2_000, kind: 'success', message: `Created ${createdProjectName}` })
       setValue({ approval: '', evidence: '', forbidden: '', goal: '', name: '', source: '', success: '' })
@@ -751,6 +764,16 @@ export function ChatView({
     queryKey: ['mission-control-projects-native-chat-home'],
     staleTime: 30_000
   })
+  const refetchProjectHome = projectHomeQuery.refetch
+  useEffect(() => {
+    const onProjectCreated = () => {
+      void refetchProjectHome()
+    }
+
+    window.addEventListener(MISSION_CONTROL_PROJECT_CREATED, onProjectCreated)
+
+    return () => window.removeEventListener(MISSION_CONTROL_PROJECT_CREATED, onProjectCreated)
+  }, [refetchProjectHome])
   const projectHomeOptions = useMemo(
     () => nativeChatProjects(projectHomeQuery.data?.projects.map(item => item.record) ?? []),
     [projectHomeQuery.data]

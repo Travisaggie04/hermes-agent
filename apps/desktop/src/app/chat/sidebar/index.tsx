@@ -49,7 +49,7 @@ import {
 } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { sessionTitle } from '@/lib/chat-runtime'
-import { MISSION_CONTROL_PROJECT_LINK_CREATED } from '@/lib/mission-control-events'
+import { MISSION_CONTROL_PROJECT_CREATED, MISSION_CONTROL_PROJECT_LINK_CREATED, notifyMissionControlProjectCreated } from '@/lib/mission-control-events'
 import { profileColor } from '@/lib/profile-color'
 import { sessionMatchesSearch } from '@/lib/session-search'
 import { cn } from '@/lib/utils'
@@ -474,14 +474,16 @@ export function ChatSidebar({
   }, [selectedMissionControlProjectId])
 
   useEffect(() => {
-    const onProjectLinkCreated = () => {
+    const onProjectRecordsChanged = () => {
       refreshProjectGroups()
     }
 
-    window.addEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED, onProjectLinkCreated)
+    window.addEventListener(MISSION_CONTROL_PROJECT_CREATED, onProjectRecordsChanged)
+    window.addEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED, onProjectRecordsChanged)
 
     return () => {
-      window.removeEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED, onProjectLinkCreated)
+      window.removeEventListener(MISSION_CONTROL_PROJECT_CREATED, onProjectRecordsChanged)
+      window.removeEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED, onProjectRecordsChanged)
     }
   }, [refreshProjectGroups])
 
@@ -541,6 +543,7 @@ export function ChatSidebar({
       setSidebarRecentsOpen(false)
       setProjectIntake({ approval: '', evidence: '', forbidden: '', goal: '', name: '', source: '', success: '' })
       setProjectIntakeOpen(false)
+      notifyMissionControlProjectCreated({ projectId: createdProjectId, projectName: project.project.name || name })
       refreshProjectGroups()
       onNewSessionInProject(createdProjectId, project.project.name || name)
     } catch (err) {
