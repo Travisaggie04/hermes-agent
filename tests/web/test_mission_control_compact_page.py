@@ -65,7 +65,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
     src = page_source()
     for expected in [
         "Project chat workspace",
-        "max-w-dvw",
+        "w-full min-w-0 max-w-full",
         "[&_*]:box-border",
         "mt-0 flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden",
         "Local studio",
@@ -210,7 +210,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "COMPACT_JENNY_MESSAGE_LIMIT - 3",
         "Queue for Jenny bridge",
         "Refresh replies",
-        "flex h-[100dvh] min-h-0 w-dvw min-w-0 max-w-dvw touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none",
+        "flex h-[100dvh] min-h-0 w-full min-w-0 max-w-full touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none",
         "sr-only",
         "min-h-0 min-w-0 max-w-full flex-1 overflow-hidden",
         "sr-only order-2 min-w-0 max-w-full overflow-hidden",
@@ -359,8 +359,7 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
     src = page_source()
     for expected in [
         "overflow-x-hidden",
-        "max-w-dvw",
-        "touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none",
+        "w-full min-w-0 max-w-full touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none",
         "h-full min-h-0 w-full min-w-0 max-w-full",
         "min-[420px]:grid-cols-2",
         "overflow-y-auto overflow-x-hidden overscroll-contain",
@@ -376,6 +375,8 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
         "grid min-w-0 grid-cols-1 gap-2 text-xs sm:grid-cols-2",
     ]:
         assert expected in src
+    assert "w-dvw" not in src
+    assert "max-w-dvw" not in src
 
 
 def test_compact_project_chat_keeps_primary_flow_chat_first() -> None:
