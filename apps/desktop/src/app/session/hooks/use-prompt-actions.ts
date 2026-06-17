@@ -117,11 +117,21 @@ function nativeProjectHarnessContext(): string {
   ].join('\n')
 }
 
-function withNativeProjectHarnessContext(text: string): string {
-  const body = text.trim()
-  const projectHarnessContext = nativeProjectHarnessContext()
+function promptSubmitParams(
+  sessionId: string,
+  text: string,
+  extra: { truncateBeforeUserOrdinal?: number } = {}
+): Record<string, unknown> {
+  const hiddenContext = nativeProjectHarnessContext()
 
-  return [projectHarnessContext, body].filter(Boolean).join('\n\n')
+  return {
+    session_id: sessionId,
+    text,
+    ...(hiddenContext && { hidden_context: hiddenContext }),
+    ...(extra.truncateBeforeUserOrdinal !== undefined && {
+      truncate_before_user_ordinal: extra.truncateBeforeUserOrdinal
+    })
+  }
 }
 
 const nativeProjectSessionLinkCache = new Set<string>()
@@ -321,13 +331,11 @@ export function usePromptActions({
         .join('\n')
 
       const terminalContextBlocks = terminalContextBlocksFromDraft(rawText).join('\n\n')
-      const projectHarnessContext = nativeProjectHarnessContext()
       const hasImage = attachments.some(a => a.kind === 'image')
       const attachmentRefs = attachments.map(attachmentDisplayText).filter((r): r is string => Boolean(r))
       const userPromptText = visibleText || (hasImage ? 'What do you see in this image?' : '')
 
-      const text =
-        [contextRefs, terminalContextBlocks, projectHarnessContext, userPromptText].filter(Boolean).join('\n\n')
+      const text = [contextRefs, terminalContextBlocks, userPromptText].filter(Boolean).join('\n\n')
 
       if ((!contextRefs && !terminalContextBlocks && !userPromptText) || !text || busyRef.current) {
         return false
@@ -427,7 +435,7 @@ export function usePromptActions({
         await syncImageAttachmentsForSubmit(sessionId, attachments, {
           updateComposerAttachments: usingComposerAttachments
         })
-        await requestGateway('prompt.submit', { session_id: sessionId, text })
+        await requestGateway('prompt.submit', promptSubmitParams(sessionId, text))
 
         if (usingComposerAttachments) {
           clearComposerAttachments()
@@ -900,8 +908,7 @@ export function usePromptActions({
 
       try {
         await requestGateway('prompt.submit', {
-          session_id: activeSessionId,
-          text: withNativeProjectHarnessContext(userText),
+          ...promptSubmitParams(activeSessionId, userText),
           truncate_before_user_ordinal: truncateBeforeUserOrdinal
         })
       } catch (err) {
@@ -955,11 +962,10 @@ export function usePromptActions({
       }))
 
       const submit = (truncateOrdinal?: number) =>
-        requestGateway('prompt.submit', {
-          session_id: sessionId,
-          text: withNativeProjectHarnessContext(text),
-          ...(truncateOrdinal !== undefined && { truncate_before_user_ordinal: truncateOrdinal })
-        })
+        requestGateway(
+          'prompt.submit',
+          promptSubmitParams(sessionId, text, { truncateBeforeUserOrdinal: truncateOrdinal })
+        )
 
       const isStaleTargetError = (err: unknown) =>
         /no longer in session history|not in session history/i.test(err instanceof Error ? err.message : String(err))

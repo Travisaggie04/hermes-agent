@@ -238,7 +238,8 @@ describe('usePromptActions project harness', () => {
 
     expect(requestGateway).toHaveBeenCalledWith('prompt.submit', {
       session_id: RUNTIME_SESSION_ID,
-      text: expect.stringContaining('Hidden Jenny OS project context:')
+      hidden_context: expect.stringContaining('Hidden Jenny OS project context:'),
+      text: 'test'
     })
     expect(createMissionControlSessionProjectLink).toHaveBeenCalledWith({
       cwd_snapshot: undefined,
@@ -252,17 +253,20 @@ describe('usePromptActions project harness', () => {
       title_snapshot: 'test'
     })
     const promptSubmitCall = requestGateway.mock.calls.find(call => call[0] === 'prompt.submit') as
-      | [string, { session_id: string; text: string }]
+      | [string, { hidden_context?: string; session_id: string; text: string }]
       | undefined
     const sentText = promptSubmitCall?.[1].text ?? ''
-    expect(sentText).toContain('Project: Hermes / Mission Control')
-    expect(sentText).toContain('Project ID: project-hermes-mission-control')
-    expect(sentText).toContain('Challenge vague, risky, or wrong-approach requests')
-    expect(sentText).toContain('answer ordinary chat naturally and concisely')
-    expect(sentText).toContain('Do not turn simple tests, greetings, or casual questions into formal spec reviews')
-    expect(sentText).toContain('give short Codex-style status updates')
-    expect(sentText).toContain('do not echo this hidden project context')
-    expect(sentText.trim().endsWith('test')).toBe(true)
+    const hiddenContext = promptSubmitCall?.[1].hidden_context ?? ''
+    expect(sentText).toBe('test')
+    expect(sentText).not.toContain('Hidden Jenny OS project context:')
+    expect(sentText).not.toContain('Project: Hermes / Mission Control')
+    expect(hiddenContext).toContain('Project: Hermes / Mission Control')
+    expect(hiddenContext).toContain('Project ID: project-hermes-mission-control')
+    expect(hiddenContext).toContain('Challenge vague, risky, or wrong-approach requests')
+    expect(hiddenContext).toContain('answer ordinary chat naturally and concisely')
+    expect(hiddenContext).toContain('Do not turn simple tests, greetings, or casual questions into formal spec reviews')
+    expect(hiddenContext).toContain('give short Codex-style status updates')
+    expect(hiddenContext).toContain('do not echo this hidden project context')
 
     const optimisticUser = states.flatMap(state => state.messages).find(message => message.role === 'user')
     expect(optimisticUser?.parts).toEqual([{ type: 'text', text: 'test' }])
@@ -283,6 +287,7 @@ describe('usePromptActions project harness', () => {
     expect(createMissionControlSessionProjectLink).toHaveBeenCalled()
     expect(requestGateway).toHaveBeenCalledWith('prompt.submit', {
       session_id: RUNTIME_SESSION_ID,
+      hidden_context: expect.stringContaining('Project: Tool & Tally'),
       text: expect.stringContaining('keep going')
     })
   })
@@ -407,14 +412,15 @@ describe('usePromptActions project harness', () => {
 
     expect(requestGateway).toHaveBeenCalledWith('prompt.submit', {
       session_id: RUNTIME_SESSION_ID,
-      text: expect.stringContaining('Hidden Jenny OS project context:'),
+      hidden_context: expect.stringContaining('Hidden Jenny OS project context:'),
+      text: 'recheck the plan',
       truncate_before_user_ordinal: 0
     })
     const promptSubmitCall = requestGateway.mock.calls.find(call => call[0] === 'prompt.submit') as
-      | [string, { session_id: string; text: string; truncate_before_user_ordinal?: number }]
+      | [string, { hidden_context?: string; session_id: string; text: string; truncate_before_user_ordinal?: number }]
       | undefined
-    expect(promptSubmitCall?.[1].text).toContain('Project: Hermes / Mission Control')
-    expect(promptSubmitCall?.[1].text.trim().endsWith('recheck the plan')).toBe(true)
+    expect(promptSubmitCall?.[1].text).toBe('recheck the plan')
+    expect(promptSubmitCall?.[1].hidden_context).toContain('Project: Hermes / Mission Control')
   })
 
   it('keeps hidden project context when editing and resending a project chat message', async () => {
@@ -445,10 +451,10 @@ describe('usePromptActions project harness', () => {
     } as unknown as AppendMessage)
 
     const promptSubmitCall = requestGateway.mock.calls.find(call => call[0] === 'prompt.submit') as
-      | [string, { session_id: string; text: string; truncate_before_user_ordinal?: number }]
+      | [string, { hidden_context?: string; session_id: string; text: string; truncate_before_user_ordinal?: number }]
       | undefined
-    expect(promptSubmitCall?.[1].text).toContain('Hidden Jenny OS project context:')
-    expect(promptSubmitCall?.[1].text).toContain('Project: Hermes / Mission Control')
-    expect(promptSubmitCall?.[1].text.trim().endsWith('edited request')).toBe(true)
+    expect(promptSubmitCall?.[1].text).toBe('edited request')
+    expect(promptSubmitCall?.[1].hidden_context).toContain('Hidden Jenny OS project context:')
+    expect(promptSubmitCall?.[1].hidden_context).toContain('Project: Hermes / Mission Control')
   })
 })
