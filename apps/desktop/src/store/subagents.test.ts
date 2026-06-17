@@ -34,6 +34,28 @@ describe('subagent store', () => {
     expect(activeSubagentCount(listFor('s1'))).toBe(2)
   })
 
+  it('preserves child session ids from native subagent events', () => {
+    upsertSubagent('s1', {
+      child_session_id: 'child-123',
+      goal: 'scan files',
+      status: 'running',
+      subagent_id: 'a1',
+      task_index: 0
+    })
+
+    expect(listFor('s1')[0]?.sessionId).toBe('child-123')
+
+    upsertSubagent('s1', {
+      goal: 'scan files',
+      status: 'running',
+      subagent_id: 'a1',
+      task_index: 0,
+      text: 'still running'
+    })
+
+    expect(listFor('s1')[0]?.sessionId).toBe('child-123')
+  })
+
   it('keeps root nodes in spawn order, not task index order', () => {
     const nowSpy = vi.spyOn(Date, 'now')
     nowSpy.mockReturnValueOnce(1_000)
