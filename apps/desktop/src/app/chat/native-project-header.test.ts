@@ -22,7 +22,8 @@ describe('native project chat header', () => {
     expect(source).toContain('<span className="shrink-0 font-medium text-foreground">Jenny</span>')
     expect(source).toContain('in {projectName}')
     expect(source).toContain('{jennyStatus.summary}')
-    expect(source).toContain('<ProjectJennyStatusStrip activeTurnRunning={busy} gatewayOpen={gatewayOpen} messages={messages} />')
+    expect(source).toContain('<ProjectJennyStatusStrip')
+    expect(source).toContain('onRetry={messageId => void onReload(messageId)}')
   })
 
   it('keeps the extra Jenny status strip hidden unless attention is required', () => {
@@ -100,8 +101,16 @@ describe('native project chat header', () => {
 
   it('lets native chat failures drive Jenny status before stale background records', () => {
     expect(source).toContain('function latestVisibleAssistantError')
+    expect(source).toContain('function latestVisibleAssistantErrorMessage')
     expect(source).toContain('latestChatError: latestVisibleAssistantError(messages)')
     expect(source).toContain("if (message.role === 'user') {")
+  })
+
+  it('offers retry only for the latest failed native Jenny reply', () => {
+    expect(source).toContain('const latestErrorMessage = latestVisibleAssistantErrorMessage(messages)')
+    expect(source).toContain('{latestErrorMessage && (')
+    expect(source).toContain('onClick={() => onRetry(latestErrorMessage.id)}')
+    expect(source).toContain('Retry')
   })
 
   it('uses the normal thread loading row while a project reply is pending', () => {
