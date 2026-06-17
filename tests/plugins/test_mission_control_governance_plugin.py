@@ -1445,6 +1445,61 @@ def test_session_project_link_latest_status_wins_and_removed_excluded(plugin_api
     assert groups["project-tool-tally"]["sessions"][0]["link_record"]["link_id"] == "latest-link"
 
 
+def test_project_session_projection_counts_links_outside_recent_session_window(plugin_api, client, monkeypatch):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(ProjectRecord(project_id="project-hermes", name="Hermes / Mission Control"))
+    store.append(
+        SessionProjectLinkRecord(
+            link_id="recent-link",
+            project_id="project-hermes",
+            session_id="session-recent",
+            lineage_root_id="root-recent",
+            status="active",
+            linked_at="2026-06-12T00:01:00Z",
+        )
+    )
+    store.append(
+        SessionProjectLinkRecord(
+            link_id="older-link",
+            project_id="project-hermes",
+            session_id="session-older",
+            lineage_root_id="root-older",
+            status="active",
+            linked_at="2026-06-12T00:02:00Z",
+        )
+    )
+    monkeypatch.setattr(
+        plugin_api,
+        "_read_profile_sessions_for_project_links",
+        lambda limit: (
+            [
+                {
+                    "id": "session-recent",
+                    "_lineage_root_id": "root-recent",
+                    "title": "Recent Hermes work",
+                    "started_at": 2,
+                    "last_active": 3,
+                }
+            ],
+            [],
+        ),
+    )
+
+    grouped = client.get("/api/plugins/mission-control-governance/workspace/project-sessions")
+    assert grouped.status_code == 200
+    grouped_payload = grouped.json()
+    groups = {item["project_id"]: item for item in grouped_payload["groups"]}
+    assert grouped_payload["active_link_count"] == 2
+    assert groups["project-hermes"]["linked_session_count"] == 2
+    assert [session["session_id"] for session in groups["project-hermes"]["sessions"]] == ["session-recent"]
+
+    state = client.get("/api/plugins/mission-control-governance/workspace/project-state")
+    assert state.status_code == 200
+    states = {item["project_id"]: item for item in state.json()["project_states"]}
+    assert states["project-hermes"]["linked_session_count"] == 2
+    assert [session["session_id"] for session in states["project-hermes"]["recent_sessions"]] == ["session-recent"]
+
+
 def test_workspace_project_state_projection_is_read_only_and_derived(plugin_api, client):
     store = JsonlRecordStore(plugin_api.record_store_path())
     store.append(
