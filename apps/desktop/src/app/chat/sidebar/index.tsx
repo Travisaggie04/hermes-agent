@@ -1592,7 +1592,7 @@ function SidebarWorkspaceGroup({
   const isProfileGroup = group.mode === 'profile'
   const isProjectGroup = group.mode === 'project'
   const pageStep = isProfileGroup ? PROFILE_INITIAL_PAGE : WORKSPACE_PAGE
-  const [open, setOpen] = useState(() => !isProjectGroup || active)
+  const [open, setOpen] = useState(() => true)
   const [visibleCount, setVisibleCount] = useState(pageStep)
 
   const loadedCount = group.sessions.length
