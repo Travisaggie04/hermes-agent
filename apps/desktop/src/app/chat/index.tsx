@@ -621,8 +621,10 @@ export function ChatView({
     [projectHomeQuery.data]
   )
 
-  const showIntro =
-    freshDraftReady && !isRoutedSessionView && !selectedSessionId && !activeSessionId && messages.length === 0
+  const blankNativeChat = !isRoutedSessionView && !selectedSessionId && !activeSessionId && messages.length === 0
+  const showProjectHomeIntro =
+    blankNativeChat && (projectHomeQuery.isLoading || projectHomeOptions.length > 0 || Boolean(selectedProjectTitle))
+  const showIntro = blankNativeChat && (freshDraftReady || showProjectHomeIntro)
 
   // Session is still loading if the route references a session we haven't
   // resumed yet. Once `activeSessionId` is set (runtime has resumed), the

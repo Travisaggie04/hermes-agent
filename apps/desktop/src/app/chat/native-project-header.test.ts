@@ -60,6 +60,10 @@ describe('native project chat header', () => {
   it('uses the blank native chat home as a project picker before a session exists', () => {
     expect(source).toContain("queryKey: ['mission-control-projects-native-chat-home']")
     expect(source).toContain('const projectHomeOptions = useMemo')
+    expect(source).toContain('const blankNativeChat = !isRoutedSessionView && !selectedSessionId && !activeSessionId && messages.length === 0')
+    expect(source).toContain('const showProjectHomeIntro =')
+    expect(source).toContain('projectHomeQuery.isLoading || projectHomeOptions.length > 0 || Boolean(selectedProjectTitle)')
+    expect(source).toContain('const showIntro = blankNativeChat && (freshDraftReady || showProjectHomeIntro)')
     expect(source).toContain('onCreateProject: () => setProjectIntakeOpen(true)')
     expect(source).toContain('projectOptions: projectHomeOptions.map(project => ({')
     expect(source).toContain('onSelectProject: (projectId, projectName) => setSelectedMissionControlProject(projectId, projectName)')
