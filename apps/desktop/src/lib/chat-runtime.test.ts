@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { coerceThinkingText, quickModelOptions } from './chat-runtime'
+import { coerceThinkingText, parseCommandDispatch, quickModelOptions } from './chat-runtime'
 
 describe('coerceThinkingText', () => {
   it('strips streaming status prefixes from thinking deltas', () => {
@@ -43,5 +43,21 @@ describe('quickModelOptions', () => {
 
     expect(options).toContainEqual({ provider: 'openai-codex', providerName: 'OpenAI Codex', model: 'gpt-5.5' })
     expect(options).toContainEqual({ provider: 'openrouter', providerName: 'OpenRouter', model: 'openai/gpt-5.5' })
+  })
+})
+
+describe('parseCommandDispatch', () => {
+  it('preserves send notices for native goal status rendering', () => {
+    expect(
+      parseCommandDispatch({
+        message: '[Engineering goal kickoff]\nObjective:\nMake Jenny reliable.',
+        notice: 'Goal set (20-turn budget): Make Jenny reliable.',
+        type: 'send'
+      })
+    ).toEqual({
+      message: '[Engineering goal kickoff]\nObjective:\nMake Jenny reliable.',
+      notice: 'Goal set (20-turn budget): Make Jenny reliable.',
+      type: 'send'
+    })
   })
 })

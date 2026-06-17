@@ -114,6 +114,10 @@ const ATTACHED_CONTEXT_MARKER_RE = /(?:^|\n)--- Attached Context ---\s*\n/
 const CONTEXT_WARNINGS_MARKER_RE = /(?:^|\n)--- Context Warnings ---[\s\S]*$/
 const CONTEXT_REF_RE = /@(file|folder|url|image|tool|terminal):(?:"[^"\n]+"|'[^'\n]+'|`[^`\n]+`|\S+)/g
 const HIDDEN_JENNY_OS_CONTEXT_RE = /^Hidden Jenny OS project context:\s*\n[\s\S]*?\n\n/
+const ENGINEERING_GOAL_PROMPT_RE =
+  /^\[(Engineering goal kickoff|Continuing engineering goal)\]\s*Objective:\s*([\s\S]*?)(?=\n\n(?:Additional user criteria:|Goal loop state:|Operate as a senior engineering agent\.)|$)/i
+const STANDING_GOAL_PROMPT_RE =
+  /^\[Continuing toward your standing goal\]\s*Goal:\s*([\s\S]*?)(?=\n\n(?:Additional criteria the user added mid-loop:|Continue working toward)|$)/i
 const LEGACY_JENNY_REQUEST_STOP_LABELS =
   'Current intake:|Request intake:|Current brief:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:'
 const LEGACY_SPEC_FIRST_REQUEST_RE =
@@ -197,7 +201,31 @@ function legacyJennyRequestText(value: string): string | null {
   return null
 }
 
+function goalControlPromptText(value: string): string | null {
+  const engineeringMatch = value.match(ENGINEERING_GOAL_PROMPT_RE)
+
+  if (engineeringMatch) {
+    const kind = engineeringMatch[1]?.toLowerCase() || ''
+    const objective = engineeringMatch[2]?.trim()
+
+    if (objective) {
+      return `${kind.includes('continuing') ? 'Continuing goal' : 'Goal'}: ${objective}`
+    }
+  }
+
+  const standingMatch = value.match(STANDING_GOAL_PROMPT_RE)
+  const objective = standingMatch?.[1]?.trim()
+
+  return objective ? `Continuing goal: ${objective}` : null
+}
+
 function visibleUserMessageText(value: string): string {
+  const goalControl = goalControlPromptText(value)
+
+  if (goalControl) {
+    return goalControl
+  }
+
   const withoutHiddenContext = value.replace(HIDDEN_JENNY_OS_CONTEXT_RE, '').trimStart()
 
   if (withoutHiddenContext !== value) {

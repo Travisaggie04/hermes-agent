@@ -208,7 +208,7 @@ export function parseCommandDispatch(raw: unknown): CommandDispatchResponse | nu
       return typeof row.name === 'string' ? { type: 'skill', name: row.name, message: str(row.message) } : null
 
     case 'send':
-      return typeof row.message === 'string' ? { type: 'send', message: row.message } : null
+      return typeof row.message === 'string' ? { type: 'send', message: row.message, notice: str(row.notice) } : null
 
     default:
       return null

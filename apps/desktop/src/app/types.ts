@@ -50,6 +50,7 @@ export interface SkillCommandDispatchResponse {
 }
 
 export interface SendCommandDispatchResponse {
+  notice?: string
   type: 'send'
   message: string
 }
