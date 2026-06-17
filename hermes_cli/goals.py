@@ -148,9 +148,10 @@ JUDGE_SYSTEM_PROMPT = (
     "the goal is fully satisfied based on that response.\n\n"
     "A goal is DONE only when:\n"
     "- The response explicitly confirms the goal was completed, OR\n"
-    "- The response clearly shows the final deliverable was produced, OR\n"
-    "- The response explains the goal is unachievable / blocked / needs "
-    "user input (treat this as DONE with reason describing the block).\n\n"
+    "- The response clearly shows the final deliverable was produced.\n\n"
+    "If the response says the goal is blocked, unachievable, waiting on "
+    "user input, or stopped by an external dependency, return done=false "
+    "and start the reason with 'blocked:'. Do not call blocked work done.\n\n"
     "Otherwise the goal is NOT done — CONTINUE.\n\n"
     "Reply ONLY with a single JSON object on one line:\n"
     '{\"done\": <true|false>, \"reason\": \"<one-sentence rationale>\"}'
@@ -193,7 +194,7 @@ class GoalState:
     """Serializable goal state stored per session."""
 
     goal: str
-    status: str = "active"          # active | paused | done | cleared
+    status: str = "active"          # active | paused | blocked | done | cleared
     turns_used: int = 0
     max_turns: int = DEFAULT_MAX_TURNS
     created_at: float = 0.0
@@ -344,6 +345,23 @@ def _truncate(text: str, limit: int) -> str:
 
 
 _JSON_OBJECT_RE = re.compile(r"\{.*?\}", re.DOTALL)
+_BLOCKED_REASON_PREFIXES = (
+    "blocked:",
+    "blocked -",
+    "blocked —",
+    "blocked.",
+    "needs user input:",
+    "requires user input:",
+    "waiting for user:",
+    "waiting on user:",
+    "external dependency:",
+    "unachievable:",
+)
+
+
+def _reason_indicates_blocked(reason: str) -> bool:
+    cleaned = (reason or "").strip().lower()
+    return any(cleaned.startswith(prefix) for prefix in _BLOCKED_REASON_PREFIXES)
 
 
 def _goal_judge_max_tokens() -> int:
@@ -551,7 +569,11 @@ class GoalManager:
         return self._state is not None and self._state.status == "active"
 
     def has_goal(self) -> bool:
-        return self._state is not None and self._state.status in {"active", "paused"}
+        return self._state is not None and self._state.status in {
+            "active",
+            "paused",
+            "blocked",
+        }
 
     def status_line(self) -> str:
         s = self._state
@@ -564,6 +586,9 @@ class GoalManager:
         if s.status == "paused":
             extra = f" — {s.paused_reason}" if s.paused_reason else ""
             return f"⏸ Goal (paused, {turns}{sub}{extra}): {s.goal}"
+        if s.status == "blocked":
+            extra = f" — {s.paused_reason}" if s.paused_reason else ""
+            return f"⏸ Goal (blocked, {turns}{sub}{extra}): {s.goal}"
         if s.status == "done":
             return f"✓ Goal done ({turns}{sub}): {s.goal}"
         return f"Goal ({s.status}, {turns}{sub}): {s.goal}"
@@ -746,6 +771,22 @@ class GoalManager:
             state.consecutive_parse_failures += 1
         else:
             state.consecutive_parse_failures = 0
+
+        if _reason_indicates_blocked(reason):
+            state.status = "blocked"
+            state.paused_reason = reason
+            save_goal(self.session_id, state)
+            return {
+                "status": "blocked",
+                "should_continue": False,
+                "continuation_prompt": None,
+                "verdict": "blocked",
+                "reason": reason,
+                "message": (
+                    f"⏸ Goal blocked: {reason}. "
+                    "Use /goal resume after resolving the blocker, or /goal clear to stop."
+                ),
+            }
 
         if verdict == "done":
             state.status = "done"
