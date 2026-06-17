@@ -26,9 +26,12 @@ describe('native project chat header', () => {
     expect(source).toContain('onRetry={messageId => void onReload(messageId)}')
   })
 
-  it('keeps the extra Jenny status strip hidden unless attention is required', () => {
-    expect(source).toContain("if (jennyStatus.tone !== 'warn') {")
+  it('shows the extra Jenny status strip only while Jenny is queued, working, or needs attention', () => {
+    expect(source).toContain("const visibleStatusTones = new Set<NativeJennyStatusTone>(['pending', 'working', 'warn'])")
+    expect(source).toContain('if (!visibleStatusTones.has(jennyStatus.tone)) {')
     expect(source).toContain('return null')
+    expect(source).toContain("jennyStatus.tone === 'warn'")
+    expect(source).toContain("jennyStatus.tone === 'pending'")
   })
 
   it('makes the native composer feel project-scoped when a project is selected', () => {

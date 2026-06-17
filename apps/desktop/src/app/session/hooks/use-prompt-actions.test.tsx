@@ -275,6 +275,41 @@ describe('usePromptActions project harness', () => {
     expect(optimisticUser?.parts).toEqual([{ type: 'text', text: 'test' }])
   })
 
+  it('queues one automatic Jenny reply request from normal project chat send', async () => {
+    setSelectedMissionControlProject('project-hermes-mission-control', 'Hermes / Mission Control')
+
+    const refreshSessions = vi.fn(async () => undefined)
+    const requestGateway = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({}) as never)
+    const states: Array<{ messages: ChatMessage[]; busy: boolean; awaitingResponse: boolean }> = []
+
+    let handle: HarnessHandle | null = null
+    render(
+      <Harness
+        onReady={h => (handle = h)}
+        onState={state => states.push(state)}
+        refreshSessions={refreshSessions}
+        requestGateway={requestGateway}
+      />
+    )
+
+    await handle!.submitText('test')
+
+    expect(requestGateway).toHaveBeenCalledTimes(1)
+    expect(requestGateway).toHaveBeenCalledWith('prompt.submit', {
+      session_id: RUNTIME_SESSION_ID,
+      hidden_context: expect.stringContaining('Hidden Jenny OS project context:'),
+      text: 'test'
+    })
+
+    const latestState = states[states.length - 1]
+
+    expect(latestState).toMatchObject({
+      busy: true,
+      awaitingResponse: true
+    })
+    expect(latestState.messages.map(chatMessageText)).toEqual(['test'])
+  })
+
   it('does not block Jenny replies if background project filing fails', async () => {
     setSelectedMissionControlProject('project-tool-tally', 'Tool & Tally')
     vi.mocked(createMissionControlSessionProjectLink).mockRejectedValueOnce(new Error('record store unavailable'))

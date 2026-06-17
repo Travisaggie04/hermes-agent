@@ -97,7 +97,7 @@ export function nativeJennyStatus({
   if (activeTurnRunning) {
     if (awaitingResponse) {
       return {
-        detail: 'Your message was sent. Jenny is preparing the first reply update.',
+        detail: 'Your message was sent. Jenny will reply here.',
         label: 'Jenny queued',
         summary: 'Waiting for Jenny',
         tone: 'pending'
@@ -105,7 +105,7 @@ export function nativeJennyStatus({
     }
 
     return {
-      detail: 'Jenny is working on this chat. Progress and the final reply appear here.',
+      detail: 'Jenny is working. Progress and the final reply appear here.',
       label: 'Jenny working',
       summary: 'Progress appears here',
       tone: 'working'
@@ -173,7 +173,7 @@ export function nativeJennyStatus({
 
   if (answerIsWorking || watchIsWorking) {
     return {
-      detail: 'Jenny is working on the latest project message.',
+      detail: 'Jenny is working on the latest project message. Progress appears in this chat.',
       label: 'Jenny working',
       summary: 'Progress appears here',
       tone: 'working'
