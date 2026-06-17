@@ -54,9 +54,7 @@ export function LanguageSwitcher({ collapsed = false, dropUp = false }: Language
   }, [open, useMobileSheet]);
 
   const current = LOCALE_META[locale];
-  const allLocales = Object.entries(LOCALE_META).filter(
-    ([code]) => code !== "zh" && code !== "zh-hant",
-  ) as Array<[Locale, typeof current]>;
+  const allLocales = Object.entries(LOCALE_META) as Array<[Locale, typeof current]>;
   const sheetTitle = t.language.switchTo;
 
   return (
