@@ -22,7 +22,7 @@ describe('native project chat header', () => {
     expect(source).toContain('<span className="shrink-0 font-medium text-foreground">Jenny</span>')
     expect(source).toContain('in {projectName}')
     expect(source).toContain('{jennyStatus.summary}')
-    expect(source).toContain('<ProjectJennyStatusStrip activeTurnRunning={busy} gatewayOpen={gatewayOpen} />')
+    expect(source).toContain('<ProjectJennyStatusStrip activeTurnRunning={busy} gatewayOpen={gatewayOpen} messages={messages} />')
   })
 
   it('keeps the extra Jenny status strip hidden unless attention is required', () => {
@@ -96,6 +96,12 @@ describe('native project chat header', () => {
   it('shows Jenny as working for the full native chat busy turn', () => {
     expect(source).toContain('activeTurnRunning={busy}')
     expect(source).not.toContain('activeTurnRunning={busy && awaitingResponse}')
+  })
+
+  it('lets native chat failures drive Jenny status before stale background records', () => {
+    expect(source).toContain('function latestVisibleAssistantError')
+    expect(source).toContain('latestChatError: latestVisibleAssistantError(messages)')
+    expect(source).toContain("if (message.role === 'user') {")
   })
 
   it('uses the normal thread loading row while a project reply is pending', () => {

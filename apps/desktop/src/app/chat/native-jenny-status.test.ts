@@ -262,6 +262,29 @@ describe('nativeJennyStatus', () => {
     })
   })
 
+  it('lets the latest native chat error drive the status before background bridge records', () => {
+    const status = nativeJennyStatus({
+      bridgeStatus: {
+        last_response_at: '2026-06-16T19:59:55Z',
+        last_response_request_id: 'old-reply',
+        last_status: 'replied',
+        pending_count: 0,
+        visible_pending_count: 0
+      },
+      gatewayOpen: true,
+      latestChatError: 'Error invoking remote method: Error: app-server startup failed',
+      projectId: 'project-hermes'
+    })
+
+    expect(status).toMatchObject({
+      detail: 'Jenny failed before finishing a reply. Retry once, and open details if it fails again.',
+      label: 'Jenny failed',
+      summary: 'Retry available',
+      tone: 'warn'
+    })
+    expectCleanVisibleStatus(status)
+  })
+
   it('does not let older queued project messages block normal native chat', () => {
     const status = nativeJennyStatus({
       gatewayOpen: true,

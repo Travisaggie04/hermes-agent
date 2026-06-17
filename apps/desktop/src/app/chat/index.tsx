@@ -112,6 +112,7 @@ interface ChatHeaderProps {
   activeTurnRunning: boolean
   gatewayOpen: boolean
   isRoutedSessionView: boolean
+  messages: ChatMessage[]
   onDeleteSelectedSession: () => void
   onStartProjectChat: (projectId: string, projectName: string) => void
   onToggleSelectedPin: () => void
@@ -123,6 +124,7 @@ function ChatHeader({
   activeTurnRunning,
   gatewayOpen,
   isRoutedSessionView,
+  messages,
   onDeleteSelectedSession,
   onStartProjectChat,
   onToggleSelectedPin,
@@ -174,6 +176,7 @@ function ChatHeader({
     activeTurnRunning,
     bridgeStatus: bridgeStatusQuery.data,
     gatewayOpen,
+    latestChatError: latestVisibleAssistantError(messages),
     loading: bridgeStatusQuery.isLoading,
     projectId: selectedProjectId,
     queryError: bridgeStatusQuery.error
@@ -256,6 +259,26 @@ function nativeAsyncAgentDetail(status?: MissionControlAsyncAgentStatusResponse 
   }
 
   return 'Native async agent capability has not been detected in this runtime.'
+}
+
+function latestVisibleAssistantError(messages: readonly ChatMessage[]): string {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+
+    if (message.hidden) {
+      continue
+    }
+
+    if (message.role === 'user') {
+      return ''
+    }
+
+    if (message.role === 'assistant' && typeof message.error === 'string' && message.error.trim()) {
+      return message.error
+    }
+  }
+
+  return ''
 }
 
 function ProjectHeaderSelect({
@@ -521,10 +544,12 @@ function HeaderPill({ label, title, tone }: { label: string; title: string; tone
 
 function ProjectJennyStatusStrip({
   activeTurnRunning,
-  gatewayOpen
+  gatewayOpen,
+  messages
 }: {
   activeTurnRunning: boolean
   gatewayOpen: boolean
+  messages: ChatMessage[]
 }) {
   const selectedProjectId = useStore($selectedMissionControlProjectId)
   const selectedProjectName = useStore($selectedMissionControlProjectName)
@@ -545,6 +570,7 @@ function ProjectJennyStatusStrip({
     activeTurnRunning,
     bridgeStatus: bridgeStatusQuery.data,
     gatewayOpen,
+    latestChatError: latestVisibleAssistantError(messages),
     loading: bridgeStatusQuery.isLoading,
     projectId: selectedProjectId,
     queryError: bridgeStatusQuery.error
@@ -772,12 +798,13 @@ export function ChatView({
         activeTurnRunning={busy}
         gatewayOpen={gatewayOpen}
         isRoutedSessionView={isRoutedSessionView}
+        messages={messages}
         onDeleteSelectedSession={onDeleteSelectedSession}
         onStartProjectChat={onStartProjectChat}
         onToggleSelectedPin={onToggleSelectedPin}
         selectedSessionId={selectedSessionId}
       />
-      <ProjectJennyStatusStrip activeTurnRunning={busy} gatewayOpen={gatewayOpen} />
+      <ProjectJennyStatusStrip activeTurnRunning={busy} gatewayOpen={gatewayOpen} messages={messages} />
 
       <PromptOverlays />
 
