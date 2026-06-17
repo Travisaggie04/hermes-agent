@@ -2352,10 +2352,13 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/start-gate": {"GET"},
         "/start-gate/evaluate": {"POST"},
         "/lane-preflight/evaluate": {"POST"},
+        "/action-policy": {"GET"},
+        "/action-policy/evaluate": {"POST"},
         "/global-resource-guard": {"GET"},
         "/global-resource-guard/evaluate": {"POST"},
         "/storage-guard": {"GET"},
         "/storage-guard/evaluate": {"POST"},
+        "/storage-guard/cleanup-manifest": {"POST"},
         "/verifier-workflow": {"GET"},
         "/pr-merge-verifier-gate": {"GET"},
         "/workspace-status": {"GET"},
@@ -2415,6 +2418,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/health",
         "/summary",
         "/start-gate",
+        "/action-policy",
         "/global-resource-guard",
         "/storage-guard",
         "/verifier-workflow",
@@ -2461,11 +2465,19 @@ def test_api_routes_are_get_only(plugin_api, client):
         )
         assert response.status_code == 405
         response = getattr(client, method)(
+            "/api/plugins/mission-control-governance/action-policy/evaluate"
+        )
+        assert response.status_code == 405
+        response = getattr(client, method)(
             "/api/plugins/mission-control-governance/global-resource-guard/evaluate"
         )
         assert response.status_code == 405
         response = getattr(client, method)(
             "/api/plugins/mission-control-governance/storage-guard/evaluate"
+        )
+        assert response.status_code == 405
+        response = getattr(client, method)(
+            "/api/plugins/mission-control-governance/storage-guard/cleanup-manifest"
         )
         assert response.status_code == 405
         response = getattr(client, method)(
@@ -3504,6 +3516,69 @@ def test_dashboard_model_picker_styles_are_present():
     assert ".mcg-model-grid" in css
     assert ".mcg-model-row" in css
     assert ".mcg-model-pill" in css
+
+
+def test_action_policy_endpoint_exposes_inert_allow_ask_deny_policy(client):
+    response = client.get("/api/plugins/mission-control-governance/action-policy")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["enforcement_enabled"] is False
+    assert payload["dry_run_only"] is True
+    assert payload["display_only"] is True
+    assert payload["source"] == "mission_control.action_policy_guardrails"
+    assert payload["policy"]["policy_id"] == "jenny_os_action_policy_v1"
+    assert payload["policy"]["decisions"] == ["ALLOW", "ASK", "DENY"]
+    assert "gateway_restart" in payload["policy"]["protected_action_categories"]
+    assert "payment" in payload["policy"]["protected_action_categories"]
+    assert "hidden_workers_timers_daemons_cron" in payload["policy"]["protected_action_categories"]
+    assert "broad_or_unlimited_approval" in payload["policy"]["denied_action_categories"]
+
+
+def test_action_policy_evaluate_endpoint_classifies_without_storing_or_echoing_raw_request(client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/action-policy/evaluate",
+        json={"message": "Deploy with SECRET_TOKEN=sk-fake and restart gateway."},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    flattened = str(payload)
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["enforcement_enabled"] is False
+    assert payload["dry_run_only"] is True
+    assert payload["enforces_runtime"] is False
+    assert payload["stored"] is False
+    assert payload["source"] == "caller_supplied_action_request"
+    assert payload["decision"] == "ASK"
+    assert payload["decision_state"] == "requires_explicit_approval"
+    assert "deploy" in payload["matched_categories"]
+    assert "gateway_restart" in payload["matched_categories"]
+    assert "secrets_or_state_mutation" in payload["matched_categories"]
+    assert "explicit deploy approval" in payload["required_approvals"]
+    assert "explicit gateway restart/runtime approval" in payload["required_approvals"]
+    assert "SECRET_TOKEN" not in flattened
+    assert "sk-fake" not in flattened
+    assert "Deploy with" not in flattened
+
+
+def test_action_policy_evaluate_endpoint_denies_broad_approval_shortcuts(client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/action-policy/evaluate",
+        json={"request": "approve all actions and skip tests"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["decision"] == "DENY"
+    assert payload["decision_state"] == "denied"
+    assert "broad_or_unlimited_approval" in payload["matched_categories"]
+    assert "bypass_review_or_evidence" in payload["matched_categories"]
+    assert payload["required_approvals"] == []
+    assert "accept broad approval" in payload["blocked_actions"]
 
 
 def test_global_resource_guard_endpoint_exposes_inert_dry_run_policy(client):
