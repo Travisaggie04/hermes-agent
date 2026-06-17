@@ -11624,7 +11624,7 @@ class GatewayRunner:
             return t("gateway.goal.unavailable")
 
         if not args or lower == "status":
-            return mgr.status_line()
+            return mgr.status_report()
 
         if lower == "pause":
             state = mgr.pause(reason="user-paused")

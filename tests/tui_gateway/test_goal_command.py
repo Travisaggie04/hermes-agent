@@ -103,6 +103,29 @@ def test_goal_status_alias_shows_status(server, session):
     assert "No active goal" in r["result"]["output"]
 
 
+def test_goal_status_returns_progress_report(server, session):
+    sid, session_key, _ = session
+    from hermes_cli.goals import GoalManager
+
+    mgr = GoalManager(session_key)
+    state = mgr.set("ship a status report")
+    state.turns_used = 1
+    state.last_verdict = "continue"
+    state.last_reason = "needs verification"
+    state.last_progress_excerpt = "Ran focused tests and opened the next PR."
+    from hermes_cli.goals import save_goal
+
+    save_goal(session_key, state)
+
+    r = _call(server, "command.dispatch", name="goal", arg="status", session_id=sid)
+    assert r["result"]["type"] == "exec"
+    output = r["result"]["output"]
+    assert "Goal (active, 1/20 turns)" in output
+    assert "Last verdict: continue" in output
+    assert "Last progress checkpoint:" in output
+    assert "Ran focused tests" in output
+
+
 def test_goal_set_returns_send_with_notice(server, session):
     sid, session_key, _ = session
     r = _call(server, "command.dispatch", name="goal", arg="build a rocket", session_id=sid)

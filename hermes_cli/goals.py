@@ -593,6 +593,33 @@ class GoalManager:
             return f"✓ Goal done ({turns}{sub}): {s.goal}"
         return f"Goal ({s.status}, {turns}{sub}): {s.goal}"
 
+    def status_report(self) -> str:
+        """Human-readable status block for chat/CLI goal surfaces."""
+        s = self._state
+        if s is None or s.status in {"cleared",}:
+            return self.status_line()
+
+        lines = [self.status_line()]
+        if s.last_verdict:
+            lines.append(f"Last verdict: {s.last_verdict}")
+        if s.last_reason:
+            lines.append(f"Last reason: {s.last_reason}")
+        if s.last_progress_excerpt:
+            lines.append("Last progress checkpoint:")
+            lines.append(s.last_progress_excerpt)
+        if s.subgoals:
+            lines.append("Subgoals:")
+            lines.append(s.render_subgoals_block())
+        if s.status == "blocked":
+            lines.append("Next: resolve the blocker, then use /goal resume; or use /goal clear to stop.")
+        elif s.status == "paused":
+            lines.append("Next: use /goal resume to continue, or /goal clear to stop.")
+        elif s.status == "active":
+            lines.append("Next: Hermes will continue after the current turn unless you pause or clear the goal.")
+        else:
+            lines.append("Next: use /goal clear to remove this completed goal from the active session.")
+        return "\n".join(lines)
+
     # --- mutation -----------------------------------------------------
 
     def set(self, goal: str, *, max_turns: Optional[int] = None) -> GoalState:
