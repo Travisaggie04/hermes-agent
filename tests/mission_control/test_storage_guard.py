@@ -2,6 +2,7 @@
 
 from mission_control.storage_guard import (
     STORAGE_GUARD_POLICY,
+    build_storage_cleanup_manifest,
     evaluate_storage_guard,
     get_storage_guard_policy,
 )
@@ -309,3 +310,106 @@ def test_storage_guard_unknown_without_observed_state():
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
     assert "caller-supplied observed storage state is incomplete" in result["reasons"]
+
+
+def test_cleanup_manifest_is_dry_run_and_protects_live_paths():
+    manifest = build_storage_cleanup_manifest(
+        {
+            "current_live_runtime": "/home/jenny/.hermes/hermes-runtime-live",
+            "accepted_live_repo": "/home/jenny/.hermes/hermes-agent",
+            "rollback_runtimes": ["/home/jenny/.hermes/hermes-runtime-rollback"],
+            "candidates": [
+                {
+                    "path": "/home/jenny/.hermes/hermes-runtime-live",
+                    "kind": "dashboard_runtime",
+                    "clean": True,
+                    "size_gib": 9,
+                },
+                {
+                    "path": "/home/jenny/.hermes/hermes-runtime-old",
+                    "kind": "stale_runtime",
+                    "clean": True,
+                    "merged": True,
+                    "size_gib": 12,
+                },
+            ],
+        }
+    )
+
+    assert manifest["dry_run_only"] is True
+    assert manifest["delete_enabled"] is False
+    assert manifest["upload_enabled"] is False
+    assert manifest["current_live_runtime_protected"] is True
+    assert manifest["rollback_runtimes_protected"] is True
+    assert manifest["accepted_live_repo_protected"] is True
+    assert manifest["records_state_db_secrets_protected"] is True
+    assert manifest["summary"]["protected_count"] == 1
+    assert manifest["summary"]["eligible_count"] == 1
+    assert manifest["eligible"][0]["path"] == "/home/jenny/.hermes/hermes-runtime-old"
+    assert manifest["summary"]["eligible_gib"] == 12
+
+
+def test_cleanup_manifest_blocks_dirty_worktrees_and_state_or_secret_paths():
+    manifest = build_storage_cleanup_manifest(
+        {
+            "current_live_runtime": "/runtime/live",
+            "accepted_live_repo": "/repo/accepted-live",
+            "rollback_runtimes": ["/runtime/rollback"],
+            "candidates": [
+                {
+                    "path": "/home/jenny/.hermes/worktrees/review-pr99",
+                    "kind": "review_worktree",
+                    "clean": False,
+                    "dirty": True,
+                    "size_gib": 4,
+                },
+                {
+                    "path": "/home/jenny/.hermes/mission-control/records.jsonl",
+                    "kind": "records",
+                    "clean": True,
+                    "size_gib": 0.1,
+                },
+                {
+                    "path": "/home/jenny/.hermes/.env",
+                    "kind": "config",
+                    "clean": True,
+                    "size_gib": 0.01,
+                },
+            ],
+        }
+    )
+
+    assert manifest["summary"]["blocked_count"] == 3
+    reasons = {item["reason"] for item in manifest["blocked"]}
+    assert "dirty worktrees are never cleanup candidates" in reasons
+    assert "records, state.db, or secrets are never cleanup candidates" in reasons
+
+
+def test_cleanup_manifest_routes_archives_and_unknowns_to_review():
+    manifest = build_storage_cleanup_manifest(
+        {
+            "current_live_runtime": "/runtime/live",
+            "accepted_live_repo": "/repo/accepted-live",
+            "rollback_runtimes": ["/runtime/rollback"],
+            "candidates": [
+                {
+                    "path": "/home/jenny/reports/tool-tally-report-bundle.zip",
+                    "kind": "report_package",
+                    "clean": True,
+                    "size_gib": 8,
+                },
+                {
+                    "path": "/home/jenny/mystery",
+                    "kind": "unknown",
+                    "clean": True,
+                    "size_gib": 3,
+                },
+            ],
+        }
+    )
+
+    assert manifest["summary"]["needs_review_count"] == 2
+    assert manifest["summary"]["needs_review_gib"] == 11
+    assert "archive or large artifact needs cloud/archive decision before cleanup" in {
+        item["reason"] for item in manifest["needs_review"]
+    }

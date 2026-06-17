@@ -139,6 +139,165 @@ def get_storage_guard_policy() -> dict[str, Any]:
     return deepcopy(STORAGE_GUARD_POLICY)
 
 
+def _bounded_text(value: Any, *, max_chars: int = 500) -> str:
+    text = str(value or "").replace("\x00", "").strip()
+    return text[:max_chars]
+
+
+def _bounded_kind(value: Any) -> str:
+    return _bounded_text(value, max_chars=80).lower().replace(" ", "_")
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _path_matches(path: str, protected_paths: set[str]) -> bool:
+    normalized = path.rstrip("/\\")
+    return bool(normalized) and normalized in protected_paths
+
+
+def build_storage_cleanup_manifest(observed_state: dict[str, Any] | None) -> dict[str, Any]:
+    """Build a dry-run cleanup manifest from caller-supplied inventory.
+
+    The manifest builder is intentionally pure. It does not inspect disks,
+    filesystems, cloud remotes, services, credentials, records, or environment
+    variables. Callers must supply candidate paths and protection metadata from
+    a separate read-only inventory step.
+    """
+
+    state = dict(observed_state or {})
+    current_live_runtime = _bounded_text(state.get("current_live_runtime"), max_chars=500)
+    accepted_live_repo = _bounded_text(state.get("accepted_live_repo"), max_chars=500)
+    rollback_runtimes = [
+        _bounded_text(item, max_chars=500)
+        for item in _as_list(state.get("rollback_runtimes"))
+        if _bounded_text(item, max_chars=500)
+    ]
+    protected_paths = {path.rstrip("/\\") for path in [current_live_runtime, accepted_live_repo, *rollback_runtimes] if path}
+
+    protected: list[dict[str, Any]] = []
+    eligible: list[dict[str, Any]] = []
+    blocked: list[dict[str, Any]] = []
+    needs_review: list[dict[str, Any]] = []
+    reasons: list[str] = []
+
+    if not current_live_runtime:
+        _add_unique(reasons, "current live runtime path was not supplied")
+    if not accepted_live_repo:
+        _add_unique(reasons, "accepted-live repo path was not supplied")
+    if not rollback_runtimes:
+        _add_unique(reasons, "rollback runtime paths were not supplied")
+
+    total_eligible_gib = 0.0
+    total_blocked_gib = 0.0
+    total_review_gib = 0.0
+    candidates = _as_list(state.get("candidates"))
+
+    for index, raw in enumerate(candidates):
+        item = raw if isinstance(raw, dict) else {}
+        path = _bounded_text(item.get("path"), max_chars=500)
+        kind = _bounded_kind(item.get("kind") or item.get("category") or "unknown")
+        size_gib = _as_float(item.get("size_gib")) or 0.0
+        clean = _as_bool(item.get("clean"))
+        dirty = _as_bool(item.get("dirty")) or not clean if kind.endswith("worktree") else _as_bool(item.get("dirty"))
+        active = _as_bool(item.get("active"))
+        merged = _as_bool(item.get("merged"))
+        current = _as_bool(item.get("current")) or _path_matches(path, protected_paths)
+        contains_records = _as_bool(item.get("contains_records")) or "records" in kind or path.endswith("records.jsonl")
+        contains_state_db = _as_bool(item.get("contains_state_db")) or path.endswith("state.db")
+        contains_secrets = _as_bool(item.get("contains_secrets")) or any(token in path.lower() for token in ("secret", ".env", "token"))
+
+        entry = {
+            "index": index,
+            "path": path,
+            "kind": kind,
+            "size_gib": size_gib,
+            "clean": clean,
+            "dirty": dirty,
+            "active": active,
+            "merged": merged,
+            "current": current,
+        }
+
+        if not path:
+            blocked.append({**entry, "reason": "candidate path is missing"})
+            total_blocked_gib += size_gib
+            continue
+        if current:
+            protected.append({**entry, "reason": "current, rollback, or accepted-live path is protected"})
+            continue
+        if contains_records or contains_state_db or contains_secrets:
+            blocked.append({**entry, "reason": "records, state.db, or secrets are never cleanup candidates"})
+            total_blocked_gib += size_gib
+            continue
+        if dirty:
+            blocked.append({**entry, "reason": "dirty worktrees are never cleanup candidates"})
+            total_blocked_gib += size_gib
+            continue
+        if active:
+            protected.append({**entry, "reason": "active runtime or review worktree is protected"})
+            continue
+
+        if kind in {"stale_runtime", "dashboard_runtime", "review_worktree", "pr_worktree"}:
+            if clean and (merged or kind in {"stale_runtime", "dashboard_runtime"}):
+                eligible.append({**entry, "reason": "clean stale runtime/worktree can be removed in an approved cleanup lane"})
+                total_eligible_gib += size_gib
+            else:
+                needs_review.append({**entry, "reason": "runtime/worktree needs review before cleanup"})
+                total_review_gib += size_gib
+            continue
+
+        if kind in {"build_output", "cache", "package_cache", "test_cache", "log", "temp"}:
+            eligible.append({**entry, "reason": "reproducible build/cache/log artifact can be removed in an approved cleanup lane"})
+            total_eligible_gib += size_gib
+            continue
+
+        if kind in {"archive_candidate", "large_artifact", "export", "report_package"}:
+            needs_review.append({**entry, "reason": "archive or large artifact needs cloud/archive decision before cleanup"})
+            total_review_gib += size_gib
+            continue
+
+        needs_review.append({**entry, "reason": "unknown cleanup class needs human review"})
+        total_review_gib += size_gib
+
+    before_used_percent = _as_float(state.get("disk_used_percent"))
+    target_used_percent = _as_float(state.get("target_used_percent")) or _as_float(
+        STORAGE_GUARD_POLICY["disk_thresholds"]["lean_target_percent"]
+    )
+
+    return {
+        "manifest_id": _bounded_text(state.get("manifest_id") or "storage-cleanup-dry-run", max_chars=120),
+        **_INERT_STORAGE_FLAGS,
+        "source": "caller_supplied_cleanup_inventory",
+        "stored": False,
+        "delete_enabled": False,
+        "upload_enabled": False,
+        "requires_explicit_cleanup_lane": True,
+        "current_live_runtime_protected": bool(current_live_runtime),
+        "rollback_runtimes_protected": bool(rollback_runtimes),
+        "accepted_live_repo_protected": bool(accepted_live_repo),
+        "records_state_db_secrets_protected": True,
+        "target_used_percent": target_used_percent,
+        "before_used_percent": before_used_percent,
+        "candidate_count": len(candidates),
+        "protected": protected,
+        "eligible": eligible,
+        "blocked": blocked,
+        "needs_review": needs_review,
+        "summary": {
+            "eligible_count": len(eligible),
+            "blocked_count": len(blocked),
+            "protected_count": len(protected),
+            "needs_review_count": len(needs_review),
+            "eligible_gib": round(total_eligible_gib, 3),
+            "blocked_gib": round(total_blocked_gib, 3),
+            "needs_review_gib": round(total_review_gib, 3),
+        },
+        "reasons": reasons,
+    }
+
+
 def _add_unique(items: list[str], value: str) -> None:
     if value not in items:
         items.append(value)

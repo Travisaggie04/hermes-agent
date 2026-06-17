@@ -29,7 +29,11 @@ from mission_control.pr_merge_verifier_gate import (
     evaluate_pr_merge_verifier_gate,
     get_pr_merge_verifier_gate_policy,
 )
-from mission_control.storage_guard import evaluate_storage_guard, get_storage_guard_policy
+from mission_control.storage_guard import (
+    build_storage_cleanup_manifest,
+    evaluate_storage_guard,
+    get_storage_guard_policy,
+)
 from mission_control.verifier_workflow import (
     evaluate_verifier_workflow,
     get_verifier_workflow_policy,
@@ -3039,6 +3043,19 @@ async def storage_guard_evaluate(request: Request) -> dict[str, Any]:
         "source": "caller_supplied_storage_state",
         "stored": False,
         **result,
+    }
+
+
+@router.post("/storage-guard/cleanup-manifest")
+async def storage_guard_cleanup_manifest(request: Request) -> dict[str, Any]:
+    payload = await _read_json_object_body(request)
+    manifest = build_storage_cleanup_manifest(payload)
+    return {
+        **INERT_FLAGS,
+        "enforcement_enabled": False,
+        "dry_run_only": True,
+        "display_only": True,
+        **manifest,
     }
 
 
