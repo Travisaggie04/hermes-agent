@@ -51,6 +51,15 @@ class TestParseJudgeResponse:
         assert done is False
         assert reason == "more work needed"
 
+    def test_blocked_reason_detector_is_prefix_based(self):
+        from hermes_cli.goals import _reason_indicates_blocked
+
+        assert _reason_indicates_blocked("blocked: missing token")
+        assert _reason_indicates_blocked("needs user input: choose a branch")
+        assert _reason_indicates_blocked("external dependency: CI is down")
+        assert not _reason_indicates_blocked("not blocked; tests passed")
+        assert not _reason_indicates_blocked("completed after removing blockers")
+
     def test_json_in_markdown_fence(self):
         from hermes_cli.goals import _parse_judge_response
 
@@ -321,6 +330,47 @@ class TestGoalManager:
         d2 = mgr.evaluate_after_turn("anything")
         assert d2["verdict"] == "inactive"
         assert d2["should_continue"] is False
+
+    def test_blocked_reason_stops_goal_without_marking_done(self, hermes_home):
+        from hermes_cli import goals
+        from hermes_cli.goals import GoalManager
+
+        mgr = GoalManager(session_id="blocked-sid")
+        mgr.set("ship safely")
+
+        with patch.object(
+            goals,
+            "judge_goal",
+            return_value=("continue", "blocked: missing deployment approval", False),
+        ):
+            decision = mgr.evaluate_after_turn("Need deployment approval before continuing.")
+
+        assert decision["status"] == "blocked"
+        assert decision["verdict"] == "blocked"
+        assert decision["should_continue"] is False
+        assert decision["continuation_prompt"] is None
+        assert mgr.state.status == "blocked"
+        assert "missing deployment approval" in (mgr.state.paused_reason or "")
+        assert "Goal blocked" in decision["message"]
+
+    def test_done_verdict_with_blocked_reason_still_blocks(self, hermes_home):
+        from hermes_cli import goals
+        from hermes_cli.goals import GoalManager
+
+        mgr = GoalManager(session_id="blocked-done-sid")
+        mgr.set("ship safely")
+
+        with patch.object(
+            goals,
+            "judge_goal",
+            return_value=("done", "blocked: user must pick a release window", False),
+        ):
+            decision = mgr.evaluate_after_turn("Blocked until Travis picks a release window.")
+
+        assert decision["status"] == "blocked"
+        assert decision["verdict"] == "blocked"
+        assert mgr.state.status == "blocked"
+        assert mgr.state.last_verdict == "done"
 
     def test_continuation_prompt_shape(self, hermes_home):
         """The continuation prompt must include an engineering work contract
@@ -780,6 +830,16 @@ class TestStatusLineSubgoalCount:
         line = mgr.status_line()
         assert "ship it" in line
         assert "subgoal" not in line.lower()
+
+    def test_status_line_blocked(self, hermes_home):
+        from hermes_cli.goals import GoalManager
+        mgr = GoalManager(session_id="sl-blocked")
+        mgr.set("ship it")
+        mgr.state.status = "blocked"
+        mgr.state.paused_reason = "blocked: waiting for approval"
+        line = mgr.status_line()
+        assert "blocked" in line
+        assert "waiting for approval" in line
 
     def test_status_line_with_subgoals(self, hermes_home):
         from hermes_cli.goals import GoalManager
