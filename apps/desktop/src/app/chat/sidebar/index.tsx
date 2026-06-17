@@ -90,7 +90,7 @@ import {
 } from '@/store/session'
 import { setSelectedMissionControlProject } from '@/store/session'
 
-import { type AppView, ARTIFACTS_ROUTE, MESSAGING_ROUTE, SKILLS_ROUTE } from '../../routes'
+import { type AppView, ARTIFACTS_ROUTE, MESSAGING_ROUTE, MISSION_CONTROL_ROUTE, SKILLS_ROUTE } from '../../routes'
 import { SidebarPanelLabel } from '../../shell/sidebar-label'
 import type { SidebarNavItem } from '../../types'
 import { fallbackProjectGroups, nativeChatProjects } from '../native-projects'
@@ -124,10 +124,16 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
   { id: 'messaging', label: 'Messaging', icon: props => <Codicon name="comment" {...props} />, route: MESSAGING_ROUTE },
   { id: 'artifacts', label: 'Artifacts', icon: props => <Codicon name="files" {...props} />, route: ARTIFACTS_ROUTE },
   {
-    id: 'mission-control',
+    id: 'jenny-os',
     label: 'Jenny OS',
-    icon: props => <Codicon name="dashboard" {...props} />,
+    icon: props => <Codicon name="comment-discussion" {...props} />,
     action: 'jenny-os'
+  },
+  {
+    id: 'advanced-audit',
+    label: 'Advanced / Audit',
+    icon: props => <Codicon name="dashboard" {...props} />,
+    route: MISSION_CONTROL_ROUTE
   }
 ]
 
@@ -909,6 +915,7 @@ export function ChatSidebar({
                   (item.id === 'skills' && currentView === 'skills') ||
                   (item.id === 'messaging' && currentView === 'messaging') ||
                   (item.id === 'artifacts' && currentView === 'artifacts') ||
+                  (item.id === 'advanced-audit' && currentView === 'mission-control') ||
                   (item.action === 'jenny-os' && currentView === 'chat' && Boolean(selectedMissionControlProjectId.trim()))
 
                 const isNewSession = item.id === 'new-session'
