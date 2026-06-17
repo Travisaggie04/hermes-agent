@@ -57,7 +57,9 @@ describe('native project chat header', () => {
     expect(source).toContain('max-w-[38vw]')
     expect(source).toContain('min-[46rem]:max-w-56')
     expect(source).toContain('className="hidden min-[46rem]:inline-flex"')
-    expect(source).toContain("className=\"hidden h-6 shrink-0 px-2 text-[0.6875rem] min-[46rem]:inline-flex\"")
+    expect(source).toContain('className="h-6 shrink-0 px-2 text-[0.6875rem]"')
+    expect(source).toContain('className="min-[46rem]:hidden"')
+    expect(source).not.toContain("className=\"hidden h-6 shrink-0 px-2 text-[0.6875rem] min-[46rem]:inline-flex\"")
   })
 
   it('lets Travis leave project mode from the native project picker', () => {
@@ -187,5 +189,8 @@ describe('native project chat header', () => {
     expect(source).toContain('const showActivity = sessionSubagents.length > 0 || asyncAgentActivityAvailable')
     expect(source).toContain('onClick={() => navigate(AGENTS_ROUTE)}')
     expect(source).toContain("runningSubagents > 0 ? `Activity ${runningSubagents}` : 'Activity'")
+    expect(source).toContain('className="h-6 shrink-0 px-2 text-[0.6875rem]"')
+    expect(source).toContain('className="min-[46rem]:hidden"')
+    expect(source).not.toContain('className="hidden h-6 shrink-0 px-2 text-[0.6875rem] min-[46rem]:inline-flex"')
   })
 })
