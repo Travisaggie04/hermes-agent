@@ -116,8 +116,8 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('rootClassName={recentsRootClassName}')
   })
 
-  it('keeps non-selected project folders collapsed until Travis opens them', () => {
-    expect(source).toContain('const [open, setOpen] = useState(() => !isProjectGroup || active)')
+  it('keeps project chat folders open so their sessions are visible by default', () => {
+    expect(source).toContain('const [open, setOpen] = useState(() => true)')
     expect(source).toContain('if (active && isProjectGroup)')
     expect(source).toContain('setOpen(true)')
   })
