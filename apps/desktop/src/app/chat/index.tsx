@@ -233,7 +233,7 @@ function ChatHeader({
           </div>
         )}
       </div>
-      <div className="ml-auto hidden min-w-0 max-w-[44vw] items-center gap-1.5 [-webkit-app-region:no-drag] min-[46rem]:flex">
+      <div className="ml-auto flex min-w-0 max-w-[52vw] items-center gap-1.5 [-webkit-app-region:no-drag]">
         <ProjectHeaderSelect
           loading={projectsQuery.isLoading}
           onClearProject={() => setSelectedMissionControlProject(null)}
@@ -243,10 +243,15 @@ function ChatHeader({
           selectedProjectId={selectedProjectId}
           selectedProjectTitle={selectedProjectTitle}
         />
-        <HeaderPill label={jennyStatus.label} title={jennyStatusDetail} tone={jennyStatus.tone} />
+        <HeaderPill
+          className="hidden min-[46rem]:inline-flex"
+          label={jennyStatus.label}
+          title={jennyStatusDetail}
+          tone={jennyStatus.tone}
+        />
         {showActivity && (
           <Button
-            className="h-6 shrink-0 px-2 text-[0.6875rem]"
+            className="hidden h-6 shrink-0 px-2 text-[0.6875rem] min-[46rem]:inline-flex"
             onClick={() => navigate(AGENTS_ROUTE)}
             title="Open live Jenny activity"
             type="button"
@@ -357,7 +362,7 @@ function ProjectHeaderSelect({
         <span className="sr-only">Project</span>
         <select
           aria-label="Project"
-          className="h-6 max-w-56 rounded-full border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) px-2 py-0 text-[0.6875rem] font-medium text-(--ui-text-secondary) outline-none hover:text-foreground focus:border-blue-400/60"
+          className="h-6 min-w-0 max-w-[38vw] rounded-full border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) px-2 py-0 text-[0.6875rem] font-medium text-(--ui-text-secondary) outline-none hover:text-foreground focus:border-blue-400/60 min-[46rem]:max-w-56"
           disabled={loading && !projects.length}
           onChange={event => {
             const nextValue = event.currentTarget.value
@@ -581,7 +586,17 @@ function NativeProjectIntakeDialog({
   )
 }
 
-function HeaderPill({ label, title, tone }: { label: string; title: string; tone: NativeJennyStatusTone }) {
+function HeaderPill({
+  className,
+  label,
+  title,
+  tone
+}: {
+  className?: string
+  label: string
+  title: string
+  tone: NativeJennyStatusTone
+}) {
   const toneClass =
     tone === 'warn'
       ? 'border-red-500/35 bg-red-500/10 text-red-200'
@@ -595,7 +610,11 @@ function HeaderPill({ label, title, tone }: { label: string; title: string; tone
 
   return (
     <span
-      className={cn('max-w-56 truncate rounded-full border px-2 py-0.5 text-[0.6875rem] font-medium leading-none', toneClass)}
+      className={cn(
+        'max-w-56 truncate rounded-full border px-2 py-0.5 text-[0.6875rem] font-medium leading-none',
+        toneClass,
+        className
+      )}
       title={title}
     >
       {label}

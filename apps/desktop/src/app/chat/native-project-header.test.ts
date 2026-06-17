@@ -48,6 +48,15 @@ describe('native project chat header', () => {
     expect(source).toContain('onSelectProject={onStartProjectChat}')
   })
 
+  it('keeps the native project picker available on narrow chat widths', () => {
+    expect(source).toContain('ml-auto flex min-w-0 max-w-[52vw]')
+    expect(source).not.toContain('ml-auto hidden min-w-0 max-w-[44vw]')
+    expect(source).toContain('max-w-[38vw]')
+    expect(source).toContain('min-[46rem]:max-w-56')
+    expect(source).toContain('className="hidden min-[46rem]:inline-flex"')
+    expect(source).toContain("className=\"hidden h-6 shrink-0 px-2 text-[0.6875rem] min-[46rem]:inline-flex\"")
+  })
+
   it('lets Travis leave project mode from the native project picker', () => {
     expect(source).toContain('setSelectedMissionControlProject')
     expect(source).toContain('onClearProject={() => setSelectedMissionControlProject(null)}')
