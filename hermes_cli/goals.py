@@ -58,6 +58,10 @@ DEFAULT_JUDGE_TIMEOUT = 30.0
 DEFAULT_JUDGE_MAX_TOKENS = 4096
 # Cap how much of the last response + recent messages we send to the judge.
 _JUDGE_RESPONSE_SNIPPET_CHARS = 4000
+# Cap the durable progress excerpt carried into the next continuation. This
+# is not a full transcript store; it is just enough state to survive compaction
+# and budget boundaries without bloating SessionDB.
+_GOAL_PROGRESS_EXCERPT_CHARS = 1200
 # After this many consecutive judge *parse* failures (empty output / non-JSON),
 # the loop auto-pauses and points the user at the goal_judge config. API /
 # transport errors do NOT count toward this — those are transient. This guards
@@ -118,6 +122,7 @@ ENGINEERING_GOAL_CONTINUATION_TEMPLATE = (
     "- turns used: {turns_used}/{max_turns}\n"
     "- last judge verdict: {last_verdict}\n"
     "- last judge reason: {last_reason}\n\n"
+    "Last progress checkpoint:\n{last_progress_excerpt}\n\n"
     "Continue from the latest repo/runtime evidence, not from memory alone. "
     "Carry forward a concise working state:\n"
     "- completed checklist items\n"
@@ -195,6 +200,7 @@ class GoalState:
     last_turn_at: float = 0.0
     last_verdict: Optional[str] = None        # "done" | "continue" | "skipped"
     last_reason: Optional[str] = None
+    last_progress_excerpt: Optional[str] = None
     paused_reason: Optional[str] = None       # why we auto-paused (budget, etc.)
     consecutive_parse_failures: int = 0       # judge-output parse failures in a row
     # User-added criteria appended mid-loop via the /subgoal command.
@@ -223,6 +229,7 @@ class GoalState:
             last_turn_at=float(data.get("last_turn_at", 0.0) or 0.0),
             last_verdict=data.get("last_verdict"),
             last_reason=data.get("last_reason"),
+            last_progress_excerpt=data.get("last_progress_excerpt"),
             paused_reason=data.get("paused_reason"),
             consecutive_parse_failures=int(data.get("consecutive_parse_failures", 0) or 0),
             subgoals=subgoals,
@@ -719,6 +726,12 @@ class GoalManager:
         # Count the turn that just finished.
         state.turns_used += 1
         state.last_turn_at = time.time()
+        stripped_response = (last_response or "").strip()
+        if stripped_response:
+            state.last_progress_excerpt = _truncate(
+                stripped_response,
+                _GOAL_PROGRESS_EXCERPT_CHARS,
+            )
 
         verdict, reason, parse_failed = judge_goal(
             state.goal, last_response, subgoals=state.subgoals or None
@@ -814,6 +827,7 @@ class GoalManager:
             max_turns=self._state.max_turns,
             last_verdict=self._state.last_verdict or "none yet",
             last_reason=self._state.last_reason or "none yet",
+            last_progress_excerpt=self._state.last_progress_excerpt or "none recorded",
         )
 
 

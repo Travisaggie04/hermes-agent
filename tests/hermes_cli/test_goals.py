@@ -338,6 +338,32 @@ class TestGoalManager:
         assert "Do not declare completion without evidence" in prompt
         assert prompt.strip()  # non-empty
 
+    def test_continuation_prompt_carries_last_progress_checkpoint(self, hermes_home):
+        """After a turn, the next continuation should carry a compact durable
+        checkpoint so long goals survive context loss better."""
+        from hermes_cli import goals
+        from hermes_cli.goals import GoalManager
+
+        mgr = GoalManager(session_id="checkpoint-sid")
+        mgr.set("ship a reliable goal loop")
+
+        with patch.object(
+            goals,
+            "judge_goal",
+            return_value=("continue", "needs evidence", False),
+        ):
+            decision = mgr.evaluate_after_turn(
+                "Changed hermes_cli/goals.py and ran tests/hermes_cli/test_goals.py."
+            )
+
+        assert decision["should_continue"] is True
+        assert mgr.state.last_progress_excerpt is not None
+        assert "Changed hermes_cli/goals.py" in mgr.state.last_progress_excerpt
+        continuation = decision["continuation_prompt"]
+        assert "Last progress checkpoint" in continuation
+        assert "Changed hermes_cli/goals.py" in continuation
+        assert "last judge reason: needs evidence" in continuation
+
     def test_kickoff_prompt_includes_engineering_contract(self, hermes_home):
         """Goal kickoff should prime the agent with scope/evidence/stop
         conditions instead of sending only the raw objective."""
@@ -558,12 +584,19 @@ class TestGoalStateSubgoalsBackcompat:
         state = GoalState.from_json(legacy)
         assert state.goal == "do a thing"
         assert state.subgoals == []
+        assert state.last_progress_excerpt is None
 
     def test_subgoals_round_trip(self):
         from hermes_cli.goals import GoalState
         state = GoalState(goal="g", subgoals=["a", "b", "c"])
         rt = GoalState.from_json(state.to_json())
         assert rt.subgoals == ["a", "b", "c"]
+
+    def test_progress_excerpt_round_trip(self):
+        from hermes_cli.goals import GoalState
+        state = GoalState(goal="g", last_progress_excerpt="ran tests and found one failure")
+        rt = GoalState.from_json(state.to_json())
+        assert rt.last_progress_excerpt == "ran tests and found one failure"
 
 
 class TestGoalManagerSubgoals:
