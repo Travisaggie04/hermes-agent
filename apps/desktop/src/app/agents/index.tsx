@@ -1,10 +1,12 @@
 import { useStore } from '@nanostores/react'
+import { useQuery } from '@tanstack/react-query'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 
 import { useElapsedSeconds } from '@/components/chat/activity-timer'
 import { ActivityTimerText } from '@/components/chat/activity-timer-text'
 import { BrailleSpinner } from '@/components/ui/braille-spinner'
 import { FadeText } from '@/components/ui/fade-text'
+import { getMissionControlAsyncAgentStatus, type MissionControlAsyncAgentStatusResponse } from '@/hermes'
 import { type Translations, useI18n } from '@/i18n'
 import { AlertCircle, CheckCircle2, Sparkles } from '@/lib/icons'
 import { useEnterAnimation } from '@/lib/use-enter-animation'
@@ -79,6 +81,11 @@ export function AgentsView({ onClose }: AgentsViewProps) {
   const { t } = useI18n()
   const activeSessionId = useStore($activeSessionId)
   const subagentsBySession = useStore($subagentsBySession)
+  const asyncAgentStatusQuery = useQuery({
+    queryFn: getMissionControlAsyncAgentStatus,
+    queryKey: ['mission-control-async-agent-status'],
+    staleTime: 60_000
+  })
 
   const activeSubagents = useMemo(
     () => (activeSessionId ? (subagentsBySession[activeSessionId] ?? []) : []),
@@ -98,8 +105,81 @@ export function AgentsView({ onClose }: AgentsViewProps) {
         <h2 className="text-sm font-semibold text-foreground">{t.agents.title}</h2>
         <p className="text-xs text-muted-foreground/80">{t.agents.subtitle}</p>
       </header>
+      <JennyActivityReadiness status={asyncAgentStatusQuery.data} />
       <SubagentTree tree={tree} />
     </OverlayView>
+  )
+}
+
+function asyncAgentReadiness(status?: MissionControlAsyncAgentStatusResponse | null): {
+  detail: string
+  label: string
+  tone: 'ok' | 'pending' | 'warn'
+} {
+  if (!status) {
+    return {
+      detail: 'Checking whether this runtime can surface Jenny delegation activity.',
+      label: 'Checking activity support',
+      tone: 'pending'
+    }
+  }
+
+  if (status.async_agent_controls_available) {
+    return {
+      detail: 'Native async-agent status is available. Starts and steering remain approval-gated.',
+      label: 'Async agents available',
+      tone: 'ok'
+    }
+  }
+
+  if (status.sync_delegate_task_available) {
+    return {
+      detail: 'Jenny can surface delegated work through the current synchronous delegate path. Native async-agent controls are not active in this runtime yet.',
+      label: 'Delegation activity available',
+      tone: 'ok'
+    }
+  }
+
+  return {
+    detail: 'No async-agent or delegation activity capability was detected in this runtime.',
+    label: 'Activity unavailable',
+    tone: 'warn'
+  }
+}
+
+function JennyActivityReadiness({ status }: { status?: MissionControlAsyncAgentStatusResponse | null }) {
+  const readiness = asyncAgentReadiness(status)
+  const toneClass =
+    readiness.tone === 'warn'
+      ? 'border-destructive/25 bg-destructive/8 text-destructive'
+      : readiness.tone === 'pending'
+        ? 'border-amber-500/25 bg-amber-500/8 text-amber-700 dark:text-amber-200'
+        : 'border-emerald-500/20 bg-emerald-500/8 text-emerald-700 dark:text-emerald-200'
+  const flags = [
+    ['Execution', status?.execution_enabled === true ? 'on' : 'off'],
+    ['Dispatch', status?.dispatch_enabled === true ? 'on' : 'off'],
+    ['Worker', status?.worker_enabled === true ? 'on' : 'off'],
+    ['Timer', status?.timer_enabled === true ? 'on' : 'off']
+  ]
+
+  return (
+    <section className="mb-4 grid gap-3 rounded-xl border border-border/70 bg-card/55 p-3">
+      <div className="flex min-w-0 items-start gap-3">
+        <span aria-hidden className={cn('mt-0.5 size-2.5 shrink-0 rounded-full border', toneClass)} />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-foreground">{readiness.label}</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground/80">{readiness.detail}</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {flags.map(([label, value]) => (
+          <div className="rounded-lg border border-border/60 bg-background/45 px-2 py-1.5" key={label}>
+            <p className="text-[0.62rem] font-medium uppercase tracking-wider text-muted-foreground/60">{label}</p>
+            <p className="mt-0.5 text-xs font-semibold text-foreground">{value}</p>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 
