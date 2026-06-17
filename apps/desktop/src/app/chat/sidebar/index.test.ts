@@ -14,6 +14,7 @@ describe('chat sidebar project workspace affordances', () => {
   })
 
   it('makes new project setup capture evidence and approval stop rules', () => {
+    expect(source).toContain('Advanced setup')
     expect(source).toContain('Evidence Jenny must return, one per line')
     expect(source).toContain('Approval or stop rules, one per line')
     expect(source).toContain('Jenny must define evidence, tests, rollback/stop conditions, and approval needs before broad work.')

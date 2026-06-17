@@ -1307,24 +1307,29 @@ function ProjectIntakeForm({ error, onCancel, onChange, onSubmit, saving, value 
         placeholder="Wins / success criteria, one per line"
         value={value.success}
       />
-      <textarea
-        className="min-h-12 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-2 py-1.5 text-[0.75rem] text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
-        onChange={update('evidence')}
-        placeholder="Evidence Jenny must return, one per line"
-        value={value.evidence}
-      />
-      <textarea
-        className="min-h-12 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-2 py-1.5 text-[0.75rem] text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
-        onChange={update('approval')}
-        placeholder="Approval or stop rules, one per line"
-        value={value.approval}
-      />
-      <textarea
-        className="min-h-12 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-2 py-1.5 text-[0.75rem] text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
-        onChange={update('forbidden')}
-        placeholder="Forbidden actions or risks, one per line"
-        value={value.forbidden}
-      />
+      <details className="grid gap-1.5 rounded border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background)/40 p-1.5 text-[0.75rem]">
+        <summary className="cursor-pointer text-(--ui-text-secondary)">Advanced setup</summary>
+        <div className="mt-1.5 grid gap-1.5">
+          <textarea
+            className="min-h-12 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-2 py-1.5 text-[0.75rem] text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
+            onChange={update('evidence')}
+            placeholder="Evidence Jenny must return, one per line"
+            value={value.evidence}
+          />
+          <textarea
+            className="min-h-12 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-2 py-1.5 text-[0.75rem] text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
+            onChange={update('approval')}
+            placeholder="Approval or stop rules, one per line"
+            value={value.approval}
+          />
+          <textarea
+            className="min-h-12 resize-none rounded border border-(--ui-stroke-tertiary) bg-transparent px-2 py-1.5 text-[0.75rem] text-foreground outline-none placeholder:text-(--ui-text-tertiary)"
+            onChange={update('forbidden')}
+            placeholder="Forbidden actions or risks, one per line"
+            value={value.forbidden}
+          />
+        </div>
+      </details>
       {error && <div className="text-[0.6875rem] text-red-400">{error}</div>}
       <div className="flex gap-1.5">
         <Button className="h-7 flex-1 text-[0.75rem]" disabled={saving} type="submit" variant="default">
