@@ -580,7 +580,7 @@ export const en: Translations = {
       messaging: 'Messaging',
       artifacts: 'Artifacts',
       'jenny-os': 'Jenny OS',
-      'advanced-audit': 'Advanced / Audit'
+      'advanced-audit': 'Advanced / Audit / Recovery'
     },
     searchAria: 'Search sessions',
     searchPlaceholder: 'Search sessions…',

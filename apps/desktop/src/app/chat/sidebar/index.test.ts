@@ -16,9 +16,10 @@ describe('chat sidebar project workspace affordances', () => {
 
   it('makes new project setup capture evidence and approval stop rules', () => {
     expect(source).toContain("from '@/lib/native-project-intake'")
-    expect(source).toContain('parseNativeProjectIntake(projectIntake)')
-    expect(source).toContain('buildNativeProjectCreatePayload(parsed)')
-    expect(source).toContain('buildNativeProjectBriefCreatePayload(parsed, createdProjectId, createdProjectName)')
+    expect(source).toContain('createNativeProjectFromIntake(projectIntake,')
+    expect(source).toContain('createProject: createMissionControlProject')
+    expect(source).toContain('createProjectBrief: createMissionControlProjectBrief')
+    expect(source).toContain("if ('error' in result)")
     expect(source).toContain('Advanced setup')
     expect(source).toContain('Evidence Jenny must return, one per line')
     expect(source).toContain('Approval or stop rules, one per line')
@@ -37,7 +38,7 @@ describe('chat sidebar project workspace affordances', () => {
   it('keeps Mission Control available only as the advanced audit route', () => {
     expect(source).toContain('MISSION_CONTROL_ROUTE')
     expect(source).toContain("id: 'advanced-audit'")
-    expect(source).toContain("label: 'Advanced / Audit'")
+    expect(source).toContain("label: 'Advanced / Audit / Recovery'")
     expect(source).toContain('route: MISSION_CONTROL_ROUTE')
     expect(source).toContain("item.id === 'advanced-audit' && currentView === 'mission-control'")
   })
@@ -111,7 +112,7 @@ describe('chat sidebar project workspace affordances', () => {
 
   it('broadcasts sidebar-created projects so native chat pickers stay in sync', () => {
     expect(source).toContain('notifyMissionControlProjectCreated')
-    expect(source).toContain('notifyMissionControlProjectCreated({ projectId: createdProjectId, projectName: createdProjectName })')
+    expect(source).toContain('notifyMissionControlProjectCreated({ projectId, projectName })')
   })
 
   it('broadcasts manual session moves so native project chats stay in sync', () => {
@@ -155,7 +156,7 @@ describe('chat sidebar project workspace affordances', () => {
   })
 
   it('keeps the backend unassigned group out of the visible project folders', () => {
-    expect(source).toContain("const UNASSIGNED_PROJECT_GROUP_ID = 'unassigned-general'")
+    expect(source).toContain('UNASSIGNED_PROJECT_GROUP_ID')
     expect(source).toContain('groups.filter(group => group.project_id !== UNASSIGNED_PROJECT_GROUP_ID).map')
     expect(source).toContain('linkedSessionIds: group.linked_session_ids ?? []')
     expect(source).toContain('totalCount: group.linked_session_count ?? group.sessions.length')
@@ -190,9 +191,14 @@ describe('chat sidebar project workspace affordances', () => {
   })
 
   it('keeps project groups visible if one Mission Control project endpoint is unavailable', () => {
-    expect(source).toContain('Promise.allSettled([getMissionControlProjects(), getMissionControlProjectSessions()])')
+    expect(source).toContain('Promise.allSettled([getMissionControlProjects(), getMissionControlProjectSessions(NATIVE_PROJECT_SESSION_LIMIT)])')
     expect(source).toContain("projectsResult.status === 'fulfilled' ? nativeChatProjects")
     expect(source).toContain("sessionsResult.status === 'fulfilled' ? sessionsResult.value.groups || [] : []")
+  })
+
+  it('requests enough project sessions for native project folders and Other chats', () => {
+    expect(source).toContain("import { fallbackProjectGroups, NATIVE_PROJECT_SESSION_LIMIT, nativeChatProjects, UNASSIGNED_PROJECT_GROUP_ID } from '../native-projects'")
+    expect(source).toContain('getMissionControlProjectSessions(NATIVE_PROJECT_SESSION_LIMIT)')
   })
 
   it('does not auto-select the first project just because projects loaded', () => {

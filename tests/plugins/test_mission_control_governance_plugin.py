@@ -1532,6 +1532,59 @@ def test_project_session_projection_counts_links_outside_recent_session_window(p
     assert [session["session_id"] for session in states["project-hermes"]["recent_sessions"]] == ["session-recent"]
 
 
+def test_project_session_projection_limit_controls_visible_rows(plugin_api, client, monkeypatch):
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    store.append(ProjectRecord(project_id="project-hermes", name="Hermes / Mission Control"))
+    for idx in range(6):
+        store.append(
+            SessionProjectLinkRecord(
+                link_id=f"linked-{idx}",
+                project_id="project-hermes",
+                session_id=f"session-linked-{idx}",
+                lineage_root_id=f"root-linked-{idx}",
+                status="active",
+                linked_at=f"2026-06-12T00:0{idx}:00Z",
+            )
+        )
+
+    linked_sessions = [
+        {
+            "id": f"session-linked-{idx}",
+            "_lineage_root_id": f"root-linked-{idx}",
+            "title": f"Linked Hermes work {idx}",
+            "started_at": idx + 1,
+            "last_active": idx + 1,
+        }
+        for idx in range(6)
+    ]
+    unassigned_sessions = [
+        {
+            "id": f"session-general-{idx}",
+            "_lineage_root_id": f"root-general-{idx}",
+            "title": f"General work {idx}",
+            "started_at": idx + 20,
+            "last_active": idx + 20,
+        }
+        for idx in range(12)
+    ]
+    monkeypatch.setattr(
+        plugin_api,
+        "_read_profile_sessions_for_project_links",
+        lambda limit: (linked_sessions + unassigned_sessions, []),
+    )
+
+    grouped = client.get("/api/plugins/mission-control-governance/workspace/project-sessions?limit=6")
+    assert grouped.status_code == 200
+    groups = {item["project_id"]: item for item in grouped.json()["groups"]}
+
+    assert [session["session_id"] for session in groups["project-hermes"]["sessions"]] == [
+        f"session-linked-{idx}" for idx in range(6)
+    ]
+    assert [session["session_id"] for session in groups["unassigned-general"]["sessions"]] == [
+        f"session-general-{idx}" for idx in range(6)
+    ]
+
+
 def test_workspace_project_state_projection_is_read_only_and_derived(plugin_api, client):
     store = JsonlRecordStore(plugin_api.record_store_path())
     store.append(

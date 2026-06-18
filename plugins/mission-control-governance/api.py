@@ -1428,8 +1428,8 @@ def _project_sessions_projection(limit: int) -> dict[str, Any]:
     for group in groups:
         group["linked_session_ids"] = linked_session_ids_by_project.get(group["project_id"], [])
         group["linked_session_count"] = linked_counts_by_project.get(group["project_id"], len(group["sessions"]))
-        group["sessions"] = group["sessions"][:5]
-    unassigned["sessions"] = unassigned["sessions"][:10]
+        group["sessions"] = group["sessions"][:limit]
+    unassigned["sessions"] = unassigned["sessions"][:limit]
     return {
         "groups": groups + [unassigned],
         "errors": errors,

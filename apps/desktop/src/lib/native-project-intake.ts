@@ -23,6 +23,26 @@ export interface NativeProjectIntakeParsed {
   success: string[]
 }
 
+export interface NativeProjectCreateDependencies {
+  createProject: (
+    payload: MissionControlProjectCreatePayload
+  ) => Promise<{ project: { name?: null | string; project_id?: null | string } }>
+  createProjectBrief: (payload: MissionControlProjectBriefCreatePayload) => Promise<unknown>
+}
+
+export interface NativeProjectCreateResult {
+  parsed: NativeProjectIntakeParsed
+  projectId: string
+  projectName: string
+}
+
+export interface NativeProjectIntakeValidation {
+  error: string
+  parsed: NativeProjectIntakeParsed
+}
+
+export const NATIVE_PROJECT_REQUIRED_ERROR = 'Project name and goal are required.'
+
 export const NATIVE_PROJECT_DEFAULT_APPROVAL_RULES = [
   'Jenny must challenge vague, risky, or wrong-approach requests before implementation.',
   'Jenny must define evidence, tests, rollback/stop conditions, and approval needs before broad work.'
@@ -78,6 +98,15 @@ export function parseNativeProjectIntake(value: NativeProjectIntakeValue): Nativ
   }
 }
 
+export function validateNativeProjectIntake(value: NativeProjectIntakeValue): NativeProjectIntakeValidation {
+  const parsed = parseNativeProjectIntake(value)
+
+  return {
+    error: parsed.name && parsed.goal ? '' : NATIVE_PROJECT_REQUIRED_ERROR,
+    parsed
+  }
+}
+
 export function buildNativeProjectCreatePayload(parsed: NativeProjectIntakeParsed): MissionControlProjectCreatePayload {
   return {
     current_goal: parsed.goal,
@@ -105,5 +134,28 @@ export function buildNativeProjectBriefCreatePayload(
     source_of_truth: parsed.source,
     status: 'active',
     success_criteria: parsed.success
+  }
+}
+
+export async function createNativeProjectFromIntake(
+  value: NativeProjectIntakeValue,
+  dependencies: NativeProjectCreateDependencies
+): Promise<NativeProjectCreateResult | { error: string; parsed: NativeProjectIntakeParsed }> {
+  const validation = validateNativeProjectIntake(value)
+
+  if (validation.error) {
+    return validation
+  }
+
+  const project = await dependencies.createProject(buildNativeProjectCreatePayload(validation.parsed))
+  const projectId = project.project.project_id || validation.parsed.projectId
+  const projectName = project.project.name || validation.parsed.name
+
+  await dependencies.createProjectBrief(buildNativeProjectBriefCreatePayload(validation.parsed, projectId, projectName))
+
+  return {
+    parsed: validation.parsed,
+    projectId,
+    projectName
   }
 }

@@ -1,5 +1,7 @@
 import { type CSSProperties, useState } from 'react'
 
+import type { NativeProjectChatOption, NativeProjectChatSession } from '../../lib/native-project-chat'
+
 import introCopyJsonl from './intro-copy.jsonl?raw'
 
 type IntroCopy = {
@@ -15,16 +17,12 @@ export type IntroProps = {
   personality?: string
   projectId?: string
   projectName?: string
-  projectOptions?: {
-    id: string
-    lastSessionId?: string
-    lastSessionTitle?: string
-    name: string
-    recentSessions?: { id: string; title: string }[]
-    sessionCount?: number
-  }[]
+  projectOptions?: NativeProjectChatOption[]
+  otherChatCount?: number
+  otherChats?: NativeProjectChatSession[]
   projectsLoading?: boolean
   onCreateProject?: () => void
+  onResumeOtherSession?: (sessionId: string) => void
   onResumeProjectSession?: (sessionId: string, projectId: string, projectName: string) => void
   onSelectProject?: (projectId: string, projectName: string) => void
   seed?: number
@@ -173,8 +171,11 @@ export function Intro({
   projectId,
   projectName,
   projectOptions = [],
+  otherChatCount = 0,
+  otherChats = [],
   projectsLoading = false,
   onCreateProject,
+  onResumeOtherSession,
   onResumeProjectSession,
   onSelectProject,
   seed
@@ -193,8 +194,9 @@ export function Intro({
   const selectedProjectLatestSessionId = selectedProjectOption?.lastSessionId?.trim() || ''
   const selectedProjectLatestSessionTitle = selectedProjectOption?.lastSessionTitle?.trim() || ''
   const selectedProjectRecentSessions = selectedProjectOption?.recentSessions?.filter(session => session.id.trim()).slice(0, 4) ?? []
-  const showProjectHome = !projectLabel && (projectsLoading || projectOptions.length > 0)
+  const showProjectHome = !projectLabel && (projectsLoading || projectOptions.length > 0 || otherChats.length > 0)
   const introInteractive = showProjectHome || Boolean(projectLabel)
+  const otherChatsLabel = otherChatCount > 0 ? `${otherChatCount} unfiled ${otherChatCount === 1 ? 'chat' : 'chats'}` : 'Unfiled chats'
 
   return (
     <div
@@ -269,11 +271,11 @@ export function Intro({
             <div className="grid gap-1 text-center">
               <h1 className="m-0 text-2xl font-semibold text-foreground">Pick a project</h1>
               <p className="m-0 max-w-xl text-sm leading-normal tracking-tight">
-                Pick a project, then chat normally. Jenny gets the project brief and guardrails without extra copy/paste.
+                Pick a project, then chat normally. Jenny gets the right project context without extra copy/paste.
               </p>
             </div>
             <div className="grid w-full max-w-xl gap-2 sm:grid-cols-2">
-              {projectsLoading && !projectOptions.length ? (
+              {projectsLoading && !projectOptions.length && !otherChats.length ? (
                 <div className="col-span-full rounded-lg border border-(--ui-stroke-tertiary) px-3 py-2 text-sm text-(--ui-text-tertiary)">
                   Loading projects...
                 </div>
@@ -310,6 +312,25 @@ export function Intro({
                 })
               )}
             </div>
+            {otherChats.length ? (
+              <div className="grid w-full max-w-xl gap-1.5 text-left">
+                <div className="flex min-w-0 items-center justify-between gap-2 px-1 text-xs text-(--ui-text-tertiary)">
+                  <span className="font-medium text-(--ui-text-secondary)">Other chats</span>
+                  <span>{otherChatsLabel}</span>
+                </div>
+                {otherChats.map(session => (
+                  <button
+                    className="flex min-h-8 min-w-0 items-center gap-2 rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background)/70 px-3 py-2 text-left text-xs text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent)/60 hover:bg-(--ui-control-hover-background) hover:text-foreground focus-visible:border-(--ui-accent)/70 focus-visible:outline-none"
+                    key={session.id}
+                    onClick={() => onResumeOtherSession?.(session.id)}
+                    title={session.title || 'Other chat'}
+                    type="button"
+                  >
+                    <span className="min-w-0 flex-1 truncate font-medium">{session.title || 'Other chat'}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
             {onCreateProject ? (
               <button
                 className="rounded-full border border-(--ui-stroke-tertiary) bg-transparent px-3 py-1.5 text-xs font-medium text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent)/60 hover:bg-(--ui-control-hover-background) hover:text-foreground focus-visible:border-(--ui-accent)/70 focus-visible:outline-none"

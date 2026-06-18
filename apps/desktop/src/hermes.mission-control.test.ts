@@ -12,6 +12,7 @@ import {
   getMissionControlLaneRequests,
   getMissionControlProjectBriefs,
   getMissionControlProjects,
+  getMissionControlProjectSessions,
   getMissionControlProjectState,
   getMissionControlReports,
   getMissionControlWorkspaceStatus
@@ -33,6 +34,7 @@ describe('Mission Control desktop API helpers', () => {
     await getMissionControlLaneRequests()
     await getMissionControlReports()
     await getMissionControlProjectState()
+    await getMissionControlProjectSessions()
     await getMissionControlGitHubBridgeStatus()
     await getMissionControlAsyncAgentStatus()
 
@@ -43,6 +45,7 @@ describe('Mission Control desktop API helpers', () => {
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/lane-requests' })
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/reports' })
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/project-state' })
+    expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/project-sessions' })
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/github-bridge/status' })
     expect(api).toHaveBeenCalledWith({ path: '/api/plugins/mission-control-governance/workspace/async-agent-status' })
 
@@ -147,6 +150,17 @@ describe('Mission Control desktop API helpers', () => {
 
     expect(api).toHaveBeenCalledWith({
       path: '/api/plugins/mission-control-governance/workspace/github-bridge/status?project_id=project-hermes%2Fmission%20control'
+    })
+  })
+
+  it('can request a larger native project-session window', async () => {
+    const api = vi.fn().mockResolvedValue({})
+    vi.stubGlobal('window', { hermesDesktop: { api } })
+
+    await getMissionControlProjectSessions(50)
+
+    expect(api).toHaveBeenCalledWith({
+      path: '/api/plugins/mission-control-governance/workspace/project-sessions?limit=50'
     })
   })
 })

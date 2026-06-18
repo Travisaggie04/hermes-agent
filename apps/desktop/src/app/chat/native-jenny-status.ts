@@ -89,7 +89,7 @@ export function nativeJennyStatus({
 
   if (!projectId.trim()) {
     return {
-      detail: 'Pick a project so Jenny gets the right hidden context and guardrails.',
+      detail: 'Pick a project so Jenny gets the right project context in the background.',
       label: 'Pick a project',
       summary: 'Choose a project',
       tone: 'idle'

@@ -24,6 +24,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   createMissionControlProject,
   createMissionControlProjectBrief,
@@ -33,9 +34,7 @@ import {
   getMissionControlProjects,
   getMissionControlProjectSessions,
   type HermesGateway,
-  type MissionControlAsyncAgentStatusResponse,
-  type MissionControlProjectRecord,
-  type MissionControlProjectSessionGroup
+  type MissionControlAsyncAgentStatusResponse
 } from '@/hermes'
 import { type ChatMessage, chatMessageText } from '@/lib/chat-messages'
 import { quickModelOptions, sessionTitle, toRuntimeMessage } from '@/lib/chat-runtime'
@@ -55,11 +54,9 @@ import {
 } from '@/lib/mission-control-events'
 import { formatModelStatusLabel } from '@/lib/model-status-label'
 import {
-  buildNativeProjectBriefCreatePayload,
-  buildNativeProjectCreatePayload,
+  createNativeProjectFromIntake,
   emptyNativeProjectIntake,
-  type NativeProjectIntakeValue,
-  parseNativeProjectIntake
+  type NativeProjectIntakeValue
 } from '@/lib/native-project-intake'
 import { cn } from '@/lib/utils'
 import type { ComposerAttachment } from '@/store/composer'
@@ -104,7 +101,12 @@ import type { ChatBarState } from './composer/types'
 import type { DroppedFile } from './hooks/use-composer-actions'
 import { useFileDropZone } from './hooks/use-file-drop-zone'
 import { nativeJennyStatus, type NativeJennyStatusTone } from './native-jenny-status'
-import { nativeChatProjects } from './native-projects'
+import {
+  nativeProjectChatModel,
+  NATIVE_PROJECT_SESSION_LIMIT,
+  type NativeProjectChatOption,
+  type NativeProjectChatSession
+} from './native-projects'
 import { SessionActionsMenu } from './sidebar/session-actions-menu'
 import { lastVisibleMessageIsUser, threadLoadingState } from './thread-loading'
 
@@ -125,6 +127,7 @@ interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
   onPickImages: () => void
   onRemoveAttachment: (id: string) => void
   onOpenProjectSession: (sessionId: string, projectId: string, projectName: string) => void
+  onResumeSession: (sessionId: string) => void
   onSubmit: (
     text: string,
     options?: { attachments?: ComposerAttachment[]; fromQueue?: boolean }
@@ -146,18 +149,10 @@ interface ChatHeaderProps {
   onDeleteSelectedSession: () => void
   onOpenProjectSession: (sessionId: string, projectId: string, projectName: string) => void
   onPickFiles: () => void
+  onResumeSession: (sessionId: string) => void
   onStartProjectChat: (projectId: string, projectName: string) => void
   onToggleSelectedPin: () => void
   selectedSessionId: null | string
-}
-
-type NativeProjectChatOption = {
-  id: string
-  lastSessionId: string
-  lastSessionTitle: string
-  name: string
-  recentSessions: { id: string; title: string }[]
-  sessionCount: number
 }
 
 function ChatHeader({
@@ -170,6 +165,7 @@ function ChatHeader({
   onDeleteSelectedSession,
   onOpenProjectSession,
   onPickFiles,
+  onResumeSession,
   onStartProjectChat,
   onToggleSelectedPin,
   selectedSessionId
@@ -192,7 +188,7 @@ function ChatHeader({
   })
   const projectSessionsQuery = useQuery({
     enabled: gatewayOpen,
-    queryFn: getMissionControlProjectSessions,
+    queryFn: () => getMissionControlProjectSessions(NATIVE_PROJECT_SESSION_LIMIT),
     queryKey: ['mission-control-project-sessions-native-chat'],
     staleTime: 30_000
   })
@@ -232,10 +228,11 @@ function ChatHeader({
     sessions.find(session => session.id === selectedSessionId || session._lineage_root_id === selectedSessionId) || null
 
   const selectedProjectTitle = selectedProjectName.trim()
-  const projects = useMemo(
-    () => projectChatOptions(projectsQuery.data?.projects.map(item => item.record) ?? [], projectSessionsQuery.data?.groups ?? []),
+  const projectModel = useMemo(
+    () => nativeProjectChatModel(projectsQuery.data?.projects.map(item => item.record) ?? [], projectSessionsQuery.data?.groups ?? []),
     [projectSessionsQuery.data, projectsQuery.data]
   )
+  const projects = projectModel.projects
   const projectPickerAvailable = projectsQuery.isLoading || projects.length > 0 || Boolean(selectedProjectTitle)
   const title = activeStoredSession ? sessionTitle(activeStoredSession) : selectedProjectTitle ? 'New project chat' : 'New session'
   const sessionSubagents = activeSessionId ? (subagentsBySession[activeSessionId] ?? []) : []
@@ -316,7 +313,10 @@ function ChatHeader({
           onClearProject={() => setSelectedMissionControlProject(null)}
           onNewProject={() => setProjectIntakeOpen(true)}
           onResumeProjectSession={onOpenProjectSession}
+          onResumeOtherSession={onResumeSession}
           onSelectProject={onStartProjectChat}
+          otherChatCount={projectModel.otherChatCount}
+          otherChats={projectModel.otherChats}
           projects={projects}
           selectedProjectId={selectedProjectId}
           selectedProjectTitle={selectedProjectTitle}
@@ -585,72 +585,15 @@ function latestVisibleAssistantErrorMessage(messages: readonly ChatMessage[]): C
   return null
 }
 
-function latestProjectSession(group?: MissionControlProjectSessionGroup): MissionControlProjectSessionGroup['sessions'][number] | null {
-  return (group?.sessions ?? []).reduce<MissionControlProjectSessionGroup['sessions'][number] | null>(
-    (latest, session) => {
-      const sessionTs = session.last_active || session.started_at || 0
-      const latestTs = latest?.last_active || latest?.started_at || 0
-
-      return sessionTs > latestTs ? session : latest
-    },
-    null
-  )
-}
-
-function latestProjectSessionTitle(group?: MissionControlProjectSessionGroup): string {
-  const latestSession = latestProjectSession(group)
-
-  return latestSession?.title?.trim() || latestSession?.preview?.trim() || ''
-}
-
-function projectSessionTitle(session: MissionControlProjectSessionGroup['sessions'][number]): string {
-  return session.title?.trim() || session.preview?.trim() || session.session_id
-}
-
-function recentProjectSessions(group?: MissionControlProjectSessionGroup): NativeProjectChatOption['recentSessions'] {
-  return [...(group?.sessions ?? [])]
-    .sort((left, right) => {
-      const leftTs = left.last_active || left.started_at || 0
-      const rightTs = right.last_active || right.started_at || 0
-
-      return rightTs - leftTs
-    })
-    .slice(0, 4)
-    .map(session => ({
-      id: session.session_id,
-      title: projectSessionTitle(session)
-    }))
-    .filter(session => Boolean(session.id.trim()))
-}
-
-function projectChatOptions(
-  projects: MissionControlProjectRecord[] = [],
-  groups: MissionControlProjectSessionGroup[] = []
-): NativeProjectChatOption[] {
-  const sessionGroupsByProject = new Map(groups.map(group => [group.project_id, group]))
-
-  return nativeChatProjects(projects).map(project => {
-    const sessionGroup = sessionGroupsByProject.get(project.project_id)
-    const sessionCount = sessionGroup?.linked_session_count ?? sessionGroup?.sessions.length ?? 0
-    const latestSession = latestProjectSession(sessionGroup)
-
-    return {
-      id: project.project_id,
-      lastSessionId: latestSession?.session_id?.trim() || '',
-      lastSessionTitle: latestProjectSessionTitle(sessionGroup),
-      name: project.name,
-      recentSessions: recentProjectSessions(sessionGroup),
-      sessionCount
-    }
-  })
-}
-
 function ProjectHeaderSelect({
   loading,
   onClearProject,
   onNewProject,
   onResumeProjectSession,
+  onResumeOtherSession,
   onSelectProject,
+  otherChatCount,
+  otherChats,
   projects,
   selectedProjectId,
   selectedProjectTitle
@@ -659,56 +602,105 @@ function ProjectHeaderSelect({
   onClearProject: () => void
   onNewProject: () => void
   onResumeProjectSession: (sessionId: string, projectId: string, projectName: string) => void
+  onResumeOtherSession: (sessionId: string) => void
   onSelectProject: (projectId: string, projectName: string) => void
+  otherChatCount: number
+  otherChats: NativeProjectChatSession[]
   projects: NativeProjectChatOption[]
   selectedProjectId: string
   selectedProjectTitle: string
 }) {
-  if (!projects.length && !selectedProjectTitle && !loading) {
+  const [open, setOpen] = useState(false)
+
+  if (!projects.length && !otherChats.length && !selectedProjectTitle && !loading) {
     return null
   }
 
   const value = selectedProjectId.trim()
   const selectedProjectKnown = projects.some(project => project.id === value)
-  const showSelectedProjectFallback = Boolean(value && selectedProjectTitle && !selectedProjectKnown)
+  const selectedLabel = selectedProjectTitle || (loading ? 'Loading projects...' : 'Other chats')
+  const otherCountLabel = otherChatCount > 0 ? `${otherChatCount} unfiled` : 'Unfiled chats'
+  const close = () => setOpen(false)
+  const openProject = (project: NativeProjectChatOption) => {
+    if (project.lastSessionId) {
+      onResumeProjectSession(project.lastSessionId, project.id, project.name)
+    } else {
+      onSelectProject(project.id, project.name)
+    }
+
+    close()
+  }
 
   return (
     <div className="flex min-w-0 items-center gap-1">
-      <label className="flex min-w-0 items-center gap-1 text-[0.6875rem] text-(--ui-text-tertiary)" title="Project">
-        <span className="sr-only">Project</span>
-        <select
-          aria-label="Project"
-          className="h-6 min-w-0 max-w-[38vw] rounded-full border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) px-2 py-0 text-[0.6875rem] font-medium text-(--ui-text-secondary) outline-none hover:text-foreground focus:border-blue-400/60 min-[46rem]:max-w-56"
-          disabled={loading && !projects.length}
-          onChange={event => {
-            const nextValue = event.currentTarget.value
-
-            if (!nextValue) {
-              onClearProject()
-              return
-            }
-
-            const project = projects.find(item => item.id === nextValue)
-            if (project) {
-              if (project.lastSessionId) {
-                onResumeProjectSession(project.lastSessionId, project.id, project.name)
-              } else {
-                onSelectProject(project.id, project.name)
-              }
-            }
-          }}
-          value={selectedProjectKnown || showSelectedProjectFallback ? value : ''}
-        >
-          <option value="">{loading ? 'Loading projects...' : 'Other chats'}</option>
-          {showSelectedProjectFallback && <option value={value}>{selectedProjectTitle}</option>}
-          {projects.map(project => (
-            <option key={project.id} value={project.id}>
-              {project.name}
-              {project.sessionCount > 0 ? ` (${project.sessionCount})` : ''}
-            </option>
-          ))}
-        </select>
-      </label>
+      <Popover onOpenChange={setOpen} open={open}>
+        <PopoverTrigger asChild>
+          <Button
+            aria-label="Project"
+            className="h-6 min-w-0 max-w-[38vw] rounded-full border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) px-2 py-0 text-[0.6875rem] font-medium text-(--ui-text-secondary) hover:text-foreground min-[46rem]:max-w-56"
+            disabled={loading && !projects.length && !otherChats.length && !selectedProjectTitle}
+            title="Project"
+            type="button"
+            variant="ghost"
+          >
+            <Codicon className="shrink-0 text-(--ui-text-tertiary)" name={value ? 'root-folder' : 'comment-discussion'} size="0.8125rem" />
+            <span className="min-w-0 truncate">{selectedLabel}</span>
+            <Codicon className="shrink-0 text-(--ui-text-tertiary)" name="chevron-down" size="0.8125rem" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-[min(26rem,calc(100vw-2rem))] p-1.5">
+          <div className="grid max-h-[min(30rem,72vh)] gap-1 overflow-y-auto pr-1">
+            <ProjectSwitcherRow
+              active={!value}
+              meta={loading ? 'Loading projects...' : otherCountLabel}
+              onClick={() => {
+                onClearProject()
+                close()
+              }}
+              title="Other chats"
+            />
+            {otherChats.length ? (
+              <div className="grid gap-px pl-3">
+                {otherChats.map(session => (
+                  <ProjectSwitcherSessionRow
+                    key={session.id}
+                    onClick={() => {
+                      onClearProject()
+                      onResumeOtherSession(session.id)
+                      close()
+                    }}
+                    session={session}
+                  />
+                ))}
+              </div>
+            ) : null}
+            {projects.map(project => (
+              <div className="grid gap-px" key={project.id}>
+                <ProjectSwitcherRow
+                  active={selectedProjectKnown && project.id === value}
+                  meta={project.sessionCount > 0 ? `${project.sessionCount} ${project.sessionCount === 1 ? 'chat' : 'chats'}` : 'New draft'}
+                  onClick={() => openProject(project)}
+                  title={project.name}
+                />
+                {project.recentSessions.length ? (
+                  <div className="grid gap-px pl-3">
+                    {project.recentSessions.map(session => (
+                      <ProjectSwitcherSessionRow
+                        key={session.id}
+                        onClick={() => {
+                          onResumeProjectSession(session.id, project.id, project.name)
+                          close()
+                        }}
+                        session={session}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
       <Button
         aria-label="Create project"
         className="size-6 rounded-full border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) text-(--ui-text-secondary) hover:text-foreground [&_svg]:size-3.5!"
@@ -720,6 +712,46 @@ function ProjectHeaderSelect({
         <Codicon name="add" size="0.875rem" />
       </Button>
     </div>
+  )
+}
+
+function ProjectSwitcherRow({
+  active,
+  meta,
+  onClick,
+  title
+}: {
+  active: boolean
+  meta: string
+  onClick: () => void
+  title: string
+}) {
+  return (
+    <button
+      className={cn(
+        'grid min-h-8 min-w-0 gap-0.5 rounded-md border border-transparent px-2 py-1.5 text-left text-xs text-(--ui-text-secondary) transition-colors hover:border-(--ui-stroke-tertiary) hover:bg-(--ui-control-hover-background) hover:text-foreground focus-visible:border-(--ui-accent)/70 focus-visible:outline-none',
+        active && 'border-(--ui-accent)/35 bg-(--ui-control-active-background) text-foreground'
+      )}
+      onClick={onClick}
+      type="button"
+    >
+      <span className="truncate font-medium">{title}</span>
+      <span className="truncate text-[0.6875rem] text-(--ui-text-tertiary)">{meta}</span>
+    </button>
+  )
+}
+
+function ProjectSwitcherSessionRow({ onClick, session }: { onClick: () => void; session: NativeProjectChatSession }) {
+  return (
+    <button
+      className="flex min-h-7 min-w-0 items-center gap-1.5 rounded-md bg-transparent px-2 py-1 text-left text-xs text-(--ui-text-tertiary) transition-colors hover:bg-(--ui-control-hover-background) hover:text-foreground focus-visible:border-(--ui-accent)/70 focus-visible:outline-none"
+      onClick={onClick}
+      title={session.title || 'Chat'}
+      type="button"
+    >
+      <Codicon className="shrink-0 text-(--ui-text-quaternary)" name="comment" size="0.75rem" />
+      <span className="min-w-0 truncate">{session.title || 'Chat'}</span>
+    </button>
   )
 }
 
@@ -739,29 +771,26 @@ function NativeProjectIntakeDialog({
     setValue(current => ({ ...current, [key]: event.currentTarget.value }))
 
   const submit = async () => {
-    const parsed = parseNativeProjectIntake(value)
-
-    if (!parsed.name || !parsed.goal) {
-      setError('Project name and goal are required.')
-
-      return
-    }
-
     setSaving(true)
     setError('')
 
     try {
-      const project = await createMissionControlProject(buildNativeProjectCreatePayload(parsed))
-      const createdProjectId = project.project.project_id || parsed.projectId
-      const createdProjectName = project.project.name || parsed.name
+      const result = await createNativeProjectFromIntake(value, {
+        createProject: createMissionControlProject,
+        createProjectBrief: createMissionControlProjectBrief
+      })
 
-      await createMissionControlProjectBrief(
-        buildNativeProjectBriefCreatePayload(parsed, createdProjectId, createdProjectName)
-      )
+      if ('error' in result) {
+        setError(result.error)
 
-      notifyMissionControlProjectCreated({ projectId: createdProjectId, projectName: createdProjectName })
-      onCreated(createdProjectId, createdProjectName)
-      notify({ durationMs: 2_000, kind: 'success', message: `Created ${createdProjectName}` })
+        return
+      }
+
+      const { projectId, projectName } = result
+
+      notifyMissionControlProjectCreated({ projectId, projectName })
+      onCreated(projectId, projectName)
+      notify({ durationMs: 2_000, kind: 'success', message: `Created ${projectName}` })
       setValue(emptyNativeProjectIntake())
       onOpenChange(false)
     } catch (err) {
@@ -779,7 +808,7 @@ function NativeProjectIntakeDialog({
         <DialogHeader>
           <DialogTitle>Create project</DialogTitle>
           <DialogDescription>
-            Name the work, give Jenny the goal, and keep detailed guardrails optional.
+            Name the work, give Jenny the goal, and keep advanced setup optional.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -1000,6 +1029,7 @@ export function ChatView({
   onPickImages,
   onRemoveAttachment,
   onOpenProjectSession,
+  onResumeSession,
   onSubmit,
   onThreadMessagesChange,
   onEdit,
@@ -1038,7 +1068,7 @@ export function ChatView({
   })
   const projectHomeSessionsQuery = useQuery({
     enabled: gatewayOpen,
-    queryFn: getMissionControlProjectSessions,
+    queryFn: () => getMissionControlProjectSessions(NATIVE_PROJECT_SESSION_LIMIT),
     queryKey: ['mission-control-project-sessions-native-chat-home'],
     staleTime: 30_000
   })
@@ -1058,10 +1088,11 @@ export function ChatView({
       window.removeEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED, onProjectRecordsChanged)
     }
   }, [refetchProjectHome, refetchProjectHomeSessions])
-  const projectHomeOptions = useMemo(
-    () => projectChatOptions(projectHomeQuery.data?.projects.map(item => item.record) ?? [], projectHomeSessionsQuery.data?.groups ?? []),
+  const projectHomeModel = useMemo(
+    () => nativeProjectChatModel(projectHomeQuery.data?.projects.map(item => item.record) ?? [], projectHomeSessionsQuery.data?.groups ?? []),
     [projectHomeQuery.data, projectHomeSessionsQuery.data]
   )
+  const projectHomeOptions = projectHomeModel.projects
 
   const blankNativeChat = !isRoutedSessionView && !selectedSessionId && !activeSessionId && messages.length === 0
   const showProjectHomeIntro =
@@ -1212,6 +1243,7 @@ export function ChatView({
         onDeleteSelectedSession={onDeleteSelectedSession}
         onOpenProjectSession={onOpenProjectSession}
         onPickFiles={onPickFiles}
+        onResumeSession={onResumeSession}
         onStartProjectChat={onStartProjectChat}
         onToggleSelectedPin={onToggleSelectedPin}
         selectedSessionId={selectedSessionId}
@@ -1240,8 +1272,11 @@ export function ChatView({
               showIntro
                 ? {
                     onCreateProject: () => setProjectIntakeOpen(true),
+                    onResumeOtherSession: onResumeSession,
                     onResumeProjectSession: onOpenProjectSession,
                     onSelectProject: onStartProjectChat,
+                    otherChatCount: projectHomeModel.otherChatCount,
+                    otherChats: projectHomeModel.otherChats,
                     personality: introPersonality,
                     projectId: selectedProjectId.trim(),
                     projectName: selectedProjectName.trim(),

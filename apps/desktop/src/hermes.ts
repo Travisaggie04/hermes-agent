@@ -1052,8 +1052,13 @@ export function getMissionControlProjectState(): Promise<MissionControlProjectSt
   return window.hermesDesktop.api<MissionControlProjectStateResponse>({ path: `${MISSION_CONTROL_API}/workspace/project-state` })
 }
 
-export function getMissionControlProjectSessions(): Promise<MissionControlProjectSessionsResponse> {
-  return window.hermesDesktop.api<MissionControlProjectSessionsResponse>({ path: `${MISSION_CONTROL_API}/workspace/project-sessions` })
+export function getMissionControlProjectSessions(limit?: number): Promise<MissionControlProjectSessionsResponse> {
+  const appliedLimit = typeof limit === 'number' && Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : null
+  const query = appliedLimit ? `?limit=${encodeURIComponent(String(appliedLimit))}` : ''
+
+  return window.hermesDesktop.api<MissionControlProjectSessionsResponse>({
+    path: `${MISSION_CONTROL_API}/workspace/project-sessions${query}`
+  })
 }
 
 // Mutations take the owning `profile` so Electron routes them to that profile's
