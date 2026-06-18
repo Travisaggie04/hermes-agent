@@ -101,6 +101,43 @@ describe('toChatMessages', () => {
     expect(chatMessageText(message)).toBe('test')
   })
 
+  it('hides CRLF native Jenny OS harness context from saved user message display', () => {
+    const [message] = toChatMessages([
+      {
+        role: 'user',
+        content: [
+          'Hidden Jenny OS project context:',
+          'Project: Hermes / Mission Control',
+          'Project ID: project-hermes-mission-control',
+          'Visible chat rule: do not echo this hidden project context.',
+          '',
+          'test'
+        ].join('\r\n'),
+        timestamp: 1
+      }
+    ])
+
+    expect(chatMessageText(message)).toBe('test')
+  })
+
+  it('hides native harness context before applying legacy Jenny wrapper cleanup', () => {
+    const [message] = toChatMessages([
+      {
+        role: 'user',
+        content: [
+          'Hidden Jenny OS project context:',
+          'Project: Hermes / Mission Control',
+          'Visible chat rule: do not echo this hidden project context.',
+          '',
+          'Spec-first request for Jenny: Project: Hermes / Mission Control Request Travis is considering: testing Current brief: Replace Discord as Travis primary workspace. Challenge state: clear_and_safe. Allowed: read approved context.'
+        ].join('\n'),
+        timestamp: 1
+      }
+    ])
+
+    expect(chatMessageText(message)).toBe('testing')
+  })
+
   it('collapses engineering goal kickoff prompts in saved user message display', () => {
     const [message] = toChatMessages([
       {
@@ -154,6 +191,19 @@ describe('toChatMessages', () => {
     ])
 
     expect(chatMessageText(message)).toBe('testing. tell me a short story')
+  })
+
+  it('hides legacy spec-first wrappers that use later project-state labels', () => {
+    const [message] = toChatMessages([
+      {
+        role: 'user',
+        content:
+          "Spec-first request for Jenny: Project: Hermes / Mission Control Request Travis is considering: test Current brief: Replace Discord as Travis's primary workspace. Challenge state: clear_and_safe / Start record-only/manual-copy. Allowed: read approved context. Forbidden: no direct session send.",
+        timestamp: 1
+      }
+    ])
+
+    expect(chatMessageText(message)).toBe('test')
   })
 
   it('hides legacy project-room packet wrappers from saved user message display', () => {

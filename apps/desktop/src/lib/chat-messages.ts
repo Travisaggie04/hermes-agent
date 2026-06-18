@@ -113,15 +113,17 @@ export function chatMessageText(message: ChatMessage): string {
 const ATTACHED_CONTEXT_MARKER_RE = /(?:^|\n)--- Attached Context ---\s*\n/
 const CONTEXT_WARNINGS_MARKER_RE = /(?:^|\n)--- Context Warnings ---[\s\S]*$/
 const CONTEXT_REF_RE = /@(file|folder|url|image|tool|terminal):(?:"[^"\n]+"|'[^'\n]+'|`[^`\n]+`|\S+)/g
-const HIDDEN_JENNY_OS_CONTEXT_RE = /^Hidden Jenny OS project context:\s*\n[\s\S]*?\n\n/
+const HIDDEN_JENNY_OS_CONTEXT_RE = /^Hidden Jenny OS project context:[ \t]*\r?\n[\s\S]*?(?:\r?\n){2}/
 const ENGINEERING_GOAL_PROMPT_RE =
   /^\[(Engineering goal kickoff|Continuing engineering goal)\]\s*Objective:\s*([\s\S]*?)(?=\n\n(?:Additional user criteria:|Goal loop state:|Operate as a senior engineering agent\.)|$)/i
 const STANDING_GOAL_PROMPT_RE =
   /^\[Continuing toward your standing goal\]\s*Goal:\s*([\s\S]*?)(?=\n\n(?:Additional criteria the user added mid-loop:|Continue working toward)|$)/i
 const LEGACY_JENNY_REQUEST_STOP_LABELS =
   'Current intake:|Request intake:|Current brief:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:'
-const LEGACY_SPEC_FIRST_REQUEST_RE =
-  /^Spec-first request for Jenny:\s*Project:\s*.+?\s+Request Travis is considering:\s*([\s\S]*?)(?=\s+Current intake:|$)/i
+const LEGACY_SPEC_FIRST_REQUEST_RE = new RegExp(
+  `^Spec-first request for Jenny:\\s*Project:\\s*.+?\\s+Request Travis is considering:\\s*([\\s\\S]*?)(?=\\s+(?:${LEGACY_JENNY_REQUEST_STOP_LABELS})|$)`,
+  'i'
+)
 const LEGACY_PROJECT_ROOM_REQUEST_RE = new RegExp(
   `^Project room request:\\s*(?:.+?\\s+)?Request:\\s*([\\s\\S]*?)(?=\\s+(?:${LEGACY_JENNY_REQUEST_STOP_LABELS})|$)`,
   'i'
@@ -220,19 +222,15 @@ function goalControlPromptText(value: string): string | null {
 }
 
 function visibleUserMessageText(value: string): string {
-  const goalControl = goalControlPromptText(value)
+  const withoutHiddenContext = value.replace(HIDDEN_JENNY_OS_CONTEXT_RE, '').trimStart()
+  const displayValue = withoutHiddenContext !== value ? withoutHiddenContext : value
+  const goalControl = goalControlPromptText(displayValue)
 
   if (goalControl) {
     return goalControl
   }
 
-  const withoutHiddenContext = value.replace(HIDDEN_JENNY_OS_CONTEXT_RE, '').trimStart()
-
-  if (withoutHiddenContext !== value) {
-    return withoutHiddenContext
-  }
-
-  return legacyJennyRequestText(value) ?? value
+  return legacyJennyRequestText(displayValue) ?? displayValue
 }
 
 function displayContentForMessage(role: SessionMessage['role'], content: unknown): string {
