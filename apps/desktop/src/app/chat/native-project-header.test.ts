@@ -286,12 +286,27 @@ describe('native project chat header', () => {
     expect(source).toContain('Read-only status for {projectName || \'this chat\'}')
     expect(source).toContain('No live subagent activity for this chat yet.')
     expect(source).toContain("runningSubagents > 0 ? `Activity ${runningSubagents}` : 'Activity'")
+    expect(source).toContain('onOpenSubagentSession={sessionId => {')
+    expect(source).toContain('setActivityOpen(false)')
+    expect(source).toContain('onResumeSession(sessionId)')
     expect(source).toContain('className="h-6 shrink-0 px-2 text-[0.6875rem]"')
     expect(source).toContain('className="min-[46rem]:hidden"')
     expect(source).not.toContain('navigate(AGENTS_ROUTE)')
     expect(source).not.toContain('Run async agent')
     expect(source).not.toContain('Start async agent')
     expect(source).not.toContain('className="hidden h-6 shrink-0 px-2 text-[0.6875rem] min-[46rem]:inline-flex"')
+  })
+
+  it('lets child-session ids open the subagent transcript from the activity drawer', () => {
+    expect(source).toContain('onOpenSubagentSession: (sessionId: string) => void')
+    expect(source).toContain('function NativeJennyActivityRow({')
+    expect(source).toContain('onOpenSession: (sessionId: string) => void')
+    expect(source).toContain('const childSessionId = item.sessionId')
+    expect(source).toContain('{childSessionId && (')
+    expect(source).toContain('onClick={() => onOpenSession(childSessionId)}')
+    expect(source).toContain('Open child session ${childSessionId}')
+    expect(source).toContain('Open session')
+    expect(source).not.toContain('subagent.interrupt')
   })
 
   it('shows central Jenny action policy only inside the read-only activity details', () => {
