@@ -65,6 +65,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
     src = page_source()
     for expected in [
         "Project chat workspace",
+        "setTitle(\"Jenny\")",
         "w-full min-w-0 max-w-full",
         "[&_*]:box-border",
         "mt-0 flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden",
@@ -210,7 +211,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "COMPACT_JENNY_MESSAGE_LIMIT - 3",
         "Queue for Jenny bridge",
         "Refresh replies",
-        "flex h-[100dvh] min-h-0 w-full min-w-0 max-w-full touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none",
+        "flex h-[calc(100dvh-7rem)] max-h-[calc(100dvh-7rem)] min-h-0 w-full min-w-0 max-w-full touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none",
         "sr-only",
         "min-h-0 min-w-0 max-w-full flex-1 overflow-hidden",
         "sr-only order-2 min-w-0 max-w-full overflow-hidden",
@@ -224,7 +225,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "min-w-0 max-w-full overflow-hidden rounded-md",
         "block max-w-full truncate font-semibold",
         "grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between",
-        "w-full rounded-lg border border-emerald-500/40",
+        "min-h-12 rounded-full border border-emerald-500/40",
         "projectRoomProjects",
         "canonicalRealProjects",
         "projects={projectRoomProjects}",
@@ -359,12 +360,14 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
     src = page_source()
     for expected in [
         "overflow-x-hidden",
-        "w-full min-w-0 max-w-full touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none",
+        "h-[calc(100dvh-7rem)] max-h-[calc(100dvh-7rem)] min-h-0 w-full min-w-0 max-w-full touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none",
         "h-full min-h-0 w-full min-w-0 max-w-full",
         "min-[420px]:grid-cols-2",
         "overflow-y-auto overflow-x-hidden overscroll-contain",
-        "sticky bottom-0 z-10",
-        "pb-[calc(env(safe-area-inset-bottom)+0.5rem)]",
+        "[-webkit-overflow-scrolling:touch]",
+        "pb-[max(env(safe-area-inset-bottom),0.75rem)]",
+        "aria-label=\"Project chat composer\"",
+        "max-h-28 min-h-12",
         "[overflow-wrap:anywhere]",
         "[word-break:break-word]",
         "min-w-0 max-w-full",
@@ -388,9 +391,11 @@ def test_compact_project_chat_keeps_primary_flow_chat_first() -> None:
     assert 'className="sr-only"' in transcript_src
     assert 'Conversation' in transcript_src
     assert "rounded-md border border-[#f3ebda]/10 bg-[#120d17] p-2" not in transcript_src
-    composer_section_start = room.rindex("sticky bottom-0 z-10", 0, composer_start)
+    composer_section_start = room.rindex('className="z-10 mt-2 max-w-full shrink-0', 0, composer_start)
     composer_src = room[composer_section_start:composer_start + 500]
-    assert "sticky bottom-0 z-10" in composer_src
+    assert "shrink-0" in composer_src
+    assert "rounded-[1.75rem]" in composer_src
+    assert "max-h-28 min-h-12" in composer_src
     assert "backdrop-blur" in composer_src
     assert "<summary" in transcript_src
     assert "Review reply" in transcript_src

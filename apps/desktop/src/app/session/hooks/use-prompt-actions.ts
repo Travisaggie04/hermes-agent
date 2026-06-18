@@ -158,7 +158,7 @@ function ensureNativeProjectSessionLink(storedSessionId: string | null, preview?
 
   createMissionControlSessionProjectLink({
     cwd_snapshot: $currentCwd.get().trim() || undefined,
-    link_method: 'chat-send',
+    link_method: 'manual',
     linked_by: 'desktop',
     profile: profile === 'default' ? undefined : profile,
     project_id: projectId,

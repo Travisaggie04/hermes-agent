@@ -243,7 +243,7 @@ describe('usePromptActions project harness', () => {
     })
     expect(createMissionControlSessionProjectLink).toHaveBeenCalledWith({
       cwd_snapshot: undefined,
-      link_method: 'chat-send',
+      link_method: 'manual',
       linked_by: 'desktop',
       profile: undefined,
       project_id: 'project-hermes-mission-control',

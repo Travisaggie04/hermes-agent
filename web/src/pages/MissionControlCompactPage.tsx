@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import { fetchJSON } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { usePageHeader } from "@/contexts/usePageHeader";
 
 const WORKSPACE_STATUS_URL = "/api/plugins/mission-control-governance/workspace-status";
 const WORKSPACE_PROJECTS_URL = "/api/plugins/mission-control-governance/workspace/projects";
@@ -1848,6 +1849,7 @@ async function loadCompactSnapshot(): Promise<CompactSnapshot> {
 }
 
 export default function MissionControlCompactPage() {
+  const { setTitle } = usePageHeader();
   const navigate = useNavigate();
   const [snapshot, setSnapshot] = useState<CompactSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1862,6 +1864,11 @@ export default function MissionControlCompactPage() {
   const [roomBusy, setRoomBusy] = useState(false);
   const [jennyRunElapsedSeconds, setJennyRunElapsedSeconds] = useState(0);
   const [jennyRunProgress, setJennyRunProgress] = useState<JennyRunProgress | null>(null);
+
+  useEffect(() => {
+    setTitle("Jenny");
+    return () => setTitle(null);
+  }, [setTitle]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2252,7 +2259,7 @@ export default function MissionControlCompactPage() {
   }
 
   return (
-    <main className="box-border flex h-[100dvh] min-h-0 w-full min-w-0 max-w-full touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none bg-[#0e0b12] px-1 py-1 pb-[env(safe-area-inset-bottom)] text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 [&_*]:box-border" data-testid="mission-control-compact-route">
+    <main className="box-border flex h-[calc(100dvh-7rem)] max-h-[calc(100dvh-7rem)] min-h-0 w-full min-w-0 max-w-full touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none bg-[#0e0b12] px-1 py-1 pb-[env(safe-area-inset-bottom)] text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 [&_*]:box-border" data-testid="mission-control-compact-route">
       <header className="sr-only">
         <p className="sr-only max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782] [overflow-wrap:anywhere]">
           <span className="font-serif text-lg italic text-[#d4a574]">IV.</span>
@@ -2800,7 +2807,7 @@ function CompactProjectRoom({
         </div>
       </div>
 
-      <article className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden p-2" data-testid="compact-project-room">
+      <article className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden p-2 pb-[max(env(safe-area-inset-bottom),0.75rem)]" data-testid="compact-project-room">
         <div className="sr-only grid min-w-0 gap-2 border-b border-[#f3ebda]/10 pb-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-2">
             <span className="sr-only">IV. — Jenny workspace</span>
@@ -2956,12 +2963,12 @@ function CompactProjectRoom({
           </div>
         </details>
 
-        <section className="mt-2 flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden overflow-x-clip p-0" aria-label="Project chat transcript">
+        <section className="mt-2 flex min-h-0 min-w-0 max-w-full flex-1 touch-pan-y flex-col overflow-hidden overflow-x-clip p-0" aria-label="Project chat transcript">
           <div className="sr-only">
             <h3 className="text-sm font-semibold text-[#f3ebda]">Conversation</h3>
             <span className="text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
           </div>
-          <div className="mt-2 grid min-h-0 min-w-0 max-w-full flex-1 content-start gap-2 overflow-y-auto overflow-x-hidden overscroll-contain pr-1">
+          <div className="mt-2 grid min-h-0 min-w-0 max-w-full flex-1 content-start gap-2 overflow-y-auto overflow-x-hidden overscroll-contain pr-1 [-webkit-overflow-scrolling:touch]">
             {chatMessages.length ? (
               chatMessages.map(chat => {
                 const replyReview = latestReviewByResponseId.get(chat.id)
@@ -3065,27 +3072,29 @@ function CompactProjectRoom({
           </div>
         </section>
 
-        <div className="sticky bottom-0 z-10 mt-2 max-w-full overflow-hidden overflow-x-clip rounded-md border border-[#f3ebda]/10 bg-[#15101a]/95 p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-18px_40px_rgba(14,11,18,0.88)] backdrop-blur">
+        <div className="z-10 mt-2 max-w-full shrink-0 overflow-hidden overflow-x-clip rounded-[1.75rem] border border-[#f3ebda]/10 bg-[#15101a]/95 p-2 shadow-[0_-18px_40px_rgba(14,11,18,0.88)] backdrop-blur" aria-label="Project chat composer">
           {reviewRequired ? (
             <p className="mb-2 max-w-full text-xs font-semibold text-amber-700 [overflow-wrap:anywhere] dark:text-amber-100" role="status">
               Review the latest Jenny reply in the chat before acting on it.
             </p>
           ) : null}
-          <label className="grid gap-1 text-sm font-medium">
-            <span className="sr-only">Message Jenny</span>
-            <textarea
-              className="min-h-16 w-full min-w-0 max-w-full rounded-md border border-[#f3ebda]/10 bg-[#0e0b12] px-3 py-2 text-sm text-[#f3ebda] outline-none transition placeholder:text-[#6e6353] focus:border-[#d4a574]/50 [overflow-wrap:anywhere] [word-break:break-word]"
-              disabled={paused}
-              onChange={event => onRequestChange(event.target.value)}
-              placeholder={paused ? "This project is on hold until Jenny is stable." : "Tell Jenny what you want to discuss or ask her to do next..."}
-              value={projectRequest}
-            />
-          </label>
+          <div className="flex min-w-0 items-end gap-2">
+            <label className="min-w-0 flex-1 text-sm font-medium">
+              <span className="sr-only">Message Jenny</span>
+              <textarea
+                className="max-h-28 min-h-12 w-full min-w-0 max-w-full resize-none rounded-2xl border border-[#f3ebda]/10 bg-[#0e0b12] px-3 py-3 text-base text-[#f3ebda] outline-none transition placeholder:text-[#6e6353] focus:border-[#d4a574]/50 [overflow-wrap:anywhere] [word-break:break-word]"
+                disabled={paused}
+                onChange={event => onRequestChange(event.target.value)}
+                placeholder={paused ? "This project is on hold until Jenny is stable." : "Tell Jenny what you want to discuss or ask her to do next..."}
+                value={projectRequest}
+              />
+            </label>
 
-          <div className="mt-2 flex min-w-0 justify-end">
-            <button className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300 min-[420px]:w-auto" disabled={busy || paused} onClick={onQueueBridge} type="button">
-              {sendButtonLabel}
-            </button>
+            <div className="flex min-w-0 shrink-0 justify-end">
+              <button className="min-h-12 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={busy || paused} onClick={onQueueBridge} type="button">
+                {sendButtonLabel}
+              </button>
+            </div>
           </div>
           <details className="hidden" hidden>
             <summary className="cursor-pointer text-sm font-semibold">Request options</summary>
