@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  JENNY_GOAL_LOOP_BLOCKED_AUDIT,
   JENNY_GOAL_LOOP_CHECKPOINTS,
+  JENNY_GOAL_LOOP_COMPLETION_AUDIT,
   JENNY_GOAL_LOOP_ID,
+  JENNY_GOAL_LOOP_PROGRESS_REPORT,
   JENNY_GOAL_LOOP_STOP_RULES,
   jennyHiddenGoalLoopContext
 } from './jenny-goal-loop'
@@ -18,6 +21,12 @@ describe('Jenny desktop goal loop context', () => {
     expect(JENNY_GOAL_LOOP_STOP_RULES).toContain(
       'do not mark work blocked unless the same blocker repeats and no safe progress remains'
     )
+    expect(JENNY_GOAL_LOOP_PROGRESS_REPORT).toContain('completed items')
+    expect(JENNY_GOAL_LOOP_COMPLETION_AUDIT).toContain('map every explicit requirement to current evidence')
+    expect(JENNY_GOAL_LOOP_COMPLETION_AUDIT).toContain('treat missing, indirect, or stale evidence as incomplete')
+    expect(JENNY_GOAL_LOOP_BLOCKED_AUDIT).toContain(
+      'name the exact missing input, failing command, or external dependency'
+    )
   })
 
   it('builds hidden context without visible command wording', () => {
@@ -25,6 +34,9 @@ describe('Jenny desktop goal loop context', () => {
 
     expect(context).toContain('Goal loop: jenny_os_goal_loop_v1.')
     expect(context).toContain('Checkpoint rules:')
+    expect(context).toContain('Progress report shape:')
+    expect(context).toContain('Completion audit:')
+    expect(context).toContain('Blocked audit:')
     expect(context).toContain('Stop rules:')
     expect(context).not.toContain('[Engineering goal kickoff]')
     expect(context).not.toContain('Spec-first request for Jenny')
