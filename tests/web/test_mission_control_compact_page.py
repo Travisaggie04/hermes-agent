@@ -137,6 +137,10 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "A message is waiting for Jenny; send your next message only after this reply finishes.",
         "Type one bounded project message, then tap Send.",
         "projectRequestPreview",
+        "stripHiddenJennyOsContext",
+        "Hidden Jenny OS project context:",
+        "Visible chat rule:",
+        "Project message",
         "cleanChatDisplayMessage",
         "user_message",
         "displayBody",
@@ -359,6 +363,21 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
     assert 'message.from_agent === "jenny" || message.status === "replied"' not in src
 
 
+def test_compact_chat_strips_hidden_jenny_context_from_user_preview() -> None:
+    src = page_source()
+    preview_fn = function_source(src, "projectRequestPreview")
+    stripper_fn = function_source(src, "stripHiddenJennyOsContext")
+
+    assert "stripHiddenJennyOsContext(value)" in preview_fn
+    assert 'return "Project message";' in preview_fn
+    assert "visibleValue" in preview_fn
+    assert "?? visibleValue" in preview_fn
+    assert "Hidden Jenny OS project context:" in stripper_fn
+    assert "Visible chat rule:" in stripper_fn
+    assert "blankSeparator" in stripper_fn
+    assert "visibleRuleIndex" in stripper_fn
+
+
 def test_compact_jenny_mailbox_payload_is_bounded() -> None:
     src = page_source()
     message_fn = function_source(src, "buildJennyMailboxMessage")
@@ -399,7 +418,10 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
         "min-w-0 max-w-full",
         "w-full max-w-full rounded-lg border px-3 py-2 text-sm",
         "sm:w-fit sm:max-w-[88%]",
-        "max-w-full overflow-visible whitespace-pre-wrap",
+        "max-w-full whitespace-pre-wrap break-words",
+        "max-h-[min(52dvh,32rem)] touch-pan-y overflow-y-auto overscroll-contain",
+        "chat.speaker === \"Jenny\"",
+        ": \"overflow-visible\"",
         "max-w-full overflow-hidden",
         "whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
         "grid min-w-0 grid-cols-1 gap-2 text-xs sm:grid-cols-2",

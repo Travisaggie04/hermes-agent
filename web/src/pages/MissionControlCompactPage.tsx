@@ -497,8 +497,36 @@ function compactText(value: string | string[] | undefined, maxChars: number): st
   return normalized.length > maxChars ? `${normalized.slice(0, Math.max(0, maxChars - 3)).trim()}...` : normalized;
 }
 
+function stripHiddenJennyOsContext(value: string): string {
+  if (!/^Hidden Jenny OS project context:/i.test(value.trimStart())) {
+    return value;
+  }
+
+  const rest = value.trimStart().replace(/^Hidden Jenny OS project context:[ \t]*\r?\n/i, "");
+  const blankSeparator = rest.match(/\r?\n[ \t]*\r?\n/);
+
+  if (blankSeparator?.index !== undefined) {
+    return rest.slice(blankSeparator.index + blankSeparator[0].length).trimStart();
+  }
+
+  const lines = rest.split(/\r?\n/);
+  const visibleRuleIndex = lines.findIndex(line => /^Visible chat rule:/i.test(line.trim()));
+
+  if (visibleRuleIndex >= 0) {
+    return lines.slice(visibleRuleIndex + 1).join("\n").trimStart();
+  }
+
+  return "";
+}
+
 function projectRequestPreview(value: string, maxChars: number): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
+  const visibleValue = stripHiddenJennyOsContext(value);
+  const normalized = visibleValue.replace(/\s+/g, " ").trim();
+
+  if (!normalized && /^Hidden Jenny OS project context:/i.test(value.trimStart())) {
+    return "Project message";
+  }
+
   const specFirstRequestMatch = normalized.match(
     /^Spec-first request for Jenny:\s*Project:\s*.+?\s+Request Travis is considering:\s*([\s\S]*?)(?=\s+Current intake:|$)/i,
   );
@@ -514,7 +542,7 @@ function projectRequestPreview(value: string, maxChars: number): string {
   const fallbackMatch = normalized.match(
     /^(.+?)\s+(?=Current brief:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:)/i,
   );
-  const candidate = specFirstRequestMatch?.[1] ?? projectRoomRequestMatch?.[1] ?? requestMatch?.[1] ?? inlineRequestMatch?.[1] ?? fallbackMatch?.[1] ?? value;
+  const candidate = specFirstRequestMatch?.[1] ?? projectRoomRequestMatch?.[1] ?? requestMatch?.[1] ?? inlineRequestMatch?.[1] ?? fallbackMatch?.[1] ?? visibleValue;
   return compactText(candidate, maxChars);
 }
 
@@ -3056,7 +3084,15 @@ function CompactProjectRoom({
                     <span className="font-semibold">{chat.speaker}</span>
                     <span className="min-w-0 text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chat.meta}</span>
                   </div>
-                  <p className="max-w-full overflow-visible whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word]" data-testid={chat.speaker === "Jenny" ? "compact-jenny-reply-body" : undefined}>
+                  <p
+                    className={cn(
+                      "max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word]",
+                      chat.speaker === "Jenny"
+                        ? "max-h-[min(52dvh,32rem)] touch-pan-y overflow-y-auto overscroll-contain pr-1 [-webkit-overflow-scrolling:touch]"
+                        : "overflow-visible",
+                    )}
+                    data-testid={chat.speaker === "Jenny" ? "compact-jenny-reply-body" : undefined}
+                  >
                     {chat.speaker === "You" ? chat.displayBody ?? projectRequestPreview(chat.body, 750) : chat.body}
                   </p>
                   {chat.speaker === "Jenny" ? (
