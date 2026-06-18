@@ -1,11 +1,12 @@
 import type { AppendMessage } from '@assistant-ui/react'
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, render, waitFor } from '@testing-library/react'
 import type { MutableRefObject } from 'react'
 import { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createMissionControlSessionProjectLink } from '@/hermes'
 import { type ChatMessage, chatMessageText } from '@/lib/chat-messages'
+import { $notifications, clearNotifications } from '@/store/notifications'
 import {
   $messages,
   $sessions,
@@ -116,6 +117,7 @@ describe('usePromptActions /title', () => {
   afterEach(() => {
     cleanup()
     $messages.set([])
+    clearNotifications()
     setBusy(false)
     setAwaitingResponse(false)
     vi.restoreAllMocks()
@@ -335,6 +337,13 @@ describe('usePromptActions project harness', () => {
       session_id: RUNTIME_SESSION_ID,
       hidden_context: expect.stringContaining('Project: Tool & Tally'),
       text: expect.stringContaining('keep going')
+    })
+    await waitFor(() => {
+      expect($notifications.get()[0]).toMatchObject({
+        kind: 'warning',
+        message: 'Jenny can still reply. This chat may appear in Other chats instead of Tool & Tally.',
+        title: 'Chat not filed yet'
+      })
     })
   })
 
