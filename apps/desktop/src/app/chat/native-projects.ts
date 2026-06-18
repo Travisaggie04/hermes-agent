@@ -43,6 +43,19 @@ export const DEFAULT_NATIVE_CHAT_PROJECTS: MissionControlProjectRecord[] = [
   }
 ]
 
+function isInternalProject(project: MissionControlProjectRecord): boolean {
+  const id = project.project_id?.trim().toLowerCase() || ''
+  const name = project.name?.trim().toLowerCase() || ''
+
+  return (
+    id.startsWith('project-smoke-') ||
+    id.includes('smoke-test') ||
+    id.includes('fixture') ||
+    /\bsmoke test\b/.test(name) ||
+    /\bfixture\b/.test(name)
+  )
+}
+
 export function nativeChatProjects(projects: MissionControlProjectRecord[] = []): MissionControlProjectRecord[] {
   const seen = new Set<string>()
   const out: MissionControlProjectRecord[] = []
@@ -51,7 +64,7 @@ export function nativeChatProjects(projects: MissionControlProjectRecord[] = [])
     const id = project.project_id?.trim()
     const name = project.name?.trim()
 
-    if (!id || !name || seen.has(id)) {
+    if (!id || !name || seen.has(id) || isInternalProject(project)) {
       continue
     }
 
