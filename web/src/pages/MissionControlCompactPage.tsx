@@ -24,6 +24,7 @@ const WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL = "/api/plugins/mission-control-
 const WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/answer-once";
 const WORKSPACE_PROJECT_STATE_URL = "/api/plugins/mission-control-governance/workspace/project-state";
 const WORKSPACE_PROFILE_MEMORY_STORAGE_URL = "/api/plugins/mission-control-governance/workspace/profile-memory-storage";
+const MODEL_INFO_URL = "/api/model/info";
 const COMPACT_JENNY_MESSAGE_LIMIT = 1900;
 
 const REAL_PROJECT_IDS = [
@@ -381,6 +382,11 @@ interface ProfileMemoryStorage {
   total_profile_data_bytes?: number;
   total_recall_file_bytes?: number;
   total_user_bytes?: number;
+}
+
+interface CompactModelInfo {
+  model?: string;
+  provider?: string;
 }
 
 interface CompactSnapshot {
@@ -1434,6 +1440,13 @@ function formatPercent(value: unknown): string {
   return `${Math.max(0, Math.round(percent))}%`;
 }
 
+function compactModelLabel(info: CompactModelInfo | null): string {
+  const provider = info?.provider?.trim();
+  const model = info?.model?.trim();
+  if (provider && model) return `${provider} / ${model}`;
+  return model || provider || "model unknown";
+}
+
 function latestForProject<T extends { project_id?: string }>(projectId: string, values: T[]): T | undefined {
   return [...values].reverse().find(value => value.project_id === projectId);
 }
@@ -1880,6 +1893,7 @@ export default function MissionControlCompactPage() {
   const [roomBusy, setRoomBusy] = useState(false);
   const [jennyRunElapsedSeconds, setJennyRunElapsedSeconds] = useState(0);
   const [jennyRunProgress, setJennyRunProgress] = useState<JennyRunProgress | null>(null);
+  const [modelInfo, setModelInfo] = useState<CompactModelInfo | null>(null);
 
   useEffect(() => {
     setTitle("Jenny");
@@ -1897,6 +1911,17 @@ export default function MissionControlCompactPage() {
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadMissionControlEndpoint<CompactModelInfo | null>("model info", () => fetchJSON<CompactModelInfo>(MODEL_INFO_URL), null)
+      .then(info => {
+        if (!cancelled) setModelInfo(info);
       });
     return () => {
       cancelled = true;
@@ -2355,6 +2380,7 @@ export default function MissionControlCompactPage() {
               jennyRunElapsedSeconds={jennyRunElapsedSeconds}
               jennyRunProgress={jennyRunProgress}
               memoryStorage={snapshot?.memoryStorage ?? {}}
+              modelLabel={compactModelLabel(modelInfo)}
               replyReviews={snapshot?.jennyReplyReviews.filter(review => review.project_id === selectedProjectView.project.project_id) ?? []}
               onCopyPacket={() => void copyPhoneSafePacket(selectedProjectView)}
               onQueueBridge={() => void queueJennyBridgeMessage(selectedProjectView)}
@@ -2635,6 +2661,7 @@ function CompactProjectRoom({
   jennyRunProgress,
   memoryStorage,
   message,
+  modelLabel,
   onCopyPacket,
   onQueueBridge,
   onQueueHermesUpdate,
@@ -2663,6 +2690,7 @@ function CompactProjectRoom({
   jennyRunProgress: JennyRunProgress | null;
   memoryStorage: ProfileMemoryStorage;
   message: string;
+  modelLabel: string;
   onCopyPacket: () => void;
   onQueueBridge: () => void;
   onQueueHermesUpdate?: () => void;
@@ -3025,7 +3053,7 @@ function CompactProjectRoom({
                     <span className="min-w-0 text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chat.meta}</span>
                   </div>
                   <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word]">
-                    {chat.speaker === "You" ? chat.displayBody ?? projectRequestPreview(chat.body, 750) : compactText(chat.body, 750)}
+                    {chat.speaker === "You" ? chat.displayBody ?? projectRequestPreview(chat.body, 750) : chat.body}
                   </p>
                   {chat.speaker === "Jenny" ? (
                     <details className="mt-2 min-w-0 border-t border-[#f3ebda]/10 pt-2 text-[0.68rem]">
@@ -3115,6 +3143,14 @@ function CompactProjectRoom({
               Review the latest Jenny reply in the chat before acting on it.
             </p>
           ) : null}
+          <div className="mb-2 flex min-w-0 max-w-full flex-wrap items-center gap-1.5 text-[0.68rem]" aria-label="Compact chat tools">
+            <span className="rounded-full border border-[#f3ebda]/15 bg-[#0e0b12]/80 px-2 py-1 font-semibold text-[#c9b8a2] [overflow-wrap:anywhere]">
+              Attach: desktop app
+            </span>
+            <span className="min-w-0 max-w-full rounded-full border border-[#f3ebda]/15 bg-[#0e0b12]/80 px-2 py-1 font-semibold text-[#c9b8a2] [overflow-wrap:anywhere]">
+              Model: {modelLabel}
+            </span>
+          </div>
           <div className="flex min-w-0 items-end gap-2">
             <label className="min-w-0 flex-1 text-sm font-medium">
               <span className="sr-only">Message Jenny</span>

@@ -49,11 +49,16 @@ describe('native project chat header', () => {
   it('makes attachments and the selected model discoverable in project chat', () => {
     expect(source).toContain("label: selectedProjectTitle ? 'Attach files / context' : 'Add context'")
     expect(source).toContain('onPickFiles={onPickFiles}')
+    expect(source).toContain('aria-label="Attach files to this Jenny project chat"')
     expect(source).toContain('title="Attach files to this Jenny project chat"')
+    expect(source).toContain('className="h-6 shrink-0 gap-1 px-2 text-[0.6875rem]"')
     expect(source).toContain('aria-label="Switch model for Jenny OS project chat"')
     expect(source).toContain('formatModelStatusLabel(currentModel')
     expect(source).toContain('onClick={() => setModelPickerOpen(true)}')
+    expect(source).toContain('className="h-6 max-w-28 shrink-0 px-2 text-[0.6875rem] min-[52rem]:max-w-44"')
     expect(source).toContain('Model {modelStatusLabel}')
+    expect(source).not.toContain('className="hidden h-6 shrink-0 gap-1 px-2 text-[0.6875rem] min-[42rem]:inline-flex"')
+    expect(source).not.toContain('className="hidden h-6 max-w-44 shrink-0 px-2 text-[0.6875rem] min-[52rem]:inline-flex"')
   })
 
   it('lets the native chat header switch Jenny projects without opening Mission Control', () => {

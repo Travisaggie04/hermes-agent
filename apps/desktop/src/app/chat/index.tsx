@@ -320,24 +320,28 @@ function ChatHeader({
         {selectedProjectTitle && (
           <>
             <Button
-              className="hidden h-6 shrink-0 gap-1 px-2 text-[0.6875rem] min-[42rem]:inline-flex"
+              aria-label="Attach files to this Jenny project chat"
+              className="h-6 shrink-0 gap-1 px-2 text-[0.6875rem]"
               onClick={onPickFiles}
               title="Attach files to this Jenny project chat"
               type="button"
               variant="outline"
             >
               <Codicon name="add" size="0.8125rem" />
-              <span>Attach</span>
+              <span className="hidden min-[42rem]:inline">Attach</span>
             </Button>
             <Button
               aria-label="Switch model for Jenny OS project chat"
-              className="hidden h-6 max-w-44 shrink-0 px-2 text-[0.6875rem] min-[52rem]:inline-flex"
+              className="h-6 max-w-28 shrink-0 px-2 text-[0.6875rem] min-[52rem]:max-w-44"
               onClick={() => setModelPickerOpen(true)}
               title={`Switch model. Current: ${modelStatusLabel}`}
               type="button"
               variant="outline"
             >
-              <span className="min-w-0 truncate">Model {modelStatusLabel}</span>
+              <span className="min-w-0 truncate">
+                <span className="min-[52rem]:hidden">Model</span>
+                <span className="hidden min-[52rem]:inline">Model {modelStatusLabel}</span>
+              </span>
             </Button>
           </>
         )}
