@@ -31,7 +31,8 @@ describe('native project chat header', () => {
 
   it('shows the extra Jenny status strip while Jenny is queued, working, failed, or freshly replied', () => {
     expect(source).toContain('const latestChatReplied = latestVisibleAssistantReply(messages)')
-    expect(source).toContain('...(latestChatReplied ? ([\'ok\'] as const) : [])')
+    expect(source).toContain('const showRepliedStatus = latestChatReplied || latestReplyAttempt?.status === \'replied\'')
+    expect(source).toContain('...(showRepliedStatus ? ([\'ok\'] as const) : [])')
     expect(source).toContain('if (!visibleStatusTones.has(jennyStatus.tone)) {')
     expect(source).toContain('return null')
     expect(source).toContain("jennyStatus.tone === 'warn'")
@@ -219,6 +220,14 @@ describe('native project chat header', () => {
     expect(source).not.toContain('activeTurnRunning={busy && awaitingResponse}')
     expect(source).toContain('awaitingResponse={awaitingResponse}')
     expect(source).toContain("awaitingResponse ? 'Waiting for Jenny' : 'Jenny is working'")
+  })
+
+  it('lets the native reply-attempt lifecycle drive the visible Jenny status', () => {
+    expect(source).toContain("import { latestNativeJennyReplyAttempt } from '@/lib/native-jenny-reply-loop'")
+    expect(source).toContain('const latestReplyAttempt = latestNativeJennyReplyAttempt(messages)')
+    expect(source).toContain('replyAttemptError: latestReplyAttempt?.error')
+    expect(source).toContain('replyAttemptStatus: latestReplyAttempt?.status')
+    expect(source).toContain("latestReplyAttempt?.status === 'replied'")
   })
 
   it('lets native chat failures drive Jenny status before stale background records', () => {

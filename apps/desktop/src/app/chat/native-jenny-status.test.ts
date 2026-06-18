@@ -228,6 +228,78 @@ describe('nativeJennyStatus', () => {
     expectCleanVisibleStatus(status)
   })
 
+  it('uses explicit native reply attempts before inferred running state', () => {
+    expect(
+      nativeJennyStatus({
+        activeTurnRunning: true,
+        awaitingResponse: false,
+        gatewayOpen: true,
+        projectId: 'project-hermes',
+        replyAttemptStatus: 'queued'
+      })
+    ).toMatchObject({
+      detail: 'Your message was sent. Jenny will reply here.',
+      label: 'Jenny queued',
+      summary: 'Waiting for Jenny',
+      tone: 'pending'
+    })
+
+    expect(
+      nativeJennyStatus({
+        activeTurnRunning: false,
+        gatewayOpen: true,
+        projectId: 'project-hermes',
+        replyAttemptStatus: 'working'
+      })
+    ).toMatchObject({
+      detail: 'Jenny is working. Progress and the final reply appear here.',
+      label: 'Jenny working',
+      summary: 'Progress appears here',
+      tone: 'working'
+    })
+  })
+
+  it('uses explicit native reply completion before stale bridge status', () => {
+    expect(
+      nativeJennyStatus({
+        bridgeStatus: { last_error: 'stale bridge field is too large' },
+        gatewayOpen: true,
+        projectId: 'project-hermes',
+        replyAttemptStatus: 'replied'
+      })
+    ).toMatchObject({
+      detail: 'Jenny replied. Review the latest answer before relying on it.',
+      label: 'Jenny replied',
+      summary: 'Review latest reply',
+      tone: 'ok'
+    })
+  })
+
+  it('uses explicit native reply failure before stale bridge status', () => {
+    const status = nativeJennyStatus({
+      bridgeStatus: {
+        last_response_at: '2026-06-16T19:59:55Z',
+        last_response_request_id: 'old-reply',
+        last_status: 'replied',
+        pending_count: 0,
+        visible_pending_count: 0
+      },
+      gatewayOpen: true,
+      latestChatReplied: true,
+      projectId: 'project-hermes',
+      replyAttemptError: 'Error invoking remote method: Error: app-server startup failed',
+      replyAttemptStatus: 'failed'
+    })
+
+    expect(status).toMatchObject({
+      detail: 'Jenny failed before finishing a reply. Retry once, and open details if it fails again.',
+      label: 'Jenny failed',
+      summary: 'Retry available',
+      tone: 'warn'
+    })
+    expectCleanVisibleStatus(status)
+  })
+
   it('shows a fresh foreground watch poll as active work', () => {
     const status = nativeJennyStatus({
       gatewayOpen: true,

@@ -319,6 +319,9 @@ describe('usePromptActions project harness', () => {
       awaitingResponse: true
     })
     expect(latestState.messages.map(chatMessageText)).toEqual(['test'])
+    expect(latestState.messages.find(message => message.role === 'user')?.nativeJennyReplyAttempt).toMatchObject({
+      status: 'queued'
+    })
   })
 
   it('does not block Jenny replies if background project filing fails', async () => {
@@ -377,6 +380,10 @@ describe('usePromptActions project harness', () => {
     expect(assistantError?.error).toBe('Jenny cannot reach the Hermes gateway. Reconnect the gateway, then retry from this chat.')
     expect(assistantError?.error).not.toContain('ECONNREFUSED')
     expect(assistantError?.error).not.toContain('100.115.125.111')
+    expect(states.at(-1)?.messages.find(message => message.role === 'user')?.nativeJennyReplyAttempt).toMatchObject({
+      error: 'Jenny cannot reach the Hermes gateway. Reconnect the gateway, then retry from this chat.',
+      status: 'failed'
+    })
   })
 
   it('starts /goal without rendering the engineering kickoff as Travis visible text', async () => {
@@ -501,6 +508,10 @@ describe('usePromptActions project harness', () => {
     const assistantError = states.flatMap(state => state.messages).findLast(message => message.role === 'assistant' && message.error)
     expect(assistantError?.error).toBe('Jenny could not process that message because it was too large. Send one smaller task and try again.')
     expect(assistantError?.error).not.toContain('bridge field')
+    expect(states.at(-1)?.messages.find(message => message.role === 'user')?.nativeJennyReplyAttempt).toMatchObject({
+      error: 'Jenny could not process that message because it was too large. Send one smaller task and try again.',
+      status: 'failed'
+    })
   })
 
   it('shows a plain chat error when Jenny times out before replying', async () => {
@@ -649,6 +660,10 @@ describe('usePromptActions project harness', () => {
     expect(assistantError?.error).toBe('Jenny could not process that message because it was too large. Send one smaller task and try again.')
     expect(assistantError?.error).not.toContain('bridge field')
     expect(assistantError?.branchGroupId).toBe('branch:user-1')
+    expect(states.at(-1)?.messages.find(message => message.role === 'user')?.nativeJennyReplyAttempt).toMatchObject({
+      error: 'Jenny could not process that message because it was too large. Send one smaller task and try again.',
+      status: 'failed'
+    })
   })
 
   it('keeps hidden project context when editing and resending a project chat message', async () => {

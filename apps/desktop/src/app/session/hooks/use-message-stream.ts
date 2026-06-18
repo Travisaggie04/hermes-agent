@@ -15,6 +15,7 @@ import {
 } from '@/lib/chat-messages'
 import { coerceGatewayText, coerceThinkingText, normalizePersonalityValue } from '@/lib/chat-runtime'
 import { triggerHaptic } from '@/lib/haptics'
+import { updateLatestNativeJennyReplyAttempt } from '@/lib/native-jenny-reply-loop'
 import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { setClarifyRequest } from '@/store/clarify'
 import { notify } from '@/store/notifications'
@@ -242,7 +243,7 @@ export function useMessageStream({
 
           return {
             ...state,
-            messages: nextMessages,
+            messages: updateLatestNativeJennyReplyAttempt(nextMessages, 'working'),
             streamId,
             sawAssistantPayload: true,
             awaitingResponse: false
@@ -517,15 +518,20 @@ export function useMessageStream({
           }
         }
 
-        const hasInlineError = nextMessages.some(m => m.role === 'assistant' && m.error && !m.hidden)
-        const lastVisible = [...nextMessages].reverse().find(m => !m.hidden)
+        const finalMessages = updateLatestNativeJennyReplyAttempt(
+          nextMessages,
+          completionError ? 'failed' : 'replied',
+          completionError ?? undefined
+        )
+        const hasInlineError = finalMessages.some(m => m.role === 'assistant' && m.error && !m.hidden)
+        const lastVisible = [...finalMessages].reverse().find(m => !m.hidden)
         const unresolvedUserTail = lastVisible?.role === 'user'
         shouldHydrate =
           !completionError && !hasInlineError && !unresolvedUserTail && (!state.sawAssistantPayload || !finalText)
 
         return {
           ...state,
-          messages: nextMessages,
+          messages: finalMessages,
           streamId: null,
           pendingBranchGroup: null,
           awaitingResponse: false,
@@ -555,7 +561,7 @@ export function useMessageStream({
       updateSessionState(sessionId, state => {
         const streamId = state.streamId ?? `assistant-error-${Date.now()}`
         const groupId = state.pendingBranchGroup ?? undefined
-        const prev = state.messages
+        const prev = updateLatestNativeJennyReplyAttempt(state.messages, 'failed', errorMessage)
         const error = errorMessage.trim() || 'Hermes reported an error'
 
         const nextMessages = prev.some(m => m.id === streamId)

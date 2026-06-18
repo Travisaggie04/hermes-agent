@@ -58,6 +58,7 @@ import {
   emptyNativeProjectIntake,
   type NativeProjectIntakeValue
 } from '@/lib/native-project-intake'
+import { latestNativeJennyReplyAttempt } from '@/lib/native-jenny-reply-loop'
 import { cn } from '@/lib/utils'
 import type { ComposerAttachment } from '@/store/composer'
 import { $pinnedSessionIds } from '@/store/layout'
@@ -250,6 +251,7 @@ function ChatHeader({
     : selectedSessionId
       ? pinnedSessionIds.includes(selectedSessionId)
       : false
+  const latestReplyAttempt = latestNativeJennyReplyAttempt(messages)
   const jennyStatus = nativeJennyStatus({
     activeTurnRunning,
     awaitingResponse,
@@ -260,7 +262,9 @@ function ChatHeader({
     liveSubagentCount: runningSubagents,
     loading: bridgeStatusQuery.isLoading,
     projectId: selectedProjectId,
-    queryError: bridgeStatusQuery.error
+    queryError: bridgeStatusQuery.error,
+    replyAttemptError: latestReplyAttempt?.error,
+    replyAttemptStatus: latestReplyAttempt?.status
   })
   const jennyStatusDetail = [jennyStatus.detail, nativeAsyncAgentDetail(asyncAgentStatusQuery.data)]
     .filter(Boolean)
@@ -947,6 +951,8 @@ function ProjectJennyStatusStrip({
   }
 
   const latestChatReplied = latestVisibleAssistantReply(messages)
+  const latestReplyAttempt = latestNativeJennyReplyAttempt(messages)
+  const showRepliedStatus = latestChatReplied || latestReplyAttempt?.status === 'replied'
   const runningSubagents = activeSubagentCount(subagents)
   const jennyStatus = nativeJennyStatus({
     activeTurnRunning,
@@ -958,14 +964,16 @@ function ProjectJennyStatusStrip({
     liveSubagentCount: runningSubagents,
     loading: bridgeStatusQuery.isLoading,
     projectId: selectedProjectId,
-    queryError: bridgeStatusQuery.error
+    queryError: bridgeStatusQuery.error,
+    replyAttemptError: latestReplyAttempt?.error,
+    replyAttemptStatus: latestReplyAttempt?.status
   })
   const latestErrorMessage = latestVisibleAssistantErrorMessage(messages)
   const visibleStatusTones = new Set<NativeJennyStatusTone>([
     'pending',
     'working',
     'warn',
-    ...(latestChatReplied ? (['ok'] as const) : [])
+    ...(showRepliedStatus ? (['ok'] as const) : [])
   ])
 
   if (!visibleStatusTones.has(jennyStatus.tone)) {
