@@ -139,6 +139,15 @@ function promptSubmitParams(
 
 const nativeProjectSessionLinkCache = new Set<string>()
 
+function notifyNativeProjectFilingSkipped(projectName: string) {
+  notify({
+    durationMs: 5_000,
+    kind: 'warning',
+    message: `Jenny can still reply. This chat may appear in Other chats instead of ${projectName}.`,
+    title: 'Chat not filed yet'
+  })
+}
+
 function ensureNativeProjectSessionLink(storedSessionId: string | null, preview?: string) {
   const sessionId = storedSessionId?.trim()
   const projectId = $selectedMissionControlProjectId.get().trim()
@@ -171,8 +180,8 @@ function ensureNativeProjectSessionLink(storedSessionId: string | null, preview?
       nativeProjectSessionLinkCache.add(cacheKey)
       notifyMissionControlProjectLinkCreated({ projectId, sessionId })
     })
-    .catch(err => {
-      notifyError(err, `Jenny can still reply, but this chat could not be filed under ${projectName}`)
+    .catch(() => {
+      notifyNativeProjectFilingSkipped(projectName)
     })
 }
 
