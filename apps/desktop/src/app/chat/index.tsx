@@ -376,6 +376,10 @@ function ChatHeader({
       </div>
       <NativeJennyActivityDialog
         asyncStatus={asyncAgentStatusQuery.data}
+        onOpenSubagentSession={sessionId => {
+          setActivityOpen(false)
+          onResumeSession(sessionId)
+        }}
         onOpenChange={setActivityOpen}
         open={activityOpen}
         projectName={selectedProjectTitle}
@@ -396,12 +400,14 @@ function ChatHeader({
 function NativeJennyActivityDialog({
   asyncStatus,
   onOpenChange,
+  onOpenSubagentSession,
   open,
   projectName,
   subagents
 }: {
   asyncStatus?: MissionControlAsyncAgentStatusResponse | null
   onOpenChange: (open: boolean) => void
+  onOpenSubagentSession: (sessionId: string) => void
   open: boolean
   projectName: string
   subagents: readonly SubagentProgress[]
@@ -485,7 +491,9 @@ function NativeJennyActivityDialog({
         </details>
         <section className="grid max-h-[45vh] gap-2 overflow-y-auto pr-1">
           {rows.length ? (
-            rows.map(item => <NativeJennyActivityRow item={item} key={item.id} />)
+            rows.map(item => (
+              <NativeJennyActivityRow item={item} key={item.id} onOpenSession={onOpenSubagentSession} />
+            ))
           ) : (
             <div className="rounded-md border border-dashed border-(--ui-stroke-tertiary) p-4 text-sm text-(--ui-text-secondary)">
               No live subagent activity for this chat yet.
@@ -497,7 +505,14 @@ function NativeJennyActivityDialog({
   )
 }
 
-function NativeJennyActivityRow({ item }: { item: SubagentProgress }) {
+function NativeJennyActivityRow({
+  item,
+  onOpenSession
+}: {
+  item: SubagentProgress
+  onOpenSession: (sessionId: string) => void
+}) {
+  const childSessionId = item.sessionId
   const latestStream = item.stream[item.stream.length - 1]
   const detail = item.currentTool || item.summary || latestStream?.text || ''
   const statusClass =
@@ -514,6 +529,19 @@ function NativeJennyActivityRow({ item }: { item: SubagentProgress }) {
         <span className="min-w-0 truncate text-sm font-medium text-foreground" title={item.goal}>
           {item.goal}
         </span>
+        {childSessionId && (
+          <Button
+            className="ml-auto h-6 shrink-0 gap-1 px-2 text-[0.6875rem]"
+            onClick={() => onOpenSession(childSessionId)}
+            title={`Open child session ${childSessionId}`}
+            type="button"
+            variant="outline"
+          >
+            <Codicon name="comment-discussion" size="0.75rem" />
+            <span className="hidden min-[36rem]:inline">Open session</span>
+            <span className="min-[36rem]:hidden">Open</span>
+          </Button>
+        )}
       </div>
       {detail && (
         <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-(--ui-text-secondary)" title={detail}>
