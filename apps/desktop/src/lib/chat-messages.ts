@@ -113,7 +113,8 @@ export function chatMessageText(message: ChatMessage): string {
 const ATTACHED_CONTEXT_MARKER_RE = /(?:^|\n)--- Attached Context ---\s*\n/
 const CONTEXT_WARNINGS_MARKER_RE = /(?:^|\n)--- Context Warnings ---[\s\S]*$/
 const CONTEXT_REF_RE = /@(file|folder|url|image|tool|terminal):(?:"[^"\n]+"|'[^'\n]+'|`[^`\n]+`|\S+)/g
-const HIDDEN_JENNY_OS_CONTEXT_RE = /^Hidden Jenny OS project context:[ \t]*\r?\n[\s\S]*?(?:\r?\n){2}/
+const HIDDEN_JENNY_OS_CONTEXT_RE = /^Hidden Jenny OS project context:[ \t]*\r?\n/
+const HIDDEN_JENNY_OS_VISIBLE_RULE_RE = /^Visible chat rule:/i
 const ENGINEERING_GOAL_PROMPT_RE =
   /^\[(Engineering goal kickoff|Continuing engineering goal)\]\s*Objective:\s*([\s\S]*?)(?=\n\n(?:Additional user criteria:|Goal loop state:|Operate as a senior engineering agent\.)|$)/i
 const STANDING_GOAL_PROMPT_RE =
@@ -221,8 +222,32 @@ function goalControlPromptText(value: string): string | null {
   return objective ? `Continuing goal: ${objective}` : null
 }
 
+function stripHiddenJennyOsContext(value: string): string {
+  const header = value.match(HIDDEN_JENNY_OS_CONTEXT_RE)
+
+  if (!header) {
+    return value
+  }
+
+  const rest = value.slice(header[0].length)
+  const blankSeparator = rest.match(/\r?\n[ \t]*\r?\n/)
+
+  if (blankSeparator?.index !== undefined) {
+    return rest.slice(blankSeparator.index + blankSeparator[0].length).trimStart()
+  }
+
+  const lines = rest.split(/\r?\n/)
+  const visibleRuleIndex = lines.findIndex(line => HIDDEN_JENNY_OS_VISIBLE_RULE_RE.test(line.trim()))
+
+  if (visibleRuleIndex >= 0) {
+    return lines.slice(visibleRuleIndex + 1).join('\n').trimStart()
+  }
+
+  return ''
+}
+
 function visibleUserMessageText(value: string): string {
-  const withoutHiddenContext = value.replace(HIDDEN_JENNY_OS_CONTEXT_RE, '').trimStart()
+  const withoutHiddenContext = stripHiddenJennyOsContext(value)
   const displayValue = withoutHiddenContext !== value ? withoutHiddenContext : value
   const goalControl = goalControlPromptText(displayValue)
 

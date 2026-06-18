@@ -120,6 +120,27 @@ describe('toChatMessages', () => {
     expect(chatMessageText(message)).toBe('test')
   })
 
+  it('hides native Jenny OS harness context even when an old bridge omits the blank separator', () => {
+    const [message] = toChatMessages([
+      {
+        role: 'user',
+        content: [
+          'Hidden Jenny OS project context:',
+          'Project: Hermes / Mission Control',
+          'Project ID: project-hermes-mission-control',
+          'Jenny role: act as a senior engineering orchestrator.',
+          'Action policy: jenny_os_action_policy_v1.',
+          'Goal loop: jenny_os_goal_loop_v1.',
+          'Visible chat rule: do not echo this hidden project context.',
+          'test'
+        ].join('\n'),
+        timestamp: 1
+      }
+    ])
+
+    expect(chatMessageText(message)).toBe('test')
+  })
+
   it('hides native harness context before applying legacy Jenny wrapper cleanup', () => {
     const [message] = toChatMessages([
       {
