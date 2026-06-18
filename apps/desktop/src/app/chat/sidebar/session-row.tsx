@@ -93,6 +93,7 @@ export function SidebarSessionRow({
       ? projectMoveTargets?.filter(project => project.project_id !== selectedProjectId)
       : projectMoveTargets
   const fileProjectMoveTarget = currentProjectMoveTarget ?? suggestedProjectMoveTarget
+  const fileProjectMoveLabel = currentProjectMoveTarget ? 'File here' : suggestedProjectMoveTarget ? 'File' : ''
   // Subscribe per-row (the leaf) instead of drilling a set through the list —
   // the atom is tiny and rarely non-empty. True when a clarify prompt in this
   // session is waiting on the user.
@@ -112,7 +113,10 @@ export function SidebarSessionRow({
     >
       <div
         className={cn(
-          'group relative grid min-h-[1.625rem] cursor-pointer grid-cols-[minmax(0,1fr)_2.75rem] items-center rounded-md transition-colors duration-100 ease-out hover:bg-(--ui-row-hover-background) hover:transition-none',
+          'group relative grid min-h-[1.625rem] cursor-pointer items-center rounded-md transition-colors duration-100 ease-out hover:bg-(--ui-row-hover-background) hover:transition-none',
+          fileProjectMoveTarget
+            ? 'grid-cols-[minmax(0,1fr)_5.75rem]'
+            : 'grid-cols-[minmax(0,1fr)_2.75rem]',
           isSelected && 'bg-(--ui-row-active-background)',
           isWorking && 'text-foreground',
           dragging && 'z-10 cursor-grabbing opacity-60 shadow-sm',
@@ -211,29 +215,33 @@ export function SidebarSessionRow({
             {title}
           </span>
         </button>
-        <div className="relative z-2 grid w-[2.75rem] grid-cols-2 place-items-center">
+        <div
+          className={cn(
+            'relative z-2 grid place-items-center',
+            fileProjectMoveTarget ? 'w-[5.75rem] grid-cols-[minmax(0,1fr)_1.25rem]' : 'w-[2.75rem] grid-cols-2'
+          )}
+        >
           {!isWorking && (
             <span className="pointer-events-none absolute right-12 top-1/2 min-w-6 -translate-y-1/2 text-right text-[0.625rem] leading-none text-(--ui-text-tertiary) opacity-0 transition-opacity group-hover:opacity-100">
               {age}
             </span>
           )}
           {fileProjectMoveTarget && onMoveToProject ? (
-            <Button
+            <button
               aria-label={`File ${title} in ${fileProjectMoveTarget.name}`}
-              className="size-5 rounded-[4px] bg-transparent text-(--ui-text-quaternary) transition-colors duration-100 hover:bg-(--ui-control-active-background) hover:text-foreground focus-visible:bg-(--ui-control-active-background) focus-visible:text-foreground focus-visible:ring-0 group-hover:text-(--ui-text-secondary) [&_svg]:size-3.5!"
+              className="inline-flex h-5 max-w-[4.25rem] items-center gap-1 rounded-[4px] border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) px-1.5 text-[0.625rem] font-medium leading-none text-(--ui-text-secondary) transition-colors duration-100 hover:border-(--ui-accent)/45 hover:text-foreground focus-visible:border-(--ui-accent)/60 focus-visible:text-foreground focus-visible:outline-none [&_svg]:size-3!"
               onClick={event => {
                 event.preventDefault()
                 event.stopPropagation()
                 triggerHaptic('selection')
                 onMoveToProject(fileProjectMoveTarget.project_id, fileProjectMoveTarget.name)
               }}
-              size="icon"
               title={`File in ${fileProjectMoveTarget.name}`}
               type="button"
-              variant="ghost"
             >
-              <Codicon name="folder-active" size="0.875rem" />
-            </Button>
+              <Codicon className="shrink-0" name="folder-active" size="0.75rem" />
+              <span className="truncate">{fileProjectMoveLabel}</span>
+            </button>
           ) : (
             <span aria-hidden="true" className="size-5" />
           )}
