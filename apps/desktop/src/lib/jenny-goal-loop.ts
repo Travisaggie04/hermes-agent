@@ -36,10 +36,10 @@ export const JENNY_GOAL_LOOP_STOP_RULES = [
 export function jennyHiddenGoalLoopContext(): string {
   return [
     `Goal loop: ${JENNY_GOAL_LOOP_ID}.`,
-    `Checkpoint rules: ${JENNY_GOAL_LOOP_CHECKPOINTS.join('; ')}.`,
-    `Progress report shape: ${JENNY_GOAL_LOOP_PROGRESS_REPORT.join('; ')}.`,
-    `Completion audit: ${JENNY_GOAL_LOOP_COMPLETION_AUDIT.join('; ')}.`,
-    `Blocked audit: ${JENNY_GOAL_LOOP_BLOCKED_AUDIT.join('; ')}.`,
-    `Stop rules: ${JENNY_GOAL_LOOP_STOP_RULES.join('; ')}.`
+    `Checkpoints: ${JENNY_GOAL_LOOP_CHECKPOINTS.join('; ')}.`,
+    `Reports: ${JENNY_GOAL_LOOP_PROGRESS_REPORT.join('; ')}.`,
+    `Complete only when: ${JENNY_GOAL_LOOP_COMPLETION_AUDIT.join('; ')}.`,
+    `Blocked only when: ${JENNY_GOAL_LOOP_BLOCKED_AUDIT.join('; ')}.`,
+    `Stop: ${JENNY_GOAL_LOOP_STOP_RULES.join('; ')}.`
   ].join('\n')
 }

@@ -61,9 +61,8 @@ export function jennyActionPolicyDecisionSummary(): string {
 export function jennyHiddenActionPolicyContext(): string {
   return [
     `Action policy: ${JENNY_ACTION_POLICY_ID}.`,
-    `Policy decisions:\n${jennyActionPolicyDecisionSummary()}`,
-    `Allowed by default: ${JENNY_ALLOWED_ACTION_EXAMPLES.join(', ')}.`,
-    `Protected actions require separate explicit approval: ${JENNY_PROTECTED_ACTION_SUMMARIES.join('; ')}.`,
-    `Denied shortcuts: ${JENNY_DENIED_SHORTCUT_SUMMARIES.join('; ')}.`
+    `ALLOW: ${JENNY_ALLOWED_ACTION_EXAMPLES.join(', ')}.`,
+    `ASK before: ${JENNY_PROTECTED_ACTION_SUMMARIES.join('; ')}.`,
+    `DENY: ${JENNY_DENIED_SHORTCUT_SUMMARIES.join('; ')}.`
   ].join('\n')
 }
