@@ -75,6 +75,13 @@ describe('native project chat header', () => {
     expect(source).toContain('<option value="">{loading ? \'Loading projects...\' : \'Other chats\'}</option>')
   })
 
+  it('keeps the selected project visible when the project list is temporarily stale', () => {
+    expect(source).toContain('const selectedProjectKnown = projects.some(project => project.project_id === value)')
+    expect(source).toContain('const showSelectedProjectFallback = Boolean(value && selectedProjectTitle && !selectedProjectKnown)')
+    expect(source).toContain('value={selectedProjectKnown || showSelectedProjectFallback ? value : \'\'}')
+    expect(source).toContain('{showSelectedProjectFallback && <option value={value}>{selectedProjectTitle}</option>}')
+  })
+
   it('keeps the project picker visible on the blank native chat home', () => {
     expect(source).toContain('const projectPickerAvailable = projectsQuery.isLoading || projects.length > 0 || Boolean(selectedProjectTitle)')
     expect(source).toContain('!projectPickerAvailable')
