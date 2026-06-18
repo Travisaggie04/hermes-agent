@@ -3,7 +3,7 @@ import type { ThreadMessage } from '@assistant-ui/react'
 import type { QuickModelOption } from '@/app/chat/composer/types'
 import type { ClientSessionState, CommandDispatchResponse } from '@/app/types'
 import { formatRefValue } from '@/components/assistant-ui/directive-text'
-import { type ChatMessage, type ChatMessagePart, chatMessageText, textPart } from '@/lib/chat-messages'
+import { type ChatMessage, chatMessageText, displayUserMessageText, textPart } from '@/lib/chat-messages'
 import type { ComposerAttachment } from '@/store/composer'
 import type { ModelOptionsResponse, SessionInfo } from '@/types/hermes'
 
@@ -293,10 +293,12 @@ export function toRuntimeMessage(message: ChatMessage): ThreadMessage {
     : new Date(Number(message.id.match(/\d+/)?.[0]) || Date.now())
 
   if (role === 'user') {
+    const visibleText = displayUserMessageText(chatMessageText(message))
+
     return {
       id: message.id,
       role,
-      content: message.parts.filter((part): part is Extract<ChatMessagePart, { type: 'text' }> => part.type === 'text'),
+      content: visibleText ? [textPart(visibleText)] : [],
       attachments: [],
       createdAt,
       metadata: { custom: { attachmentRefs: message.attachmentRefs ?? [] } }

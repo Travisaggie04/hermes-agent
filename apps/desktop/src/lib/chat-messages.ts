@@ -258,14 +258,8 @@ function visibleUserMessageText(value: string): string {
   return legacyJennyRequestText(displayValue) ?? displayValue
 }
 
-function displayContentForMessage(role: SessionMessage['role'], content: unknown): string {
-  const rawTextContent = textFromUnknown(content)
-  const textContent = role === 'user' ? visibleUserMessageText(rawTextContent) : rawTextContent
-
-  if (role !== 'user') {
-    return textContent
-  }
-
+export function displayUserMessageText(value: string): string {
+  const textContent = visibleUserMessageText(value)
   const marker = textContent.match(ATTACHED_CONTEXT_MARKER_RE)
 
   if (!marker || marker.index === undefined) {
@@ -277,6 +271,16 @@ function displayContentForMessage(role: SessionMessage['role'], content: unknown
   const refs = [...new Set(Array.from(attachedContext.matchAll(CONTEXT_REF_RE)).map(match => match[0]))]
 
   return [refs.join('\n'), visibleText].filter(Boolean).join('\n\n') || visibleText
+}
+
+function displayContentForMessage(role: SessionMessage['role'], content: unknown): string {
+  const rawTextContent = textFromUnknown(content)
+
+  if (role !== 'user') {
+    return rawTextContent
+  }
+
+  return displayUserMessageText(rawTextContent)
 }
 
 export function appendTextPart(parts: ChatMessagePart[], delta: string): ChatMessagePart[] {
