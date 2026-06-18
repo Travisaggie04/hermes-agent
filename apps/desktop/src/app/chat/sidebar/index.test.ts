@@ -58,12 +58,21 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('onNewSessionInProject={startProjectChat}')
   })
 
-  it('opens a clean project draft when a project folder is selected', () => {
+  it('opens the latest project chat when a project folder with sessions is selected', () => {
+    expect(source).toContain('const latestSidebarSession = (sessions: SessionInfo[])')
+    expect(source).toContain('const latestProjectSession = isProjectGroup ? latestSidebarSession(group.sessions) : null')
+    expect(source).toContain('onResumeSession?: (sessionId: string) => void')
+    expect(source).toContain('onResumeSession={onResumeSession}')
+    expect(source).toContain('if (!active && latestProjectSession) {')
+    expect(source).toContain('onResumeSession?.(latestProjectSession.id)')
+    expect(source).toContain('} else if (!active) {')
+  })
+
+  it('keeps a clean project draft as the fallback and explicit new-chat action', () => {
     expect(source).toContain('onOpenProjectChat={startProjectChat}')
     expect(source).toContain('onOpenProjectChat?: (projectId: string, projectName: string) => void')
     expect(source).toContain('onOpenProjectChat?.(group.id, group.label)')
     expect(source).toContain('onSelectProject?.(group.id, group.label)')
-    expect(source).toContain('if (!active) {')
     expect(source).toContain('setOpen(true)')
     expect(source).toContain('onNewSessionInProject={startProjectChat}')
     expect(source).toContain('onNewSessionInProject?.(group.id, group.label)')
