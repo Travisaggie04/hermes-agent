@@ -6,6 +6,14 @@ import type { SessionMessage, UsageStats } from '@/types/hermes'
 
 export type ChatMessagePart = Exclude<ThreadMessageLike['content'], string>[number]
 
+export type NativeJennyReplyAttemptStatus = 'queued' | 'working' | 'replied' | 'failed'
+
+export interface NativeJennyReplyAttempt {
+  error?: string
+  status: NativeJennyReplyAttemptStatus
+  updatedAt: number
+}
+
 export type ChatMessage = {
   id: string
   role: SessionMessage['role']
@@ -21,6 +29,8 @@ export type ChatMessage = {
   runtimeText?: string
   /** Hidden Jenny context recovered from legacy saved user rows. Never render this in the chat bubble. */
   hiddenContext?: string
+  /** Native project-chat Jenny reply attempt lifecycle. Kept out of rendered bubble text. */
+  nativeJennyReplyAttempt?: NativeJennyReplyAttempt
 }
 
 export type GatewayEventPayload = {

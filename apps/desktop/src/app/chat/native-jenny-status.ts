@@ -1,4 +1,5 @@
 import type { MissionControlGitHubBridgeStatusResponse } from '@/hermes'
+import type { NativeJennyReplyAttemptStatus } from '@/lib/chat-messages'
 
 export type NativeJennyStatusTone = 'idle' | 'ok' | 'pending' | 'working' | 'warn'
 
@@ -21,6 +22,8 @@ export interface NativeJennyStatusInput {
   nowMs?: number
   projectId?: string
   queryError?: unknown
+  replyAttemptError?: string
+  replyAttemptStatus?: NativeJennyReplyAttemptStatus | null
 }
 
 const BENIGN_NO_PENDING_ERROR_RE = /no matching pending mission control mailbox request/i
@@ -76,7 +79,9 @@ export function nativeJennyStatus({
   loading = false,
   nowMs = Date.now(),
   projectId = '',
-  queryError
+  queryError,
+  replyAttemptError,
+  replyAttemptStatus
 }: NativeJennyStatusInput): NativeJennyStatus {
   if (!gatewayOpen) {
     return {
@@ -93,6 +98,42 @@ export function nativeJennyStatus({
       label: 'Pick a project',
       summary: 'Choose a project',
       tone: 'idle'
+    }
+  }
+
+  if (replyAttemptStatus === 'queued') {
+    return {
+      detail: 'Your message was sent. Jenny will reply here.',
+      label: 'Jenny queued',
+      summary: 'Waiting for Jenny',
+      tone: 'pending'
+    }
+  }
+
+  if (replyAttemptStatus === 'working') {
+    return {
+      detail: 'Jenny is working. Progress and the final reply appear here.',
+      label: 'Jenny working',
+      summary: 'Progress appears here',
+      tone: 'working'
+    }
+  }
+
+  if (replyAttemptStatus === 'failed') {
+    return {
+      detail: friendlyBridgeError(replyAttemptError || latestChatError || ''),
+      label: 'Jenny failed',
+      summary: 'Retry available',
+      tone: 'warn'
+    }
+  }
+
+  if (replyAttemptStatus === 'replied') {
+    return {
+      detail: 'Jenny replied. Review the latest answer before relying on it.',
+      label: 'Jenny replied',
+      summary: 'Review latest reply',
+      tone: 'ok'
     }
   }
 
