@@ -15,7 +15,14 @@ export type IntroProps = {
   personality?: string
   projectId?: string
   projectName?: string
-  projectOptions?: { id: string; lastSessionId?: string; lastSessionTitle?: string; name: string; sessionCount?: number }[]
+  projectOptions?: {
+    id: string
+    lastSessionId?: string
+    lastSessionTitle?: string
+    name: string
+    recentSessions?: { id: string; title: string }[]
+    sessionCount?: number
+  }[]
   projectsLoading?: boolean
   onCreateProject?: () => void
   onResumeProjectSession?: (sessionId: string, projectId: string, projectName: string) => void
@@ -185,6 +192,7 @@ export function Intro({
       : 'No saved chats yet'
   const selectedProjectLatestSessionId = selectedProjectOption?.lastSessionId?.trim() || ''
   const selectedProjectLatestSessionTitle = selectedProjectOption?.lastSessionTitle?.trim() || ''
+  const selectedProjectRecentSessions = selectedProjectOption?.recentSessions?.filter(session => session.id.trim()).slice(0, 4) ?? []
   const showProjectHome = !projectLabel && (projectsLoading || projectOptions.length > 0)
   const introInteractive = showProjectHome || Boolean(projectLabel)
 
@@ -237,6 +245,24 @@ export function Intro({
                 </span>
               )}
             </div>
+            {selectedProjectRecentSessions.length ? (
+              <div className="mt-2 grid w-full max-w-lg gap-1.5 text-left">
+                <p className="m-0 text-center text-[0.6875rem] font-medium uppercase tracking-[0.16em] text-(--ui-text-tertiary)">
+                  Recent chats
+                </p>
+                {selectedProjectRecentSessions.map(session => (
+                  <button
+                    className="min-w-0 rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background)/70 px-3 py-2 text-left text-xs text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent)/60 hover:bg-(--ui-control-hover-background) hover:text-foreground focus-visible:border-(--ui-accent)/70 focus-visible:outline-none"
+                    key={session.id}
+                    onClick={() => onResumeProjectSession?.(session.id, selectedProjectOption?.id || projectKey, projectLabel)}
+                    title={session.title || 'Project chat'}
+                    type="button"
+                  >
+                    <span className="block truncate font-medium">{session.title || 'Project chat'}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : showProjectHome ? (
           <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-3">

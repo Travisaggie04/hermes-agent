@@ -155,6 +155,7 @@ type NativeProjectChatOption = {
   lastSessionId: string
   lastSessionTitle: string
   name: string
+  recentSessions: { id: string; title: string }[]
   sessionCount: number
 }
 
@@ -599,6 +600,26 @@ function latestProjectSessionTitle(group?: MissionControlProjectSessionGroup): s
   return latestSession?.title?.trim() || latestSession?.preview?.trim() || ''
 }
 
+function projectSessionTitle(session: MissionControlProjectSessionGroup['sessions'][number]): string {
+  return session.title?.trim() || session.preview?.trim() || session.session_id
+}
+
+function recentProjectSessions(group?: MissionControlProjectSessionGroup): NativeProjectChatOption['recentSessions'] {
+  return [...(group?.sessions ?? [])]
+    .sort((left, right) => {
+      const leftTs = left.last_active || left.started_at || 0
+      const rightTs = right.last_active || right.started_at || 0
+
+      return rightTs - leftTs
+    })
+    .slice(0, 4)
+    .map(session => ({
+      id: session.session_id,
+      title: projectSessionTitle(session)
+    }))
+    .filter(session => Boolean(session.id.trim()))
+}
+
 function projectChatOptions(
   projects: MissionControlProjectRecord[] = [],
   groups: MissionControlProjectSessionGroup[] = []
@@ -615,6 +636,7 @@ function projectChatOptions(
       lastSessionId: latestSession?.session_id?.trim() || '',
       lastSessionTitle: latestProjectSessionTitle(sessionGroup),
       name: project.name,
+      recentSessions: recentProjectSessions(sessionGroup),
       sessionCount
     }
   })

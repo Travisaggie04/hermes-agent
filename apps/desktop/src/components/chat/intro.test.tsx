@@ -30,6 +30,10 @@ describe('Intro', () => {
             lastSessionId: 'session-latest',
             lastSessionTitle: 'Bridge smoke test',
             name: 'Hermes / Mission Control',
+            recentSessions: [
+              { id: 'session-latest', title: 'Bridge smoke test' },
+              { id: 'session-planning', title: 'Planning review' }
+            ],
             sessionCount: 3
           },
           {
@@ -46,11 +50,22 @@ describe('Intro', () => {
 
     expect(screen.getByText('3 chats')).toBeTruthy()
     expect(screen.getByText('Open latest: Bridge smoke test')).toBeTruthy()
+    expect(screen.getByText('Recent chats')).toBeTruthy()
+    expect(screen.getByText('Bridge smoke test')).toBeTruthy()
+    expect(screen.getByText('Planning review')).toBeTruthy()
 
     fireEvent.click(screen.getByText('Open latest: Bridge smoke test'))
 
     expect(onResumeProjectSession).toHaveBeenCalledWith(
       'session-latest',
+      'project-hermes-mission-control',
+      'Hermes / Mission Control'
+    )
+
+    fireEvent.click(screen.getByText('Planning review'))
+
+    expect(onResumeProjectSession).toHaveBeenCalledWith(
+      'session-planning',
       'project-hermes-mission-control',
       'Hermes / Mission Control'
     )
