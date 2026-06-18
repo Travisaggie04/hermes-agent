@@ -599,7 +599,8 @@ export function ChatSidebar({
   }, [projectGroups, selectedMissionControlProjectId])
 
   const projectMode = Boolean(selectedMissionControlProjectId.trim())
-  const recentsLabel = projectMode ? 'Other chats' : s.sessions
+  const projectFoldersVisible = projectGroups.length > 0 || projectMode || projectGroupsLoading
+  const recentsLabel = projectFoldersVisible ? 'Other chats' : s.sessions
   const recentsRootClassName = projectMode ? 'shrink-0 p-0 pb-1 opacity-90' : 'min-h-0 flex-1 p-0'
   const recentsContentClassName = cn(
     projectMode
