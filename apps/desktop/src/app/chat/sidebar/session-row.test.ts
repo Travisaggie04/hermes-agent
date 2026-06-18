@@ -23,6 +23,9 @@ describe('sidebar session row project filing affordance', () => {
   it('suppresses the quick move action for chats already shown in the current project group', () => {
     expect(source).toContain('hideCurrentProjectMove')
     expect(source).toContain('!hideCurrentProjectMove && selectedProjectId')
+    expect(source).toContain('const menuProjectMoveTargets')
+    expect(source).toContain('projectMoveTargets?.filter(project => project.project_id !== selectedProjectId)')
+    expect(source).toContain('projectMoveTargets={menuProjectMoveTargets}')
     expect(indexSource).toContain("hideCurrentProjectMove: group?.mode === 'project' && group.id === activeGroupId")
   })
 })
