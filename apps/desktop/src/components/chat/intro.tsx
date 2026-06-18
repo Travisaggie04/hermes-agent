@@ -14,9 +14,10 @@ type IntroCopyRecord = IntroCopy & {
 export type IntroProps = {
   personality?: string
   projectName?: string
-  projectOptions?: { id: string; lastSessionTitle?: string; name: string; sessionCount?: number }[]
+  projectOptions?: { id: string; lastSessionId?: string; lastSessionTitle?: string; name: string; sessionCount?: number }[]
   projectsLoading?: boolean
   onCreateProject?: () => void
+  onResumeProjectSession?: (sessionId: string, projectId: string, projectName: string) => void
   onSelectProject?: (projectId: string, projectName: string) => void
   seed?: number
 }
@@ -165,6 +166,7 @@ export function Intro({
   projectOptions = [],
   projectsLoading = false,
   onCreateProject,
+  onResumeProjectSession,
   onSelectProject,
   seed
 }: IntroProps) {
@@ -221,12 +223,16 @@ export function Intro({
                     typeof project.sessionCount === 'number' && project.sessionCount > 0
                       ? `${project.sessionCount} ${project.sessionCount === 1 ? 'chat' : 'chats'}`
                       : 'No chats yet'
+                  const lastSessionId = project.lastSessionId?.trim() || ''
+                  const cardAction = lastSessionId
+                    ? () => onResumeProjectSession?.(lastSessionId, project.id, project.name)
+                    : () => onSelectProject?.(project.id, project.name)
 
                   return (
                     <button
                       className="min-w-0 rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) px-3 py-2 text-left text-sm text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent)/60 hover:bg-(--ui-control-hover-background) hover:text-foreground focus-visible:border-(--ui-accent)/70 focus-visible:outline-none"
                       key={project.id}
-                      onClick={() => onSelectProject?.(project.id, project.name)}
+                      onClick={cardAction}
                       type="button"
                     >
                       <span className="block truncate font-medium">{project.name}</span>
@@ -236,6 +242,9 @@ export function Intro({
                           Last: {project.lastSessionTitle}
                         </span>
                       ) : null}
+                      <span className="mt-2 block text-xs font-medium text-(--ui-text-secondary)">
+                        {lastSessionId ? 'Open latest chat' : 'Start project chat'}
+                      </span>
                     </button>
                   )
                 })

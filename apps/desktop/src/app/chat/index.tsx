@@ -120,6 +120,7 @@ interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
   onPickFolders: () => void
   onPickImages: () => void
   onRemoveAttachment: (id: string) => void
+  onOpenProjectSession: (sessionId: string, projectId: string, projectName: string) => void
   onSubmit: (
     text: string,
     options?: { attachments?: ComposerAttachment[]; fromQueue?: boolean }
@@ -146,6 +147,7 @@ interface ChatHeaderProps {
 
 type NativeProjectChatOption = {
   id: string
+  lastSessionId: string
   lastSessionTitle: string
   name: string
   sessionCount: number
@@ -538,8 +540,8 @@ function latestVisibleAssistantErrorMessage(messages: readonly ChatMessage[]): C
   return null
 }
 
-function latestProjectSessionTitle(group?: MissionControlProjectSessionGroup): string {
-  const latestSession = (group?.sessions ?? []).reduce<MissionControlProjectSessionGroup['sessions'][number] | null>(
+function latestProjectSession(group?: MissionControlProjectSessionGroup): MissionControlProjectSessionGroup['sessions'][number] | null {
+  return (group?.sessions ?? []).reduce<MissionControlProjectSessionGroup['sessions'][number] | null>(
     (latest, session) => {
       const sessionTs = session.last_active || session.started_at || 0
       const latestTs = latest?.last_active || latest?.started_at || 0
@@ -548,6 +550,10 @@ function latestProjectSessionTitle(group?: MissionControlProjectSessionGroup): s
     },
     null
   )
+}
+
+function latestProjectSessionTitle(group?: MissionControlProjectSessionGroup): string {
+  const latestSession = latestProjectSession(group)
 
   return latestSession?.title?.trim() || latestSession?.preview?.trim() || ''
 }
@@ -561,9 +567,11 @@ function projectChatOptions(
   return nativeChatProjects(projects).map(project => {
     const sessionGroup = sessionGroupsByProject.get(project.project_id)
     const sessionCount = sessionGroup?.linked_session_count ?? sessionGroup?.sessions.length ?? 0
+    const latestSession = latestProjectSession(sessionGroup)
 
     return {
       id: project.project_id,
+      lastSessionId: latestSession?.session_id?.trim() || '',
       lastSessionTitle: latestProjectSessionTitle(sessionGroup),
       name: project.name,
       sessionCount
@@ -919,6 +927,7 @@ export function ChatView({
   onPickFolders,
   onPickImages,
   onRemoveAttachment,
+  onOpenProjectSession,
   onSubmit,
   onThreadMessagesChange,
   onEdit,
@@ -1156,6 +1165,7 @@ export function ChatView({
               showIntro
                 ? {
                     onCreateProject: () => setProjectIntakeOpen(true),
+                    onResumeProjectSession: onOpenProjectSession,
                     onSelectProject: onStartProjectChat,
                     personality: introPersonality,
                     projectName: selectedProjectName.trim(),

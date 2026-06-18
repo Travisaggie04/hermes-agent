@@ -48,6 +48,7 @@ describe('Intro', () => {
     expect(screen.getByText('2 chats')).toBeTruthy()
     expect(screen.getByText('Last: Bridge smoke test')).toBeTruthy()
     expect(screen.getByText('No chats yet')).toBeTruthy()
+    expect(screen.getAllByText('Start project chat')).toHaveLength(2)
 
     fireEvent.click(screen.getByText('Hermes / Mission Control'))
 
@@ -56,5 +57,34 @@ describe('Intro', () => {
     fireEvent.click(screen.getByText('Create project'))
 
     expect(onCreateProject).toHaveBeenCalledOnce()
+  })
+
+  it('opens the latest project chat when a project already has sessions', () => {
+    const onSelectProject = vi.fn()
+    const onResumeProjectSession = vi.fn()
+
+    render(
+      <Intro
+        onResumeProjectSession={onResumeProjectSession}
+        onSelectProject={onSelectProject}
+        projectOptions={[
+          {
+            id: 'project-hermes-mission-control',
+            lastSessionId: 'session-latest',
+            lastSessionTitle: 'Bridge smoke test',
+            name: 'Hermes / Mission Control',
+            sessionCount: 2
+          }
+        ]}
+        seed={0}
+      />
+    )
+
+    expect(screen.getByText('Open latest chat')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('Hermes / Mission Control'))
+
+    expect(onResumeProjectSession).toHaveBeenCalledWith('session-latest', 'project-hermes-mission-control', 'Hermes / Mission Control')
+    expect(onSelectProject).not.toHaveBeenCalled()
   })
 })
