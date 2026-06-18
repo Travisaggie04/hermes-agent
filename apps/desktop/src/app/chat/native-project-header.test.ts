@@ -139,6 +139,17 @@ describe('native project chat header', () => {
     expect(source).toContain('onStartProjectChat(projectId, projectName)')
   })
 
+  it('keeps normal chat send as the only Jenny request action', () => {
+    expect(source).toContain('onSubmit={onSubmit}')
+    expect(source).toContain('selectedProjectTitle ? `Message Jenny in ${selectedProjectTitle}; she replies here` : undefined')
+    expect(source).toContain("loadingLabel={selectedProjectTitle ? (awaitingResponse ? 'Waiting for Jenny' : 'Jenny is working') : undefined}")
+    expect(source).not.toContain('Get response from Jenny')
+    expect(source).not.toContain('Run Jenny once')
+    expect(source).not.toContain('Queue for Jenny bridge')
+    expect(source).not.toContain('Ask Jenny to review first')
+    expect(source).not.toContain('Try Jenny again')
+  })
+
   it('shows Jenny as queued before the first reply update and working after that', () => {
     expect(source).toContain('activeTurnRunning={busy}')
     expect(source).not.toContain('activeTurnRunning={busy && awaitingResponse}')
