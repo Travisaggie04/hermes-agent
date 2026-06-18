@@ -1215,6 +1215,21 @@ def _session_title(session: dict[str, Any]) -> str:
     return str(session.get("title") or session.get("preview") or session.get("id") or "").strip()
 
 
+def _normalize_session_project_link_method(raw_method: str) -> tuple[str, str]:
+    allowed = {"manual", "suggested", "seeded"}
+    if raw_method in allowed:
+        return raw_method, ""
+
+    # Earlier desktop builds could send their native-chat source label where the
+    # link method belonged. Treat only those known manual user paths as manual
+    # links so chat filing stays robust without widening the enum.
+    legacy_manual_methods = {"desktop-native-chat", "native-project-chat", "project-chat"}
+    if raw_method in legacy_manual_methods:
+        return "manual", raw_method
+
+    raise HTTPException(status_code=422, detail="link_method must be manual, suggested, or seeded")
+
+
 def _build_session_project_link_record(payload: dict[str, Any]) -> SessionProjectLinkRecord:
     project_id = _workspace_text(payload.get("project_id"), max_chars=120)
     session_id = _workspace_text(payload.get("session_id"), max_chars=160)
@@ -1225,10 +1240,19 @@ def _build_session_project_link_record(payload: dict[str, Any]) -> SessionProjec
     status = _workspace_text(payload.get("status"), max_chars=40) or "active"
     if status not in {"active", "removed", "superseded"}:
         raise HTTPException(status_code=422, detail="status must be active, removed, or superseded")
-    link_method = _workspace_text(payload.get("link_method"), max_chars=40) or "manual"
-    if link_method not in {"manual", "suggested", "seeded"}:
-        raise HTTPException(status_code=422, detail="link_method must be manual, suggested, or seeded")
+    link_method, normalized_from = _normalize_session_project_link_method(
+        _workspace_text(payload.get("link_method"), max_chars=40) or "manual"
+    )
     now = _utc_now()
+    metadata = {
+        "source": "mission_control_session_project_link_backend_v1",
+        "manual_copy_only": True,
+        "send_to_jenny_enabled": False,
+        "dispatch_enabled": False,
+        "auto_inferred": False,
+    }
+    if normalized_from:
+        metadata["normalized_link_method_from"] = normalized_from
     return SessionProjectLinkRecord(
         link_id=_workspace_text(payload.get("link_id"), max_chars=120) or f"session-project-link-{uuid.uuid4().hex[:12]}",
         project_id=project_id,
@@ -1243,13 +1267,7 @@ def _build_session_project_link_record(payload: dict[str, Any]) -> SessionProjec
         link_method=link_method,
         confidence=_workspace_text(payload.get("confidence"), max_chars=80) or "manual",
         status=status,
-        metadata={
-            "source": "mission_control_session_project_link_backend_v1",
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-            "auto_inferred": False,
-        },
+        metadata=metadata,
     )
 
 

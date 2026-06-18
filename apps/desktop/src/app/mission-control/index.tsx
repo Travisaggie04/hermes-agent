@@ -40,6 +40,7 @@ import {
   type MissionControlProjectSessionGroup,
   type MissionControlProjectState,
   type MissionControlReportRecord,
+  type MissionControlSessionProjectLinkCreatePayload,
   type MissionControlWorkspaceStatus
 } from '@/hermes'
 import { cn } from '@/lib/utils'
@@ -1343,7 +1344,7 @@ function durableSessionId(session: MissionControlProjectSession): string {
   return session.lineage_root_id || session.durable_session_id || session.session_id
 }
 
-function sessionLinkPayload(dialog: SessionLinkDialogState) {
+function sessionLinkPayload(dialog: SessionLinkDialogState): MissionControlSessionProjectLinkCreatePayload {
   const durable = durableSessionId(dialog.session)
 
   return {

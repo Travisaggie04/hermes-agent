@@ -352,11 +352,13 @@ export interface MissionControlSessionProjectLinkRecord {
   title_snapshot?: string
 }
 
+export type MissionControlSessionProjectLinkMethod = 'manual' | 'suggested' | 'seeded'
+
 export interface MissionControlSessionProjectLinkCreatePayload {
   confidence?: string
   cwd_snapshot?: string
   lineage_root_id?: string
-  link_method?: string
+  link_method?: MissionControlSessionProjectLinkMethod
   linked_by?: string
   profile?: string
   project_id: string
