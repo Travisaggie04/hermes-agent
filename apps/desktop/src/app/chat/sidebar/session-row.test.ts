@@ -9,9 +9,12 @@ describe('sidebar session row project filing affordance', () => {
     expect(source).toContain('$selectedMissionControlProjectName')
     expect(source).toContain('const currentProjectMoveTarget')
     expect(source).toContain('const fileProjectMoveTarget = currentProjectMoveTarget ?? suggestedProjectMoveTarget')
+    expect(source).toContain("const fileProjectMoveLabel = currentProjectMoveTarget ? 'File here' : suggestedProjectMoveTarget ? 'File' : ''")
+    expect(source).toContain("grid-cols-[minmax(0,1fr)_5.75rem]")
     expect(source).toContain('File ${title} in ${fileProjectMoveTarget.name}')
     expect(source).toContain('onMoveToProject(fileProjectMoveTarget.project_id, fileProjectMoveTarget.name)')
-    expect(source).toContain('Codicon name="folder-active"')
+    expect(source).toContain('name="folder-active"')
+    expect(source).toContain('<span className="truncate">{fileProjectMoveLabel}</span>')
   })
 
   it('can use a backend suggested project target for unfiled chats', () => {
