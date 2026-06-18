@@ -756,7 +756,9 @@ function ProjectJennyStatusStrip({
   return (
     <div
       aria-label="Project chat status"
+      aria-live="polite"
       className="relative z-10 flex min-h-8 shrink-0 items-center gap-2 border-b border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background)/95 px-4 text-[0.75rem] text-(--ui-text-secondary)"
+      role="status"
     >
       <span className="shrink-0 font-medium text-foreground">Jenny</span>
       <span className={cn('min-w-0 truncate font-medium', summaryClass)} title={jennyStatus.detail}>
