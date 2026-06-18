@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { jennyActionPolicyBriefRule } from './jenny-action-policy'
 import {
   buildNativeProjectBriefCreatePayload,
   buildNativeProjectCreatePayload,
@@ -34,8 +35,18 @@ describe('native project intake helpers', () => {
     })
 
     expect(parsed.projectId).toBe('project-jenny-os')
-    expect(parsed.approvalRules).toEqual([...NATIVE_PROJECT_DEFAULT_APPROVAL_RULES, 'Ask before payment changes'])
+    expect(parsed.approvalRules).toEqual([
+      ...NATIVE_PROJECT_DEFAULT_APPROVAL_RULES,
+      'Ask before payment changes'
+    ])
+    expect(parsed.approvalRules).toContain(jennyActionPolicyBriefRule())
+    expect(parsed.policyDecision).toBe('ASK')
+    expect(parsed.policyMatches).toEqual(['payment, checkout, or refund action', 'customer outreach or delivery'])
+    expect(parsed.policyReview).toBe(
+      'Action policy review: ASK payment, checkout, or refund action; customer outreach or delivery.'
+    )
     expect(parsed.constraints).toEqual([
+      'Action policy review: ASK payment, checkout, or refund action; customer outreach or delivery.',
       'Evidence required: passing tests',
       'Evidence required: manual smoke',
       'Approval/stop rule: Ask before payment changes'

@@ -1,4 +1,10 @@
 import type { MissionControlProjectBriefCreatePayload, MissionControlProjectCreatePayload } from '@/hermes'
+import {
+  jennyActionPolicyBriefRule,
+  jennyActionPolicyForText,
+  jennyActionPolicyReviewConstraint,
+  type JennyActionPolicyDecision
+} from '@/lib/jenny-action-policy'
 
 export interface NativeProjectIntakeValue {
   approval: string
@@ -18,6 +24,9 @@ export interface NativeProjectIntakeParsed {
   forbidden: string[]
   goal: string
   name: string
+  policyDecision: JennyActionPolicyDecision
+  policyMatches: string[]
+  policyReview: string
   projectId: string
   source: string
   success: string[]
@@ -45,7 +54,8 @@ export const NATIVE_PROJECT_REQUIRED_ERROR = 'Project name and goal are required
 
 export const NATIVE_PROJECT_DEFAULT_APPROVAL_RULES = [
   'Jenny must challenge vague, risky, or wrong-approach requests before implementation.',
-  'Jenny must define evidence, tests, rollback/stop conditions, and approval needs before broad work.'
+  'Jenny must define evidence, tests, rollback/stop conditions, and approval needs before broad work.',
+  jennyActionPolicyBriefRule()
 ] as const
 
 export const NATIVE_PROJECT_DEFAULT_NEXT_LANE = 'Start with a spec-first project setup review.'
@@ -78,8 +88,13 @@ export function parseNativeProjectIntake(value: NativeProjectIntakeValue): Nativ
   const forbidden = nativeProjectIntakeList(value.forbidden)
   const evidence = nativeProjectIntakeList(value.evidence)
   const approval = nativeProjectIntakeList(value.approval)
+  const policyEvaluation = jennyActionPolicyForText(
+    [goal, source, success.join('\n'), approval.join('\n'), forbidden.join('\n')].filter(Boolean).join('\n')
+  )
+  const policyReview = jennyActionPolicyReviewConstraint(policyEvaluation)
   const approvalRules = [...NATIVE_PROJECT_DEFAULT_APPROVAL_RULES, ...approval]
   const constraints = [
+    ...(policyEvaluation.decision === 'ALLOW' ? [] : [policyReview]),
     ...evidence.map(item => `Evidence required: ${item}`),
     ...approval.map(item => `Approval/stop rule: ${item}`)
   ]
@@ -92,6 +107,9 @@ export function parseNativeProjectIntake(value: NativeProjectIntakeValue): Nativ
     forbidden,
     goal,
     name,
+    policyDecision: policyEvaluation.decision,
+    policyMatches: [...policyEvaluation.matches],
+    policyReview,
     projectId: `project-${nativeProjectSlug(name)}`,
     source,
     success

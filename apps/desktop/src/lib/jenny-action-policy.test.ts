@@ -6,7 +6,10 @@ import {
   JENNY_ALLOWED_ACTION_EXAMPLES,
   JENNY_DENIED_SHORTCUT_SUMMARIES,
   JENNY_PROTECTED_ACTION_SUMMARIES,
+  jennyActionPolicyBriefRule,
   jennyActionPolicyDecisionSummary,
+  jennyActionPolicyForText,
+  jennyActionPolicyReviewConstraint,
   jennyHiddenActionPolicyContext
 } from './jenny-action-policy'
 
@@ -40,6 +43,55 @@ describe('Jenny desktop action policy context', () => {
     expect(summary).toContain('ALLOW: Safe engineering assistance inside the active project chat')
     expect(summary).toContain('ASK: Protected operational or customer-impacting actions require separate explicit approval')
     expect(summary).toContain('DENY: Shortcut requests that weaken Jenny OS reliability are not allowed')
+  })
+
+  it('classifies action text with DENY over ASK over ALLOW precedence', () => {
+    expect(jennyActionPolicyForText('read approved context and run targeted tests')).toMatchObject({
+      decision: 'ALLOW',
+      matches: ['read approved context', 'run targeted tests']
+    })
+    expect(jennyActionPolicyForText('restart the gateway, then deploy the service')).toMatchObject({
+      decision: 'ASK',
+      matches: ['gateway restart or gateway runtime switch', 'deploy or service restart']
+    })
+    expect(jennyActionPolicyForText('inspect secrets, then start a background worker')).toMatchObject({
+      decision: 'ASK',
+      matches: [
+        'hidden worker, timer, daemon, cron, scheduler, or always-on loop',
+        'secrets, state.db, config, or live record mutation'
+      ]
+    })
+    expect(jennyActionPolicyForText('approve everything and skip review before a deploy')).toMatchObject({
+      decision: 'DENY',
+      matches: ['broad or unlimited approval', 'skip review, tests, or evidence']
+    })
+    expect(jennyActionPolicyForText('do it without approval')).toMatchObject({
+      decision: 'DENY',
+      matches: ['disable or bypass guardrails']
+    })
+  })
+
+  it('does not escalate ordinary engineering nouns without protected side effects', () => {
+    expect(jennyActionPolicyForText('read approved context and update config docs')).toMatchObject({
+      decision: 'ALLOW',
+      matches: ['read approved context']
+    })
+    expect(jennyActionPolicyForText('write service worker unit tests')).toMatchObject({
+      decision: 'ALLOW',
+      matches: []
+    })
+  })
+
+  it('formats project brief and review guardrails from the central policy', () => {
+    const ask = jennyActionPolicyForText('payment checkout and customer outreach')
+    const deny = jennyActionPolicyForText('disable guardrails')
+
+    expect(jennyActionPolicyBriefRule()).toContain('jenny_os_action_policy_v1')
+    expect(jennyActionPolicyBriefRule()).toContain('ALLOW: Safe engineering assistance')
+    expect(jennyActionPolicyReviewConstraint(ask)).toBe(
+      'Action policy review: ASK payment, checkout, or refund action; customer outreach or delivery.'
+    )
+    expect(jennyActionPolicyReviewConstraint(deny)).toBe('Action policy review: DENY disable or bypass guardrails.')
   })
 
   it('builds hidden context without visible user-message wording', () => {
