@@ -605,6 +605,20 @@ def test_compact_run_jenny_once_targets_visible_current_project_message() -> Non
     assert "isCurrentAfterReply" in helper
 
 
+def test_compact_run_jenny_once_recovers_late_recorded_reply_before_error() -> None:
+    src = page_source()
+    helper = function_source(src, "latestGitHubBridgeReplyForRequest")
+    assert "status?.response_messages" in helper
+    assert "status?.recent_messages" in helper
+    assert 'message.request_id === requestId && message.from_agent === "jenny"' in helper
+
+    run_fn = function_source(src, "runJennyOnce")
+    assert "latestGitHubBridgeReplyForRequest(nextSnapshot.githubBridgeStatus, pendingRequestId)" in run_fn
+    assert "compact chat reply reconciliation failed" in run_fn
+    assert run_fn.index("latestGitHubBridgeReplyForRequest(nextSnapshot.githubBridgeStatus, pendingRequestId)") < run_fn.index("jennyChatErrorMessage(err)")
+    assert "Jenny replied to the latest pending project message." in run_fn
+
+
 def test_compact_jenny_activity_uses_github_bridge_status_records() -> None:
     src = page_source()
     start = src.index("function jennyActivityItems")

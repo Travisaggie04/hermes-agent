@@ -1098,6 +1098,22 @@ function latestVisiblePendingGitHubBridgeMessageForProject(
   return latestPendingGitHubBridgeMessage(visibleCurrentGitHubBridgeMessagesForProject(messages, projectId));
 }
 
+function latestGitHubBridgeReplyForRequest(
+  status: GitHubBridgeStatus | undefined,
+  requestId: string | undefined,
+): GitHubBridgeMessageRecord | null {
+  if (!requestId) {
+    return null;
+  }
+
+  const replies = uniqueGitHubBridgeMessages([
+    ...unwrapRecords(status?.response_messages),
+    ...unwrapRecords(status?.recent_messages),
+  ]).filter(message => message.request_id === requestId && message.from_agent === "jenny");
+
+  return replies.length ? replies[replies.length - 1] : null;
+}
+
 function bridgeRequestId(): string {
   const fallback = Math.random().toString(16).slice(2, 14);
   return `mission-control-chat-${globalThis.crypto?.randomUUID?.() ?? fallback}`;
@@ -2033,13 +2049,35 @@ export default function MissionControlCompactPage() {
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
-      await refreshSnapshot();
+      let recordedReply: GitHubBridgeMessageRecord | null = null;
+      try {
+        const nextSnapshot = await loadCompactSnapshot();
+        setSnapshot(nextSnapshot);
+        recordedReply = latestGitHubBridgeReplyForRequest(nextSnapshot.githubBridgeStatus, pendingRequestId);
+      } catch (refreshErr) {
+        console.warn("[mission-control] compact chat snapshot refresh failed after Jenny run", refreshErr);
+      }
+      const answered = Boolean(result.answered || recordedReply);
       setJennyRunProgress({
-        detail: result.answered ? "Jenny replied to the latest project message." : noReplyStatusMessage(result.status?.last_error),
-        phase: result.answered ? "complete" : "error",
+        detail: answered ? "Jenny replied to the latest project message." : noReplyStatusMessage(result.status?.last_error),
+        phase: answered ? "complete" : "error",
       });
-      setRoomMessage(result.answered ? "Jenny replied to the latest pending project message." : noReplyStatusMessage(result.status?.last_error));
+      setRoomMessage(answered ? "Jenny replied to the latest pending project message." : noReplyStatusMessage(result.status?.last_error));
     } catch (err) {
+      try {
+        const nextSnapshot = await loadCompactSnapshot();
+        setSnapshot(nextSnapshot);
+        if (latestGitHubBridgeReplyForRequest(nextSnapshot.githubBridgeStatus, pendingRequestId)) {
+          setJennyRunProgress({
+            detail: "Jenny replied to the latest project message.",
+            phase: "complete",
+          });
+          setRoomMessage("Jenny replied to the latest pending project message.");
+          return;
+        }
+      } catch (refreshErr) {
+        console.warn("[mission-control] compact chat reply reconciliation failed", refreshErr);
+      }
       const message = jennyChatErrorMessage(err);
       setJennyRunProgress({
         detail: message,
