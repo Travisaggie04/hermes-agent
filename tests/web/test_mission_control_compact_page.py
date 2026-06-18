@@ -75,7 +75,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "setTitle(\"Jenny\")",
         "w-full min-w-0 max-w-full",
         "[&_*]:box-border",
-        "flex w-full min-w-0 max-w-full flex-1 overflow-visible overflow-x-clip sm:min-h-0 sm:overflow-hidden",
+        "block w-full min-w-0 max-w-full overflow-visible overflow-x-clip sm:flex sm:flex-1 sm:min-h-0 sm:overflow-hidden",
         "Local studio",
         "Projects",
         "IV. — Jenny workspace",
@@ -231,9 +231,9 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Refresh replies",
         "min-h-[100dvh] w-full min-w-0 max-w-full touch-pan-y flex-col overflow-y-auto overflow-x-clip overscroll-x-none",
         "sr-only",
-        "min-w-0 max-w-full flex-1 overflow-visible sm:min-h-0 sm:overflow-hidden",
+        "min-w-0 max-w-full overflow-visible sm:flex-1 sm:min-h-0 sm:overflow-hidden",
         "sr-only order-2 min-w-0 max-w-full overflow-hidden",
-        "flex w-full min-w-0 max-w-full flex-1 overflow-visible overflow-x-clip",
+        "block w-full min-w-0 max-w-full overflow-visible overflow-x-clip",
         "sm:h-full sm:max-h-full sm:min-h-0",
         "rounded-none border-0 border-[#d4a574]/10",
         "grid w-full min-w-0 max-w-xl gap-1",
@@ -397,8 +397,9 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
         "overflow-x-hidden",
         "min-h-[100dvh] w-full min-w-0 max-w-full touch-pan-y flex-col overflow-y-auto overflow-x-clip overscroll-x-none",
         "sm:h-full sm:max-h-full sm:min-h-0 sm:flex-1 sm:overflow-hidden",
-        "flex w-full min-w-0 max-w-full flex-1 overflow-visible overflow-x-clip sm:min-h-0 sm:overflow-hidden",
-        "min-h-[calc(100dvh-8rem)] min-w-0 max-w-full flex-1 flex-col overflow-visible",
+        "block w-full min-w-0 max-w-full overflow-visible overflow-x-clip sm:flex sm:flex-1 sm:min-h-0 sm:overflow-hidden",
+        "flex min-h-0 min-w-0 max-w-full flex-col overflow-visible",
+        "sm:min-h-0 sm:flex-1 sm:overflow-hidden",
         "min-[420px]:grid-cols-2",
         "auto-rows-max content-start",
         "overflow-visible overflow-x-hidden overscroll-contain",
@@ -406,7 +407,7 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
         "sm:scroll-pb-6",
         "[-webkit-overflow-scrolling:touch]",
         "pb-[max(env(safe-area-inset-bottom),0.5rem)]",
-        "pb-[calc(env(safe-area-inset-bottom)+10rem)]",
+        "pb-4 pr-1 sm:min-h-0 sm:flex-1",
         "mb-[max(env(safe-area-inset-bottom),1rem)]",
         "aria-label=\"Project chat composer\"",
         "data-testid=\"compact-chat-composer\"",
@@ -453,7 +454,8 @@ def test_compact_mobile_transcript_uses_page_scroll_not_trapped_panel() -> None:
     assert "sm:overflow-y-auto" in transcript_src
     assert "content-start" in transcript_src
     assert "sm:content-end" in transcript_src
-    assert "pb-[calc(env(safe-area-inset-bottom)+10rem)]" in transcript_src
+    assert "pb-4" in transcript_src
+    assert "pb-[calc(env(safe-area-inset-bottom)+10rem)]" not in transcript_src
     assert "mb-[max(env(safe-area-inset-bottom),1rem)]" in composer_src
     assert "sticky bottom-0" not in composer_src
 

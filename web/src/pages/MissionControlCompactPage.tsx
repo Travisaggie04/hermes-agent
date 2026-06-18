@@ -2390,8 +2390,8 @@ export default function MissionControlCompactPage() {
       ) : null}
 
       {selectedProjectView ? (
-        <div className="flex w-full min-w-0 max-w-full flex-1 overflow-visible overflow-x-clip sm:min-h-0 sm:overflow-hidden">
-          <div className="min-w-0 max-w-full flex-1 overflow-visible sm:min-h-0 sm:overflow-hidden">
+        <div className="block w-full min-w-0 max-w-full overflow-visible overflow-x-clip sm:flex sm:flex-1 sm:min-h-0 sm:overflow-hidden">
+          <div className="min-w-0 max-w-full overflow-visible sm:flex-1 sm:min-h-0 sm:overflow-hidden">
             <CompactProjectRoom
               busy={roomBusy}
               message={roomMessage}
@@ -2863,7 +2863,7 @@ function CompactProjectRoom({
   });
   return (
     <section
-      className="flex h-full min-h-0 w-full min-w-0 max-w-full flex-col overflow-hidden overflow-x-clip rounded-none border-0 border-[#d4a574]/10 bg-[#15101a] sm:rounded-md sm:border"
+      className="flex min-h-0 w-full min-w-0 max-w-full flex-col overflow-visible overflow-x-clip rounded-none border-0 border-[#d4a574]/10 bg-[#15101a] sm:h-full sm:overflow-hidden sm:rounded-md sm:border"
       aria-label="Project chat workspace"
     >
       <div className="w-full min-w-0 max-w-full shrink-0 overflow-hidden overflow-x-clip border-b border-[#f3ebda]/10 bg-[#15101a] px-2 py-2">
@@ -2904,7 +2904,7 @@ function CompactProjectRoom({
         </div>
       </div>
 
-      <article className="flex min-h-[calc(100dvh-8rem)] min-w-0 max-w-full flex-1 flex-col overflow-visible px-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-2 sm:min-h-0 sm:overflow-hidden" data-testid="compact-project-room">
+      <article className="flex min-h-0 min-w-0 max-w-full flex-col overflow-visible px-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-2 sm:min-h-0 sm:flex-1 sm:overflow-hidden" data-testid="compact-project-room">
         <div className="sr-only grid min-w-0 gap-2 border-b border-[#f3ebda]/10 pb-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-2">
             <span className="sr-only">IV. — Jenny workspace</span>
@@ -3065,7 +3065,7 @@ function CompactProjectRoom({
             <h3 className="text-sm font-semibold text-[#f3ebda]">Conversation</h3>
             <span className="text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
           </div>
-          <div className="mt-2 grid min-w-0 max-w-full auto-rows-max content-start gap-2 overflow-visible overflow-x-hidden overscroll-contain pb-[calc(env(safe-area-inset-bottom)+10rem)] pr-1 sm:min-h-0 sm:flex-1 sm:content-end sm:overflow-y-auto sm:pb-3 sm:scroll-pb-6 [-webkit-overflow-scrolling:touch]" data-testid="compact-chat-scroll">
+          <div className="mt-2 grid min-w-0 max-w-full auto-rows-max content-start gap-2 overflow-visible overflow-x-hidden overscroll-contain pb-4 pr-1 sm:min-h-0 sm:flex-1 sm:content-end sm:overflow-y-auto sm:pb-3 sm:scroll-pb-6 [-webkit-overflow-scrolling:touch]" data-testid="compact-chat-scroll">
             {chatMessages.length ? (
               chatMessages.map(chat => {
                 const replyReview = latestReviewByResponseId.get(chat.id)
