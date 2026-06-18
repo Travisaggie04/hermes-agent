@@ -95,21 +95,19 @@ describe('native project chat header', () => {
   })
 
   it('lets the native chat header create a structured Jenny project brief', () => {
+    expect(source).toContain("from '@/lib/native-project-intake'")
     expect(source).toContain('function NativeProjectIntakeDialog')
     expect(source).toContain('Create project')
     expect(source).toContain('Name the work, give Jenny the goal, and keep detailed guardrails optional.')
-    expect(source).toContain('createMissionControlProject({')
-    expect(source).toContain('createMissionControlProjectBrief({')
-    expect(source).toContain('Jenny must challenge vague, risky, or wrong-approach requests before implementation.')
-    expect(source).toContain('Jenny must define evidence, tests, rollback/stop conditions, and approval needs before broad work.')
+    expect(source).toContain('parseNativeProjectIntake(value)')
+    expect(source).toContain('createMissionControlProject(buildNativeProjectCreatePayload(parsed))')
+    expect(source).toContain('createMissionControlProjectBrief(')
+    expect(source).toContain('buildNativeProjectBriefCreatePayload(parsed, createdProjectId, createdProjectName)')
     expect(source).toContain('Advanced setup')
     expect(source).toContain('Evidence Jenny must return, one per line')
     expect(source).toContain('Approval or stop rules, one per line')
-    expect(source).toContain('Evidence required: ${item}')
-    expect(source).toContain('Approval/stop rule: ${item}')
     expect(source).toContain('notifyMissionControlProjectCreated({ projectId: createdProjectId, projectName: createdProjectName })')
     expect(source).toContain('onStartProjectChat(projectId, projectName)')
-    expect(source).toContain('Start with a spec-first project setup review.')
   })
 
   it('refreshes native project pickers when any surface creates a project', () => {

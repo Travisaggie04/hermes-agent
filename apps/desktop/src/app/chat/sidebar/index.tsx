@@ -50,6 +50,13 @@ import {
 import { useI18n } from '@/i18n'
 import { sessionTitle } from '@/lib/chat-runtime'
 import { MISSION_CONTROL_PROJECT_CREATED, MISSION_CONTROL_PROJECT_LINK_CREATED, notifyMissionControlProjectCreated } from '@/lib/mission-control-events'
+import {
+  buildNativeProjectBriefCreatePayload,
+  buildNativeProjectCreatePayload,
+  emptyNativeProjectIntake,
+  type NativeProjectIntakeValue,
+  parseNativeProjectIntake
+} from '@/lib/native-project-intake'
 import { profileColor } from '@/lib/profile-color'
 import { sessionMatchesSearch } from '@/lib/session-search'
 import { cn } from '@/lib/utils'
@@ -271,14 +278,6 @@ function projectGroupsFor(groups: MissionControlProjectSessionGroup[]): SidebarS
   }))
 }
 
-function projectSlug(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'project'
-}
-
-function listFromTextarea(value: string): string[] {
-  return value.split(/\r?\n|,/).map(item => item.trim()).filter(Boolean)
-}
-
 function useSortableBindings(id: string) {
   const { attributes, isDragging, listeners, setNodeRef, transform, transition } = useSortable({ id })
 
@@ -350,15 +349,7 @@ export function ChatSidebar({
   const [projectIntakeOpen, setProjectIntakeOpen] = useState(false)
   const [projectIntakeError, setProjectIntakeError] = useState('')
   const [projectIntakeSaving, setProjectIntakeSaving] = useState(false)
-  const [projectIntake, setProjectIntake] = useState<ProjectIntakeValue>({
-    approval: '',
-    evidence: '',
-    forbidden: '',
-    goal: '',
-    name: '',
-    source: '',
-    success: ''
-  })
+  const [projectIntake, setProjectIntake] = useState<NativeProjectIntakeValue>(emptyNativeProjectIntake)
   const [profileLoadMorePending, setProfileLoadMorePending] = useState<Record<string, boolean>>({})
   const recentsAutoCollapsedProjectIdRef = useRef('')
   const trimmedQuery = searchQuery.trim()
@@ -508,24 +499,9 @@ export function ChatSidebar({
   }, [refreshProjectGroups])
 
   const createProjectFromIntake = useCallback(async () => {
-    const name = projectIntake.name.trim()
-    const goal = projectIntake.goal.trim()
-    const source = projectIntake.source.trim()
-    const success = listFromTextarea(projectIntake.success)
-    const forbidden = listFromTextarea(projectIntake.forbidden)
-    const evidence = listFromTextarea(projectIntake.evidence)
-    const approval = listFromTextarea(projectIntake.approval)
-    const approvalRules = [
-      'Jenny must challenge vague, risky, or wrong-approach requests before implementation.',
-      'Jenny must define evidence, tests, rollback/stop conditions, and approval needs before broad work.',
-      ...approval
-    ]
-    const constraints = [
-      ...evidence.map(item => `Evidence required: ${item}`),
-      ...approval.map(item => `Approval/stop rule: ${item}`)
-    ]
+    const parsed = parseNativeProjectIntake(projectIntake)
 
-    if (!name || !goal) {
+    if (!parsed.name || !parsed.goal) {
       setProjectIntakeError('Project name and goal are required.')
 
       return
@@ -535,37 +511,21 @@ export function ChatSidebar({
     setProjectIntakeError('')
 
     try {
-      const projectId = `project-${projectSlug(name)}`
-      const project = await createMissionControlProject({
-        current_goal: goal,
-        mistakes_guards: forbidden.join('; '),
-        name,
-        next_recommended_lane: 'Start with a spec-first project setup review.',
-        project_id: projectId,
-        source_of_truth: source,
-        status: 'active'
-      })
-      const createdProjectId = project.project.project_id || projectId
+      const project = await createMissionControlProject(buildNativeProjectCreatePayload(parsed))
+      const createdProjectId = project.project.project_id || parsed.projectId
+      const createdProjectName = project.project.name || parsed.name
 
-      await createMissionControlProjectBrief({
-        approval_rules: approvalRules,
-        constraints,
-        forbidden_actions: forbidden,
-        name: `${name} initial brief`,
-        outcome: goal,
-        project_id: createdProjectId,
-        source_of_truth: source,
-        status: 'active',
-        success_criteria: success
-      })
+      await createMissionControlProjectBrief(
+        buildNativeProjectBriefCreatePayload(parsed, createdProjectId, createdProjectName)
+      )
 
-      setSelectedMissionControlProject(createdProjectId, project.project.name || name)
+      setSelectedMissionControlProject(createdProjectId, createdProjectName)
       setSidebarRecentsOpen(false)
-      setProjectIntake({ approval: '', evidence: '', forbidden: '', goal: '', name: '', source: '', success: '' })
+      setProjectIntake(emptyNativeProjectIntake())
       setProjectIntakeOpen(false)
-      notifyMissionControlProjectCreated({ projectId: createdProjectId, projectName: project.project.name || name })
+      notifyMissionControlProjectCreated({ projectId: createdProjectId, projectName: createdProjectName })
       refreshProjectGroups()
-      onNewSessionInProject(createdProjectId, project.project.name || name)
+      onNewSessionInProject(createdProjectId, createdProjectName)
     } catch (err) {
       setProjectIntakeError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -1284,27 +1244,17 @@ function SidebarPinnedEmptyState() {
   )
 }
 
-interface ProjectIntakeValue {
-  approval: string
-  evidence: string
-  forbidden: string
-  goal: string
-  name: string
-  source: string
-  success: string
-}
-
 interface ProjectIntakeFormProps {
   error: string
   onCancel: () => void
-  onChange: (value: ProjectIntakeValue) => void
+  onChange: (value: NativeProjectIntakeValue) => void
   onSubmit: () => void
   saving: boolean
-  value: ProjectIntakeValue
+  value: NativeProjectIntakeValue
 }
 
 function ProjectIntakeForm({ error, onCancel, onChange, onSubmit, saving, value }: ProjectIntakeFormProps) {
-  const update = (key: keyof ProjectIntakeValue) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+  const update = (key: keyof NativeProjectIntakeValue) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     onChange({ ...value, [key]: event.currentTarget.value })
 
   return (

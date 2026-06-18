@@ -15,13 +15,15 @@ describe('chat sidebar project workspace affordances', () => {
   })
 
   it('makes new project setup capture evidence and approval stop rules', () => {
+    expect(source).toContain("from '@/lib/native-project-intake'")
+    expect(source).toContain('parseNativeProjectIntake(projectIntake)')
+    expect(source).toContain('buildNativeProjectCreatePayload(parsed)')
+    expect(source).toContain('buildNativeProjectBriefCreatePayload(parsed, createdProjectId, createdProjectName)')
     expect(source).toContain('Advanced setup')
     expect(source).toContain('Evidence Jenny must return, one per line')
     expect(source).toContain('Approval or stop rules, one per line')
-    expect(source).toContain('Jenny must define evidence, tests, rollback/stop conditions, and approval needs before broad work.')
-    expect(source).toContain('Evidence required: ${item}')
-    expect(source).toContain('Approval/stop rule: ${item}')
-    expect(source).toContain("setProjectIntake({ approval: '', evidence: '', forbidden: '', goal: '', name: '', source: '', success: '' })")
+    expect(source).toContain('emptyNativeProjectIntake')
+    expect(source).toContain('setProjectIntake(emptyNativeProjectIntake())')
   })
 
   it('makes Jenny OS the primary native project chat entry', () => {
@@ -100,7 +102,7 @@ describe('chat sidebar project workspace affordances', () => {
 
   it('broadcasts sidebar-created projects so native chat pickers stay in sync', () => {
     expect(source).toContain('notifyMissionControlProjectCreated')
-    expect(source).toContain('notifyMissionControlProjectCreated({ projectId: createdProjectId, projectName: project.project.name || name })')
+    expect(source).toContain('notifyMissionControlProjectCreated({ projectId: createdProjectId, projectName: createdProjectName })')
   })
 
   it('selects the project before resuming a project-linked chat', () => {
