@@ -161,6 +161,11 @@ const wsId = (id: string) => `${WS_ID_PREFIX}${id}`
 const parseWsId = (id: string) => (id.startsWith(WS_ID_PREFIX) ? id.slice(WS_ID_PREFIX.length) : null)
 const countLabel = (loaded: number, total: number) => (total > loaded ? `${loaded}/${total}` : String(loaded))
 const sessionTime = (s: SessionInfo) => s.last_active || s.started_at || 0
+const latestSidebarSession = (sessions: SessionInfo[]) =>
+  sessions.reduce<SessionInfo | null>(
+    (latest, session) => (latest && sessionTime(latest) >= sessionTime(session) ? latest : session),
+    null
+  )
 
 function orderByIds<T>(items: T[], getId: (item: T) => string, orderIds: string[]): T[] {
   if (!orderIds.length) {
@@ -1477,6 +1482,7 @@ function SidebarSessionsSection({
           onNewSession={onNewSessionInWorkspace}
           onNewSessionInProject={onNewSessionInProject}
           onOpenProjectChat={onOpenProjectChat}
+          onResumeSession={onResumeSession}
           onSelectProject={onSelectProject}
           renderRows={renderSessionList}
         />
@@ -1488,6 +1494,7 @@ function SidebarSessionsSection({
           onNewSession={onNewSessionInWorkspace}
           onNewSessionInProject={onNewSessionInProject}
           onOpenProjectChat={onOpenProjectChat}
+          onResumeSession={onResumeSession}
           onSelectProject={onSelectProject}
           renderRows={renderSessionList}
         />
@@ -1554,6 +1561,7 @@ interface SidebarWorkspaceGroupProps extends React.ComponentProps<'div'> {
   onNewSession?: (path: null | string) => void
   onNewSessionInProject?: (projectId: string, projectName: string) => void
   onOpenProjectChat?: (projectId: string, projectName: string) => void
+  onResumeSession?: (sessionId: string) => void
   onSelectProject?: (projectId: string, projectName: string) => void
   active?: boolean
   reorderable?: boolean
@@ -1567,6 +1575,7 @@ function SidebarWorkspaceGroup({
   onNewSession,
   onNewSessionInProject,
   onOpenProjectChat,
+  onResumeSession,
   onSelectProject,
   active = false,
   reorderable = false,
@@ -1592,6 +1601,7 @@ function SidebarWorkspaceGroup({
   const visibleSessions = group.sessions.slice(0, visibleCount)
   const hiddenCount = Math.max(0, (isProfileGroup ? totalCount : loadedCount) - visibleSessions.length)
   const nextCount = Math.min(pageStep, hiddenCount)
+  const latestProjectSession = isProjectGroup ? latestSidebarSession(group.sessions) : null
 
   // Reveal already-loaded rows first; only hit the backend when the next page
   // crosses what's been fetched for this profile.
@@ -1629,7 +1639,9 @@ function SidebarWorkspaceGroup({
           onClick={() => {
             if (isProjectGroup) {
               onSelectProject?.(group.id, group.label)
-              if (!active) {
+              if (!active && latestProjectSession) {
+                onResumeSession?.(latestProjectSession.id)
+              } else if (!active) {
                 onOpenProjectChat?.(group.id, group.label)
               }
               setOpen(true)
@@ -1744,6 +1756,7 @@ interface SortableWorkspaceProps {
   onNewSession?: (path: null | string) => void
   onNewSessionInProject?: (projectId: string, projectName: string) => void
   onOpenProjectChat?: (projectId: string, projectName: string) => void
+  onResumeSession?: (sessionId: string) => void
   onSelectProject?: (projectId: string, projectName: string) => void
   active?: boolean
 }
