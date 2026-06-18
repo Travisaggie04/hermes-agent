@@ -1906,7 +1906,6 @@ export default function MissionControlCompactPage() {
 
   useEffect(() => {
     if (!isJennyRunActive(jennyRunProgress)) {
-      setJennyRunElapsedSeconds(0);
       return;
     }
 
@@ -2259,7 +2258,7 @@ export default function MissionControlCompactPage() {
   }
 
   return (
-    <main className="box-border flex h-full max-h-full min-h-0 w-full min-w-0 max-w-full flex-1 touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none bg-[#0e0b12] px-1 py-1 text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 [&_*]:box-border" data-testid="mission-control-compact-route">
+    <main className="box-border flex h-full max-h-full min-h-0 w-full min-w-0 max-w-full flex-1 touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none bg-[#0e0b12] px-0 py-0 text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 sm:py-1 [&_*]:box-border" data-testid="mission-control-compact-route">
       <header className="sr-only">
         <p className="sr-only max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782] [overflow-wrap:anywhere]">
           <span className="font-serif text-lg italic text-[#d4a574]">IV.</span>
@@ -2300,7 +2299,7 @@ export default function MissionControlCompactPage() {
       ) : null}
 
       {selectedProjectView ? (
-        <div className="mt-0 flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden overflow-x-clip">
+        <div className="flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden overflow-x-clip">
           <div className="min-h-0 min-w-0 max-w-full flex-1 overflow-hidden">
             <CompactProjectRoom
               busy={roomBusy}
@@ -2766,10 +2765,10 @@ function CompactProjectRoom({
   });
   return (
     <section
-      className="mt-0 flex h-full min-h-0 w-full min-w-0 max-w-full flex-col overflow-hidden overflow-x-clip rounded-md border border-[#d4a574]/10 bg-[#15101a] sm:h-[calc(100vh-4rem)] sm:min-h-[34rem]"
+      className="flex h-full min-h-0 w-full min-w-0 max-w-full flex-col overflow-hidden overflow-x-clip rounded-none border-0 border-[#d4a574]/10 bg-[#15101a] sm:rounded-md sm:border"
       aria-label="Project chat workspace"
     >
-      <div className="w-full min-w-0 max-w-full overflow-hidden overflow-x-clip border-b border-[#f3ebda]/10 bg-[#15101a] px-2 py-2">
+      <div className="w-full min-w-0 max-w-full shrink-0 overflow-hidden overflow-x-clip border-b border-[#f3ebda]/10 bg-[#15101a] px-2 py-2">
         <label className="grid w-full min-w-0 max-w-xl gap-1">
           <span className="sr-only">Active project</span>
           <select
@@ -2807,7 +2806,7 @@ function CompactProjectRoom({
         </div>
       </div>
 
-      <article className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden p-2 pb-[max(env(safe-area-inset-bottom),0.75rem)]" data-testid="compact-project-room">
+      <article className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2" data-testid="compact-project-room">
         <div className="sr-only grid min-w-0 gap-2 border-b border-[#f3ebda]/10 pb-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-2">
             <span className="sr-only">IV. — Jenny workspace</span>
@@ -2968,7 +2967,7 @@ function CompactProjectRoom({
             <h3 className="text-sm font-semibold text-[#f3ebda]">Conversation</h3>
             <span className="text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
           </div>
-          <div className="mt-2 grid min-h-0 min-w-0 max-w-full flex-1 auto-rows-max content-end gap-2 overflow-y-auto overflow-x-hidden overscroll-contain pb-2 pr-1 scroll-pb-32 [-webkit-overflow-scrolling:touch]">
+          <div className="mt-2 grid min-h-0 min-w-0 max-w-full flex-1 auto-rows-max content-end gap-2 overflow-y-auto overflow-x-hidden overscroll-contain pb-3 pr-1 scroll-pb-6 [-webkit-overflow-scrolling:touch]" data-testid="compact-chat-scroll">
             {chatMessages.length ? (
               chatMessages.map(chat => {
                 const replyReview = latestReviewByResponseId.get(chat.id)
@@ -3072,7 +3071,7 @@ function CompactProjectRoom({
           </div>
         </section>
 
-        <div className="z-10 mt-2 max-w-full shrink-0 sticky bottom-0 overflow-hidden overflow-x-clip rounded-[1.75rem] border border-[#f3ebda]/10 bg-[#15101a]/95 p-2 shadow-[0_-18px_40px_rgba(14,11,18,0.88)] backdrop-blur" aria-label="Project chat composer">
+        <div className="z-10 mt-2 max-w-full shrink-0 overflow-hidden overflow-x-clip rounded-[1.5rem] border border-[#f3ebda]/10 bg-[#15101a]/95 p-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-[0_-18px_40px_rgba(14,11,18,0.88)] backdrop-blur" aria-label="Project chat composer" data-testid="compact-chat-composer">
           {reviewRequired ? (
             <p className="mb-2 max-w-full text-xs font-semibold text-amber-700 [overflow-wrap:anywhere] dark:text-amber-100" role="status">
               Review the latest Jenny reply in the chat before acting on it.
@@ -3082,7 +3081,7 @@ function CompactProjectRoom({
             <label className="min-w-0 flex-1 text-sm font-medium">
               <span className="sr-only">Message Jenny</span>
               <textarea
-                className="max-h-24 min-h-12 w-full min-w-0 max-w-full resize-none rounded-2xl border border-[#f3ebda]/10 bg-[#0e0b12] px-3 py-3 text-base text-[#f3ebda] outline-none transition placeholder:text-[#6e6353] focus:border-[#d4a574]/50 [overflow-wrap:anywhere] [word-break:break-word]"
+                className="max-h-28 min-h-11 w-full min-w-0 max-w-full resize-none rounded-2xl border border-[#f3ebda]/10 bg-[#0e0b12] px-3 py-2.5 text-base text-[#f3ebda] outline-none transition placeholder:text-[#6e6353] focus:border-[#d4a574]/50 [overflow-wrap:anywhere] [word-break:break-word]"
                 disabled={paused}
                 onChange={event => onRequestChange(event.target.value)}
                 placeholder={paused ? "This project is on hold until Jenny is stable." : "Tell Jenny what you want to discuss or ask her to do next..."}
@@ -3091,7 +3090,7 @@ function CompactProjectRoom({
             </label>
 
             <div className="flex min-w-0 shrink-0 justify-end">
-              <button className="min-h-12 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={busy || paused} onClick={onQueueBridge} type="button">
+              <button className="min-h-11 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={busy || paused} onClick={onQueueBridge} type="button">
                 {sendButtonLabel}
               </button>
             </div>
