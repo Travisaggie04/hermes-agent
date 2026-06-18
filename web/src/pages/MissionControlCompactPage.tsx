@@ -3088,7 +3088,7 @@ function CompactProjectRoom({
                     className={cn(
                       "max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word]",
                       chat.speaker === "Jenny"
-                        ? "max-h-[min(52dvh,32rem)] touch-pan-y overflow-y-auto overscroll-contain pr-1 [-webkit-overflow-scrolling:touch]"
+                        ? "overflow-visible sm:max-h-[min(52dvh,32rem)] sm:touch-pan-y sm:overflow-y-auto sm:overscroll-contain sm:pr-1 sm:[-webkit-overflow-scrolling:touch]"
                         : "overflow-visible",
                     )}
                     data-testid={chat.speaker === "Jenny" ? "compact-jenny-reply-body" : undefined}
