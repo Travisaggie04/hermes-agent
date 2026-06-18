@@ -144,6 +144,13 @@ interface ChatHeaderProps {
   selectedSessionId: null | string
 }
 
+type NativeProjectChatOption = {
+  id: string
+  lastSessionTitle: string
+  name: string
+  sessionCount: number
+}
+
 function ChatHeader({
   activeSessionId,
   activeTurnRunning,
@@ -169,6 +176,12 @@ function ChatHeader({
     queryKey: ['mission-control-projects-native-chat'],
     staleTime: 30_000
   })
+  const projectSessionsQuery = useQuery({
+    enabled: gatewayOpen,
+    queryFn: getMissionControlProjectSessions,
+    queryKey: ['mission-control-project-sessions-native-chat'],
+    staleTime: 30_000
+  })
   const bridgeStatusQuery = useQuery({
     enabled: gatewayOpen && Boolean(selectedProjectId.trim()),
     queryFn: () => getMissionControlGitHubBridgeStatus(selectedProjectId),
@@ -184,22 +197,31 @@ function ChatHeader({
     staleTime: 60_000
   })
   const refetchHeaderProjects = projectsQuery.refetch
+  const refetchHeaderProjectSessions = projectSessionsQuery.refetch
 
   useEffect(() => {
-    const onProjectCreated = () => {
+    const onProjectRecordsChanged = () => {
       void refetchHeaderProjects()
+      void refetchHeaderProjectSessions()
     }
 
-    window.addEventListener(MISSION_CONTROL_PROJECT_CREATED, onProjectCreated)
+    window.addEventListener(MISSION_CONTROL_PROJECT_CREATED, onProjectRecordsChanged)
+    window.addEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED, onProjectRecordsChanged)
 
-    return () => window.removeEventListener(MISSION_CONTROL_PROJECT_CREATED, onProjectCreated)
-  }, [refetchHeaderProjects])
+    return () => {
+      window.removeEventListener(MISSION_CONTROL_PROJECT_CREATED, onProjectRecordsChanged)
+      window.removeEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED, onProjectRecordsChanged)
+    }
+  }, [refetchHeaderProjectSessions, refetchHeaderProjects])
 
   const activeStoredSession =
     sessions.find(session => session.id === selectedSessionId || session._lineage_root_id === selectedSessionId) || null
 
   const selectedProjectTitle = selectedProjectName.trim()
-  const projects = useMemo(() => nativeChatProjects(projectsQuery.data?.projects.map(item => item.record) ?? []), [projectsQuery.data])
+  const projects = useMemo(
+    () => projectChatOptions(projectsQuery.data?.projects.map(item => item.record) ?? [], projectSessionsQuery.data?.groups ?? []),
+    [projectSessionsQuery.data, projectsQuery.data]
+  )
   const projectPickerAvailable = projectsQuery.isLoading || projects.length > 0 || Boolean(selectedProjectTitle)
   const title = activeStoredSession ? sessionTitle(activeStoredSession) : selectedProjectTitle ? 'New project chat' : 'New session'
   const sessionSubagents = activeSessionId ? (subagentsBySession[activeSessionId] ?? []) : []
@@ -272,7 +294,7 @@ function ChatHeader({
       </div>
       <div className="ml-auto flex min-w-0 max-w-[52vw] items-center gap-1.5 [-webkit-app-region:no-drag]">
         <ProjectHeaderSelect
-          loading={projectsQuery.isLoading}
+          loading={projectsQuery.isLoading || projectSessionsQuery.isLoading}
           onClearProject={() => setSelectedMissionControlProject(null)}
           onNewProject={() => setProjectIntakeOpen(true)}
           onSelectProject={onStartProjectChat}
@@ -530,6 +552,25 @@ function latestProjectSessionTitle(group?: MissionControlProjectSessionGroup): s
   return latestSession?.title?.trim() || latestSession?.preview?.trim() || ''
 }
 
+function projectChatOptions(
+  projects: MissionControlProjectRecord[] = [],
+  groups: MissionControlProjectSessionGroup[] = []
+): NativeProjectChatOption[] {
+  const sessionGroupsByProject = new Map(groups.map(group => [group.project_id, group]))
+
+  return nativeChatProjects(projects).map(project => {
+    const sessionGroup = sessionGroupsByProject.get(project.project_id)
+    const sessionCount = sessionGroup?.linked_session_count ?? sessionGroup?.sessions.length ?? 0
+
+    return {
+      id: project.project_id,
+      lastSessionTitle: latestProjectSessionTitle(sessionGroup),
+      name: project.name,
+      sessionCount
+    }
+  })
+}
+
 function ProjectHeaderSelect({
   loading,
   onClearProject,
@@ -543,7 +584,7 @@ function ProjectHeaderSelect({
   onClearProject: () => void
   onNewProject: () => void
   onSelectProject: (projectId: string, projectName: string) => void
-  projects: MissionControlProjectRecord[]
+  projects: NativeProjectChatOption[]
   selectedProjectId: string
   selectedProjectTitle: string
 }) {
@@ -552,7 +593,7 @@ function ProjectHeaderSelect({
   }
 
   const value = selectedProjectId.trim()
-  const selectedProjectKnown = projects.some(project => project.project_id === value)
+  const selectedProjectKnown = projects.some(project => project.id === value)
   const showSelectedProjectFallback = Boolean(value && selectedProjectTitle && !selectedProjectKnown)
 
   return (
@@ -571,9 +612,9 @@ function ProjectHeaderSelect({
               return
             }
 
-            const project = projects.find(item => item.project_id === nextValue)
+            const project = projects.find(item => item.id === nextValue)
             if (project) {
-              onSelectProject(project.project_id, project.name)
+              onSelectProject(project.id, project.name)
             }
           }}
           value={selectedProjectKnown || showSelectedProjectFallback ? value : ''}
@@ -581,8 +622,9 @@ function ProjectHeaderSelect({
           <option value="">{loading ? 'Loading projects...' : 'Other chats'}</option>
           {showSelectedProjectFallback && <option value={value}>{selectedProjectTitle}</option>}
           {projects.map(project => (
-            <option key={project.project_id} value={project.project_id}>
+            <option key={project.id} value={project.id}>
               {project.name}
+              {project.sessionCount > 0 ? ` (${project.sessionCount})` : ''}
             </option>
           ))}
         </select>
@@ -934,23 +976,10 @@ export function ChatView({
       window.removeEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED, onProjectRecordsChanged)
     }
   }, [refetchProjectHome, refetchProjectHomeSessions])
-  const projectHomeOptions = useMemo(() => {
-    const sessionGroupsByProject = new Map(
-      (projectHomeSessionsQuery.data?.groups ?? []).map(group => [group.project_id, group])
-    )
-
-    return nativeChatProjects(projectHomeQuery.data?.projects.map(item => item.record) ?? []).map(project => {
-      const sessionGroup = sessionGroupsByProject.get(project.project_id)
-      const sessionCount = sessionGroup?.linked_session_count ?? sessionGroup?.sessions.length ?? 0
-
-      return {
-        id: project.project_id,
-        lastSessionTitle: latestProjectSessionTitle(sessionGroup),
-        name: project.name,
-        sessionCount
-      }
-    })
-  }, [projectHomeQuery.data, projectHomeSessionsQuery.data])
+  const projectHomeOptions = useMemo(
+    () => projectChatOptions(projectHomeQuery.data?.projects.map(item => item.record) ?? [], projectHomeSessionsQuery.data?.groups ?? []),
+    [projectHomeQuery.data, projectHomeSessionsQuery.data]
+  )
 
   const blankNativeChat = !isRoutedSessionView && !selectedSessionId && !activeSessionId && messages.length === 0
   const showProjectHomeIntro =

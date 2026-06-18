@@ -48,11 +48,23 @@ describe('native project chat header', () => {
 
   it('lets the native chat header switch Jenny projects without opening Mission Control', () => {
     expect(source).toContain('getMissionControlProjects')
+    expect(source).toContain('getMissionControlProjectSessions')
     expect(source).toContain("queryKey: ['mission-control-projects-native-chat']")
+    expect(source).toContain("queryKey: ['mission-control-project-sessions-native-chat']")
     expect(source).toContain('function ProjectHeaderSelect')
     expect(source).toContain('aria-label="Project"')
-    expect(source).toContain('onSelectProject(project.project_id, project.name)')
+    expect(source).toContain('onSelectProject(project.id, project.name)')
     expect(source).toContain('onSelectProject={onStartProjectChat}')
+  })
+
+  it('shows project chat counts in the native header selector', () => {
+    expect(source).toContain('type NativeProjectChatOption')
+    expect(source).toContain('function projectChatOptions')
+    expect(source).toContain('const sessionGroupsByProject = new Map')
+    expect(source).toContain('const sessionCount = sessionGroup?.linked_session_count ?? sessionGroup?.sessions.length ?? 0')
+    expect(source).toContain('projectChatOptions(projectsQuery.data?.projects.map(item => item.record) ?? [], projectSessionsQuery.data?.groups ?? [])')
+    expect(source).toContain("{project.sessionCount > 0 ? ` (${project.sessionCount})` : ''}")
+    expect(source).toContain('loading={projectsQuery.isLoading || projectSessionsQuery.isLoading}')
   })
 
   it('keeps the native project picker available on narrow chat widths', () => {
@@ -76,7 +88,7 @@ describe('native project chat header', () => {
   })
 
   it('keeps the selected project visible when the project list is temporarily stale', () => {
-    expect(source).toContain('const selectedProjectKnown = projects.some(project => project.project_id === value)')
+    expect(source).toContain('const selectedProjectKnown = projects.some(project => project.id === value)')
     expect(source).toContain('const showSelectedProjectFallback = Boolean(value && selectedProjectTitle && !selectedProjectKnown)')
     expect(source).toContain('value={selectedProjectKnown || showSelectedProjectFallback ? value : \'\'}')
     expect(source).toContain('{showSelectedProjectFallback && <option value={value}>{selectedProjectTitle}</option>}')
@@ -90,7 +102,7 @@ describe('native project chat header', () => {
 
   it('keeps the native project picker scoped to existing project records', () => {
     expect(source).toContain("import { nativeChatProjects } from './native-projects'")
-    expect(source).toContain('nativeChatProjects(projectsQuery.data?.projects.map(item => item.record) ?? [])')
+    expect(source).toContain('nativeChatProjects(projects)')
   })
 
   it('uses the blank native chat home as a project picker before a session exists', () => {
@@ -107,6 +119,7 @@ describe('native project chat header', () => {
     expect(source).toContain('const showIntro = blankNativeChat && (freshDraftReady || showProjectHomeIntro)')
     expect(source).toContain('onCreateProject: () => setProjectIntakeOpen(true)')
     expect(source).toContain('projectOptions: projectHomeOptions')
+    expect(source).toContain('projectHomeSessionsQuery.refetch()')
     expect(source).toContain('onSelectProject: onStartProjectChat')
   })
 
@@ -131,6 +144,8 @@ describe('native project chat header', () => {
     expect(source).toContain('MISSION_CONTROL_PROJECT_LINK_CREATED')
     expect(source).toContain('const refetchHeaderProjects = projectsQuery.refetch')
     expect(source).toContain('void refetchHeaderProjects()')
+    expect(source).toContain('const refetchHeaderProjectSessions = projectSessionsQuery.refetch')
+    expect(source).toContain('void refetchHeaderProjectSessions()')
     expect(source).toContain('const refetchProjectHome = projectHomeQuery.refetch')
     expect(source).toContain('void refetchProjectHome()')
     expect(source).toContain('const refetchProjectHomeSessions = projectHomeSessionsQuery.refetch')
