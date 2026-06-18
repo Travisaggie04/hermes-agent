@@ -437,6 +437,59 @@ describe('usePromptActions project harness', () => {
     expect(allMessages.map(chatMessageText).join('\n')).not.toContain('Operate as a senior engineering agent')
   })
 
+  it('resumes /goal by submitting the continuation without a visible Travis bubble', async () => {
+    const refreshSessions = vi.fn(async () => undefined)
+    const requestGateway = vi.fn(async (method: string) => {
+      if (method === 'slash.exec') {
+        throw new Error('route through command.dispatch')
+      }
+
+      if (method === 'command.dispatch') {
+        return {
+          type: 'send',
+          notice: 'Goal resumed: Make Jenny reliable.',
+          message: [
+            '[Continuing engineering goal]',
+            'Objective:',
+            'Make Jenny reliable.',
+            '',
+            'Goal loop state:',
+            '- turns used: 2/20',
+            '',
+            'Take the next safe action now.'
+          ].join('\n')
+        } as never
+      }
+
+      return {} as never
+    })
+    const states: Array<{ messages: ChatMessage[]; busy: boolean; awaitingResponse: boolean }> = []
+
+    let handle: HarnessHandle | null = null
+    render(
+      <Harness
+        onReady={h => (handle = h)}
+        onState={state => states.push(state)}
+        refreshSessions={refreshSessions}
+        requestGateway={requestGateway}
+      />
+    )
+
+    await handle!.submitText('/goal resume')
+
+    const promptSubmitCall = requestGateway.mock.calls.find(call => call[0] === 'prompt.submit') as
+      | [string, { session_id: string; text: string }]
+      | undefined
+    expect(promptSubmitCall?.[1].text).toContain('[Continuing engineering goal]')
+    expect(promptSubmitCall?.[1].text).toContain('Objective:\nMake Jenny reliable.')
+
+    const allMessages = states.flatMap(state => state.messages)
+    expect(allMessages.filter(message => message.role === 'user')).toHaveLength(0)
+    expect(allMessages.some(message => message.role === 'system' && chatMessageText(message).includes('Goal resumed'))).toBe(true)
+    expect(allMessages.map(chatMessageText).join('\n')).not.toContain('Goal loop state:')
+    expect(allMessages.map(chatMessageText).join('\n')).not.toContain('Take the next safe action now.')
+  })
+
   it('shows the typed slash command instead of expanded send payloads', async () => {
     const refreshSessions = vi.fn(async () => undefined)
     const requestGateway = vi.fn(async (method: string) => {
