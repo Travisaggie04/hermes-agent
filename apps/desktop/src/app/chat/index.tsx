@@ -53,6 +53,7 @@ import {
   MISSION_CONTROL_PROJECT_LINK_CREATED,
   notifyMissionControlProjectCreated
 } from '@/lib/mission-control-events'
+import { formatModelStatusLabel } from '@/lib/model-status-label'
 import {
   buildNativeProjectBriefCreatePayload,
   buildNativeProjectCreatePayload,
@@ -71,8 +72,10 @@ import {
   $busy,
   $contextSuggestions,
   $currentCwd,
+  $currentFastMode,
   $currentModel,
   $currentProvider,
+  $currentReasoningEffort,
   $freshDraftReady,
   $gatewayState,
   $introPersonality,
@@ -83,6 +86,7 @@ import {
   $selectedStoredSessionId,
   $sessions,
   sessionPinId,
+  setModelPickerOpen,
   setSelectedMissionControlProject
 } from '@/store/session'
 import { $subagentsBySession, activeSubagentCount, type SubagentProgress } from '@/store/subagents'
@@ -140,6 +144,7 @@ interface ChatHeaderProps {
   isRoutedSessionView: boolean
   messages: ChatMessage[]
   onDeleteSelectedSession: () => void
+  onPickFiles: () => void
   onStartProjectChat: (projectId: string, projectName: string) => void
   onToggleSelectedPin: () => void
   selectedSessionId: null | string
@@ -161,6 +166,7 @@ function ChatHeader({
   isRoutedSessionView,
   messages,
   onDeleteSelectedSession,
+  onPickFiles,
   onStartProjectChat,
   onToggleSelectedPin,
   selectedSessionId
@@ -169,6 +175,9 @@ function ChatHeader({
   const pinnedSessionIds = useStore($pinnedSessionIds)
   const selectedProjectId = useStore($selectedMissionControlProjectId)
   const selectedProjectName = useStore($selectedMissionControlProjectName)
+  const currentFastMode = useStore($currentFastMode)
+  const currentModel = useStore($currentModel)
+  const currentReasoningEffort = useStore($currentReasoningEffort)
   const subagentsBySession = useStore($subagentsBySession)
   const [activityOpen, setActivityOpen] = useState(false)
   const [projectIntakeOpen, setProjectIntakeOpen] = useState(false)
@@ -256,6 +265,10 @@ function ChatHeader({
   const jennyStatusDetail = [jennyStatus.detail, nativeAsyncAgentDetail(asyncAgentStatusQuery.data)]
     .filter(Boolean)
     .join(' ')
+  const modelStatusLabel = formatModelStatusLabel(currentModel, {
+    fastMode: currentFastMode,
+    reasoningEffort: currentReasoningEffort
+  })
 
   // A brand-new generic session has no session actions yet. Keep the header
   // visible once project records are available so the native chat home can act
@@ -304,6 +317,30 @@ function ChatHeader({
           selectedProjectId={selectedProjectId}
           selectedProjectTitle={selectedProjectTitle}
         />
+        {selectedProjectTitle && (
+          <>
+            <Button
+              className="hidden h-6 shrink-0 gap-1 px-2 text-[0.6875rem] min-[42rem]:inline-flex"
+              onClick={onPickFiles}
+              title="Attach files to this Jenny project chat"
+              type="button"
+              variant="outline"
+            >
+              <Codicon name="add" size="0.8125rem" />
+              <span>Attach</span>
+            </Button>
+            <Button
+              aria-label="Switch model for Jenny OS project chat"
+              className="hidden h-6 max-w-44 shrink-0 px-2 text-[0.6875rem] min-[52rem]:inline-flex"
+              onClick={() => setModelPickerOpen(true)}
+              title={`Switch model. Current: ${modelStatusLabel}`}
+              type="button"
+              variant="outline"
+            >
+              <span className="min-w-0 truncate">Model {modelStatusLabel}</span>
+            </Button>
+          </>
+        )}
         <HeaderPill
           className="hidden min-[46rem]:inline-flex"
           label={jennyStatus.label}
@@ -1038,7 +1075,7 @@ export function ChatView({
       },
       tools: {
         enabled: true,
-        label: 'Add context',
+        label: selectedProjectTitle ? 'Attach files / context' : 'Add context',
         suggestions: contextSuggestions
       },
       voice: {
@@ -1046,7 +1083,7 @@ export function ChatView({
         active: false
       }
     }),
-    [contextSuggestions, currentModel, currentProvider, gatewayOpen, quickModels]
+    [contextSuggestions, currentModel, currentProvider, gatewayOpen, quickModels, selectedProjectTitle]
   )
 
   const runtimeMessageRepository = useMemo(() => {
@@ -1137,6 +1174,7 @@ export function ChatView({
         isRoutedSessionView={isRoutedSessionView}
         messages={messages}
         onDeleteSelectedSession={onDeleteSelectedSession}
+        onPickFiles={onPickFiles}
         onStartProjectChat={onStartProjectChat}
         onToggleSelectedPin={onToggleSelectedPin}
         selectedSessionId={selectedSessionId}
