@@ -12,6 +12,48 @@ describe('Intro', () => {
     expect(screen.getByText('Project chat')).toBeTruthy()
     expect(screen.getByText('Hermes / Mission Control')).toBeTruthy()
     expect(screen.getByText('Send normally. Jenny replies here, with project context and safety checks in the background.')).toBeTruthy()
+    expect(screen.getByText('No saved chats yet')).toBeTruthy()
+    expect(screen.getByText('Type below to start this project')).toBeTruthy()
+  })
+
+  it('shows recent project chat history from the selected project intro', () => {
+    const onResumeProjectSession = vi.fn()
+
+    render(
+      <Intro
+        onResumeProjectSession={onResumeProjectSession}
+        projectId="project-hermes-mission-control"
+        projectName="Hermes / Mission Control"
+        projectOptions={[
+          {
+            id: 'project-hermes-mission-control',
+            lastSessionId: 'session-latest',
+            lastSessionTitle: 'Bridge smoke test',
+            name: 'Hermes / Mission Control',
+            sessionCount: 3
+          },
+          {
+            id: 'project-tool-tally',
+            lastSessionId: 'tool-session',
+            lastSessionTitle: 'Wrong project',
+            name: 'Tool & Tally',
+            sessionCount: 1
+          }
+        ]}
+        seed={0}
+      />
+    )
+
+    expect(screen.getByText('3 chats')).toBeTruthy()
+    expect(screen.getByText('Open latest: Bridge smoke test')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('Open latest: Bridge smoke test'))
+
+    expect(onResumeProjectSession).toHaveBeenCalledWith(
+      'session-latest',
+      'project-hermes-mission-control',
+      'Hermes / Mission Control'
+    )
   })
 
   it('keeps the generic intro when no project is selected', () => {
