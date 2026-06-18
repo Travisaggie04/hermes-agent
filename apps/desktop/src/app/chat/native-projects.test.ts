@@ -36,6 +36,18 @@ describe('native chat projects', () => {
     ])
   })
 
+  it('keeps smoke and fixture records out of the native chat project picker', () => {
+    const names = nativeChatProjects([
+      { name: 'Smoke Test Project', project_id: 'project-smoke-test' },
+      { name: 'Fixture Review', project_id: 'project-fixture-review' },
+      { name: 'Personal Admin', project_id: 'project-personal-admin' }
+    ]).map(project => project.name)
+
+    expect(names).toContain('Personal Admin')
+    expect(names).not.toContain('Smoke Test Project')
+    expect(names).not.toContain('Fixture Review')
+  })
+
   it('provides empty-session fallback groups for the sidebar', () => {
     expect(fallbackProjectGroups()[0]).toMatchObject({
       name: 'Hermes / Mission Control',
