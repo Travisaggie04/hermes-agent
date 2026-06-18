@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from mission_control.action_policy import evaluate_action_policy
 from mission_control.records import StartGateCheck, TaskControlEnvelope
 
 
@@ -24,34 +25,6 @@ _REQUIRED_FIELDS = (
     ("forbidden_actions", "missing forbidden actions"),
     ("stop_condition", "missing stop condition"),
     ("report_requirements", "missing report requirements"),
-)
-
-_PRIVILEGED_ACTION_TERMS = (
-    "deploy",
-    "restart",
-    "merge",
-    "force-push",
-    "force push",
-    "delete",
-    "clean",
-    "reset",
-    "stash",
-    "secret",
-    "secrets",
-    "push",
-)
-
-_BLOCKED_ACTION_TERMS = (
-    "parent directory",
-    "../",
-    "full transcript",
-    "transcript dump",
-    "dump all context",
-    "dump all records",
-    "unbounded records",
-    "unbounded context",
-    "without bounds",
-    "full-text search",
 )
 
 _AMBIGUOUS_REMOTE_TERMS = (
@@ -81,11 +54,25 @@ def evaluate_start_gate(envelope: TaskControlEnvelope | Mapping[str, Any]) -> St
             reasons.append(reason)
 
     requested_actions = _strings(data.get("allowed_actions"))
-    for action in requested_actions:
-        lowered = action.lower()
-        if _contains_any(lowered, _BLOCKED_ACTION_TERMS):
-            reasons.append(f"blocked unsafe request: {action}")
-            blocked_actions.append(action)
+    approval_ids = _strings(data.get("approval_slice_ids"))
+    has_explicit_approval = bool(data.get("approval_required")) and bool(approval_ids)
+    action_policy = evaluate_action_policy(
+        requested_actions,
+        approval_required=bool(data.get("approval_required")),
+        approval_slice_ids=approval_ids,
+    )
+
+    for decision in action_policy.decisions:
+        if decision.decision == "deny":
+            reasons.append(f"blocked unsafe request: {decision.action}")
+            blocked_actions.append(decision.action)
+        elif decision.decision == "ask":
+            if has_explicit_approval:
+                required_approvals.extend(approval_ids)
+            else:
+                reasons.append("privileged action requires explicit approval")
+                blocked_actions.append(decision.action)
+                required_approvals.append("explicit approval for privileged action")
 
     dirty_worktree_state = _dirty_worktree_state(metadata)
     if dirty_worktree_state != "clean":
@@ -99,20 +86,6 @@ def evaluate_start_gate(envelope: TaskControlEnvelope | Mapping[str, Any]) -> St
     token_context_state = _token_context_state(data, requested_actions)
     if token_context_state == "unbounded":
         reasons.append("unbounded token/context retrieval requested")
-
-    approval_ids = _strings(data.get("approval_slice_ids"))
-    has_explicit_approval = bool(data.get("approval_required")) and bool(approval_ids)
-    privileged_actions = [
-        action
-        for action in requested_actions
-        if _contains_any(action.lower(), _PRIVILEGED_ACTION_TERMS)
-    ]
-    if privileged_actions and not has_explicit_approval:
-        reasons.append("privileged action requires explicit approval")
-        blocked_actions.extend(privileged_actions)
-        required_approvals.append("explicit approval for privileged action")
-    elif privileged_actions and has_explicit_approval:
-        required_approvals.extend(approval_ids)
 
     blocked_actions = _dedupe(blocked_actions)
     required_approvals = _dedupe(required_approvals)
@@ -147,6 +120,7 @@ def evaluate_start_gate(envelope: TaskControlEnvelope | Mapping[str, Any]) -> St
             "inert": INERT,
             "enforces_runtime": ENFORCES_RUNTIME,
             "policy": "mission_control.start_gate.default_off.v1",
+            "action_policy": action_policy.policy_id,
         },
     )
 
