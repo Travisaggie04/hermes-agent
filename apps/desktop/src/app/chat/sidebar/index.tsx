@@ -49,7 +49,12 @@ import {
 } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { sessionTitle } from '@/lib/chat-runtime'
-import { MISSION_CONTROL_PROJECT_CREATED, MISSION_CONTROL_PROJECT_LINK_CREATED, notifyMissionControlProjectCreated } from '@/lib/mission-control-events'
+import {
+  MISSION_CONTROL_PROJECT_CREATED,
+  MISSION_CONTROL_PROJECT_LINK_CREATED,
+  notifyMissionControlProjectCreated,
+  notifyMissionControlProjectLinkCreated
+} from '@/lib/mission-control-events'
 import {
   buildNativeProjectBriefCreatePayload,
   buildNativeProjectCreatePayload,
@@ -587,6 +592,7 @@ export function ChatSidebar({
           title_snapshot: sessionTitle(session)
         })
         notify({ durationMs: 2_000, kind: 'success', message: `Moved to ${projectName}` })
+        notifyMissionControlProjectLinkCreated({ projectId, sessionId: session.id })
         refreshProjectGroups()
       } catch (err) {
         notifyError(err, `Could not move session to ${projectName}`)
