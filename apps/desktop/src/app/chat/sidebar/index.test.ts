@@ -105,6 +105,11 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('notifyMissionControlProjectCreated({ projectId: createdProjectId, projectName: createdProjectName })')
   })
 
+  it('broadcasts manual session moves so native project chats stay in sync', () => {
+    expect(source).toContain('notifyMissionControlProjectLinkCreated')
+    expect(source).toContain('notifyMissionControlProjectLinkCreated({ projectId, sessionId: session.id })')
+  })
+
   it('selects the project before resuming a project-linked chat', () => {
     expect(source).toContain("if (group?.mode === 'project')")
     expect(source).toContain('onSelectProject?.(group.id, group.label)')
