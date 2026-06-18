@@ -385,6 +385,12 @@ class TestGoalManager:
         assert "port goal command to hermes" in prompt
         assert "evidence already gathered" in prompt
         assert "next smallest concrete action" in prompt
+        assert "Completion audit before final answer" in prompt
+        assert "map every explicit requirement to current evidence" in prompt
+        assert "treat missing, indirect, or stale evidence as incomplete" in prompt
+        assert "Blocked audit before stopping" in prompt
+        assert "name the exact missing input, failing command, or external dependency" in prompt
+        assert "keep making safe progress if another bounded step remains" in prompt
         assert "Do not declare completion without evidence" in prompt
         assert prompt.strip()  # non-empty
 
@@ -469,6 +475,8 @@ class TestGoalManager:
         assert "protected surfaces" in prompt
         assert "evidence required to prove completion" in prompt
         assert "rollback or stop conditions" in prompt
+        assert "completed items, evidence gathered, open risks or approvals" in prompt
+        assert "runtime checks, or artifact paths" in prompt
 
 
 # ──────────────────────────────────────────────────────────────────────

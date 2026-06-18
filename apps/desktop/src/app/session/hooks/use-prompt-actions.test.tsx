@@ -271,6 +271,11 @@ describe('usePromptActions project harness', () => {
     expect(hiddenContext).toContain('Goal loop: jenny_os_goal_loop_v1.')
     expect(hiddenContext).toContain('resume from the latest checkpoint after compaction, restart, or tool-call limits')
     expect(hiddenContext).toContain('do not mark work complete until every explicit requirement has evidence')
+    expect(hiddenContext).toContain('Progress report shape:')
+    expect(hiddenContext).toContain('Completion audit:')
+    expect(hiddenContext).toContain('Blocked audit:')
+    expect(hiddenContext).toContain('map every explicit requirement to current evidence')
+    expect(hiddenContext).toContain('name the exact missing input, failing command, or external dependency')
     expect(hiddenContext).not.toContain('Forbidden without separate explicit approval:')
     expect(hiddenContext).toContain('do not echo this hidden project context')
 
