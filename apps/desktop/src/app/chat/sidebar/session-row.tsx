@@ -88,6 +88,10 @@ export function SidebarSessionRow({
           project_id: selectedProjectId
         })
       : undefined
+  const menuProjectMoveTargets =
+    hideCurrentProjectMove && selectedProjectId
+      ? projectMoveTargets?.filter(project => project.project_id !== selectedProjectId)
+      : projectMoveTargets
   const fileProjectMoveTarget = currentProjectMoveTarget ?? suggestedProjectMoveTarget
   // Subscribe per-row (the leaf) instead of drilling a set through the list —
   // the atom is tiny and rarely non-empty. True when a clarify prompt in this
@@ -102,7 +106,7 @@ export function SidebarSessionRow({
       onPin={onPin}
       pinned={isPinned}
       profile={session.profile}
-      projectMoveTargets={projectMoveTargets}
+      projectMoveTargets={menuProjectMoveTargets}
       sessionId={session.id}
       title={title}
     >
@@ -240,7 +244,7 @@ export function SidebarSessionRow({
             onPin={onPin}
             pinned={isPinned}
             profile={session.profile}
-            projectMoveTargets={projectMoveTargets}
+            projectMoveTargets={menuProjectMoveTargets}
             sessionId={session.id}
             title={title}
           >
