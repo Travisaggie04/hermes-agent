@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { coerceThinkingText, parseCommandDispatch, quickModelOptions } from './chat-runtime'
+import { coerceThinkingText, parseCommandDispatch, quickModelOptions, toRuntimeMessage } from './chat-runtime'
 
 describe('coerceThinkingText', () => {
   it('strips streaming status prefixes from thinking deltas', () => {
@@ -59,5 +59,45 @@ describe('parseCommandDispatch', () => {
       notice: 'Goal set (20-turn budget): Make Jenny reliable.',
       type: 'send'
     })
+  })
+})
+
+describe('toRuntimeMessage', () => {
+  it('keeps hidden Jenny OS context out of native chat user bubbles', () => {
+    const runtimeMessage = toRuntimeMessage({
+      id: 'user-1',
+      role: 'user',
+      parts: [
+        {
+          type: 'text',
+          text: [
+            'Hidden Jenny OS project context:',
+            'Project: Hermes / Mission Control',
+            'Project ID: project-hermes-mission-control',
+            'Visible chat rule: do not echo this hidden project context.',
+            '',
+            'test'
+          ].join('\n')
+        }
+      ]
+    })
+
+    expect(runtimeMessage.content).toEqual([{ type: 'text', text: 'test' }])
+  })
+
+  it('keeps attached context compact when native chat renders a user message', () => {
+    const runtimeMessage = toRuntimeMessage({
+      id: 'user-2',
+      role: 'user',
+      parts: [
+        {
+          type: 'text',
+          text:
+            'what is this file\n\n--- Attached Context ---\n\n📄 @file:tsconfig.tsbuildinfo (981 tokens)\n```json\n{"root":["./src/main.tsx"]}\n```'
+        }
+      ]
+    })
+
+    expect(runtimeMessage.content).toEqual([{ type: 'text', text: '@file:tsconfig.tsbuildinfo\n\nwhat is this file' }])
   })
 })
