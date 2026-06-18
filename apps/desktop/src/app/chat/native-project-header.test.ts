@@ -203,6 +203,17 @@ describe('native project chat header', () => {
     expect(source).not.toContain('className="hidden h-6 shrink-0 px-2 text-[0.6875rem] min-[46rem]:inline-flex"')
   })
 
+  it('shows central Jenny action policy only inside the read-only activity details', () => {
+    expect(source).toContain("import { JENNY_ACTION_POLICY_RULES } from '@/lib/jenny-action-policy'")
+    expect(source).toContain('Policy guardrails')
+    expect(source).toContain('JENNY_ACTION_POLICY_RULES.map(rule => (')
+    expect(source).toContain('{rule.decision}')
+    expect(source).toContain('{rule.summary}')
+    expect(source).toContain('rule.examples.slice(0, 3).join')
+    expect(source).not.toContain('setPolicy')
+    expect(source).not.toContain('updatePolicy')
+  })
+
   it('lets live subagent activity drive the visible native Jenny status', () => {
     expect(source).toContain('liveSubagentCount: runningSubagents')
     expect(source).toContain('const runningSubagents = activeSubagentCount(subagents)')

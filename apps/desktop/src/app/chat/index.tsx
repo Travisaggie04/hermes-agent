@@ -38,6 +38,7 @@ import {
 import { type ChatMessage, chatMessageText } from '@/lib/chat-messages'
 import { quickModelOptions, sessionTitle, toRuntimeMessage } from '@/lib/chat-runtime'
 import { useIncrementalExternalStoreRuntime } from '@/lib/incremental-external-store-runtime'
+import { JENNY_ACTION_POLICY_RULES } from '@/lib/jenny-action-policy'
 import { MISSION_CONTROL_PROJECT_CREATED, notifyMissionControlProjectCreated } from '@/lib/mission-control-events'
 import {
   buildNativeProjectBriefCreatePayload,
@@ -357,6 +358,24 @@ function NativeJennyActivityDialog({
             ))}
           </div>
         </section>
+        <details className="rounded-md border border-(--ui-stroke-tertiary) bg-background/30 p-3 text-sm">
+          <summary className="cursor-pointer font-medium text-(--ui-text-secondary)">Policy guardrails</summary>
+          <div className="mt-3 grid gap-2">
+            {JENNY_ACTION_POLICY_RULES.map(rule => (
+              <div className="rounded border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background)/35 p-2" key={rule.decision}>
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="shrink-0 rounded-full border border-(--ui-stroke-tertiary) px-2 py-0.5 text-[0.6875rem] font-semibold">
+                    {rule.decision}
+                  </span>
+                  <span className="min-w-0 text-xs font-medium text-foreground">{rule.summary}</span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-(--ui-text-tertiary)">
+                  {rule.examples.slice(0, 3).join('; ')}
+                </p>
+              </div>
+            ))}
+          </div>
+        </details>
         <section className="grid max-h-[45vh] gap-2 overflow-y-auto pr-1">
           {rows.length ? (
             rows.map(item => <NativeJennyActivityRow item={item} key={item.id} />)
