@@ -8,7 +8,7 @@ import { useStore } from '@nanostores/react'
 import { useQuery } from '@tanstack/react-query'
 import type * as React from 'react'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 
 import { Thread } from '@/components/assistant-ui/thread'
 import { Backdrop } from '@/components/Backdrop'
@@ -71,10 +71,10 @@ import {
   sessionPinId,
   setSelectedMissionControlProject
 } from '@/store/session'
-import { $subagentsBySession, activeSubagentCount } from '@/store/subagents'
+import { $subagentsBySession, activeSubagentCount, type SubagentProgress } from '@/store/subagents'
 import type { ModelOptionsResponse } from '@/types/hermes'
 
-import { AGENTS_ROUTE, routeSessionId } from '../routes'
+import { routeSessionId } from '../routes'
 import { titlebarHeaderBaseClass, titlebarHeaderShadowClass } from '../shell/titlebar'
 
 import { ChatDropOverlay } from './chat-drop-overlay'
@@ -142,12 +142,12 @@ function ChatHeader({
   onToggleSelectedPin,
   selectedSessionId
 }: ChatHeaderProps) {
-  const navigate = useNavigate()
   const sessions = useStore($sessions)
   const pinnedSessionIds = useStore($pinnedSessionIds)
   const selectedProjectId = useStore($selectedMissionControlProjectId)
   const selectedProjectName = useStore($selectedMissionControlProjectName)
   const subagentsBySession = useStore($subagentsBySession)
+  const [activityOpen, setActivityOpen] = useState(false)
   const [projectIntakeOpen, setProjectIntakeOpen] = useState(false)
   const projectsQuery = useQuery({
     enabled: gatewayOpen,
@@ -274,8 +274,8 @@ function ChatHeader({
         {showActivity && (
           <Button
             className="h-6 shrink-0 px-2 text-[0.6875rem]"
-            onClick={() => navigate(AGENTS_ROUTE)}
-            title="Open live Jenny activity"
+            onClick={() => setActivityOpen(true)}
+            title="Open Jenny activity"
             type="button"
             variant="outline"
           >
@@ -286,6 +286,13 @@ function ChatHeader({
           </Button>
         )}
       </div>
+      <NativeJennyActivityDialog
+        asyncStatus={asyncAgentStatusQuery.data}
+        onOpenChange={setActivityOpen}
+        open={activityOpen}
+        projectName={selectedProjectTitle}
+        subagents={sessionSubagents}
+      />
       <NativeProjectIntakeDialog
         onCreated={(projectId, projectName) => {
           onStartProjectChat(projectId, projectName)
@@ -295,6 +302,103 @@ function ChatHeader({
         open={projectIntakeOpen}
       />
     </header>
+  )
+}
+
+function NativeJennyActivityDialog({
+  asyncStatus,
+  onOpenChange,
+  open,
+  projectName,
+  subagents
+}: {
+  asyncStatus?: MissionControlAsyncAgentStatusResponse | null
+  onOpenChange: (open: boolean) => void
+  open: boolean
+  projectName: string
+  subagents: readonly SubagentProgress[]
+}) {
+  const running = activeSubagentCount(subagents)
+  const rows = subagents.slice(-8).reverse()
+  const readiness = nativeAsyncAgentDetail(asyncStatus) || 'Checking Jenny activity support.'
+  const flags = [
+    ['Execution', asyncStatus?.execution_enabled === true ? 'on' : 'off'],
+    ['Dispatch', asyncStatus?.dispatch_enabled === true ? 'on' : 'off'],
+    ['Worker', asyncStatus?.worker_enabled === true ? 'on' : 'off'],
+    ['Timer', asyncStatus?.timer_enabled === true ? 'on' : 'off']
+  ]
+
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className="max-w-xl gap-4">
+        <DialogHeader>
+          <DialogTitle>Jenny activity</DialogTitle>
+          <DialogDescription>
+            Read-only status for {projectName || 'this chat'}. Jenny starts, steering, and approvals remain guarded.
+          </DialogDescription>
+        </DialogHeader>
+        <section className="grid gap-3 rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background)/40 p-3">
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">{running > 0 ? `Jenny working (${running})` : 'No active Jenny work'}</p>
+              <p className="mt-1 text-xs leading-relaxed text-(--ui-text-secondary)">{readiness}</p>
+            </div>
+            <span className="shrink-0 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-1 text-[0.6875rem] font-medium text-emerald-100">
+              read-only
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {flags.map(([label, value]) => (
+              <div className="rounded border border-(--ui-stroke-tertiary) bg-background/35 px-2 py-1.5" key={label}>
+                <p className="text-[0.62rem] font-medium uppercase tracking-wider text-(--ui-text-tertiary)">{label}</p>
+                <p className="mt-0.5 text-xs font-semibold text-foreground">{value}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+        <section className="grid max-h-[45vh] gap-2 overflow-y-auto pr-1">
+          {rows.length ? (
+            rows.map(item => <NativeJennyActivityRow item={item} key={item.id} />)
+          ) : (
+            <div className="rounded-md border border-dashed border-(--ui-stroke-tertiary) p-4 text-sm text-(--ui-text-secondary)">
+              No live subagent activity for this chat yet.
+            </div>
+          )}
+        </section>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function NativeJennyActivityRow({ item }: { item: SubagentProgress }) {
+  const latestStream = item.stream[item.stream.length - 1]
+  const detail = item.currentTool || item.summary || latestStream?.text || ''
+  const statusClass =
+    item.status === 'failed' || item.status === 'interrupted'
+      ? 'text-red-200'
+      : item.status === 'completed'
+        ? 'text-emerald-100'
+        : 'text-blue-100'
+
+  return (
+    <article className="rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background)/35 p-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className={cn('shrink-0 text-xs font-semibold capitalize', statusClass)}>{item.status}</span>
+        <span className="min-w-0 truncate text-sm font-medium text-foreground" title={item.goal}>
+          {item.goal}
+        </span>
+      </div>
+      {detail && (
+        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-(--ui-text-secondary)" title={detail}>
+          {detail}
+        </p>
+      )}
+      <div className="mt-2 flex flex-wrap gap-2 text-[0.6875rem] text-(--ui-text-tertiary)">
+        <span>step {Math.max(1, item.taskIndex + 1)} of {Math.max(1, item.taskCount)}</span>
+        {item.toolCount ? <span>{item.toolCount} tools</span> : null}
+        {item.filesWritten.length ? <span>{item.filesWritten.length} files changed</span> : null}
+      </div>
+    </article>
   )
 }
 
