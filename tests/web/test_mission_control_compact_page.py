@@ -3,6 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PAGE = ROOT / "web/src/pages/MissionControlCompactPage.tsx"
 APP = ROOT / "web/src/App.tsx"
+PAGE_HEADER_PROVIDER = ROOT / "web/src/contexts/PageHeaderProvider.tsx"
 
 
 def page_source() -> str:
@@ -23,8 +24,13 @@ def function_source(src: str, name: str) -> str:
 
 def test_mobile_compact_route_is_registered() -> None:
     app = APP.read_text(encoding="utf-8")
+    provider = PAGE_HEADER_PROVIDER.read_text(encoding="utf-8")
     assert '"/mission-control-compact": MissionControlCompactPage' in app
     assert 'import MissionControlCompactPage from "@/pages/MissionControlCompactPage"' in app
+    assert 'const isCompactChatRoute = normalizedPath === "/mission-control-compact";' in app
+    assert "const isChatLikeRoute = isChatRoute || isCompactChatRoute;" in app
+    assert 'const isCompactChatRoute = pathname === "/mission-control-compact" || pathname === "/mission-control-compact/";' in provider
+    assert "isChatLikeRoute" in provider
 
 
 def test_renders_five_real_projects_in_compact_mode() -> None:
@@ -211,7 +217,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "COMPACT_JENNY_MESSAGE_LIMIT - 3",
         "Queue for Jenny bridge",
         "Refresh replies",
-        "flex h-[calc(100dvh-7rem)] max-h-[calc(100dvh-7rem)] min-h-0 w-full min-w-0 max-w-full touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none",
+        "flex h-full max-h-full min-h-0 w-full min-w-0 max-w-full flex-1 touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none",
         "sr-only",
         "min-h-0 min-w-0 max-w-full flex-1 overflow-hidden",
         "sr-only order-2 min-w-0 max-w-full overflow-hidden",
@@ -360,14 +366,17 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
     src = page_source()
     for expected in [
         "overflow-x-hidden",
-        "h-[calc(100dvh-7rem)] max-h-[calc(100dvh-7rem)] min-h-0 w-full min-w-0 max-w-full touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none",
+        "h-full max-h-full min-h-0 w-full min-w-0 max-w-full flex-1 touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none",
         "h-full min-h-0 w-full min-w-0 max-w-full",
         "min-[420px]:grid-cols-2",
         "overflow-y-auto overflow-x-hidden overscroll-contain",
+        "auto-rows-max content-end",
+        "scroll-pb-32",
         "[-webkit-overflow-scrolling:touch]",
         "pb-[max(env(safe-area-inset-bottom),0.75rem)]",
         "aria-label=\"Project chat composer\"",
-        "max-h-28 min-h-12",
+        "sticky bottom-0",
+        "max-h-24 min-h-12",
         "[overflow-wrap:anywhere]",
         "[word-break:break-word]",
         "min-w-0 max-w-full",
@@ -395,7 +404,8 @@ def test_compact_project_chat_keeps_primary_flow_chat_first() -> None:
     composer_src = room[composer_section_start:composer_start + 500]
     assert "shrink-0" in composer_src
     assert "rounded-[1.75rem]" in composer_src
-    assert "max-h-28 min-h-12" in composer_src
+    assert "sticky bottom-0" in composer_src
+    assert "max-h-24 min-h-12" in composer_src
     assert "backdrop-blur" in composer_src
     assert "<summary" in transcript_src
     assert "Review reply" in transcript_src
