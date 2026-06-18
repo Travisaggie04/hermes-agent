@@ -130,6 +130,7 @@ describe('native project chat header', () => {
     expect(source).toContain('const latestSession = latestProjectSession(sessionGroup)')
     expect(source).toContain("lastSessionId: latestSession?.session_id?.trim() || ''")
     expect(source).toContain('lastSessionTitle: latestProjectSessionTitle(sessionGroup)')
+    expect(source).toContain('recentSessions: recentProjectSessions(sessionGroup)')
     expect(source).toContain('const blankNativeChat = !isRoutedSessionView && !selectedSessionId && !activeSessionId && messages.length === 0')
     expect(source).toContain('const showProjectHomeIntro =')
     expect(source).toContain('projectHomeQuery.isLoading || projectHomeSessionsQuery.isLoading || projectHomeOptions.length > 0 || Boolean(selectedProjectTitle)')
