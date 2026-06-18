@@ -387,16 +387,19 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
         "sm:scroll-pb-6",
         "[-webkit-overflow-scrolling:touch]",
         "pb-[max(env(safe-area-inset-bottom),0.5rem)]",
+        "pb-[calc(env(safe-area-inset-bottom)+10rem)]",
         "mb-[max(env(safe-area-inset-bottom),1rem)]",
         "aria-label=\"Project chat composer\"",
         "data-testid=\"compact-chat-composer\"",
         "data-testid=\"compact-chat-scroll\"",
+        "data-testid={chat.speaker === \"Jenny\" ? \"compact-jenny-reply-body\" : undefined}",
         "max-h-28 min-h-11",
         "[overflow-wrap:anywhere]",
         "[word-break:break-word]",
         "min-w-0 max-w-full",
-        "w-fit max-w-[calc(100%-0.25rem)]",
-        "max-w-[calc(100%-0.25rem)] rounded-lg border px-3 py-2 text-sm",
+        "w-full max-w-full rounded-lg border px-3 py-2 text-sm",
+        "sm:w-fit sm:max-w-[88%]",
+        "max-w-full overflow-visible whitespace-pre-wrap",
         "max-w-full overflow-hidden",
         "whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
         "grid min-w-0 grid-cols-1 gap-2 text-xs sm:grid-cols-2",
@@ -428,6 +431,7 @@ def test_compact_mobile_transcript_uses_page_scroll_not_trapped_panel() -> None:
     assert "sm:overflow-y-auto" in transcript_src
     assert "content-start" in transcript_src
     assert "sm:content-end" in transcript_src
+    assert "pb-[calc(env(safe-area-inset-bottom)+10rem)]" in transcript_src
     assert "mb-[max(env(safe-area-inset-bottom),1rem)]" in composer_src
     assert "sticky bottom-0" not in composer_src
 

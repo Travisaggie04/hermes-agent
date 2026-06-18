@@ -3037,7 +3037,7 @@ function CompactProjectRoom({
             <h3 className="text-sm font-semibold text-[#f3ebda]">Conversation</h3>
             <span className="text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
           </div>
-          <div className="mt-2 grid min-w-0 max-w-full auto-rows-max content-start gap-2 overflow-visible overflow-x-hidden overscroll-contain pb-4 pr-1 sm:min-h-0 sm:flex-1 sm:content-end sm:overflow-y-auto sm:pb-3 sm:scroll-pb-6 [-webkit-overflow-scrolling:touch]" data-testid="compact-chat-scroll">
+          <div className="mt-2 grid min-w-0 max-w-full auto-rows-max content-start gap-2 overflow-visible overflow-x-hidden overscroll-contain pb-[calc(env(safe-area-inset-bottom)+10rem)] pr-1 sm:min-h-0 sm:flex-1 sm:content-end sm:overflow-y-auto sm:pb-3 sm:scroll-pb-6 [-webkit-overflow-scrolling:touch]" data-testid="compact-chat-scroll">
             {chatMessages.length ? (
               chatMessages.map(chat => {
                 const replyReview = latestReviewByResponseId.get(chat.id)
@@ -3047,7 +3047,7 @@ function CompactProjectRoom({
                 return (
                 <article
                   className={cn(
-                    "min-w-0 w-fit max-w-[calc(100%-0.25rem)] rounded-lg border px-3 py-2 text-sm [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]",
+                    "min-w-0 w-full max-w-full rounded-lg border px-3 py-2 text-sm [overflow-wrap:anywhere] [word-break:break-word] sm:w-fit sm:max-w-[88%]",
                     chat.speaker === "You" ? "justify-self-end border-[#5ab896]/30 bg-[#5ab896]/10 text-[#f3ebda]" : "justify-self-start border-[#f3ebda]/10 bg-[#1c1622]/90 text-[#f3ebda]",
                   )}
                   key={`${chat.speaker}:${chat.id}`}
@@ -3056,11 +3056,11 @@ function CompactProjectRoom({
                     <span className="font-semibold">{chat.speaker}</span>
                     <span className="min-w-0 text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chat.meta}</span>
                   </div>
-                  <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word]">
+                  <p className="max-w-full overflow-visible whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word]" data-testid={chat.speaker === "Jenny" ? "compact-jenny-reply-body" : undefined}>
                     {chat.speaker === "You" ? chat.displayBody ?? projectRequestPreview(chat.body, 750) : chat.body}
                   </p>
                   {chat.speaker === "Jenny" ? (
-                    <details className="mt-2 min-w-0 border-t border-[#f3ebda]/10 pt-2 text-[0.68rem]">
+                    <details className="mt-2 min-w-0 overflow-visible border-t border-[#f3ebda]/10 pt-2 text-[0.68rem]">
                       <summary className="cursor-pointer list-none font-semibold text-[#a59783] [overflow-wrap:anywhere] marker:hidden">
                         Review reply
                       </summary>
@@ -3118,7 +3118,7 @@ function CompactProjectRoom({
             )}
             {showJennyStatusInChat ? (
               <article className={cn(
-                "min-w-0 w-fit max-w-[calc(100%-0.25rem)] justify-self-start rounded-lg border px-3 py-2 text-sm text-[#f3ebda] [overflow-wrap:anywhere] [word-break:break-word] sm:max-w-[88%]",
+                "min-w-0 w-full max-w-full justify-self-start rounded-lg border px-3 py-2 text-sm text-[#f3ebda] [overflow-wrap:anywhere] [word-break:break-word] sm:w-fit sm:max-w-[88%]",
                 effectiveJennyRunProgress?.phase === "error"
                   ? "border-red-500/30 bg-red-500/10"
                   : "border-sky-500/30 bg-sky-500/10",
