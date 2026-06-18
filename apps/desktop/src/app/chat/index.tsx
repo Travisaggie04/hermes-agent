@@ -31,9 +31,11 @@ import {
   getMissionControlAsyncAgentStatus,
   getMissionControlGitHubBridgeStatus,
   getMissionControlProjects,
+  getMissionControlProjectSessions,
   type HermesGateway,
   type MissionControlAsyncAgentStatusResponse,
-  type MissionControlProjectRecord
+  type MissionControlProjectRecord,
+  type MissionControlProjectSessionGroup
 } from '@/hermes'
 import { type ChatMessage, chatMessageText } from '@/lib/chat-messages'
 import { quickModelOptions, sessionTitle, toRuntimeMessage } from '@/lib/chat-runtime'
@@ -46,7 +48,11 @@ import {
   JENNY_GOAL_LOOP_PROGRESS_REPORT,
   JENNY_GOAL_LOOP_STOP_RULES
 } from '@/lib/jenny-goal-loop'
-import { MISSION_CONTROL_PROJECT_CREATED, notifyMissionControlProjectCreated } from '@/lib/mission-control-events'
+import {
+  MISSION_CONTROL_PROJECT_CREATED,
+  MISSION_CONTROL_PROJECT_LINK_CREATED,
+  notifyMissionControlProjectCreated
+} from '@/lib/mission-control-events'
 import {
   buildNativeProjectBriefCreatePayload,
   buildNativeProjectCreatePayload,
@@ -510,6 +516,20 @@ function latestVisibleAssistantErrorMessage(messages: readonly ChatMessage[]): C
   return null
 }
 
+function latestProjectSessionTitle(group?: MissionControlProjectSessionGroup): string {
+  const latestSession = (group?.sessions ?? []).reduce<MissionControlProjectSessionGroup['sessions'][number] | null>(
+    (latest, session) => {
+      const sessionTs = session.last_active || session.started_at || 0
+      const latestTs = latest?.last_active || latest?.started_at || 0
+
+      return sessionTs > latestTs ? session : latest
+    },
+    null
+  )
+
+  return latestSession?.title?.trim() || latestSession?.preview?.trim() || ''
+}
+
 function ProjectHeaderSelect({
   loading,
   onClearProject,
@@ -892,24 +912,50 @@ export function ChatView({
     queryKey: ['mission-control-projects-native-chat-home'],
     staleTime: 30_000
   })
+  const projectHomeSessionsQuery = useQuery({
+    enabled: gatewayOpen,
+    queryFn: getMissionControlProjectSessions,
+    queryKey: ['mission-control-project-sessions-native-chat-home'],
+    staleTime: 30_000
+  })
   const refetchProjectHome = projectHomeQuery.refetch
+  const refetchProjectHomeSessions = projectHomeSessionsQuery.refetch
   useEffect(() => {
-    const onProjectCreated = () => {
+    const onProjectRecordsChanged = () => {
       void refetchProjectHome()
+      void refetchProjectHomeSessions()
     }
 
-    window.addEventListener(MISSION_CONTROL_PROJECT_CREATED, onProjectCreated)
+    window.addEventListener(MISSION_CONTROL_PROJECT_CREATED, onProjectRecordsChanged)
+    window.addEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED, onProjectRecordsChanged)
 
-    return () => window.removeEventListener(MISSION_CONTROL_PROJECT_CREATED, onProjectCreated)
-  }, [refetchProjectHome])
-  const projectHomeOptions = useMemo(
-    () => nativeChatProjects(projectHomeQuery.data?.projects.map(item => item.record) ?? []),
-    [projectHomeQuery.data]
-  )
+    return () => {
+      window.removeEventListener(MISSION_CONTROL_PROJECT_CREATED, onProjectRecordsChanged)
+      window.removeEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED, onProjectRecordsChanged)
+    }
+  }, [refetchProjectHome, refetchProjectHomeSessions])
+  const projectHomeOptions = useMemo(() => {
+    const sessionGroupsByProject = new Map(
+      (projectHomeSessionsQuery.data?.groups ?? []).map(group => [group.project_id, group])
+    )
+
+    return nativeChatProjects(projectHomeQuery.data?.projects.map(item => item.record) ?? []).map(project => {
+      const sessionGroup = sessionGroupsByProject.get(project.project_id)
+      const sessionCount = sessionGroup?.linked_session_count ?? sessionGroup?.sessions.length ?? 0
+
+      return {
+        id: project.project_id,
+        lastSessionTitle: latestProjectSessionTitle(sessionGroup),
+        name: project.name,
+        sessionCount
+      }
+    })
+  }, [projectHomeQuery.data, projectHomeSessionsQuery.data])
 
   const blankNativeChat = !isRoutedSessionView && !selectedSessionId && !activeSessionId && messages.length === 0
   const showProjectHomeIntro =
-    blankNativeChat && (projectHomeQuery.isLoading || projectHomeOptions.length > 0 || Boolean(selectedProjectTitle))
+    blankNativeChat &&
+    (projectHomeQuery.isLoading || projectHomeSessionsQuery.isLoading || projectHomeOptions.length > 0 || Boolean(selectedProjectTitle))
   const showIntro = blankNativeChat && (freshDraftReady || showProjectHomeIntro)
 
   // Session is still loading if the route references a session we haven't
@@ -1084,11 +1130,8 @@ export function ChatView({
                     onSelectProject: onStartProjectChat,
                     personality: introPersonality,
                     projectName: selectedProjectName.trim(),
-                    projectOptions: projectHomeOptions.map(project => ({
-                      id: project.project_id,
-                      name: project.name
-                    })),
-                    projectsLoading: projectHomeQuery.isLoading,
+                    projectOptions: projectHomeOptions,
+                    projectsLoading: projectHomeQuery.isLoading || projectHomeSessionsQuery.isLoading,
                     seed: introSeed
                   }
                 : undefined
@@ -1138,6 +1181,7 @@ export function ChatView({
           onCreated={(projectId, projectName) => {
             onStartProjectChat(projectId, projectName)
             void projectHomeQuery.refetch()
+            void projectHomeSessionsQuery.refetch()
           }}
           onOpenChange={setProjectIntakeOpen}
           open={projectIntakeOpen}

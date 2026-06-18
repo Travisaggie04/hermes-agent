@@ -14,7 +14,7 @@ type IntroCopyRecord = IntroCopy & {
 export type IntroProps = {
   personality?: string
   projectName?: string
-  projectOptions?: { id: string; name: string }[]
+  projectOptions?: { id: string; lastSessionTitle?: string; name: string; sessionCount?: number }[]
   projectsLoading?: boolean
   onCreateProject?: () => void
   onSelectProject?: (projectId: string, projectName: string) => void
@@ -216,17 +216,29 @@ export function Intro({
                   Loading projects...
                 </div>
               ) : (
-                projectOptions.map(project => (
-                  <button
-                    className="min-w-0 rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) px-3 py-2 text-left text-sm text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent)/60 hover:bg-(--ui-control-hover-background) hover:text-foreground focus-visible:border-(--ui-accent)/70 focus-visible:outline-none"
-                    key={project.id}
-                    onClick={() => onSelectProject?.(project.id, project.name)}
-                    type="button"
-                  >
-                    <span className="block truncate font-medium">{project.name}</span>
-                    <span className="mt-0.5 block truncate text-xs text-(--ui-text-tertiary)">Open project chat</span>
-                  </button>
-                ))
+                projectOptions.map(project => {
+                  const sessionCount =
+                    typeof project.sessionCount === 'number' && project.sessionCount > 0
+                      ? `${project.sessionCount} ${project.sessionCount === 1 ? 'chat' : 'chats'}`
+                      : 'No chats yet'
+
+                  return (
+                    <button
+                      className="min-w-0 rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) px-3 py-2 text-left text-sm text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent)/60 hover:bg-(--ui-control-hover-background) hover:text-foreground focus-visible:border-(--ui-accent)/70 focus-visible:outline-none"
+                      key={project.id}
+                      onClick={() => onSelectProject?.(project.id, project.name)}
+                      type="button"
+                    >
+                      <span className="block truncate font-medium">{project.name}</span>
+                      <span className="mt-0.5 block truncate text-xs text-(--ui-text-tertiary)">{sessionCount}</span>
+                      {project.lastSessionTitle ? (
+                        <span className="mt-1 block truncate text-xs text-(--ui-text-quaternary)" title={project.lastSessionTitle}>
+                          Last: {project.lastSessionTitle}
+                        </span>
+                      ) : null}
+                    </button>
+                  )
+                })
               )}
             </div>
             {onCreateProject ? (

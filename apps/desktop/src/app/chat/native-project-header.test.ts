@@ -95,13 +95,18 @@ describe('native project chat header', () => {
 
   it('uses the blank native chat home as a project picker before a session exists', () => {
     expect(source).toContain("queryKey: ['mission-control-projects-native-chat-home']")
+    expect(source).toContain("queryKey: ['mission-control-project-sessions-native-chat-home']")
+    expect(source).toContain('queryFn: getMissionControlProjectSessions')
     expect(source).toContain('const projectHomeOptions = useMemo')
+    expect(source).toContain('sessionGroupsByProject')
+    expect(source).toContain('sessionCount')
+    expect(source).toContain('lastSessionTitle: latestProjectSessionTitle(sessionGroup)')
     expect(source).toContain('const blankNativeChat = !isRoutedSessionView && !selectedSessionId && !activeSessionId && messages.length === 0')
     expect(source).toContain('const showProjectHomeIntro =')
-    expect(source).toContain('projectHomeQuery.isLoading || projectHomeOptions.length > 0 || Boolean(selectedProjectTitle)')
+    expect(source).toContain('projectHomeQuery.isLoading || projectHomeSessionsQuery.isLoading || projectHomeOptions.length > 0 || Boolean(selectedProjectTitle)')
     expect(source).toContain('const showIntro = blankNativeChat && (freshDraftReady || showProjectHomeIntro)')
     expect(source).toContain('onCreateProject: () => setProjectIntakeOpen(true)')
-    expect(source).toContain('projectOptions: projectHomeOptions.map(project => ({')
+    expect(source).toContain('projectOptions: projectHomeOptions')
     expect(source).toContain('onSelectProject: onStartProjectChat')
   })
 
@@ -123,12 +128,17 @@ describe('native project chat header', () => {
 
   it('refreshes native project pickers when any surface creates a project', () => {
     expect(source).toContain('MISSION_CONTROL_PROJECT_CREATED')
+    expect(source).toContain('MISSION_CONTROL_PROJECT_LINK_CREATED')
     expect(source).toContain('const refetchHeaderProjects = projectsQuery.refetch')
     expect(source).toContain('void refetchHeaderProjects()')
     expect(source).toContain('const refetchProjectHome = projectHomeQuery.refetch')
     expect(source).toContain('void refetchProjectHome()')
+    expect(source).toContain('const refetchProjectHomeSessions = projectHomeSessionsQuery.refetch')
+    expect(source).toContain('void refetchProjectHomeSessions()')
     expect(source).toContain('window.addEventListener(MISSION_CONTROL_PROJECT_CREATED')
+    expect(source).toContain('window.addEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED')
     expect(source).toContain('window.removeEventListener(MISSION_CONTROL_PROJECT_CREATED')
+    expect(source).toContain('window.removeEventListener(MISSION_CONTROL_PROJECT_LINK_CREATED')
   })
 
   it('uses the same clean project chat action for header, home, and newly created projects', () => {

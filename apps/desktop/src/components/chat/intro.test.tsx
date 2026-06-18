@@ -30,7 +30,12 @@ describe('Intro', () => {
         onCreateProject={onCreateProject}
         onSelectProject={onSelectProject}
         projectOptions={[
-          { id: 'project-hermes-mission-control', name: 'Hermes / Mission Control' },
+          {
+            id: 'project-hermes-mission-control',
+            lastSessionTitle: 'Bridge smoke test',
+            name: 'Hermes / Mission Control',
+            sessionCount: 2
+          },
           { id: 'project-tool-tally', name: 'Tool & Tally' }
         ]}
         seed={0}
@@ -40,6 +45,9 @@ describe('Intro', () => {
     expect(screen.getByLabelText('Projects').textContent).toContain('Projects')
     expect(screen.getByText('Pick a project')).toBeTruthy()
     expect(screen.getByText('Pick a project, then chat normally. Jenny gets the project brief and guardrails without extra copy/paste.')).toBeTruthy()
+    expect(screen.getByText('2 chats')).toBeTruthy()
+    expect(screen.getByText('Last: Bridge smoke test')).toBeTruthy()
+    expect(screen.getByText('No chats yet')).toBeTruthy()
 
     fireEvent.click(screen.getByText('Hermes / Mission Control'))
 
