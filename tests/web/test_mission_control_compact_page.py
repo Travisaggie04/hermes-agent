@@ -419,7 +419,7 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
         "w-full max-w-full rounded-lg border px-3 py-2 text-sm",
         "sm:w-fit sm:max-w-[88%]",
         "max-w-full whitespace-pre-wrap break-words",
-        "max-h-[min(52dvh,32rem)] touch-pan-y overflow-y-auto overscroll-contain",
+        "overflow-visible sm:max-h-[min(52dvh,32rem)] sm:touch-pan-y sm:overflow-y-auto sm:overscroll-contain",
         "chat.speaker === \"Jenny\"",
         ": \"overflow-visible\"",
         "max-w-full overflow-hidden",
