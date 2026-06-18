@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { nativeJennyStatus } from './native-jenny-status'
 
 const TRANSPORT_WORDING_RE = /bridge|mailbox|mission control status|audit console/i
+const SECOND_ACTION_WORDING_RE = /get response|run jenny|ask jenny|queue for jenny|tap run|click run/i
 const NOW_MS = Date.parse('2026-06-16T20:00:00Z')
 const RECENT_STATUS_AT = '2026-06-16T19:59:45Z'
 const STALE_STATUS_AT = '2026-06-16T19:58:00Z'
@@ -11,6 +12,9 @@ function expectCleanVisibleStatus(status: ReturnType<typeof nativeJennyStatus>) 
   expect(status.detail).not.toMatch(TRANSPORT_WORDING_RE)
   expect(status.label).not.toMatch(TRANSPORT_WORDING_RE)
   expect(status.summary).not.toMatch(TRANSPORT_WORDING_RE)
+  expect(status.detail).not.toMatch(SECOND_ACTION_WORDING_RE)
+  expect(status.label).not.toMatch(SECOND_ACTION_WORDING_RE)
+  expect(status.summary).not.toMatch(SECOND_ACTION_WORDING_RE)
 }
 
 describe('nativeJennyStatus', () => {
