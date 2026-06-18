@@ -722,13 +722,13 @@ export function ChatSidebar({
           return false
         }
 
-        if (!projectMode) {
+        if (!projectFoldersVisible) {
           return true
         }
 
         return !projectLinkedSessionIds.has(session.id) && !projectLinkedSessionIds.has(session._lineage_root_id || '')
       }),
-    [projectLinkedSessionIds, projectMode, sortedSessions, pinnedRealIdSet]
+    [projectFoldersVisible, projectLinkedSessionIds, sortedSessions, pinnedRealIdSet]
   )
 
   const agentSessions = useMemo(
