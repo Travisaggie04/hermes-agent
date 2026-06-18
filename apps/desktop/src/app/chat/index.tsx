@@ -39,6 +39,13 @@ import { type ChatMessage, chatMessageText } from '@/lib/chat-messages'
 import { quickModelOptions, sessionTitle, toRuntimeMessage } from '@/lib/chat-runtime'
 import { useIncrementalExternalStoreRuntime } from '@/lib/incremental-external-store-runtime'
 import { JENNY_ACTION_POLICY_RULES } from '@/lib/jenny-action-policy'
+import {
+  JENNY_GOAL_LOOP_BLOCKED_AUDIT,
+  JENNY_GOAL_LOOP_CHECKPOINTS,
+  JENNY_GOAL_LOOP_COMPLETION_AUDIT,
+  JENNY_GOAL_LOOP_PROGRESS_REPORT,
+  JENNY_GOAL_LOOP_STOP_RULES
+} from '@/lib/jenny-goal-loop'
 import { MISSION_CONTROL_PROJECT_CREATED, notifyMissionControlProjectCreated } from '@/lib/mission-control-events'
 import {
   buildNativeProjectBriefCreatePayload,
@@ -372,6 +379,27 @@ function NativeJennyActivityDialog({
                 <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-(--ui-text-tertiary)">
                   {rule.examples.slice(0, 3).join('; ')}
                 </p>
+              </div>
+            ))}
+          </div>
+        </details>
+        <details className="rounded-md border border-(--ui-stroke-tertiary) bg-background/30 p-3 text-sm">
+          <summary className="cursor-pointer font-medium text-(--ui-text-secondary)">Goal loop</summary>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {[
+              ['Checkpoints', JENNY_GOAL_LOOP_CHECKPOINTS],
+              ['Progress reports', JENNY_GOAL_LOOP_PROGRESS_REPORT],
+              ['Completion audit', JENNY_GOAL_LOOP_COMPLETION_AUDIT],
+              ['Blocked audit', JENNY_GOAL_LOOP_BLOCKED_AUDIT],
+              ['Stop rules', JENNY_GOAL_LOOP_STOP_RULES]
+            ].map(([label, items]) => (
+              <div className="rounded border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background)/35 p-2" key={label as string}>
+                <p className="text-xs font-semibold text-foreground">{label as string}</p>
+                <ul className="mt-1 list-disc space-y-1 pl-4 text-xs leading-relaxed text-(--ui-text-tertiary)">
+                  {(items as readonly string[]).slice(0, 3).map(item => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
               </div>
             ))}
           </div>

@@ -232,6 +232,23 @@ describe('native project chat header', () => {
     expect(source).not.toContain('updatePolicy')
   })
 
+  it('shows long-running goal loop rules only inside the read-only activity details', () => {
+    expect(source).toContain("} from '@/lib/jenny-goal-loop'")
+    expect(source).toContain('Goal loop')
+    expect(source).toContain('JENNY_GOAL_LOOP_CHECKPOINTS')
+    expect(source).toContain('JENNY_GOAL_LOOP_PROGRESS_REPORT')
+    expect(source).toContain('JENNY_GOAL_LOOP_COMPLETION_AUDIT')
+    expect(source).toContain('JENNY_GOAL_LOOP_BLOCKED_AUDIT')
+    expect(source).toContain('JENNY_GOAL_LOOP_STOP_RULES')
+    expect(source).toContain('Checkpoints')
+    expect(source).toContain('Progress reports')
+    expect(source).toContain('Completion audit')
+    expect(source).toContain('Blocked audit')
+    expect(source).toContain('Stop rules')
+    expect(source).not.toContain('setGoalLoop')
+    expect(source).not.toContain('updateGoalLoop')
+  })
+
   it('lets live subagent activity drive the visible native Jenny status', () => {
     expect(source).toContain('liveSubagentCount: runningSubagents')
     expect(source).toContain('const runningSubagents = activeSubagentCount(subagents)')
