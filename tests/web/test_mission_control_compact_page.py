@@ -608,6 +608,18 @@ def test_compact_chat_behaves_like_a_normal_thread_after_send() -> None:
     assert "time: response.created_at" in chat_src
 
 
+def test_compact_chat_does_not_force_scroll_on_elapsed_timer_ticks() -> None:
+    src = page_source()
+    effect_start = src.index("chatEndRef.current?.scrollIntoView?.({ block: \"end\" })")
+    effect_end = src.index("const operatorGuidance", effect_start)
+    effect_src = src[effect_start:effect_end]
+
+    assert "chatMessages.length" in effect_src
+    assert "effectiveJennyRunProgress?.phase" in effect_src
+    assert "selectedProjectView.project.project_id" in effect_src
+    assert "jennyRunElapsedSeconds" not in effect_src
+
+
 def test_compact_chat_restores_jenny_status_from_bridge_records() -> None:
     src = page_source()
     helper_start = src.index("function recordBackedJennyRunProgress")
