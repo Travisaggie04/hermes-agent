@@ -27,6 +27,7 @@ const DESKTOP_COMMAND_META = [
   ['/background', 'Run a prompt in the background'],
   ['/branch', 'Branch the latest message into a new chat'],
   ['/compress', 'Compress this conversation context'],
+  ['/codex-handoff', 'Queue or review a manual Codex work packet'],
   ['/debug', 'Create a debug report'],
   ['/goal', 'Manage the standing goal for this session'],
   ['/help', 'Show desktop slash commands'],
@@ -51,6 +52,7 @@ const DESKTOP_COMMANDS: ReadonlySet<string> = new Set(DESKTOP_COMMAND_META.map((
 const DESKTOP_ALIASES = new Map([
   ['/bg', '/background'],
   ['/btw', '/background'],
+  ['/codex', '/codex-handoff'],
   ['/fork', '/branch'],
   ['/q', '/queue'],
   ['/reload_mcp', '/reload-mcp'],

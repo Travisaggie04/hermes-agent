@@ -2904,7 +2904,7 @@ function CompactProjectRoom({
         </div>
       </div>
 
-      <article className="flex min-h-0 min-w-0 max-w-full flex-col overflow-visible px-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-2 sm:min-h-0 sm:flex-1 sm:overflow-hidden" data-testid="compact-project-room">
+      <article className="flex min-h-0 min-w-0 max-w-full flex-col overflow-visible overflow-x-clip px-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-2 sm:min-h-0 sm:flex-1 sm:overflow-hidden" data-testid="compact-project-room">
         <div className="sr-only grid min-w-0 gap-2 border-b border-[#f3ebda]/10 pb-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-2">
             <span className="sr-only">IV. — Jenny workspace</span>
@@ -3177,7 +3177,7 @@ function CompactProjectRoom({
           </div>
         </section>
 
-        <div className="z-10 mt-2 mb-[max(env(safe-area-inset-bottom),1rem)] max-w-full shrink-0 overflow-hidden overflow-x-clip rounded-[1.5rem] border border-[#f3ebda]/10 bg-[#15101a]/95 p-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-[0_-18px_40px_rgba(14,11,18,0.88)] backdrop-blur" aria-label="Project chat composer" data-testid="compact-chat-composer">
+        <div className="z-10 mt-2 mb-[max(env(safe-area-inset-bottom),1rem)] min-w-0 max-w-full shrink-0 overflow-hidden overflow-x-clip rounded-[1.5rem] border border-[#f3ebda]/10 bg-[#15101a]/95 p-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-[0_-18px_40px_rgba(14,11,18,0.88)] backdrop-blur" aria-label="Project chat composer" data-testid="compact-chat-composer">
           {reviewRequired ? (
             <p className="mb-2 max-w-full text-xs font-semibold text-amber-700 [overflow-wrap:anywhere] dark:text-amber-100" role="status">
               Review the latest Jenny reply in the chat before acting on it.
