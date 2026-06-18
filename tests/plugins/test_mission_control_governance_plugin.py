@@ -1392,6 +1392,37 @@ def test_workspace_session_project_link_api_and_projection_rules(plugin_api, cli
     assert states["project-tool-tally"]["linked_session_count"] == 0
 
 
+def test_session_project_link_accepts_legacy_desktop_native_method_but_rejects_unknown(client):
+    create = client.post(
+        "/api/plugins/mission-control-governance/workspace/session-project-links/create",
+        json={
+            "project_id": "project-hermes",
+            "session_id": "session-tip",
+            "link_method": "desktop-native-chat",
+            "source": "desktop-native-chat",
+            "title": "Native project chat",
+        },
+    )
+
+    assert create.status_code == 200
+    record = create.json()["session_project_link"]
+    assert record["link_method"] == "manual"
+    assert record["metadata"]["normalized_link_method_from"] == "desktop-native-chat"
+    assert record["metadata"]["dispatch_enabled"] is False
+
+    invalid = client.post(
+        "/api/plugins/mission-control-governance/workspace/session-project-links/create",
+        json={
+            "project_id": "project-hermes",
+            "session_id": "session-tip-2",
+            "link_method": "auto-dispatch",
+        },
+    )
+
+    assert invalid.status_code == 422
+    assert invalid.json()["detail"] == "link_method must be manual, suggested, or seeded"
+
+
 def test_session_project_link_latest_status_wins_and_removed_excluded(plugin_api, client, monkeypatch):
     store = JsonlRecordStore(plugin_api.record_store_path())
     store.append(ProjectRecord(project_id="project-hermes", name="Hermes / Mission Control"))
