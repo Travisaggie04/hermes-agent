@@ -1,5 +1,6 @@
 import pytest
 
+from mission_control.action_policy import POLICY_ID
 from mission_control.records import StartGateCheck, TaskControlEnvelope
 from mission_control.start_gate import evaluate_start_gate
 
@@ -40,6 +41,7 @@ def test_valid_bounded_envelope_passes_default_off_and_inert():
     assert check.metadata["default_off"] is True
     assert check.metadata["inert"] is True
     assert check.metadata["enforces_runtime"] is False
+    assert check.metadata["action_policy"] == POLICY_ID
 
 
 @pytest.mark.parametrize(
