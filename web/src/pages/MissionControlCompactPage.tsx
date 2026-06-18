@@ -2321,7 +2321,7 @@ export default function MissionControlCompactPage() {
   }
 
   return (
-    <main className="box-border flex h-full max-h-full min-h-0 w-full min-w-0 max-w-full flex-1 touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none bg-[#0e0b12] px-0 py-0 text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:px-3 sm:py-1 [&_*]:box-border" data-testid="mission-control-compact-route">
+    <main className="box-border flex min-h-[100dvh] w-full min-w-0 max-w-full touch-pan-y flex-col overflow-y-auto overflow-x-clip overscroll-x-none bg-[#0e0b12] px-0 py-0 pb-[max(env(safe-area-inset-bottom),0.75rem)] text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:h-full sm:max-h-full sm:min-h-0 sm:flex-1 sm:overflow-hidden sm:px-3 sm:py-1 [&_*]:box-border" data-testid="mission-control-compact-route">
       <header className="sr-only">
         <p className="sr-only max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782] [overflow-wrap:anywhere]">
           <span className="font-serif text-lg italic text-[#d4a574]">IV.</span>
@@ -2362,8 +2362,8 @@ export default function MissionControlCompactPage() {
       ) : null}
 
       {selectedProjectView ? (
-        <div className="flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden overflow-x-clip">
-          <div className="min-h-0 min-w-0 max-w-full flex-1 overflow-hidden">
+        <div className="flex w-full min-w-0 max-w-full flex-1 overflow-visible overflow-x-clip sm:min-h-0 sm:overflow-hidden">
+          <div className="min-w-0 max-w-full flex-1 overflow-visible sm:min-h-0 sm:overflow-hidden">
             <CompactProjectRoom
               busy={roomBusy}
               message={roomMessage}
@@ -2872,7 +2872,7 @@ function CompactProjectRoom({
         </div>
       </div>
 
-      <article className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2" data-testid="compact-project-room">
+      <article className="flex min-h-[calc(100dvh-8rem)] min-w-0 max-w-full flex-1 flex-col overflow-visible px-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-2 sm:min-h-0 sm:overflow-hidden" data-testid="compact-project-room">
         <div className="sr-only grid min-w-0 gap-2 border-b border-[#f3ebda]/10 pb-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-2">
             <span className="sr-only">IV. — Jenny workspace</span>
@@ -3028,12 +3028,12 @@ function CompactProjectRoom({
           </div>
         </details>
 
-        <section className="mt-2 flex min-h-0 min-w-0 max-w-full flex-1 touch-pan-y flex-col overflow-hidden overflow-x-clip p-0" aria-label="Project chat transcript">
+        <section className="mt-2 flex min-w-0 max-w-full touch-pan-y flex-none flex-col overflow-visible overflow-x-clip p-0 sm:min-h-0 sm:flex-1 sm:overflow-hidden" aria-label="Project chat transcript">
           <div className="sr-only">
             <h3 className="text-sm font-semibold text-[#f3ebda]">Conversation</h3>
             <span className="text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
           </div>
-          <div className="mt-2 grid min-h-0 min-w-0 max-w-full flex-1 auto-rows-max content-end gap-2 overflow-y-auto overflow-x-hidden overscroll-contain pb-3 pr-1 scroll-pb-6 [-webkit-overflow-scrolling:touch]" data-testid="compact-chat-scroll">
+          <div className="mt-2 grid min-w-0 max-w-full auto-rows-max content-start gap-2 overflow-visible overflow-x-hidden overscroll-contain pb-4 pr-1 sm:min-h-0 sm:flex-1 sm:content-end sm:overflow-y-auto sm:pb-3 sm:scroll-pb-6 [-webkit-overflow-scrolling:touch]" data-testid="compact-chat-scroll">
             {chatMessages.length ? (
               chatMessages.map(chat => {
                 const replyReview = latestReviewByResponseId.get(chat.id)
@@ -3137,7 +3137,7 @@ function CompactProjectRoom({
           </div>
         </section>
 
-        <div className="z-10 mt-2 max-w-full shrink-0 overflow-hidden overflow-x-clip rounded-[1.5rem] border border-[#f3ebda]/10 bg-[#15101a]/95 p-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-[0_-18px_40px_rgba(14,11,18,0.88)] backdrop-blur" aria-label="Project chat composer" data-testid="compact-chat-composer">
+        <div className="z-10 mt-2 mb-[max(env(safe-area-inset-bottom),1rem)] max-w-full shrink-0 overflow-hidden overflow-x-clip rounded-[1.5rem] border border-[#f3ebda]/10 bg-[#15101a]/95 p-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-[0_-18px_40px_rgba(14,11,18,0.88)] backdrop-blur" aria-label="Project chat composer" data-testid="compact-chat-composer">
           {reviewRequired ? (
             <p className="mb-2 max-w-full text-xs font-semibold text-amber-700 [overflow-wrap:anywhere] dark:text-amber-100" role="status">
               Review the latest Jenny reply in the chat before acting on it.
