@@ -284,6 +284,23 @@ describe('nativeJennyStatus', () => {
     })
   })
 
+  it('shows Jenny working while native subagents are active even if the main turn is quiet', () => {
+    const status = nativeJennyStatus({
+      bridgeStatus: { pending_count: 0, visible_pending_count: 0 },
+      gatewayOpen: true,
+      liveSubagentCount: 2,
+      projectId: 'project-hermes'
+    })
+
+    expect(status).toMatchObject({
+      detail: '2 Jenny subtasks are running. Progress and the final reply appear here.',
+      label: 'Jenny working',
+      summary: 'Progress appears here',
+      tone: 'working'
+    })
+    expectCleanVisibleStatus(status)
+  })
+
   it('lets the latest native chat error drive the status before background bridge records', () => {
     const status = nativeJennyStatus({
       bridgeStatus: {
