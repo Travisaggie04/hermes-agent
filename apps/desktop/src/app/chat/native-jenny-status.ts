@@ -16,6 +16,7 @@ export interface NativeJennyStatusInput {
   gatewayOpen: boolean
   latestChatError?: string
   latestChatReplied?: boolean
+  liveSubagentCount?: number
   loading?: boolean
   nowMs?: number
   projectId?: string
@@ -71,6 +72,7 @@ export function nativeJennyStatus({
   gatewayOpen,
   latestChatError,
   latestChatReplied = false,
+  liveSubagentCount = 0,
   loading = false,
   nowMs = Date.now(),
   projectId = '',
@@ -106,6 +108,15 @@ export function nativeJennyStatus({
 
     return {
       detail: 'Jenny is working. Progress and the final reply appear here.',
+      label: 'Jenny working',
+      summary: 'Progress appears here',
+      tone: 'working'
+    }
+  }
+
+  if (liveSubagentCount > 0) {
+    return {
+      detail: `${liveSubagentCount} Jenny subtask${liveSubagentCount === 1 ? ' is' : 's are'} running. Progress and the final reply appear here.`,
       label: 'Jenny working',
       summary: 'Progress appears here',
       tone: 'working'

@@ -26,6 +26,7 @@ describe('native project chat header', () => {
     expect(source).toContain('{jennyStatus.summary}')
     expect(source).toContain('<ProjectJennyStatusStrip')
     expect(source).toContain('onRetry={messageId => void onReload(messageId)}')
+    expect(source).toContain('subagents={activeSessionId ? (subagentsBySession[activeSessionId] ?? []) : []}')
   })
 
   it('shows the extra Jenny status strip while Jenny is queued, working, failed, or freshly replied', () => {
@@ -200,5 +201,11 @@ describe('native project chat header', () => {
     expect(source).not.toContain('Run async agent')
     expect(source).not.toContain('Start async agent')
     expect(source).not.toContain('className="hidden h-6 shrink-0 px-2 text-[0.6875rem] min-[46rem]:inline-flex"')
+  })
+
+  it('lets live subagent activity drive the visible native Jenny status', () => {
+    expect(source).toContain('liveSubagentCount: runningSubagents')
+    expect(source).toContain('const runningSubagents = activeSubagentCount(subagents)')
+    expect(source).toContain('subagents: readonly SubagentProgress[]')
   })
 })

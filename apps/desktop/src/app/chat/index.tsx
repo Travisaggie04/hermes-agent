@@ -210,6 +210,7 @@ function ChatHeader({
     gatewayOpen,
     latestChatError: latestVisibleAssistantError(messages),
     latestChatReplied: latestVisibleAssistantReply(messages),
+    liveSubagentCount: runningSubagents,
     loading: bridgeStatusQuery.isLoading,
     projectId: selectedProjectId,
     queryError: bridgeStatusQuery.error
@@ -699,13 +700,15 @@ function ProjectJennyStatusStrip({
   awaitingResponse,
   gatewayOpen,
   messages,
-  onRetry
+  onRetry,
+  subagents
 }: {
   activeTurnRunning: boolean
   awaitingResponse: boolean
   gatewayOpen: boolean
   messages: ChatMessage[]
   onRetry: (messageId: string) => void
+  subagents: readonly SubagentProgress[]
 }) {
   const selectedProjectId = useStore($selectedMissionControlProjectId)
   const selectedProjectName = useStore($selectedMissionControlProjectName)
@@ -723,6 +726,7 @@ function ProjectJennyStatusStrip({
   }
 
   const latestChatReplied = latestVisibleAssistantReply(messages)
+  const runningSubagents = activeSubagentCount(subagents)
   const jennyStatus = nativeJennyStatus({
     activeTurnRunning,
     awaitingResponse,
@@ -730,6 +734,7 @@ function ProjectJennyStatusStrip({
     gatewayOpen,
     latestChatError: latestVisibleAssistantError(messages),
     latestChatReplied,
+    liveSubagentCount: runningSubagents,
     loading: bridgeStatusQuery.isLoading,
     projectId: selectedProjectId,
     queryError: bridgeStatusQuery.error
@@ -826,6 +831,7 @@ export function ChatView({
   const messages = useStore($messages)
   const selectedProjectName = useStore($selectedMissionControlProjectName)
   const selectedSessionId = useStore($selectedStoredSessionId)
+  const subagentsBySession = useStore($subagentsBySession)
   const [projectIntakeOpen, setProjectIntakeOpen] = useState(false)
   const selectedProjectTitle = selectedProjectName.trim()
   const runtimeMessageCacheRef = useRef(new WeakMap<ChatMessage, ThreadMessage>())
@@ -1007,6 +1013,7 @@ export function ChatView({
         gatewayOpen={gatewayOpen}
         messages={messages}
         onRetry={messageId => void onReload(messageId)}
+        subagents={activeSessionId ? (subagentsBySession[activeSessionId] ?? []) : []}
       />
 
       <PromptOverlays />
