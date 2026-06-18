@@ -580,6 +580,14 @@ export function DesktopController() {
     [startFreshSessionDraft]
   )
 
+  const openSessionInProject = useCallback(
+    (sessionId: string, projectId: string, projectName: string) => {
+      setSelectedMissionControlProject(projectId, projectName)
+      navigate(sessionRoute(sessionId))
+    },
+    [navigate]
+  )
+
   const handleSkinCommand = useSkinCommand()
 
   const { cancelRun, editMessage, handleThreadMessagesChange, reloadFromMessage, submitText, transcribeVoiceAudio } =
@@ -756,6 +764,7 @@ export function DesktopController() {
         }
       }}
       onEdit={editMessage}
+      onOpenProjectSession={openSessionInProject}
       onPasteClipboardImage={() => void composer.pasteClipboardImage()}
       onPickFiles={() => void composer.pickContextPaths('file')}
       onPickFolders={() => void composer.pickContextPaths('folder')}
