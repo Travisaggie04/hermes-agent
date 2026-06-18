@@ -13,6 +13,7 @@ type IntroCopyRecord = IntroCopy & {
 
 export type IntroProps = {
   personality?: string
+  projectId?: string
   projectName?: string
   projectOptions?: { id: string; lastSessionId?: string; lastSessionTitle?: string; name: string; sessionCount?: number }[]
   projectsLoading?: boolean
@@ -162,6 +163,7 @@ function resolveCopy(personality?: string, seed?: number): IntroCopy {
 
 export function Intro({
   personality,
+  projectId,
   projectName,
   projectOptions = [],
   projectsLoading = false,
@@ -172,15 +174,26 @@ export function Intro({
 }: IntroProps) {
   const [mountSeed] = useState(() => Math.floor(Math.random() * 100000))
   const copy = resolveCopy(personality, mountSeed + (seed ?? 0))
+  const projectKey = projectId?.trim() || ''
   const projectLabel = projectName?.trim() || ''
+  const selectedProjectOption = projectKey
+    ? projectOptions.find(project => project.id === projectKey)
+    : projectOptions.find(project => project.name === projectLabel)
+  const selectedProjectSessionCount =
+    typeof selectedProjectOption?.sessionCount === 'number' && selectedProjectOption.sessionCount > 0
+      ? `${selectedProjectOption.sessionCount} ${selectedProjectOption.sessionCount === 1 ? 'chat' : 'chats'}`
+      : 'No saved chats yet'
+  const selectedProjectLatestSessionId = selectedProjectOption?.lastSessionId?.trim() || ''
+  const selectedProjectLatestSessionTitle = selectedProjectOption?.lastSessionTitle?.trim() || ''
   const showProjectHome = !projectLabel && (projectsLoading || projectOptions.length > 0)
+  const introInteractive = showProjectHome || Boolean(projectLabel)
 
   return (
     <div
       className="flex w-full min-w-0 flex-col items-center justify-center px-3 py-6 text-center text-muted-foreground sm:px-6 lg:px-8"
       data-slot="aui_intro"
     >
-      <div className={showProjectHome ? 'pointer-events-auto w-full min-w-0' : 'pointer-events-none w-full min-w-0'}>
+      <div className={introInteractive ? 'pointer-events-auto w-full min-w-0' : 'pointer-events-none w-full min-w-0'}>
         <p
           aria-label={showProjectHome ? 'Projects' : WORDMARK}
           className={
@@ -197,12 +210,33 @@ export function Intro({
         </p>
 
         {projectLabel ? (
-          <div className="mx-auto mb-3 flex max-w-2xl flex-col items-center gap-1 text-center">
+          <div className="mx-auto mb-3 flex max-w-2xl flex-col items-center gap-2 text-center">
             <p className="m-0 text-xs font-medium uppercase text-(--ui-text-tertiary)">Project chat</p>
             <p className="m-0 max-w-full truncate text-lg font-semibold text-foreground">{projectLabel}</p>
             <p className="m-0 text-sm leading-normal tracking-tight">
               Send normally. Jenny replies here, with project context and safety checks in the background.
             </p>
+            <div className="mt-1 flex max-w-full flex-wrap items-center justify-center gap-2 text-xs text-(--ui-text-tertiary)">
+              <span className="rounded-full border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) px-2 py-1">
+                {selectedProjectSessionCount}
+              </span>
+              {selectedProjectLatestSessionId ? (
+                <button
+                  className="max-w-full rounded-full border border-(--ui-stroke-tertiary) bg-transparent px-2 py-1 font-medium text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent)/60 hover:bg-(--ui-control-hover-background) hover:text-foreground focus-visible:border-(--ui-accent)/70 focus-visible:outline-none"
+                  onClick={() => onResumeProjectSession?.(selectedProjectLatestSessionId, selectedProjectOption?.id || projectKey, projectLabel)}
+                  title={selectedProjectLatestSessionTitle || 'Open latest chat'}
+                  type="button"
+                >
+                  <span className="block max-w-72 truncate">
+                    Open latest{selectedProjectLatestSessionTitle ? `: ${selectedProjectLatestSessionTitle}` : ' chat'}
+                  </span>
+                </button>
+              ) : (
+                <span className="rounded-full border border-(--ui-stroke-tertiary) bg-transparent px-2 py-1">
+                  Type below to start this project
+                </span>
+              )}
+            </div>
           </div>
         ) : showProjectHome ? (
           <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-3">

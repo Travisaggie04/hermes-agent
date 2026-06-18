@@ -991,6 +991,7 @@ export function ChatView({
   const introPersonality = useStore($introPersonality)
   const introSeed = useStore($introSeed)
   const messages = useStore($messages)
+  const selectedProjectId = useStore($selectedMissionControlProjectId)
   const selectedProjectName = useStore($selectedMissionControlProjectName)
   const selectedSessionId = useStore($selectedStoredSessionId)
   const subagentsBySession = useStore($subagentsBySession)
@@ -1210,6 +1211,7 @@ export function ChatView({
                     onResumeProjectSession: onOpenProjectSession,
                     onSelectProject: onStartProjectChat,
                     personality: introPersonality,
+                    projectId: selectedProjectId.trim(),
                     projectName: selectedProjectName.trim(),
                     projectOptions: projectHomeOptions,
                     projectsLoading: projectHomeQuery.isLoading || projectHomeSessionsQuery.isLoading,

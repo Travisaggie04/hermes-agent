@@ -136,6 +136,7 @@ describe('native project chat header', () => {
     expect(source).toContain('const showIntro = blankNativeChat && (freshDraftReady || showProjectHomeIntro)')
     expect(source).toContain('onCreateProject: () => setProjectIntakeOpen(true)')
     expect(source).toContain('onResumeProjectSession: onOpenProjectSession')
+    expect(source).toContain('projectId: selectedProjectId.trim()')
     expect(source).toContain('projectOptions: projectHomeOptions')
     expect(source).toContain('projectHomeSessionsQuery.refetch()')
     expect(source).toContain('onSelectProject: onStartProjectChat')
