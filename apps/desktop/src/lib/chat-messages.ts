@@ -17,6 +17,10 @@ export type ChatMessage = {
   hidden?: boolean
   /** Composer attachment ref strings (`@file:...`, `@image:...`) sent with this user message. */
   attachmentRefs?: string[]
+  /** Original user text to send when reusing a saved turn. Hidden harness text is stored separately. */
+  runtimeText?: string
+  /** Hidden Jenny context recovered from legacy saved user rows. Never render this in the chat bubble. */
+  hiddenContext?: string
 }
 
 export type GatewayEventPayload = {
@@ -110,6 +114,14 @@ export function chatMessageText(message: ChatMessage): string {
     .join('')
 }
 
+export function chatMessageRuntimeText(message: ChatMessage): string {
+  return message.role === 'user' ? message.runtimeText ?? chatMessageText(message) : chatMessageText(message)
+}
+
+export function chatMessageHiddenContext(message: ChatMessage): string {
+  return message.role === 'user' ? message.hiddenContext?.trim() ?? '' : ''
+}
+
 const ATTACHED_CONTEXT_MARKER_RE = /(?:^|\n)--- Attached Context ---\s*\n/
 const CONTEXT_WARNINGS_MARKER_RE = /(?:^|\n)--- Context Warnings ---[\s\S]*$/
 const CONTEXT_REF_RE = /@(file|folder|url|image|tool|terminal):(?:"[^"\n]+"|'[^'\n]+'|`[^`\n]+`|\S+)/g
@@ -119,8 +131,34 @@ const ENGINEERING_GOAL_PROMPT_RE =
   /^\[(Engineering goal kickoff|Continuing engineering goal)\]\s*Objective:\s*([\s\S]*?)(?=\n\n(?:Additional user criteria:|Goal loop state:|Operate as a senior engineering agent\.)|$)/i
 const STANDING_GOAL_PROMPT_RE =
   /^\[Continuing toward your standing goal\]\s*Goal:\s*([\s\S]*?)(?=\n\n(?:Additional criteria the user added mid-loop:|Continue working toward)|$)/i
-const LEGACY_JENNY_REQUEST_STOP_LABELS =
-  'Current intake:|Request intake:|Current brief:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:'
+const LEGACY_JENNY_REQUEST_STOP_LABELS = [
+  'Project ID:',
+  'Jenny role:',
+  'Default flow:',
+  'Conversation style:',
+  'Progress style:',
+  'Action policy:',
+  'Goal loop:',
+  'Visible chat rule:',
+  'ALLOW:',
+  'ASK before:',
+  'DENY:',
+  'Current intake:',
+  'Request intake:',
+  'Current brief:',
+  'Challenge state:',
+  'Categories:',
+  'Blocking verdicts:',
+  'Readiness:',
+  'Current goal:',
+  'Allowed:',
+  'Forbidden:',
+  'Safety(?: status)?:',
+  'Structured handoff:',
+  'Evidence contract:',
+  'Evidence required:',
+  'Approval gate:'
+].join('|')
 const LEGACY_SPEC_FIRST_REQUEST_RE = new RegExp(
   `^Spec-first request for Jenny:\\s*Project:\\s*.+?\\s+Request Travis is considering:\\s*([\\s\\S]*?)(?=\\s+(?:${LEGACY_JENNY_REQUEST_STOP_LABELS})|$)`,
   'i'
@@ -222,28 +260,38 @@ function goalControlPromptText(value: string): string | null {
   return objective ? `Continuing goal: ${objective}` : null
 }
 
-function stripHiddenJennyOsContext(value: string): string {
+function splitHiddenJennyOsContext(value: string): { hiddenContext: string; visibleText: string } {
   const header = value.match(HIDDEN_JENNY_OS_CONTEXT_RE)
 
   if (!header) {
-    return value
+    return { hiddenContext: '', visibleText: value }
   }
 
   const rest = value.slice(header[0].length)
   const blankSeparator = rest.match(/\r?\n[ \t]*\r?\n/)
 
   if (blankSeparator?.index !== undefined) {
-    return rest.slice(blankSeparator.index + blankSeparator[0].length).trimStart()
+    return {
+      hiddenContext: value.slice(0, header[0].length + blankSeparator.index).trimEnd(),
+      visibleText: rest.slice(blankSeparator.index + blankSeparator[0].length).trimStart()
+    }
   }
 
   const lines = rest.split(/\r?\n/)
   const visibleRuleIndex = lines.findIndex(line => HIDDEN_JENNY_OS_VISIBLE_RULE_RE.test(line.trim()))
 
   if (visibleRuleIndex >= 0) {
-    return lines.slice(visibleRuleIndex + 1).join('\n').trimStart()
+    return {
+      hiddenContext: [header[0].trimEnd(), ...lines.slice(0, visibleRuleIndex + 1)].join('\n').trimEnd(),
+      visibleText: lines.slice(visibleRuleIndex + 1).join('\n').trimStart()
+    }
   }
 
-  return ''
+  return { hiddenContext: value.trim(), visibleText: '' }
+}
+
+function stripHiddenJennyOsContext(value: string): string {
+  return splitHiddenJennyOsContext(value).visibleText
 }
 
 function visibleUserMessageText(value: string): string {
@@ -281,6 +329,18 @@ function displayContentForMessage(role: SessionMessage['role'], content: unknown
   }
 
   return displayUserMessageText(rawTextContent)
+}
+
+function runtimeContentForUserMessage(content: unknown): { hiddenContext: string; runtimeText: string } {
+  const rawTextContent = textFromUnknown(content)
+  const { hiddenContext, visibleText } = splitHiddenJennyOsContext(rawTextContent)
+  const legacyRequestText = legacyJennyRequestText(visibleText)
+  const visibleRuntimeText = visibleText.trim()
+
+  return {
+    hiddenContext: [hiddenContext, legacyRequestText ? visibleRuntimeText : ''].filter(Boolean).join('\n\n'),
+    runtimeText: legacyRequestText ?? visibleRuntimeText
+  }
 }
 
 export function appendTextPart(parts: ChatMessagePart[], delta: string): ChatMessagePart[] {
@@ -841,6 +901,7 @@ export function toChatMessages(messages: SessionMessage[]): ChatMessage[] {
 
     const content = message.content || message.text || message.context || message.name
     const displayContent = displayContentForMessage(message.role, content)
+    const userRuntimeContent = message.role === 'user' ? runtimeContentForUserMessage(content) : null
     const parts: ChatMessagePart[] = []
 
     const reasoning =
@@ -910,7 +971,9 @@ export function toChatMessages(messages: SessionMessage[]): ChatMessage[] {
       id: `${message.timestamp || Date.now()}-${index}-${message.role}`,
       role: message.role,
       parts,
-      timestamp: message.timestamp
+      timestamp: message.timestamp,
+      ...(userRuntimeContent?.runtimeText && { runtimeText: userRuntimeContent.runtimeText }),
+      ...(userRuntimeContent?.hiddenContext && { hiddenContext: userRuntimeContent.hiddenContext })
     })
 
     activeAssistantIndex = message.role === 'assistant' ? result.length - 1 : null

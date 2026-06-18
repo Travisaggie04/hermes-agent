@@ -29,6 +29,16 @@ describe('native project chat session linking', () => {
     expect(actionBlock).toContain('navigate(NEW_CHAT_ROUTE)')
   })
 
+  it('branches native chat from visible text instead of recovered hidden runtime packets', () => {
+    const branchStart = source.indexOf('const branchMessages = currentMessages')
+    const branchEnd = source.indexOf("title: 'Branch'", branchStart)
+    const branchBlock = source.slice(branchStart, branchEnd)
+
+    expect(branchBlock).toContain('content: chatMessageText(message)')
+    expect(branchBlock).not.toContain('chatMessageRuntimeText')
+    expect(branchBlock).not.toContain('chatMessageHiddenContext')
+  })
+
   it('keeps the relabeled New project chat action from inheriting an unrelated workspace', () => {
     const actionStart = source.indexOf("if (item.action === 'new-session')")
     const actionEnd = source.indexOf("if (item.action === 'jenny-os')", actionStart)

@@ -573,6 +573,51 @@ describe('usePromptActions project harness', () => {
     expect(promptSubmitCall?.[1].hidden_context).toContain('Project: Hermes / Mission Control')
   })
 
+  it('uses recovered hidden context when regenerating a loaded legacy project chat reply', async () => {
+    const initialMessages: ChatMessage[] = [
+      {
+        id: 'user-legacy',
+        role: 'user',
+        parts: [{ type: 'text', text: 'clean visible chat messages' }],
+        runtimeText: 'clean visible chat messages',
+        hiddenContext: [
+          'Spec-first request for Jenny: Project: Hermes / Mission Control Request Travis is considering: clean visible chat messages',
+          'Action policy: jenny_os_action_policy_v1.',
+          'ASK before: gateway restart or runtime switch.',
+          'Goal loop: jenny_os_goal_loop_v1.'
+        ].join('\n')
+      },
+      { id: 'assistant-legacy', role: 'assistant', parts: [{ type: 'text', text: 'old reply' }] }
+    ]
+    $messages.set(initialMessages)
+
+    const refreshSessions = vi.fn(async () => undefined)
+    const requestGateway = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({}) as never)
+
+    let handle: HarnessHandle | null = null
+    render(
+      <Harness
+        initialMessages={initialMessages}
+        onReady={h => (handle = h)}
+        refreshSessions={refreshSessions}
+        requestGateway={requestGateway}
+      />
+    )
+
+    await handle!.reloadFromMessage('assistant-legacy')
+
+    const promptSubmitCall = requestGateway.mock.calls.find(call => call[0] === 'prompt.submit') as
+      | [string, { hidden_context?: string; session_id: string; text: string; truncate_before_user_ordinal?: number }]
+      | undefined
+
+    expect(promptSubmitCall?.[1].text).toBe('clean visible chat messages')
+    expect(promptSubmitCall?.[1].text).not.toContain('Action policy:')
+    expect(promptSubmitCall?.[1].text).not.toContain('ASK before:')
+    expect(promptSubmitCall?.[1].hidden_context).toContain('Action policy: jenny_os_action_policy_v1.')
+    expect(promptSubmitCall?.[1].hidden_context).toContain('ASK before: gateway restart or runtime switch.')
+    expect(promptSubmitCall?.[1].hidden_context).toContain('Goal loop: jenny_os_goal_loop_v1.')
+  })
+
   it('shows a chat retry error when regenerating a project reply fails', async () => {
     setSelectedMissionControlProject('project-hermes-mission-control', 'Hermes / Mission Control')
     const initialMessages: ChatMessage[] = [
