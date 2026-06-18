@@ -1,14 +1,17 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   buildNativeProjectBriefCreatePayload,
   buildNativeProjectCreatePayload,
+  createNativeProjectFromIntake,
   emptyNativeProjectIntake,
   NATIVE_PROJECT_DEFAULT_APPROVAL_RULES,
   NATIVE_PROJECT_DEFAULT_NEXT_LANE,
+  NATIVE_PROJECT_REQUIRED_ERROR,
   nativeProjectIntakeList,
   nativeProjectSlug,
-  parseNativeProjectIntake
+  parseNativeProjectIntake,
+  validateNativeProjectIntake
 } from './native-project-intake'
 
 describe('native project intake helpers', () => {
@@ -59,5 +62,60 @@ describe('native project intake helpers', () => {
       status: 'active',
       success_criteria: ['clean user messages', 'project sessions grouped']
     })
+  })
+
+  it('validates required native project fields before writing records', async () => {
+    const validation = validateNativeProjectIntake(emptyNativeProjectIntake())
+    const createProject = vi.fn()
+    const createProjectBrief = vi.fn()
+
+    await expect(
+      createNativeProjectFromIntake(emptyNativeProjectIntake(), { createProject, createProjectBrief })
+    ).resolves.toEqual({
+      error: NATIVE_PROJECT_REQUIRED_ERROR,
+      parsed: validation.parsed
+    })
+    expect(createProject).not.toHaveBeenCalled()
+    expect(createProjectBrief).not.toHaveBeenCalled()
+  })
+
+  it('creates the native project and initial brief through one shared submit helper', async () => {
+    const value = {
+      ...emptyNativeProjectIntake(),
+      approval: 'Ask before payment changes',
+      evidence: 'passing tests',
+      forbidden: 'payment mutation',
+      goal: 'Make Jenny safer to use from native chat.',
+      name: 'Jenny OS',
+      source: 'Hermes repo',
+      success: 'project sessions grouped'
+    }
+    const createProject = vi.fn(async () => ({
+      project: {
+        name: 'Jenny OS Live',
+        project_id: 'project-jenny-os-live'
+      }
+    }))
+    const createProjectBrief = vi.fn(async () => ({ stored: true }))
+
+    await expect(createNativeProjectFromIntake(value, { createProject, createProjectBrief })).resolves.toMatchObject({
+      projectId: 'project-jenny-os-live',
+      projectName: 'Jenny OS Live'
+    })
+    expect(createProject).toHaveBeenCalledWith({
+      current_goal: 'Make Jenny safer to use from native chat.',
+      mistakes_guards: 'payment mutation',
+      name: 'Jenny OS',
+      next_recommended_lane: NATIVE_PROJECT_DEFAULT_NEXT_LANE,
+      project_id: 'project-jenny-os',
+      source_of_truth: 'Hermes repo',
+      status: 'active'
+    })
+    expect(createProjectBrief).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Jenny OS Live initial brief',
+        project_id: 'project-jenny-os-live'
+      })
+    )
   })
 })

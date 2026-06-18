@@ -41,6 +41,7 @@ describe('Intro', () => {
             lastSessionId: 'tool-session',
             lastSessionTitle: 'Wrong project',
             name: 'Tool & Tally',
+            recentSessions: [],
             sessionCount: 1
           }
         ]}
@@ -89,11 +90,13 @@ describe('Intro', () => {
         projectOptions={[
           {
             id: 'project-hermes-mission-control',
+            lastSessionId: '',
             lastSessionTitle: 'Bridge smoke test',
             name: 'Hermes / Mission Control',
+            recentSessions: [],
             sessionCount: 2
           },
-          { id: 'project-tool-tally', name: 'Tool & Tally' }
+          { id: 'project-tool-tally', lastSessionId: '', lastSessionTitle: '', name: 'Tool & Tally', recentSessions: [], sessionCount: 0 }
         ]}
         seed={0}
       />
@@ -101,7 +104,7 @@ describe('Intro', () => {
 
     expect(screen.getByLabelText('Projects').textContent).toContain('Projects')
     expect(screen.getByText('Pick a project')).toBeTruthy()
-    expect(screen.getByText('Pick a project, then chat normally. Jenny gets the project brief and guardrails without extra copy/paste.')).toBeTruthy()
+    expect(screen.getByText('Pick a project, then chat normally. Jenny gets the right project context without extra copy/paste.')).toBeTruthy()
     expect(screen.getByText('2 chats')).toBeTruthy()
     expect(screen.getByText('Last: Bridge smoke test')).toBeTruthy()
     expect(screen.getByText('No chats yet')).toBeTruthy()
@@ -130,6 +133,7 @@ describe('Intro', () => {
             lastSessionId: 'session-latest',
             lastSessionTitle: 'Bridge smoke test',
             name: 'Hermes / Mission Control',
+            recentSessions: [],
             sessionCount: 2
           }
         ]}
@@ -143,5 +147,30 @@ describe('Intro', () => {
 
     expect(onResumeProjectSession).toHaveBeenCalledWith('session-latest', 'project-hermes-mission-control', 'Hermes / Mission Control')
     expect(onSelectProject).not.toHaveBeenCalled()
+  })
+
+  it('shows unfiled Other chats on the blank native chat home', () => {
+    const onResumeOtherSession = vi.fn()
+
+    render(
+      <Intro
+        onResumeOtherSession={onResumeOtherSession}
+        otherChatCount={2}
+        otherChats={[
+          { id: 'legacy-root', title: 'Legacy planning chat' },
+          { id: 'scratch-root', title: 'Scratch notes' }
+        ]}
+        seed={0}
+      />
+    )
+
+    expect(screen.getByText('Pick a project')).toBeTruthy()
+    expect(screen.getByText('Other chats')).toBeTruthy()
+    expect(screen.getByText('2 unfiled chats')).toBeTruthy()
+    expect(screen.getByText('Legacy planning chat')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('Legacy planning chat'))
+
+    expect(onResumeOtherSession).toHaveBeenCalledWith('legacy-root')
   })
 })

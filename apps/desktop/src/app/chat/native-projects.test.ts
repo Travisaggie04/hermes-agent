@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest'
 
-import { fallbackProjectGroups, nativeChatProjects } from './native-projects'
+import {
+  fallbackProjectGroups,
+  nativeChatProjects,
+  nativeProjectChatModel,
+  NATIVE_PROJECT_SESSION_LIMIT,
+  projectSessionStableId,
+  UNASSIGNED_PROJECT_GROUP_ID
+} from './native-projects'
 
 describe('native chat projects', () => {
+  it('uses the widest safe Mission Control session window for native project grouping', () => {
+    expect(NATIVE_PROJECT_SESSION_LIMIT).toBe(50)
+  })
+
   it('keeps the native Jenny workspace project-first when Mission Control project records are unavailable', () => {
     expect(nativeChatProjects().map(project => project.name)).toEqual([
       'Hermes / Mission Control',
@@ -54,5 +65,31 @@ describe('native chat projects', () => {
       project_id: 'project-hermes-mission-control',
       sessions: []
     })
+  })
+
+  it('normalizes project chat sessions to durable ids for header and intro reuse', () => {
+    expect(projectSessionStableId({ durable_session_id: 'session-root', session_id: 'session-tip' })).toBe('session-root')
+    expect(projectSessionStableId({ session_id: 'session-tip' })).toBe('session-tip')
+
+    const model = nativeProjectChatModel(
+      [{ name: 'Hermes / Mission Control', project_id: 'project-hermes-mission-control' }],
+      [
+        {
+          linked_session_count: 1,
+          name: 'Hermes / Mission Control',
+          project_id: 'project-hermes-mission-control',
+          sessions: [{ durable_session_id: 'session-root', session_id: 'session-tip', title: 'Durable chat' }]
+        },
+        {
+          name: 'Unassigned / General',
+          project_id: UNASSIGNED_PROJECT_GROUP_ID,
+          sessions: [{ durable_session_id: 'legacy-root', session_id: 'legacy-tip', title: 'Legacy chat' }]
+        }
+      ]
+    )
+
+    expect(model.projects[0].lastSessionId).toBe('session-root')
+    expect(model.projects[0].recentSessions[0]).toEqual({ id: 'session-root', title: 'Durable chat' })
+    expect(model.otherChats[0]).toEqual({ id: 'legacy-root', title: 'Legacy chat' })
   })
 })

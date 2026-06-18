@@ -56,11 +56,9 @@ import {
   notifyMissionControlProjectLinkCreated
 } from '@/lib/mission-control-events'
 import {
-  buildNativeProjectBriefCreatePayload,
-  buildNativeProjectCreatePayload,
+  createNativeProjectFromIntake,
   emptyNativeProjectIntake,
-  type NativeProjectIntakeValue,
-  parseNativeProjectIntake
+  type NativeProjectIntakeValue
 } from '@/lib/native-project-intake'
 import { profileColor } from '@/lib/profile-color'
 import { sessionMatchesSearch } from '@/lib/session-search'
@@ -105,7 +103,7 @@ import { setSelectedMissionControlProject } from '@/store/session'
 import { type AppView, ARTIFACTS_ROUTE, MESSAGING_ROUTE, MISSION_CONTROL_ROUTE, SKILLS_ROUTE } from '../../routes'
 import { SidebarPanelLabel } from '../../shell/sidebar-label'
 import type { SidebarNavItem } from '../../types'
-import { fallbackProjectGroups, nativeChatProjects } from '../native-projects'
+import { fallbackProjectGroups, NATIVE_PROJECT_SESSION_LIMIT, nativeChatProjects, UNASSIGNED_PROJECT_GROUP_ID } from '../native-projects'
 
 import { ProfileRail } from './profile-switcher'
 import type { ProjectMoveTarget } from './session-actions-menu'
@@ -143,7 +141,7 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
   },
   {
     id: 'advanced-audit',
-    label: 'Advanced / Audit',
+    label: 'Advanced / Audit / Recovery',
     icon: props => <Codicon name="dashboard" {...props} />,
     route: MISSION_CONTROL_ROUTE
   }
@@ -155,8 +153,6 @@ const WORKSPACE_PAGE = 5
 const PROFILE_INITIAL_PAGE = 5
 const WS_ID_PREFIX = 'workspace:'
 const HERMES_PROJECT_NAME = 'Hermes / Mission Control'
-const UNASSIGNED_PROJECT_GROUP_ID = 'unassigned-general'
-
 const wsId = (id: string) => `${WS_ID_PREFIX}${id}`
 const parseWsId = (id: string) => (id.startsWith(WS_ID_PREFIX) ? id.slice(WS_ID_PREFIX.length) : null)
 const countLabel = (loaded: number, total: number) => (total > loaded ? `${loaded}/${total}` : String(loaded))
@@ -410,7 +406,7 @@ export function ChatSidebar({
     let cancelled = false
 
     setProjectGroupsLoading(true)
-    Promise.allSettled([getMissionControlProjects(), getMissionControlProjectSessions()])
+    Promise.allSettled([getMissionControlProjects(), getMissionControlProjectSessions(NATIVE_PROJECT_SESSION_LIMIT)])
       .then(results => {
         if (cancelled) {
           return
@@ -509,33 +505,30 @@ export function ChatSidebar({
   }, [refreshProjectGroups])
 
   const createProjectFromIntake = useCallback(async () => {
-    const parsed = parseNativeProjectIntake(projectIntake)
-
-    if (!parsed.name || !parsed.goal) {
-      setProjectIntakeError('Project name and goal are required.')
-
-      return
-    }
-
     setProjectIntakeSaving(true)
     setProjectIntakeError('')
 
     try {
-      const project = await createMissionControlProject(buildNativeProjectCreatePayload(parsed))
-      const createdProjectId = project.project.project_id || parsed.projectId
-      const createdProjectName = project.project.name || parsed.name
+      const result = await createNativeProjectFromIntake(projectIntake, {
+        createProject: createMissionControlProject,
+        createProjectBrief: createMissionControlProjectBrief
+      })
 
-      await createMissionControlProjectBrief(
-        buildNativeProjectBriefCreatePayload(parsed, createdProjectId, createdProjectName)
-      )
+      if ('error' in result) {
+        setProjectIntakeError(result.error)
 
-      setSelectedMissionControlProject(createdProjectId, createdProjectName)
+        return
+      }
+
+      const { projectId, projectName } = result
+
+      setSelectedMissionControlProject(projectId, projectName)
       setSidebarRecentsOpen(false)
       setProjectIntake(emptyNativeProjectIntake())
       setProjectIntakeOpen(false)
-      notifyMissionControlProjectCreated({ projectId: createdProjectId, projectName: createdProjectName })
+      notifyMissionControlProjectCreated({ projectId, projectName })
       refreshProjectGroups()
-      onNewSessionInProject(createdProjectId, createdProjectName)
+      onNewSessionInProject(projectId, projectName)
     } catch (err) {
       setProjectIntakeError(err instanceof Error ? err.message : String(err))
     } finally {

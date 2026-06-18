@@ -771,6 +771,7 @@ export function DesktopController() {
       onPickImages={() => void composer.pickImages()}
       onReload={reloadFromMessage}
       onRemoveAttachment={id => void composer.removeAttachment(id)}
+      onResumeSession={sessionId => navigate(sessionRoute(sessionId))}
       onStartProjectChat={startSessionInProject}
       onSubmit={submitText}
       onThreadMessagesChange={handleThreadMessagesChange}
