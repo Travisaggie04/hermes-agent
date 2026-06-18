@@ -39,6 +39,13 @@ import { type ChatMessage, chatMessageText } from '@/lib/chat-messages'
 import { quickModelOptions, sessionTitle, toRuntimeMessage } from '@/lib/chat-runtime'
 import { useIncrementalExternalStoreRuntime } from '@/lib/incremental-external-store-runtime'
 import { MISSION_CONTROL_PROJECT_CREATED, notifyMissionControlProjectCreated } from '@/lib/mission-control-events'
+import {
+  buildNativeProjectBriefCreatePayload,
+  buildNativeProjectCreatePayload,
+  emptyNativeProjectIntake,
+  type NativeProjectIntakeValue,
+  parseNativeProjectIntake
+} from '@/lib/native-project-intake'
 import { cn } from '@/lib/utils'
 import type { ComposerAttachment } from '@/store/composer'
 import { $pinnedSessionIds } from '@/store/layout'
@@ -419,24 +426,6 @@ function ProjectHeaderSelect({
   )
 }
 
-interface NativeProjectIntakeValue {
-  approval: string
-  evidence: string
-  forbidden: string
-  goal: string
-  name: string
-  source: string
-  success: string
-}
-
-function projectSlug(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'project'
-}
-
-function listFromTextarea(value: string): string[] {
-  return value.split(/\r?\n|,/).map(item => item.trim()).filter(Boolean)
-}
-
 function NativeProjectIntakeDialog({
   onCreated,
   onOpenChange,
@@ -446,39 +435,16 @@ function NativeProjectIntakeDialog({
   onOpenChange: (open: boolean) => void
   open: boolean
 }) {
-  const [value, setValue] = useState<NativeProjectIntakeValue>({
-    approval: '',
-    evidence: '',
-    forbidden: '',
-    goal: '',
-    name: '',
-    source: '',
-    success: ''
-  })
+  const [value, setValue] = useState<NativeProjectIntakeValue>(emptyNativeProjectIntake)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const update = (key: keyof NativeProjectIntakeValue) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setValue(current => ({ ...current, [key]: event.currentTarget.value }))
 
   const submit = async () => {
-    const name = value.name.trim()
-    const goal = value.goal.trim()
-    const source = value.source.trim()
-    const success = listFromTextarea(value.success)
-    const forbidden = listFromTextarea(value.forbidden)
-    const evidence = listFromTextarea(value.evidence)
-    const approval = listFromTextarea(value.approval)
-    const approvalRules = [
-      'Jenny must challenge vague, risky, or wrong-approach requests before implementation.',
-      'Jenny must define evidence, tests, rollback/stop conditions, and approval needs before broad work.',
-      ...approval
-    ]
-    const constraints = [
-      ...evidence.map(item => `Evidence required: ${item}`),
-      ...approval.map(item => `Approval/stop rule: ${item}`)
-    ]
+    const parsed = parseNativeProjectIntake(value)
 
-    if (!name || !goal) {
+    if (!parsed.name || !parsed.goal) {
       setError('Project name and goal are required.')
 
       return
@@ -488,35 +454,18 @@ function NativeProjectIntakeDialog({
     setError('')
 
     try {
-      const projectId = `project-${projectSlug(name)}`
-      const project = await createMissionControlProject({
-        current_goal: goal,
-        mistakes_guards: forbidden.join('; '),
-        name,
-        next_recommended_lane: 'Start with a spec-first project setup review.',
-        project_id: projectId,
-        source_of_truth: source,
-        status: 'active'
-      })
-      const createdProjectId = project.project.project_id || projectId
-      const createdProjectName = project.project.name || name
+      const project = await createMissionControlProject(buildNativeProjectCreatePayload(parsed))
+      const createdProjectId = project.project.project_id || parsed.projectId
+      const createdProjectName = project.project.name || parsed.name
 
-      await createMissionControlProjectBrief({
-        approval_rules: approvalRules,
-        constraints,
-        forbidden_actions: forbidden,
-        name: `${createdProjectName} initial brief`,
-        outcome: goal,
-        project_id: createdProjectId,
-        source_of_truth: source,
-        status: 'active',
-        success_criteria: success
-      })
+      await createMissionControlProjectBrief(
+        buildNativeProjectBriefCreatePayload(parsed, createdProjectId, createdProjectName)
+      )
 
       notifyMissionControlProjectCreated({ projectId: createdProjectId, projectName: createdProjectName })
       onCreated(createdProjectId, createdProjectName)
       notify({ durationMs: 2_000, kind: 'success', message: `Created ${createdProjectName}` })
-      setValue({ approval: '', evidence: '', forbidden: '', goal: '', name: '', source: '', success: '' })
+      setValue(emptyNativeProjectIntake())
       onOpenChange(false)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
