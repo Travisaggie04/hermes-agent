@@ -31,6 +31,7 @@ def test_mobile_compact_route_is_registered() -> None:
     assert "const isChatLikeRoute = isChatRoute || isCompactChatRoute;" in app
     assert 'const isCompactChatRoute = pathname === "/mission-control-compact" || pathname === "/mission-control-compact/";' in provider
     assert "isChatLikeRoute" in provider
+    assert 'isCompactChatRoute && "sr-only"' in provider
 
 
 def test_renders_five_real_projects_in_compact_mode() -> None:
@@ -74,7 +75,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "setTitle(\"Jenny\")",
         "w-full min-w-0 max-w-full",
         "[&_*]:box-border",
-        "mt-0 flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden",
+        "flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden",
         "Local studio",
         "Projects",
         "IV. — Jenny workspace",
@@ -221,9 +222,9 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "sr-only",
         "min-h-0 min-w-0 max-w-full flex-1 overflow-hidden",
         "sr-only order-2 min-w-0 max-w-full overflow-hidden",
-        "mt-0 flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden overflow-x-clip",
+        "flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden overflow-x-clip",
         "h-full min-h-0",
-        "sm:h-[calc(100vh-4rem)] sm:min-h-[34rem]",
+        "rounded-none border-0 border-[#d4a574]/10",
         "grid w-full min-w-0 max-w-xl gap-1",
         "select",
         "sr-only w-full min-w-0 max-w-full gap-1.5",
@@ -231,7 +232,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "min-w-0 max-w-full overflow-hidden rounded-md",
         "block max-w-full truncate font-semibold",
         "grid min-w-0 gap-1 sm:flex sm:items-center sm:justify-between",
-        "min-h-12 rounded-full border border-emerald-500/40",
+        "min-h-11 rounded-full border border-emerald-500/40",
         "projectRoomProjects",
         "canonicalRealProjects",
         "projects={projectRoomProjects}",
@@ -344,6 +345,8 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "WORKSPACE_CHALLENGE_REVIEWS_CREATE_URL",
         "WORKSPACE_LANE_REQUESTS_CREATE_URL",
         "compact-project-room",
+        "compact-chat-scroll",
+        "compact-chat-composer",
     ]:
         assert expected in src
     assert 'message.from_agent === "jenny" || message.status === "replied"' not in src
@@ -371,12 +374,13 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
         "min-[420px]:grid-cols-2",
         "overflow-y-auto overflow-x-hidden overscroll-contain",
         "auto-rows-max content-end",
-        "scroll-pb-32",
+        "scroll-pb-6",
         "[-webkit-overflow-scrolling:touch]",
-        "pb-[max(env(safe-area-inset-bottom),0.75rem)]",
+        "pb-[max(env(safe-area-inset-bottom),0.5rem)]",
         "aria-label=\"Project chat composer\"",
-        "sticky bottom-0",
-        "max-h-24 min-h-12",
+        "data-testid=\"compact-chat-composer\"",
+        "data-testid=\"compact-chat-scroll\"",
+        "max-h-28 min-h-11",
         "[overflow-wrap:anywhere]",
         "[word-break:break-word]",
         "min-w-0 max-w-full",
@@ -389,6 +393,8 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
         assert expected in src
     assert "w-dvw" not in src
     assert "max-w-dvw" not in src
+    assert "sticky bottom-0" not in src
+    assert "Mission Control compact route should not reserve dashboard chrome" not in src
 
 
 def test_compact_project_chat_keeps_primary_flow_chat_first() -> None:
@@ -403,9 +409,10 @@ def test_compact_project_chat_keeps_primary_flow_chat_first() -> None:
     composer_section_start = room.rindex('className="z-10 mt-2 max-w-full shrink-0', 0, composer_start)
     composer_src = room[composer_section_start:composer_start + 500]
     assert "shrink-0" in composer_src
-    assert "rounded-[1.75rem]" in composer_src
-    assert "sticky bottom-0" in composer_src
-    assert "max-h-24 min-h-12" in composer_src
+    assert "rounded-[1.5rem]" in composer_src
+    assert "sticky bottom-0" not in composer_src
+    assert "max-h-28 min-h-11" in composer_src
+    assert "data-testid=\"compact-chat-composer\"" in composer_src
     assert "backdrop-blur" in composer_src
     assert "<summary" in transcript_src
     assert "Review reply" in transcript_src
