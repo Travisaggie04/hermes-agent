@@ -9112,6 +9112,8 @@ class HermesCLI:
             self._handle_goal_command(cmd_original)
         elif canonical == "subgoal":
             self._handle_subgoal_command(cmd_original)
+        elif canonical == "codex-handoff":
+            self._handle_codex_handoff_command(cmd_original)
         elif canonical == "skin":
             self._handle_skin_command(cmd_original)
         elif canonical == "voice":
@@ -9664,6 +9666,20 @@ class HermesCLI:
             print()
 
     # ────────────────────────────────────────────────────────────────
+    # /codex-handoff — manual Jenny-to-Codex foreground work packets
+
+    def _handle_codex_handoff_command(self, cmd: str) -> None:
+        parts = cmd.split(maxsplit=1)
+        arg = parts[1].strip() if len(parts) > 1 else ""
+        try:
+            from hermes_cli.codex_handoff import handle_codex_handoff_command
+
+            _cprint(handle_codex_handoff_command(arg, session_id=self.session_id))
+        except ValueError as exc:
+            _cprint(f"  {exc}")
+        except Exception as exc:
+            _cprint(f"  Codex handoff unavailable: {exc}")
+
     # /goal — persistent cross-turn goals (Ralph-style loop)
     # ────────────────────────────────────────────────────────────────
     def _get_goal_manager(self):

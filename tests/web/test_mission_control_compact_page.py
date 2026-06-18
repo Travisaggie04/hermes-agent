@@ -398,7 +398,7 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
         "min-h-[100dvh] w-full min-w-0 max-w-full touch-pan-y flex-col overflow-y-auto overflow-x-clip overscroll-x-none",
         "sm:h-full sm:max-h-full sm:min-h-0 sm:flex-1 sm:overflow-hidden",
         "block w-full min-w-0 max-w-full overflow-visible overflow-x-clip sm:flex sm:flex-1 sm:min-h-0 sm:overflow-hidden",
-        "flex min-h-0 min-w-0 max-w-full flex-col overflow-visible",
+        "flex min-h-0 min-w-0 max-w-full flex-col overflow-visible overflow-x-clip",
         "sm:min-h-0 sm:flex-1 sm:overflow-hidden",
         "min-[420px]:grid-cols-2",
         "auto-rows-max content-start",
@@ -434,6 +434,35 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
     assert "Mission Control compact route should not reserve dashboard chrome" not in src
 
 
+def test_compact_phone_viewport_avoids_horizontal_document_scroll() -> None:
+    src = page_source()
+    main_start = src.index('data-testid="mission-control-compact-route"')
+    project_room_start = src.index('data-testid="compact-project-room"')
+    transcript_start = src.index('aria-label="Project chat transcript"')
+    scroll_start = src.index('data-testid="compact-chat-scroll"')
+    composer_start = src.index('data-testid="compact-chat-composer"')
+
+    main_src = src[main_start - 600:main_start + 250]
+    room_src = src[project_room_start - 500:project_room_start + 250]
+    transcript_src = src[transcript_start - 500:transcript_start + 250]
+    scroll_src = src[scroll_start - 500:scroll_start + 250]
+    composer_src = src[composer_start - 500:composer_start + 250]
+    compact_shell = main_src + room_src + transcript_src + scroll_src + composer_src
+
+    for fragment in [main_src, room_src, transcript_src, scroll_src, composer_src]:
+        assert "min-w-0" in fragment
+        assert "max-w-full" in fragment
+
+    assert "overflow-x-clip" in main_src
+    assert "overscroll-x-none" in main_src
+    assert "overflow-x-clip" in room_src
+    assert "overflow-x-hidden" in scroll_src
+    assert "overflow-x-clip" in composer_src
+
+    for forbidden in ["overflow-x-auto", "w-screen", "min-w-screen", "w-dvw", "max-w-dvw"]:
+        assert forbidden not in compact_shell
+
+
 def test_compact_mobile_transcript_uses_page_scroll_not_trapped_panel() -> None:
     src = page_source()
     main_start = src.index('data-testid="mission-control-compact-route"')
@@ -443,7 +472,7 @@ def test_compact_mobile_transcript_uses_page_scroll_not_trapped_panel() -> None:
     main_src = src[main_start - 450:main_start + 150]
     room_src = src[project_room_start - 350:project_room_start + 150]
     transcript_src = src[transcript_start - 300:composer_start]
-    composer_src = src[composer_start - 300:composer_start + 150]
+    composer_src = src[composer_start - 420:composer_start + 150]
 
     assert "overflow-y-auto" in main_src
     assert "sm:overflow-hidden" in main_src
@@ -469,7 +498,7 @@ def test_compact_project_chat_keeps_primary_flow_chat_first() -> None:
     assert 'className="sr-only"' in transcript_src
     assert 'Conversation' in transcript_src
     assert "rounded-md border border-[#f3ebda]/10 bg-[#120d17] p-2" not in transcript_src
-    composer_section_start = room.rindex('className="z-10 mt-2 mb-[max(env(safe-area-inset-bottom),1rem)] max-w-full shrink-0', 0, composer_start)
+    composer_section_start = room.rindex('className="z-10 mt-2 mb-[max(env(safe-area-inset-bottom),1rem)] min-w-0 max-w-full shrink-0', 0, composer_start)
     composer_src = room[composer_section_start:composer_start + 500]
     assert "shrink-0" in composer_src
     assert "rounded-[1.5rem]" in composer_src

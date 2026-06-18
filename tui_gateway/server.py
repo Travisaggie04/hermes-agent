@@ -6103,6 +6103,8 @@ _PENDING_INPUT_COMMANDS: frozenset[str] = frozenset(
         "steer",
         "plan",
         "goal",
+        "codex-handoff",
+        "codex",
         "undo",
     }
 )
@@ -6490,6 +6492,25 @@ def _(rid, params: dict) -> dict:
             rid,
             {"type": "send", "notice": notice, "message": mgr.kickoff_prompt() or state.goal},
         )
+
+    if name in {"codex-handoff", "codex"}:
+        try:
+            from hermes_cli.codex_handoff import handle_codex_handoff_command
+
+            return _ok(
+                rid,
+                {
+                    "type": "exec",
+                    "output": handle_codex_handoff_command(
+                        arg,
+                        session_id=session.get("session_key", "") if session else "",
+                    ),
+                },
+            )
+        except ValueError as exc:
+            return _err(rid, 4004, str(exc))
+        except Exception as exc:
+            return _err(rid, 5031, f"codex handoff unavailable: {exc}")
 
     if name == "undo":
         # /undo [N]: back up N user turns (default 1), soft-delete the

@@ -15,6 +15,8 @@ describe('desktop slash command curation', () => {
     expect(isDesktopSlashSuggestion('/branch')).toBe(true)
     expect(isDesktopSlashSuggestion('/skin')).toBe(true)
     expect(isDesktopSlashSuggestion('/usage')).toBe(true)
+    expect(isDesktopSlashSuggestion('/codex-handoff')).toBe(true)
+    expect(isDesktopSlashCommand('/codex-handoff create test')).toBe(true)
     expect(isDesktopSlashSuggestion('/yolo')).toBe(true)
     expect(isDesktopSlashCommand('/yolo')).toBe(true)
   })
@@ -39,6 +41,8 @@ describe('desktop slash command curation', () => {
   it('allows aliases to execute without cluttering the popover', () => {
     expect(isDesktopSlashSuggestion('/reset')).toBe(false)
     expect(isDesktopSlashCommand('/reset')).toBe(true)
+    expect(isDesktopSlashSuggestion('/codex')).toBe(false)
+    expect(isDesktopSlashCommand('/codex create test')).toBe(true)
   })
 
   it('filters built-in catalog noise but keeps skill / quick-command extensions', () => {
@@ -82,6 +86,7 @@ describe('desktop slash command curation', () => {
     expect(desktopSlashDescription('/skin', 'Show or change the display skin/theme')).toBe(
       'Switch desktop theme or cycle to the next one'
     )
+    expect(desktopSlashDescription('/codex-handoff')).toBe('Queue or review a manual Codex work packet')
   })
 
   it('builds /skin completions from desktop themes', () => {
