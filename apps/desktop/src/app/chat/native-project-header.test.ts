@@ -72,6 +72,15 @@ describe('native project chat header', () => {
     expect(source).toContain('onSelectProject={onStartProjectChat}')
   })
 
+  it('resumes the latest project chat from the native header selector when one exists', () => {
+    expect(source).toContain('onResumeProjectSession: (sessionId: string, projectId: string, projectName: string) => void')
+    expect(source).toContain('onResumeProjectSession={onOpenProjectSession}')
+    expect(source).toContain('if (project.lastSessionId) {')
+    expect(source).toContain('onResumeProjectSession(project.lastSessionId, project.id, project.name)')
+    expect(source).toContain('} else {')
+    expect(source).toContain('onSelectProject(project.id, project.name)')
+  })
+
   it('shows project chat counts in the native header selector', () => {
     expect(source).toContain('type NativeProjectChatOption')
     expect(source).toContain('function projectChatOptions')

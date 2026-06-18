@@ -144,6 +144,7 @@ interface ChatHeaderProps {
   isRoutedSessionView: boolean
   messages: ChatMessage[]
   onDeleteSelectedSession: () => void
+  onOpenProjectSession: (sessionId: string, projectId: string, projectName: string) => void
   onPickFiles: () => void
   onStartProjectChat: (projectId: string, projectName: string) => void
   onToggleSelectedPin: () => void
@@ -167,6 +168,7 @@ function ChatHeader({
   isRoutedSessionView,
   messages,
   onDeleteSelectedSession,
+  onOpenProjectSession,
   onPickFiles,
   onStartProjectChat,
   onToggleSelectedPin,
@@ -313,6 +315,7 @@ function ChatHeader({
           loading={projectsQuery.isLoading || projectSessionsQuery.isLoading}
           onClearProject={() => setSelectedMissionControlProject(null)}
           onNewProject={() => setProjectIntakeOpen(true)}
+          onResumeProjectSession={onOpenProjectSession}
           onSelectProject={onStartProjectChat}
           projects={projects}
           selectedProjectId={selectedProjectId}
@@ -646,6 +649,7 @@ function ProjectHeaderSelect({
   loading,
   onClearProject,
   onNewProject,
+  onResumeProjectSession,
   onSelectProject,
   projects,
   selectedProjectId,
@@ -654,6 +658,7 @@ function ProjectHeaderSelect({
   loading: boolean
   onClearProject: () => void
   onNewProject: () => void
+  onResumeProjectSession: (sessionId: string, projectId: string, projectName: string) => void
   onSelectProject: (projectId: string, projectName: string) => void
   projects: NativeProjectChatOption[]
   selectedProjectId: string
@@ -685,7 +690,11 @@ function ProjectHeaderSelect({
 
             const project = projects.find(item => item.id === nextValue)
             if (project) {
-              onSelectProject(project.id, project.name)
+              if (project.lastSessionId) {
+                onResumeProjectSession(project.lastSessionId, project.id, project.name)
+              } else {
+                onSelectProject(project.id, project.name)
+              }
             }
           }}
           value={selectedProjectKnown || showSelectedProjectFallback ? value : ''}
@@ -1201,6 +1210,7 @@ export function ChatView({
         isRoutedSessionView={isRoutedSessionView}
         messages={messages}
         onDeleteSelectedSession={onDeleteSelectedSession}
+        onOpenProjectSession={onOpenProjectSession}
         onPickFiles={onPickFiles}
         onStartProjectChat={onStartProjectChat}
         onToggleSelectedPin={onToggleSelectedPin}
