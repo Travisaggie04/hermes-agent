@@ -26,8 +26,9 @@ describe('native project chat header', () => {
     expect(source).toContain('onRetry={messageId => void onReload(messageId)}')
   })
 
-  it('shows the extra Jenny status strip only while Jenny is queued, working, or needs attention', () => {
-    expect(source).toContain("const visibleStatusTones = new Set<NativeJennyStatusTone>(['pending', 'working', 'warn'])")
+  it('shows the extra Jenny status strip while Jenny is queued, working, failed, or freshly replied', () => {
+    expect(source).toContain('const latestChatReplied = latestVisibleAssistantReply(messages)')
+    expect(source).toContain('...(latestChatReplied ? ([\'ok\'] as const) : [])')
     expect(source).toContain('if (!visibleStatusTones.has(jennyStatus.tone)) {')
     expect(source).toContain('return null')
     expect(source).toContain("jennyStatus.tone === 'warn'")

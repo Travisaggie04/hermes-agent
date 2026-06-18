@@ -618,19 +618,25 @@ function ProjectJennyStatusStrip({
     return null
   }
 
+  const latestChatReplied = latestVisibleAssistantReply(messages)
   const jennyStatus = nativeJennyStatus({
     activeTurnRunning,
     awaitingResponse,
     bridgeStatus: bridgeStatusQuery.data,
     gatewayOpen,
     latestChatError: latestVisibleAssistantError(messages),
-    latestChatReplied: latestVisibleAssistantReply(messages),
+    latestChatReplied,
     loading: bridgeStatusQuery.isLoading,
     projectId: selectedProjectId,
     queryError: bridgeStatusQuery.error
   })
   const latestErrorMessage = latestVisibleAssistantErrorMessage(messages)
-  const visibleStatusTones = new Set<NativeJennyStatusTone>(['pending', 'working', 'warn'])
+  const visibleStatusTones = new Set<NativeJennyStatusTone>([
+    'pending',
+    'working',
+    'warn',
+    ...(latestChatReplied ? (['ok'] as const) : [])
+  ])
 
   if (!visibleStatusTones.has(jennyStatus.tone)) {
     return null
