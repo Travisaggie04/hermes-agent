@@ -504,6 +504,8 @@ function ProjectHeaderSelect({
   }
 
   const value = selectedProjectId.trim()
+  const selectedProjectKnown = projects.some(project => project.project_id === value)
+  const showSelectedProjectFallback = Boolean(value && selectedProjectTitle && !selectedProjectKnown)
 
   return (
     <div className="flex min-w-0 items-center gap-1">
@@ -526,9 +528,10 @@ function ProjectHeaderSelect({
               onSelectProject(project.project_id, project.name)
             }
           }}
-          value={projects.some(project => project.project_id === value) ? value : ''}
+          value={selectedProjectKnown || showSelectedProjectFallback ? value : ''}
         >
           <option value="">{loading ? 'Loading projects...' : 'Other chats'}</option>
+          {showSelectedProjectFallback && <option value={value}>{selectedProjectTitle}</option>}
           {projects.map(project => (
             <option key={project.project_id} value={project.project_id}>
               {project.name}
