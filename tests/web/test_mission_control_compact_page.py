@@ -75,7 +75,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "setTitle(\"Jenny\")",
         "w-full min-w-0 max-w-full",
         "[&_*]:box-border",
-        "flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden",
+        "flex w-full min-w-0 max-w-full flex-1 overflow-visible overflow-x-clip sm:min-h-0 sm:overflow-hidden",
         "Local studio",
         "Projects",
         "IV. — Jenny workspace",
@@ -225,12 +225,12 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "COMPACT_JENNY_MESSAGE_LIMIT - 3",
         "Queue for Jenny bridge",
         "Refresh replies",
-        "flex h-full max-h-full min-h-0 w-full min-w-0 max-w-full flex-1 touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none",
+        "min-h-[100dvh] w-full min-w-0 max-w-full touch-pan-y flex-col overflow-y-auto overflow-x-clip overscroll-x-none",
         "sr-only",
-        "min-h-0 min-w-0 max-w-full flex-1 overflow-hidden",
+        "min-w-0 max-w-full flex-1 overflow-visible sm:min-h-0 sm:overflow-hidden",
         "sr-only order-2 min-w-0 max-w-full overflow-hidden",
-        "flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden overflow-x-clip",
-        "h-full min-h-0",
+        "flex w-full min-w-0 max-w-full flex-1 overflow-visible overflow-x-clip",
+        "sm:h-full sm:max-h-full sm:min-h-0",
         "rounded-none border-0 border-[#d4a574]/10",
         "grid w-full min-w-0 max-w-xl gap-1",
         "select",
@@ -376,14 +376,18 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
     src = page_source()
     for expected in [
         "overflow-x-hidden",
-        "h-full max-h-full min-h-0 w-full min-w-0 max-w-full flex-1 touch-pan-y flex-col overflow-hidden overflow-x-clip overscroll-x-none",
-        "h-full min-h-0 w-full min-w-0 max-w-full",
+        "min-h-[100dvh] w-full min-w-0 max-w-full touch-pan-y flex-col overflow-y-auto overflow-x-clip overscroll-x-none",
+        "sm:h-full sm:max-h-full sm:min-h-0 sm:flex-1 sm:overflow-hidden",
+        "flex w-full min-w-0 max-w-full flex-1 overflow-visible overflow-x-clip sm:min-h-0 sm:overflow-hidden",
+        "min-h-[calc(100dvh-8rem)] min-w-0 max-w-full flex-1 flex-col overflow-visible",
         "min-[420px]:grid-cols-2",
-        "overflow-y-auto overflow-x-hidden overscroll-contain",
-        "auto-rows-max content-end",
-        "scroll-pb-6",
+        "auto-rows-max content-start",
+        "overflow-visible overflow-x-hidden overscroll-contain",
+        "sm:content-end sm:overflow-y-auto",
+        "sm:scroll-pb-6",
         "[-webkit-overflow-scrolling:touch]",
         "pb-[max(env(safe-area-inset-bottom),0.5rem)]",
+        "mb-[max(env(safe-area-inset-bottom),1rem)]",
         "aria-label=\"Project chat composer\"",
         "data-testid=\"compact-chat-composer\"",
         "data-testid=\"compact-chat-scroll\"",
@@ -404,6 +408,30 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
     assert "Mission Control compact route should not reserve dashboard chrome" not in src
 
 
+def test_compact_mobile_transcript_uses_page_scroll_not_trapped_panel() -> None:
+    src = page_source()
+    main_start = src.index('data-testid="mission-control-compact-route"')
+    project_room_start = src.index('data-testid="compact-project-room"')
+    transcript_start = src.index('aria-label="Project chat transcript"')
+    composer_start = src.index('data-testid="compact-chat-composer"')
+    main_src = src[main_start - 450:main_start + 150]
+    room_src = src[project_room_start - 350:project_room_start + 150]
+    transcript_src = src[transcript_start - 300:composer_start]
+    composer_src = src[composer_start - 300:composer_start + 150]
+
+    assert "overflow-y-auto" in main_src
+    assert "sm:overflow-hidden" in main_src
+    assert "overflow-visible" in room_src
+    assert "sm:overflow-hidden" in room_src
+    assert "flex-none" in transcript_src
+    assert "overflow-visible overflow-x-hidden" in transcript_src
+    assert "sm:overflow-y-auto" in transcript_src
+    assert "content-start" in transcript_src
+    assert "sm:content-end" in transcript_src
+    assert "mb-[max(env(safe-area-inset-bottom),1rem)]" in composer_src
+    assert "sticky bottom-0" not in composer_src
+
+
 def test_compact_project_chat_keeps_primary_flow_chat_first() -> None:
     src = page_source()
     room = function_source(src, "CompactProjectRoom")
@@ -413,7 +441,7 @@ def test_compact_project_chat_keeps_primary_flow_chat_first() -> None:
     assert 'className="sr-only"' in transcript_src
     assert 'Conversation' in transcript_src
     assert "rounded-md border border-[#f3ebda]/10 bg-[#120d17] p-2" not in transcript_src
-    composer_section_start = room.rindex('className="z-10 mt-2 max-w-full shrink-0', 0, composer_start)
+    composer_section_start = room.rindex('className="z-10 mt-2 mb-[max(env(safe-area-inset-bottom),1rem)] max-w-full shrink-0', 0, composer_start)
     composer_src = room[composer_section_start:composer_start + 500]
     assert "shrink-0" in composer_src
     assert "rounded-[1.5rem]" in composer_src
