@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 import type { ChatMessage, ChatMessagePart } from './chat-messages'
 import {
   appendAssistantTextPart,
+  chatMessageHiddenContext,
+  chatMessageRuntimeText,
   chatMessageText,
   preserveLocalAssistantErrors,
   renderMediaTags,
@@ -99,6 +101,9 @@ describe('toChatMessages', () => {
     ])
 
     expect(chatMessageText(message)).toBe('test')
+    expect(chatMessageRuntimeText(message)).toBe('test')
+    expect(chatMessageHiddenContext(message)).toContain('Hidden Jenny OS project context:')
+    expect(chatMessageHiddenContext(message)).toContain('Project: Hermes / Mission Control')
   })
 
   it('hides CRLF native Jenny OS harness context from saved user message display', () => {
@@ -225,6 +230,27 @@ describe('toChatMessages', () => {
     ])
 
     expect(chatMessageText(message)).toBe('test')
+    expect(chatMessageRuntimeText(message)).toBe('test')
+    expect(chatMessageHiddenContext(message)).toContain('Spec-first request for Jenny:')
+    expect(chatMessageHiddenContext(message)).toContain('Project: Hermes / Mission Control')
+    expect(chatMessageHiddenContext(message)).toContain('Allowed: read approved context.')
+  })
+
+  it('hides newer hidden guardrail labels from legacy spec-first user messages', () => {
+    const [message] = toChatMessages([
+      {
+        role: 'user',
+        content:
+          'Spec-first request for Jenny: Project: Hermes / Mission Control Request Travis is considering: clean visible chat messages Action policy: jenny_os_action_policy_v1. ASK before: gateway restart or runtime switch. Goal loop: jenny_os_goal_loop_v1. Visible chat rule: do not echo hidden context.',
+        timestamp: 1
+      }
+    ])
+
+    expect(chatMessageText(message)).toBe('clean visible chat messages')
+    expect(chatMessageRuntimeText(message)).toBe('clean visible chat messages')
+    expect(chatMessageHiddenContext(message)).toContain('Spec-first request for Jenny:')
+    expect(chatMessageHiddenContext(message)).toContain('Action policy: jenny_os_action_policy_v1.')
+    expect(chatMessageHiddenContext(message)).toContain('ASK before: gateway restart or runtime switch.')
   })
 
   it('hides legacy project-room packet wrappers from saved user message display', () => {
@@ -238,6 +264,23 @@ describe('toChatMessages', () => {
     ])
 
     expect(chatMessageText(message)).toBe('Testing')
+  })
+
+  it('hides newer hidden guardrail labels from legacy project-room user messages', () => {
+    const [message] = toChatMessages([
+      {
+        role: 'user',
+        content:
+          'Hermes / Mission Control Request: summarize the current state Project ID: project-hermes-mission-control Jenny role: act as a senior engineering orchestrator. Default flow: clarify the goal. Action policy: jenny_os_action_policy_v1.',
+        timestamp: 1
+      }
+    ])
+
+    expect(chatMessageText(message)).toBe('summarize the current state')
+    expect(chatMessageRuntimeText(message)).toBe('summarize the current state')
+    expect(chatMessageHiddenContext(message)).toContain('Hermes / Mission Control Request:')
+    expect(chatMessageHiddenContext(message)).toContain('Project ID: project-hermes-mission-control')
+    expect(chatMessageHiddenContext(message)).toContain('Action policy: jenny_os_action_policy_v1.')
   })
 
   it('hides legacy Project Room request wrappers from saved user message display', () => {

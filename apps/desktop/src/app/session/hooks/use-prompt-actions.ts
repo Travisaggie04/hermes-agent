@@ -2,7 +2,15 @@ import type { AppendMessage, ThreadMessage } from '@assistant-ui/react'
 import { type MutableRefObject, useCallback } from 'react'
 
 import { createMissionControlSessionProjectLink, getProfiles, transcribeAudio } from '@/hermes'
-import { appendTextPart, branchGroupForUser, type ChatMessage, chatMessageText, textPart } from '@/lib/chat-messages'
+import {
+  appendTextPart,
+  branchGroupForUser,
+  type ChatMessage,
+  chatMessageHiddenContext,
+  chatMessageRuntimeText,
+  chatMessageText,
+  textPart
+} from '@/lib/chat-messages'
 import {
   attachmentDisplayText,
   INTERRUPTED_MARKER,
@@ -123,9 +131,12 @@ function nativeProjectHarnessContext(): string {
 function promptSubmitParams(
   sessionId: string,
   text: string,
-  extra: { truncateBeforeUserOrdinal?: number } = {}
+  extra: { hiddenContext?: string; truncateBeforeUserOrdinal?: number } = {}
 ): Record<string, unknown> {
-  const hiddenContext = nativeProjectHarnessContext()
+  const hiddenContext = [
+    extra.hiddenContext?.trim(),
+    nativeProjectHarnessContext()
+  ].filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index).join('\n\n')
 
   return {
     session_id: sessionId,
@@ -908,7 +919,8 @@ export function usePromptActions({
 
       const absoluteUserIndex = parentIndex - userIndex
       const userMessage = messages[absoluteUserIndex]
-      const userText = userMessage ? chatMessageText(userMessage).trim() : ''
+      const userText = userMessage ? chatMessageRuntimeText(userMessage).trim() : ''
+      const hiddenContext = userMessage ? chatMessageHiddenContext(userMessage) : ''
 
       if (!userText) {
         return
@@ -948,7 +960,7 @@ export function usePromptActions({
 
       try {
         await requestGateway('prompt.submit', {
-          ...promptSubmitParams(activeSessionId, userText),
+          ...promptSubmitParams(activeSessionId, userText, { hiddenContext }),
           truncate_before_user_ordinal: truncateBeforeUserOrdinal
         })
       } catch (err) {
