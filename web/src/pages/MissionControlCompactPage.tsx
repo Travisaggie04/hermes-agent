@@ -2820,7 +2820,11 @@ function CompactProjectRoom({
   });
   useEffect(() => {
     chatEndRef.current?.scrollIntoView?.({ block: "end" });
-  }, [chatMessages.length, effectiveJennyRunProgress?.phase, jennyRunElapsedSeconds, selectedProjectView.project.project_id]);
+  }, [
+    chatMessages.length,
+    effectiveJennyRunProgress?.phase,
+    selectedProjectView.project.project_id,
+  ]);
   const operatorGuidance = jennyOperatorGuidance({
     bridgeError,
     hasRunnablePendingMessage,
