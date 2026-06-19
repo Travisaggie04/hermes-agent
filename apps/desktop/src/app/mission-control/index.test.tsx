@@ -172,6 +172,47 @@ beforeEach(() => {
       latest_merged_pr: '108',
       state: 'merged_not_deployed'
     },
+    execution_packet_preview: {
+      blocked_reasons: ['runtime provenance is not clean', 'worker-node presence is not confirmed online'],
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      eligible: false,
+      execution_enabled: false,
+      packet: {
+        allowed_actions: ['edit scoped files', 'run focused tests'],
+        approval_id: 'approval-pr-1',
+        forbidden_actions: ['deploy', 'restart', 'runtime switch', 'no live deploy', 'no worker dispatch activation'],
+        mode: 'worker_node',
+        objective: 'Prepare bounded scoped PR packet.',
+        packet_version: 'mission_control_execution_packet_preview_v1',
+        project_id: 'project-hermes-mission-control',
+        report_contract: { required: true, review_required: true, tests_required: true },
+        run_id: 'run-parent-1',
+        scope: { directories: [], explicit: true, files: ['apps/desktop/src/app/mission-control/index.tsx'], has_wildcard: false },
+        worker_node_contract: {
+          execution_enabled: false,
+          dispatch_enabled: false,
+          manual_handoff_only: true,
+          parent_run_id: 'run-parent-1',
+          session_send_enabled: false,
+          trusted_for_execution: false,
+          worker_dispatch_enabled: false,
+          worker_host_label: 'laptop-codex',
+          worker_identity: 'codex',
+          worker_kind: 'laptop_codex'
+        }
+      },
+      session_send_enabled: false,
+      source: 'mission_control_execution_packet_preview_v1',
+      stored: false,
+      trusted_for_execution: false,
+      warnings: ['worker-node packet is a manual handoff preview; no worker dispatch is enabled'],
+      worker_dispatch_enabled: false,
+      would_dispatch: false,
+      would_execute: false,
+      would_session_send: false
+    },
     lane: { active_lane_count: 0 },
     next_safe_actions: {
       action_count: 1,
@@ -217,12 +258,17 @@ beforeEach(() => {
         'gateway git metadata is broken',
         'report_id report-worker still needs Jenny review',
         'worker node offline',
-        'worker-node presence_status is not recorded'
+        'worker-node presence_status is not recorded',
+        'runtime provenance is not clean',
+        'worker-node presence is not confirmed online'
       ],
       child_instruction_available: true,
       dispatch_enabled: false,
       display_only: true,
       dry_run_only: true,
+      execution_packet_blocked_reasons: ['runtime provenance is not clean', 'worker-node presence is not confirmed online'],
+      execution_packet_eligible: false,
+      execution_packet_mode: 'worker_node',
       execution_enabled: false,
       execution_ready: false,
       jenny_review_required: true,
@@ -230,7 +276,7 @@ beforeEach(() => {
       next_safe_action_id: 'review_runtime_provenance_blockers',
       next_safe_action_label: 'Review runtime provenance blockers',
       next_safe_action_reason: 'gateway git metadata is broken',
-      plain_language_summary: 'Operator state: report review required. Runtime provenance: GATEWAY_UNTRUSTED. Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked. Worker presence: unknown. Next safe action: Review runtime provenance blockers. Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review. Worker instruction: manual handoff only; laptop Codex dispatch remains disabled. Child instruction: manual delegation preview only; execution remains disabled. Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation.',
+      plain_language_summary: 'Operator state: report review required. Runtime provenance: GATEWAY_UNTRUSTED. Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked. Worker presence: unknown. Execution packet preview: worker_node, eligible false; execution disabled. Next safe action: Review runtime provenance blockers. Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review. Worker instruction: manual handoff only; laptop Codex dispatch remains disabled. Child instruction: manual delegation preview only; execution remains disabled. Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation.',
       recommended_operator_instruction: 'Jenny reviews Laptop Codex reported scoped PR evidence. before issuing another worker instruction.',
       report_review_queue_count: 3,
       session_send_enabled: false,
@@ -242,6 +288,7 @@ beforeEach(() => {
         'Runtime provenance: GATEWAY_UNTRUSTED.',
         'Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked.',
         'Worker presence: unknown.',
+        'Execution packet preview: worker_node, eligible false; execution disabled.',
         'Next safe action: Review runtime provenance blockers.',
         'Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review.',
         'Worker instruction: manual handoff only; laptop Codex dispatch remains disabled.',
@@ -1452,6 +1499,8 @@ describe('MissionControlView', () => {
     expect(screen.getByText('scoped PR lane')).toBeTruthy()
     expect(screen.getByText('scoped PR bridge')).toBeTruthy()
     expect(screen.getByText('manual only')).toBeTruthy()
+    expect(screen.getByText('execution packet')).toBeTruthy()
+    expect(screen.getByText('worker node / eligible no / execute no')).toBeTruthy()
     expect(screen.getByText('lifecycle projection')).toBeTruthy()
     expect(screen.getByText('append-only yes / active mutation lanes 0')).toBeTruthy()
     expect(screen.getByText('next safe action')).toBeTruthy()
@@ -1467,7 +1516,9 @@ describe('MissionControlView', () => {
     expect(screen.getByText('operator summary')).toBeTruthy()
     expect(screen.getByText(/Operator state: report review required/)).toBeTruthy()
     expect(screen.getByText('operator blockers')).toBeTruthy()
-    expect(screen.getByText('gateway git metadata is broken, report_id report-worker still needs Jenny review, worker node offline, worker-node presence_status is not recorded')).toBeTruthy()
+    expect(screen.getByText('gateway git metadata is broken, report_id report-worker still needs Jenny review, worker node offline, worker-node presence_status is not recorded, runtime provenance is not clean, worker-node presence is not confirmed online')).toBeTruthy()
+    expect(screen.getByText('execution packet blockers')).toBeTruthy()
+    expect(screen.getByText('runtime provenance is not clean, worker-node presence is not confirmed online')).toBeTruthy()
     expect(screen.getByText('orchestration readiness')).toBeTruthy()
     expect(screen.getByText('read-only blocked / scoped PR blocked')).toBeTruthy()
     expect(screen.getByText('worker readiness')).toBeTruthy()

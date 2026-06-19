@@ -12,6 +12,7 @@ import re
 from typing import Any
 
 from mission_control.autonomy_eligibility import (
+    build_execution_packet_preview,
     classify_control_path_permissions,
     evaluate_read_only_autonomy_eligibility,
     evaluate_runtime_provenance,
@@ -223,6 +224,13 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         )
     )
     tool_permission_classification = classify_control_path_permissions(_section(source, "tool_permissions"))
+    execution_packet_preview = build_execution_packet_preview(
+        _execution_packet_preview_input(
+            source=source,
+            runtime_provenance=runtime_provenance,
+            tool_permission_classification=tool_permission_classification,
+        )
+    )
 
     warnings: list[str] = []
     if accepted_source == "static_fallback":
@@ -294,6 +302,7 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         "read_only_autonomy_eligibility": read_only_autonomy_eligibility,
         "scoped_pr_lane_eligibility": scoped_pr_lane_eligibility,
         "tool_permission_classification": tool_permission_classification,
+        "execution_packet_preview": execution_packet_preview,
         "latest_handoff": latest_handoff,
         "stale_context": {
             "baseline_mismatch": "baseline_mismatch" in warnings,
@@ -340,6 +349,49 @@ def _runtime_provenance_input(
         "active_lane_count": lane.get("active_lane_count"),
         "max_active_lane": lane.get("max_active_lane"),
     }
+
+
+def _execution_packet_preview_input(
+    *,
+    source: dict[str, Any],
+    runtime_provenance: dict[str, Any],
+    tool_permission_classification: dict[str, Any],
+) -> dict[str, Any]:
+    section = _section(source, "execution_packet_preview")
+    lane = _section(section, "lane") or _section(source, "lane")
+    run = _section(section, "run")
+    worker_node = _section(section, "worker_node")
+    packet_tool_permissions = section.get("tool_permissions")
+    if not isinstance(packet_tool_permissions, (dict, list)):
+        packet_tool_permissions = tool_permission_classification
+    mode = _safe_text(section.get("mode") or section.get("execution_mode"))
+    lane_type = _safe_text(
+        run.get("lane_type")
+        or lane.get("lane_type")
+        or lane.get("mode")
+    )
+    if not mode:
+        if worker_node:
+            mode = "worker_node"
+        elif lane_type in {"pr_creation", "scoped_pr"}:
+            mode = "scoped_pr"
+        elif lane_type in {"read_only_lane", "read_only_design", "read_only_inspection"} or lane_type.startswith("read_only"):
+            mode = "read_only"
+        else:
+            mode = "blocked"
+
+    return _merge_dicts(
+        section,
+        {
+            "mode": mode,
+            "runtime_provenance": runtime_provenance,
+            "tool_permissions": packet_tool_permissions,
+            "active_mutation_lane_count": _safe_int(
+                _section(source, "control_plane_lifecycle").get("active_mutation_lane_count"),
+                default=0,
+            ),
+        },
+    )
 
 
 

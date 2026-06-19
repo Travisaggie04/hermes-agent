@@ -395,6 +395,120 @@ def test_record_sourced_workspace_status_blocks_worker_node_when_presence_unknow
     assert "review_worker_node_presence" in action_ids
 
 
+def test_record_sourced_workspace_status_projects_execution_packet_preview(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    head = "8ef64e370a51bc19e97fec1526f5bb3d42025a09"
+    forbidden_actions = (
+        "merge",
+        "deploy",
+        "restart",
+        "runtime switch",
+        "waha",
+        "social",
+        "payment",
+        "model routing",
+        "queue",
+        "worker",
+        "timer",
+        "daemon",
+        "dispatch",
+        "session-send",
+    )
+    store.append(
+        AcceptedBaselineRecord(
+            baseline_id="accepted",
+            runtime_path="/runtime/current",
+            head=head,
+            rollback_runtime_path="/runtime/rollback",
+            rollback_head=head,
+            max_active_lane=1,
+        )
+    )
+    store.append(
+        ApprovalRecord(
+            approval_id="approval-pr-1",
+            project_id="project-hermes-mission-control",
+            action_class="pr_creation",
+            approval_scope="project-hermes-mission-control scoped PR for mission_control/workspace_status_records.py",
+            status="approved",
+            expires_at="2099-01-01T00:00:00Z",
+            metadata={"files": ["mission_control/workspace_status_records.py"]},
+        )
+    )
+    store.append(
+        RunRecord(
+            run_id="run-pr-1",
+            project_id="project-hermes-mission-control",
+            approval_id="approval-pr-1",
+            lane_type="pr_creation",
+            title="Scoped PR packet preview",
+            objective="Prepare bounded worker-node packet evidence.",
+            status="running",
+            allowed_actions=("edit scoped files", "run focused tests"),
+            forbidden_actions=forbidden_actions,
+            metadata={"files": ["mission_control/workspace_status_records.py"]},
+        )
+    )
+    store.append(
+        WorkerNodeRunRecord(
+            worker_run_id="worker-run-1",
+            parent_run_id="run-pr-1",
+            project_id="project-hermes-mission-control",
+            worker_identity="codex",
+            worker_host_label="laptop-codex",
+            status="running",
+            objective="Prepare bounded worker-node packet evidence.",
+            allowed_actions=("edit scoped files", "run focused tests"),
+            forbidden_actions=forbidden_actions,
+            assigned_packet_id="packet-1",
+            assigned_packet_summary="Scoped PR packet preview.",
+            report_contract_status="present",
+            presence_status="online",
+            last_seen_at="2026-06-19T12:00:00Z",
+        )
+    )
+
+    status = build_workspace_status_from_records(
+        {
+            "now": "2026-06-19T12:05:00Z",
+            "source_control": {"accepted_live_head": head},
+            "dashboard_runtime": {"path": "/runtime/current", "head": head},
+            "gateway_runtime": {"path": "/runtime/current", "head": head},
+            "rollback_runtime": {"path": "/runtime/rollback", "head": head},
+            "tool_permissions": {"paths": [{"path_id": "manual_packet_copy", "manual_only": True}]},
+        },
+        records_path=records_path,
+    )
+
+    packet = status["execution_packet_preview"]
+    assert packet["source"] == "mission_control_execution_packet_preview_v1"
+    assert packet["display_only"] is True
+    assert packet["trusted_for_execution"] is False
+    assert packet["would_execute"] is False
+    assert packet["would_dispatch"] is False
+    assert packet["would_session_send"] is False
+    assert packet["execution_enabled"] is False
+    assert packet["dispatch_enabled"] is False
+    assert packet["session_send_enabled"] is False
+    assert packet["worker_dispatch_enabled"] is False
+    assert packet["eligible"] is True
+    assert packet["packet"]["mode"] == "worker_node"
+    assert packet["packet"]["run_id"] == "run-pr-1"
+    assert packet["packet"]["approval_id"] == "approval-pr-1"
+    assert packet["packet"]["scope"]["files"] == ["mission_control/workspace_status_records.py"]
+    assert packet["packet"]["worker_node_contract"]["worker_identity"] == "codex"
+    assert packet["packet"]["worker_node_contract"]["worker_host_label"] == "laptop-codex"
+    assert packet["packet"]["worker_node_contract"]["parent_run_id"] == "run-pr-1"
+    assert packet["packet"]["worker_node_contract"]["manual_handoff_only"] is True
+    assert packet["packet"]["worker_node_contract"]["worker_dispatch_enabled"] is False
+
+    operator_packet = status["operator_decision_packet"]
+    assert operator_packet["execution_packet_mode"] == "worker_node"
+    assert operator_packet["execution_packet_eligible"] is True
+    assert "Execution packet preview: worker_node, eligible true; execution disabled." in operator_packet["plain_language_summary"]
+
+
 def test_record_sourced_workspace_status_projects_report_review_queue(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"
     store = JsonlRecordStore(records_path)

@@ -3332,8 +3332,8 @@ async def workspace_execution_packet_preview(request: Request) -> dict[str, Any]
     return {
         **CONTROL_PLANE_INERT_FLAGS,
         "stored": False,
-        "source": "caller_supplied_execution_packet_preview",
         **build_execution_packet_preview(payload),
+        "source": "caller_supplied_execution_packet_preview",
     }
 
 

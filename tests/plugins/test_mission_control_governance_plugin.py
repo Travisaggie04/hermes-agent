@@ -5100,6 +5100,7 @@ def test_scoped_pr_and_execution_packet_previews_are_inert_and_store_nothing(plu
                 "worker_identity": "codex",
                 "worker_host_label": "laptop-codex",
                 "worker_kind": "laptop_codex",
+                "presence_status": "online",
             },
         },
     )

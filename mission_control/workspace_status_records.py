@@ -140,8 +140,13 @@ def build_workspace_status_from_records(
         for record in active_runs
         if record.lane_type in MUTATION_LANE_TYPES or record.dispatch_state is True
     )
+    latest_active_run = active_runs[-1] if active_runs else None
+    latest_approval = (
+        _latest_matching_approval(recent_approvals, latest_active_run.approval_id)
+        if latest_active_run is not None
+        else None
+    )
     if active_runs:
-        latest_active_run = active_runs[-1]
         status_input["lane"] = _merge_status_input(
             status_input.get("lane") if isinstance(status_input.get("lane"), dict) else {},
             {
@@ -153,7 +158,6 @@ def build_workspace_status_from_records(
                 "active_lane_count": len(active_runs),
             },
         )
-        latest_approval = _latest_matching_approval(recent_approvals, latest_active_run.approval_id)
         status_input["autonomy_eligibility"] = _merge_status_input(
             status_input.get("autonomy_eligibility") if isinstance(status_input.get("autonomy_eligibility"), dict) else {},
             {
@@ -178,6 +182,12 @@ def build_workspace_status_from_records(
     active_child_runs = tuple(record for record in recent_child_runs if record.status in ACTIVE_ORCHESTRATION_STATUSES)
     active_worker_runs = tuple(record for record in recent_worker_runs if record.status in ACTIVE_ORCHESTRATION_STATUSES)
     reports_by_id, reports_by_run_id = _report_lookup_maps(recent_reports)
+    status_input["execution_packet_preview"] = _record_execution_packet_preview_input(
+        latest_active_run=latest_active_run,
+        latest_approval=latest_approval,
+        active_mutation_lane_count=len(active_mutation_runs),
+        active_worker_runs=active_worker_runs,
+    )
 
     status = build_workspace_status(status_input)
     status["child_agent_orchestration"] = _orchestration_projection(
@@ -282,6 +292,94 @@ def _latest_matching_approval(records: tuple[ApprovalRecord, ...], approval_id: 
         if record.approval_id == approval_id:
             return record
     return None
+
+
+def _record_execution_packet_preview_input(
+    *,
+    latest_active_run: RunRecord | None,
+    latest_approval: ApprovalRecord | None,
+    active_mutation_lane_count: int,
+    active_worker_runs: tuple[WorkerNodeRunRecord, ...],
+) -> dict[str, Any]:
+    worker = active_worker_runs[-1] if active_worker_runs else None
+    run_payload = latest_active_run.to_dict() if latest_active_run is not None else {}
+    approval_payload = _approval_packet_payload(latest_approval)
+    worker_payload = worker.to_dict() if worker is not None else {}
+    lane_type = _safe_text(
+        run_payload.get("lane_type")
+        or worker_payload.get("lane_mode")
+        or worker_payload.get("mode")
+    )
+    if worker is not None:
+        mode = "worker_node"
+    elif lane_type in {"pr_creation", "scoped_pr"}:
+        mode = "scoped_pr"
+    elif lane_type in {"read_only_lane", "read_only_design", "read_only_inspection"} or lane_type.startswith("read_only"):
+        mode = "read_only"
+    else:
+        mode = "blocked"
+
+    lane_payload = {
+        "lane_type": lane_type,
+        "objective": _safe_text(
+            run_payload.get("objective")
+            or worker_payload.get("objective")
+            or run_payload.get("title"),
+            max_chars=800,
+        ),
+        "allowed_actions": _metadata_list(latest_active_run, "allowed_actions", "allowed_actions"),
+        "forbidden_actions": _metadata_list(latest_active_run, "forbidden_actions", "forbidden_actions"),
+        "files": _metadata_list(latest_active_run, "files", "allowed_files", "approved_files"),
+        "directories": _metadata_list(latest_active_run, "directories", "allowed_directories", "approved_directories"),
+    }
+    contract_required = latest_active_run is not None or worker is not None
+    return {
+        "mode": mode,
+        "run": run_payload,
+        "approval": approval_payload,
+        "lane": lane_payload,
+        "worker_node": worker_payload,
+        "report_contract": {
+            "required": contract_required,
+            "tests_required": mode in {"scoped_pr", "worker_node"},
+            "review_required": contract_required,
+            "result_summary_required": contract_required,
+        },
+        "active_mutation_lane_count": active_mutation_lane_count,
+    }
+
+
+def _approval_packet_payload(approval: ApprovalRecord | None) -> dict[str, Any]:
+    if approval is None:
+        return {}
+    payload = approval.to_dict()
+    metadata = approval.metadata if isinstance(approval.metadata, dict) else {}
+    for key in ("approved_files", "files", "approved_directories", "directories"):
+        values = _text_values(metadata.get(key))
+        if values:
+            payload[key] = values
+    return payload
+
+
+def _metadata_list(record: Any, field_name: str, *metadata_keys: str) -> list[str]:
+    if record is None:
+        return []
+    direct = getattr(record, field_name, ())
+    values = _text_values(direct)
+    metadata = getattr(record, "metadata", {})
+    if isinstance(metadata, dict):
+        for key in metadata_keys:
+            values.extend(_text_values(metadata.get(key)))
+    return _unique_reasons(values)
+
+
+def _text_values(value: Any) -> list[str]:
+    if isinstance(value, str):
+        text = _safe_text(value)
+        return [text] if text else []
+    if isinstance(value, (list, tuple, set)):
+        return [_safe_text(item) for item in value if _safe_text(item)]
+    return []
 
 
 def _control_plane_lifecycle_payload(
@@ -724,6 +822,18 @@ def _next_safe_actions_payload(status: dict[str, Any]) -> dict[str, Any]:
             reason=_first_reason(scoped_pr_reasons, "Scoped PR creation is not preview-ready."),
             blocked_until="scoped PR preview eligibility is satisfied",
             priority=90,
+        )
+
+    execution_packet = _mapping(status.get("execution_packet_preview"))
+    execution_packet_reasons = _text_list(execution_packet.get("blocked_reasons"))
+    if execution_packet.get("eligible") is False and execution_packet_reasons:
+        extend_blockers(execution_packet_reasons)
+        add_action(
+            action_id="review_execution_packet_preview",
+            label="Review bounded work-packet preview",
+            reason=_first_reason(execution_packet_reasons, "The bounded work packet is not preview-ready."),
+            blocked_until="packet mode, scope, report contract, and disabled execution flags are safe",
+            priority=95,
         )
 
     unique_blocked_reasons = _unique_reasons(blocked_reasons)
@@ -1653,6 +1763,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     worker_presence = _mapping(status.get("worker_node_presence"))
     worker_instruction = _mapping(status.get("worker_node_instruction_preview"))
     child_instruction = _mapping(status.get("child_agent_instruction_preview"))
+    execution_packet = _mapping(status.get("execution_packet_preview"))
 
     queue_count = _safe_int(report_queue.get("queue_count"))
     readiness_states = _mapping(readiness.get("states"))
@@ -1668,12 +1779,15 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     worker_presence_state = _safe_text(worker_presence.get("presence_state")) or "unknown"
     worker_last_seen_at = _safe_text(worker_presence.get("last_seen_at"))
     worker_seen_suffix = f" at {worker_last_seen_at}" if worker_last_seen_at else ""
+    execution_packet_mode = _safe_text(_mapping(execution_packet.get("packet")).get("mode")) or "unknown"
+    execution_packet_eligible = execution_packet.get("eligible") is True
     blocked_reasons = _unique_reasons(
         [
             *_text_list(runtime_provenance.get("autonomy_blocked_reasons")),
             *_text_list(readiness.get("blocked_reasons")),
             *_text_list(report_queue.get("blocked_reasons")),
             *_text_list(worker_presence.get("blocked_reasons")),
+            *_text_list(execution_packet.get("blocked_reasons")),
             *_text_list(next_safe_actions.get("blocked_reasons")),
             *_text_list(worker_instruction.get("blocked_reasons")),
             *_text_list(child_instruction.get("blocked_reasons")),
@@ -1698,6 +1812,10 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             "Worker presence: "
             f"{worker_presence_state}"
             f"{worker_seen_suffix}."
+        ),
+        (
+            "Execution packet preview: "
+            f"{execution_packet_mode}, eligible {str(execution_packet_eligible).lower()}; execution disabled."
         ),
     ]
     if next_label:
@@ -1742,6 +1860,9 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         "next_safe_action_label": next_label,
         "next_safe_action_reason": next_reason,
         "report_review_queue_count": queue_count,
+        "execution_packet_mode": execution_packet_mode,
+        "execution_packet_eligible": execution_packet_eligible,
+        "execution_packet_blocked_reasons": _text_list(execution_packet.get("blocked_reasons")),
         "worker_presence_state": worker_presence_state,
         "worker_online": worker_presence.get("online") is True,
         "worker_last_seen_at": worker_last_seen_at,

@@ -421,6 +421,9 @@ def test_execution_packet_preview_is_never_an_execution_path():
     result = build_execution_packet_preview(_eligible_pr_preview_payload(mode="scoped_pr"))
 
     assert result["eligible"] is True
+    assert result["source"] == "mission_control_execution_packet_preview_v1"
+    assert result["display_only"] is True
+    assert result["trusted_for_execution"] is False
     assert result["packet"]["mode"] == "scoped_pr"
     assert result["packet"]["run_id"] == "run-pr-1"
     assert result["would_execute"] is False
@@ -451,6 +454,7 @@ def test_worker_node_execution_packet_preview_wraps_scoped_pr_without_dispatch()
                 "worker_identity": "codex",
                 "worker_host_label": "laptop-codex",
                 "worker_kind": "laptop_codex",
+                "presence_status": "online",
             },
         )
     )
@@ -489,6 +493,7 @@ def test_worker_node_execution_packet_blocks_dispatch_and_missing_report_review(
     assert "worker dispatch must stay disabled" in result["blocked_reasons"]
     assert "worker execution must stay disabled" in result["blocked_reasons"]
     assert "worker-node report review is required" in result["blocked_reasons"]
+    assert "worker-node presence is not confirmed online" in result["blocked_reasons"]
     assert result["worker_dispatch_enabled"] is False
 
 

@@ -132,6 +132,57 @@ def test_workspace_status_surfaces_scoped_pr_lane_eligibility_as_inert_preview()
     assert "runtime provenance is not clean" in scoped_pr["blocked_reasons"]
 
 
+def test_workspace_status_surfaces_execution_packet_preview_as_inert_work_packet():
+    status = build_workspace_status(
+        _baseline_payload(
+            execution_packet_preview={
+                "mode": "scoped_pr",
+                "approval": {
+                    "approval_id": "approval-pr-1",
+                    "status": "approved",
+                    "approval_mode": "one_time",
+                    "approval_scope": "project-hermes-mission-control:scoped-pr:mission_control/",
+                    "action_class": "pr_creation",
+                    "approved_files": ["mission_control/workspace_status.py"],
+                    "expires_at": "2099-01-01T00:00:00Z",
+                },
+                "run": {
+                    "run_id": "run-pr-1",
+                    "project_id": "project-hermes-mission-control",
+                    "approval_id": "approval-pr-1",
+                    "lane_type": "pr_creation",
+                    "status": "requested",
+                    "forbidden_actions": ["merge", "deploy", "restart", "runtime switch"],
+                },
+                "lane": {
+                    "lane_type": "pr_creation",
+                    "allowed_files": ["mission_control/workspace_status.py"],
+                    "tests_required": True,
+                    "review_required": True,
+                },
+                "report_contract": {"required": True, "tests_required": True, "review_required": True},
+            }
+        )
+    )
+
+    packet = status["execution_packet_preview"]
+    assert packet["source"] == "mission_control_execution_packet_preview_v1"
+    assert packet["display_only"] is True
+    assert packet["trusted_for_execution"] is False
+    assert packet["would_execute"] is False
+    assert packet["would_dispatch"] is False
+    assert packet["would_session_send"] is False
+    assert packet["execution_enabled"] is False
+    assert packet["dispatch_enabled"] is False
+    assert packet["session_send_enabled"] is False
+    assert packet["worker_dispatch_enabled"] is False
+    assert packet["packet"]["mode"] == "scoped_pr"
+    assert packet["packet"]["run_id"] == "run-pr-1"
+    assert packet["packet"]["scope"]["files"] == ["mission_control/workspace_status.py"]
+    assert packet["eligible"] is False
+    assert "runtime provenance is not clean" in packet["blocked_reasons"]
+
+
 def test_workspace_status_surfaces_tool_permission_classification():
     status = build_workspace_status(
         _baseline_payload(

@@ -579,10 +579,13 @@ def build_execution_packet_preview(observed_state: dict[str, Any] | None = None)
         "worker_node_contract": _worker_node_contract(state),
     }
     return {
+        "source": "mission_control_execution_packet_preview_v1",
         "eligible": bool(eligibility.get("eligible")),
         "blocked_reasons": list(eligibility.get("blocked_reasons") or ()),
         "warnings": list(eligibility.get("warnings") or ()),
         "packet": packet,
+        "display_only": True,
+        "trusted_for_execution": False,
         "would_execute": False,
         "would_dispatch": False,
         "would_session_send": False,
@@ -636,6 +639,9 @@ def _evaluate_worker_node_packet_preview(state: dict[str, Any]) -> dict[str, Any
         _add(blocked, "worker-node objective is required")
     if not _safe_text(worker_node.get("parent_run_id") or run.get("run_id")):
         _add(blocked, "worker-node parent run is required")
+    presence_status = _safe_text(worker_node.get("presence_status") or worker_node.get("presence_state"))
+    if presence_status != "online" and _safe_bool(worker_node.get("online")) is not True:
+        _add(blocked, "worker-node presence is not confirmed online")
 
     _add(warnings, "worker-node packet is a manual handoff preview; no worker dispatch is enabled")
     return {

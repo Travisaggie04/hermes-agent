@@ -227,6 +227,14 @@ hard forbidden actions, and report contract. It is useful copy for Jenny or
 Travis to review, but it does not contact the laptop, start a worker, or enable
 execution.
 
+The execution packet preview is the canonical bounded work-packet view. It
+wraps the active approval, run, scope, report contract, and worker-node
+contract into one advisory packet. It may say blocked or preview-ready, but it
+always keeps `would_execute`, `execution_enabled`, `dispatch_enabled`,
+`session_send_enabled`, and `worker_dispatch_enabled` false. A worker-node
+packet also requires explicit online worker presence before it can be
+preview-ready.
+
 The orchestration run graph joins parent runs, child-agent runs, laptop Codex
 worker-node runs, and reports into one display-only lineage view. Missing
 parent runs, missing report IDs, stale report links, and reports tied to
@@ -269,6 +277,8 @@ not start delegation, send a session, mutate records, or enable dispatch.
   read-only autonomy, scoped PR creation, and laptop Codex worker-node.
 - Worker instruction preview: a manual Codex handoff prompt with objective,
   allowed actions, forbidden actions, and report requirements.
+- Execution packet preview: the bounded work-packet contract for Jenny and
+  Travis to review; it is not a dispatch or approval.
 - Orchestration run graph: parent/child/worker/report lineage and any missing
   parent or report-link blockers.
 - Child instruction preview: a manual child-agent delegation prompt and report

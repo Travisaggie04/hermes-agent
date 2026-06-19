@@ -561,6 +561,9 @@ export interface MissionControlOperatorDecisionPacket {
   dispatch_enabled?: boolean
   display_only?: boolean
   dry_run_only?: boolean
+  execution_packet_blocked_reasons?: string[]
+  execution_packet_eligible?: boolean
+  execution_packet_mode?: string
   execution_enabled?: boolean
   execution_ready?: boolean
   jenny_review_required?: boolean
@@ -586,6 +589,36 @@ export interface MissionControlOperatorDecisionPacket {
   worker_online?: boolean
   worker_presence_state?: string
   would_execute?: boolean
+}
+
+export interface MissionControlExecutionPacketPreview {
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  eligible?: boolean
+  execution_enabled?: boolean
+  packet?: {
+    allowed_actions?: string[]
+    approval_id?: string
+    child_run_contract?: Record<string, unknown>
+    forbidden_actions?: string[]
+    mode?: string
+    objective?: string
+    packet_version?: string
+    project_id?: string
+    report_contract?: Record<string, unknown>
+    run_id?: string
+    scope?: { directories?: string[]; explicit?: boolean; files?: string[]; has_wildcard?: boolean }
+    worker_node_contract?: Record<string, unknown>
+  }
+  session_send_enabled?: boolean
+  stored?: boolean
+  warnings?: string[]
+  worker_dispatch_enabled?: boolean
+  would_dispatch?: boolean
+  would_execute?: boolean
+  would_session_send?: boolean
 }
 
 export interface MissionControlNextSafeAction {
@@ -1184,6 +1217,7 @@ export interface MissionControlWorkspaceStatus {
     source?: string
   }
   deployment_gap?: { dashboard_deploy_needed?: boolean; deployed_head?: string; accepted_live_head?: string; latest_merged_pr?: string; state?: string }
+  execution_packet_preview?: MissionControlExecutionPacketPreview
   lane?: { active_lane_count?: number; max_active_lane?: number }
   next_safe_actions?: MissionControlNextSafeActions
   operator_decision_packet?: MissionControlOperatorDecisionPacket
