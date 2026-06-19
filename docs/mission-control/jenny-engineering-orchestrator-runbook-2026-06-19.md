@@ -33,6 +33,9 @@ Jenny packet as permission to bypass Codex safety checks.
   GitHub bridge status confirms manual-only mode with dispatch, execution,
   session-send, worker, timer, daemon, and model-routing flags off.
 - `/mission-control-compact` is the old compact Mission Control route.
+  Its compact chat controls follow the same manual-only bridge rule; the
+  manual report/challenge/lane draft buttons are separate record actions and
+  remain visibly guarded.
 - Desktop Mission Control is the advanced audit and recovery surface.
 
 ## Runtime Provenance

@@ -688,6 +688,44 @@ def test_compact_chat_send_uses_github_mailbox_not_local_only_outbox() -> None:
     assert "await refreshSnapshot()" not in send_fn
 
 
+def test_compact_chat_bridge_controls_fail_closed_on_live_flags() -> None:
+    src = page_source()
+    send_fn = function_source(src, "queueJennyBridgeMessage")
+    run_once_fn = function_source(src, "runJennyOnce")
+
+    for expected in [
+        "function compactGitHubBridgeSafety(status: GitHubBridgeStatus | undefined): CompactBridgeSafety",
+        'reasons.push("GitHub bridge status not loaded")',
+        'status.manual_start_only !== true',
+        '["dispatch_enabled", "dispatch_enabled must remain false"]',
+        '["execution_enabled", "execution_enabled must remain false"]',
+        '["session_send_enabled", "session_send_enabled must remain false"]',
+        '["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"]',
+        '["worker_enabled", "worker_enabled must remain false"]',
+        '["timer_enabled", "timer_enabled must remain false"]',
+        '["daemon_enabled", "daemon_enabled must remain false"]',
+        '["discord_automation_enabled", "discord_automation_enabled must remain false"]',
+        '["model_routing_enabled", "model_routing_enabled must remain false"]',
+        "function compactBridgeBlockedMessage(safety: CompactBridgeSafety): string",
+        "const githubBridgeSafety = compactGitHubBridgeSafety(githubBridgeStatus);",
+        "const bridgeActionDisabled = busy || paused || !githubBridgeSafety.safe;",
+        "const canRunForegroundReply = !paused && githubBridgeSafety.safe &&",
+        "disabled={bridgeActionDisabled}",
+        'CompactField label="GitHub safety"',
+        "Manual Jenny bridge blocked:",
+    ]:
+        assert expected in src
+
+    for function in [send_fn, run_once_fn]:
+        safety_index = function.index("const bridgeSafety = compactGitHubBridgeSafety(snapshot?.githubBridgeStatus);")
+        block_index = function.index("if (!bridgeSafety.safe)")
+        assert safety_index < block_index
+        assert "setRoomMessage(compactBridgeBlockedMessage(bridgeSafety));" in function
+
+    assert send_fn.index("if (!bridgeSafety.safe)") < send_fn.index("WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL")
+    assert run_once_fn.index("if (!bridgeSafety.safe)") < run_once_fn.index("WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL")
+
+
 def test_compact_chat_uses_plain_language_errors() -> None:
     src = page_source()
     helper = function_source(src, "jennyChatErrorMessage")

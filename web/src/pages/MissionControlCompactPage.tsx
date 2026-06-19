@@ -268,7 +268,13 @@ interface GitHubBridgeStatus {
   session_send_enabled?: boolean;
   status_records?: Array<WrappedRecord<GitHubBridgeMailboxStatusRecord> | GitHubBridgeMailboxStatusRecord>;
   timer_enabled?: boolean;
+  worker_dispatch_enabled?: boolean;
   worker_enabled?: boolean;
+}
+
+interface CompactBridgeSafety {
+  reasons: string[];
+  safe: boolean;
 }
 
 interface GitHubBridgeMailboxStatusRecord {
@@ -1308,6 +1314,34 @@ function normalizedBridgeError(bridgeStatus: JennyBridgePollerStatus, githubBrid
   return hasGitHubBridgeSignal(githubBridgeStatus) ? "" : legacyError;
 }
 
+function compactGitHubBridgeSafety(status: GitHubBridgeStatus | undefined): CompactBridgeSafety {
+  const reasons: string[] = [];
+  if (!status) {
+    reasons.push("GitHub bridge status not loaded");
+  } else {
+    if (status.manual_start_only !== true) reasons.push("manual_start_only is not confirmed");
+    const liveFlags: Array<[keyof GitHubBridgeStatus, string]> = [
+      ["dispatch_enabled", "dispatch_enabled must remain false"],
+      ["execution_enabled", "execution_enabled must remain false"],
+      ["session_send_enabled", "session_send_enabled must remain false"],
+      ["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"],
+      ["worker_enabled", "worker_enabled must remain false"],
+      ["timer_enabled", "timer_enabled must remain false"],
+      ["daemon_enabled", "daemon_enabled must remain false"],
+      ["discord_automation_enabled", "discord_automation_enabled must remain false"],
+      ["model_routing_enabled", "model_routing_enabled must remain false"],
+    ];
+    for (const [flag, reason] of liveFlags) {
+      if (status[flag] === true) reasons.push(reason);
+    }
+  }
+  return { reasons, safe: reasons.length === 0 };
+}
+
+function compactBridgeBlockedMessage(safety: CompactBridgeSafety): string {
+  return `Manual Jenny bridge blocked: ${safety.reasons[0] ?? "bridge safety is not confirmed"}`;
+}
+
 function noReplyStatusMessage(error: unknown): string {
   const rawError = error ?? "no matching pending request";
   if (isNoPendingBridgeError(rawError)) {
@@ -2257,6 +2291,11 @@ export default function MissionControlCompactPage() {
       setRoomMessage("Write one bounded request before queuing a Jenny bridge message.");
       return;
     }
+    const bridgeSafety = compactGitHubBridgeSafety(snapshot?.githubBridgeStatus);
+    if (!bridgeSafety.safe) {
+      setRoomMessage(compactBridgeBlockedMessage(bridgeSafety));
+      return;
+    }
     const requestId = bridgeRequestId();
     setRoomBusy(true);
     setRoomMessage("");
@@ -2296,6 +2335,11 @@ export default function MissionControlCompactPage() {
   }
 
   async function runJennyOnce(projectView: ProjectViewModel, requestId?: string) {
+    const bridgeSafety = compactGitHubBridgeSafety(snapshot?.githubBridgeStatus);
+    if (!bridgeSafety.safe) {
+      setRoomMessage(compactBridgeBlockedMessage(bridgeSafety));
+      return;
+    }
     const pendingRequestId = requestId || latestVisiblePendingGitHubBridgeMessageForProject(
       unwrapRecords(snapshot?.githubBridgeStatus.visible_pending_messages),
       projectView.project.project_id,
@@ -3028,8 +3072,10 @@ function CompactProjectRoom({
   const sendButtonLabel = jennySendButtonLabel();
   const latestReviewByResponseId = latestReplyReviewByResponseId(replyReviews);
   const bridgeError = normalizedBridgeError(bridgeStatus, githubBridgeStatus);
+  const githubBridgeSafety = compactGitHubBridgeSafety(githubBridgeStatus);
+  const bridgeActionDisabled = busy || paused || !githubBridgeSafety.safe;
   const hasRunnablePendingMessage = Boolean(projectedVisiblePending ?? latestPending);
-  const canRunForegroundReply = !paused && (hasRunnablePendingMessage || pendingCount > 0);
+  const canRunForegroundReply = !paused && githubBridgeSafety.safe && (hasRunnablePendingMessage || pendingCount > 0);
   const statusRecords = unwrapRecords(githubBridgeStatus.status_records);
   const statusSourceBridgeMessages = [
     ...visibleGitHubBridgeMessages,
@@ -3442,6 +3488,11 @@ function CompactProjectRoom({
               Review the latest Jenny reply in the chat before acting on it.
             </p>
           ) : null}
+          {!githubBridgeSafety.safe ? (
+            <p className="mb-2 max-w-full rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-700 [overflow-wrap:anywhere] dark:text-red-200" role="status">
+              {compactBridgeBlockedMessage(githubBridgeSafety)}
+            </p>
+          ) : null}
           <div className="mb-2 grid min-w-0 max-w-full grid-cols-2 gap-1.5 text-[0.68rem]" aria-label="Compact chat tools">
             <label className="min-w-0">
               <span className="mb-1 block font-semibold uppercase tracking-[0.14em] text-[#a59783]">Model</span>
@@ -3492,7 +3543,7 @@ function CompactProjectRoom({
             </label>
 
             <div className="flex min-w-0 shrink-0 justify-end">
-              <button className="min-h-11 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={busy || paused} onClick={onQueueBridge} type="button">
+              <button className="min-h-11 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={bridgeActionDisabled} onClick={onQueueBridge} type="button">
                 {sendButtonLabel}
               </button>
             </div>
@@ -3688,6 +3739,7 @@ function CompactProjectRoom({
             </div>
             <div className="mt-3 grid min-w-0 gap-2 rounded-lg border border-sky-500/20 bg-sky-500/5 p-2 text-xs sm:grid-cols-2">
               <CompactField label="GitHub mailbox" value={githubBridgeStatus.manual_start_only === false ? "disabled" : "manual-start only"} />
+              <CompactField label="GitHub safety" value={githubBridgeSafety.safe ? "manual-only confirmed" : compactBridgeBlockedMessage(githubBridgeSafety)} />
               <CompactField label="GitHub mode" value={githubBridgeStatus.mode || "manual"} />
               <CompactField
                 label="GitHub pending"
