@@ -4977,6 +4977,19 @@ def test_workspace_status_endpoint_returns_display_only_status(client):
     assert "accepted_baseline" in payload
     assert "rollback_baseline" in payload
     assert "stale_context" in payload
+    hard_boundary = payload["hard_boundary_contract"]
+    assert hard_boundary["source"] == "mission_control_hard_boundary_contract_v1"
+    assert hard_boundary["display_only"] is True
+    assert hard_boundary["trusted_for_execution"] is False
+    assert hard_boundary["execution_enabled"] is False
+    assert hard_boundary["dispatch_enabled"] is False
+    assert hard_boundary["session_send_enabled"] is False
+    assert hard_boundary["worker_dispatch_enabled"] is False
+    assert hard_boundary["live_operations_goal"] is False
+    assert hard_boundary["live_operations_enabled"] is False
+    assert hard_boundary["separate_approval_required"] is True
+    assert "PR merge" in hard_boundary["separate_approval_actions"]
+    assert "live deploy" in hard_boundary["forbidden_actions"]
     operator_packet = payload["operator_decision_packet"]
     assert operator_packet["source"] == "mission_control_operator_decision_packet_v1"
     assert operator_packet["display_only"] is True
