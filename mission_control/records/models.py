@@ -1277,11 +1277,13 @@ class ChildRunRecord:
         metadata.update(
             {
                 "display_only": True,
+                "would_execute": False,
                 "execution_enabled": False,
                 "dispatch_enabled": False,
                 "session_send_enabled": False,
                 "worker_dispatch_enabled": False,
                 "trusted_for_execution": False,
+                "inert_context_only": True,
             }
         )
         object.__setattr__(self, "metadata", metadata)
@@ -1373,11 +1375,13 @@ class WorkerNodeRunRecord:
         metadata.update(
             {
                 "display_only": True,
+                "would_execute": False,
                 "execution_enabled": False,
                 "dispatch_enabled": False,
                 "session_send_enabled": False,
                 "worker_dispatch_enabled": False,
                 "trusted_for_execution": False,
+                "inert_context_only": True,
             }
         )
         object.__setattr__(self, "metadata", metadata)

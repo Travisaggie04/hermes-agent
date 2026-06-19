@@ -103,7 +103,12 @@ def test_poll_comments_appends_new_messages_and_status_without_duplicates(tmp_pa
     assert [message.request_id for message in messages] == ["req-1", "req-2"]
     assert [status.status for status in statuses] == ["poll_completed", "poll_completed"]
     assert statuses[-1].metadata["manual_start_only"] is True
+    assert statuses[-1].metadata["trusted_for_execution"] is False
+    assert statuses[-1].metadata["inert_context_only"] is True
+    assert statuses[-1].metadata["would_execute"] is False
     assert statuses[-1].metadata["dispatch_enabled"] is False
+    assert statuses[-1].metadata["session_send_enabled"] is False
+    assert statuses[-1].metadata["worker_dispatch_enabled"] is False
     assert statuses[-1].metadata["worker_enabled"] is False
 
 
@@ -191,8 +196,12 @@ def test_pending_projection_excludes_replied_requests(tmp_path: Path):
     assert status["pending_count"] == 1
     assert status["last_response_request_id"] == "req-done"
     assert status["manual_start_only"] is True
+    assert status["trusted_for_execution"] is False
+    assert status["inert_context_only"] is True
+    assert status["would_execute"] is False
     assert status["dispatch_enabled"] is False
     assert status["session_send_enabled"] is False
+    assert status["worker_dispatch_enabled"] is False
     assert status["worker_enabled"] is False
     assert status["timer_enabled"] is False
 

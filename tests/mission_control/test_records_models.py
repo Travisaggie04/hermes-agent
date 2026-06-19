@@ -948,10 +948,13 @@ def test_child_run_record_round_trips_orchestration_status_and_forces_disabled_f
     assert data["allowed_actions"] == ["read files"]
     assert data["depends_on_child_run_ids"] == ["child-run-0"]
     assert data["metadata"]["display_only"] is True
+    assert data["metadata"]["would_execute"] is False
     assert data["metadata"]["execution_enabled"] is False
     assert data["metadata"]["dispatch_enabled"] is False
     assert data["metadata"]["session_send_enabled"] is False
     assert data["metadata"]["worker_dispatch_enabled"] is False
+    assert data["metadata"]["trusted_for_execution"] is False
+    assert data["metadata"]["inert_context_only"] is True
     assert ChildRunRecord.from_dict(data) == record
     assert RECORD_TYPES["ChildRunRecord"] is ChildRunRecord
 
@@ -993,9 +996,12 @@ def test_worker_node_run_record_round_trips_laptop_codex_state_and_forces_disabl
     assert data["capability_summary"] == "repo-local engineering worker with guarded shell and patch tools"
     assert data["worker_dispatch_enabled"] is False
     assert data["metadata"]["display_only"] is True
+    assert data["metadata"]["would_execute"] is False
     assert data["metadata"]["execution_enabled"] is False
     assert data["metadata"]["dispatch_enabled"] is False
     assert data["metadata"]["session_send_enabled"] is False
     assert data["metadata"]["worker_dispatch_enabled"] is False
+    assert data["metadata"]["trusted_for_execution"] is False
+    assert data["metadata"]["inert_context_only"] is True
     assert WorkerNodeRunRecord.from_dict(data) == record
     assert RECORD_TYPES["WorkerNodeRunRecord"] is WorkerNodeRunRecord

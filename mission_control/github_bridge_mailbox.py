@@ -37,6 +37,9 @@ DEFAULT_LIMIT = 25
 FOREGROUND_WATCH_RUNNING_SECONDS = 15
 INERT_METADATA = {
     "manual_start_only": True,
+    "trusted_for_execution": False,
+    "inert_context_only": True,
+    "would_execute": False,
     "dispatch_enabled": False,
     "session_send_enabled": False,
     "execution_enabled": False,
@@ -571,6 +574,9 @@ def github_bridge_status(*, path: Path | None = None, repo: str = "", issue_numb
 def _inert_response_flags() -> dict[str, bool]:
     return {
         "manual_start_only": True,
+        "trusted_for_execution": False,
+        "inert_context_only": True,
+        "would_execute": False,
         "dispatch_enabled": False,
         "session_send_enabled": False,
         "execution_enabled": False,

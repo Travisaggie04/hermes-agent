@@ -40,9 +40,18 @@ def test_pending_requests_exclude_answered_bridge_messages(tmp_path):
     assert index == 2
     assert response is not None
     assert response.record_type == "JennyBridgeMessageResponseRecord"
+    assert response.metadata["trusted_for_execution"] is False
+    assert response.metadata["inert_context_only"] is True
+    assert response.metadata["would_execute"] is False
     assert response.metadata["dispatch_enabled"] is False
+    assert response.metadata["session_send_enabled"] is False
+    assert response.metadata["worker_dispatch_enabled"] is False
     assert response.metadata["send_to_jenny_enabled"] is False
     assert status.status == "response_appended"
+    assert status.metadata["trusted_for_execution"] is False
+    assert status.metadata["inert_context_only"] is True
+    assert status.metadata["would_execute"] is False
+    assert status.metadata["worker_dispatch_enabled"] is False
     assert status.metadata["worker_enabled"] is False
     assert status.metadata["timer_enabled"] is False
 
@@ -189,8 +198,12 @@ def test_relay_status_reports_manual_flags_and_last_response(tmp_path):
     status = relay_status(path)
 
     assert status["manual_start_only"] is True
+    assert status["trusted_for_execution"] is False
+    assert status["inert_context_only"] is True
+    assert status["would_execute"] is False
     assert status["dispatch_enabled"] is False
     assert status["session_send_enabled"] is False
+    assert status["worker_dispatch_enabled"] is False
     assert status["worker_enabled"] is False
     assert status["timer_enabled"] is False
     assert status["pending_count"] == 0

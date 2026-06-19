@@ -25,6 +25,9 @@ DEFAULT_LIMIT = 25
 POLLER_ID = "manual-jenny-bridge-relay"
 INERT_STATUS_METADATA = {
     "manual_start_only": True,
+    "trusted_for_execution": False,
+    "inert_context_only": True,
+    "would_execute": False,
     "dispatch_enabled": False,
     "session_send_enabled": False,
     "execution_enabled": False,
@@ -140,6 +143,9 @@ def relay_status(path: Path | None = None, *, limit: int = DEFAULT_LIMIT) -> dic
         latest_response = responses[-1][1]
     return {
         "manual_start_only": True,
+        "trusted_for_execution": False,
+        "inert_context_only": True,
+        "would_execute": False,
         "dispatch_enabled": False,
         "session_send_enabled": False,
         "execution_enabled": False,
@@ -286,8 +292,13 @@ def append_response(
             "bridge_direction": "inbound",
             "manual_copy_only": False,
             "send_to_jenny_enabled": False,
+            "would_execute": False,
             "dispatch_enabled": False,
+            "session_send_enabled": False,
             "execution_enabled": False,
+            "worker_dispatch_enabled": False,
+            "trusted_for_execution": False,
+            "inert_context_only": True,
             "external_jenny_response": True,
         },
     )
@@ -316,8 +327,13 @@ def _pending_payload(requests: list[PendingBridgeRequest]) -> dict[str, Any]:
         ],
         "relay_packet": relay_packet(requests),
         "send_to_jenny_enabled": False,
+        "trusted_for_execution": False,
+        "inert_context_only": True,
+        "would_execute": False,
         "dispatch_enabled": False,
+        "session_send_enabled": False,
         "execution_enabled": False,
+        "worker_dispatch_enabled": False,
     }
 
 
