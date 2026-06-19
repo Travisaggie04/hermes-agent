@@ -1063,6 +1063,16 @@ def _assert_inert_workspace_payload(payload):
     assert payload["inert_context_only"] is True
 
 
+def _assert_inert_record_metadata(metadata):
+    assert metadata["would_execute"] is False
+    assert metadata["execution_enabled"] is False
+    assert metadata["dispatch_enabled"] is False
+    assert metadata["session_send_enabled"] is False
+    assert metadata["worker_dispatch_enabled"] is False
+    assert metadata["trusted_for_execution"] is False
+    assert metadata["inert_context_only"] is True
+
+
 def test_control_plane_records_round_trip_and_register():
     approval = ApprovalRecord(
         approval_id="approval-1",
@@ -1177,6 +1187,7 @@ def test_control_plane_append_endpoints_store_temp_records_and_stay_inert(plugin
     assert approval_payload["stored"] is True
     assert approval_payload["record_type"] == "ApprovalRecord"
     assert approval_payload["approval"]["approval_mode"] == "one_time"
+    _assert_inert_record_metadata(approval_payload["approval"]["metadata"])
 
     run = client.post(
         "/api/plugins/mission-control-governance/workspace/runs/create",
@@ -1207,6 +1218,7 @@ def test_control_plane_append_endpoints_store_temp_records_and_stay_inert(plugin
     assert run_payload["stored"] is True
     assert run_payload["record_type"] == "RunRecord"
     assert run_payload["run"]["execution_mode"] == "manual_copy"
+    _assert_inert_record_metadata(run_payload["run"]["metadata"])
 
     report = client.post(
         "/api/plugins/mission-control-governance/workspace/reports/ingest",
@@ -1233,10 +1245,18 @@ def test_control_plane_append_endpoints_store_temp_records_and_stay_inert(plugin
     _assert_inert_workspace_payload(report_payload)
     assert report_payload["stored"] is True
     assert report_payload["record_type"] == "ReportRecord"
+    _assert_inert_record_metadata(report_payload["report"]["metadata"])
 
-    assert len(JsonlRecordStore(plugin_api.record_store_path()).read_all(ApprovalRecord)) == 1
-    assert len(JsonlRecordStore(plugin_api.record_store_path()).read_all(RunRecord)) == 1
-    assert len(JsonlRecordStore(plugin_api.record_store_path()).read_all(ReportRecord)) == 1
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    approvals = store.read_all(ApprovalRecord)
+    runs = store.read_all(RunRecord)
+    reports = store.read_all(ReportRecord)
+    assert len(approvals) == 1
+    assert len(runs) == 1
+    assert len(reports) == 1
+    _assert_inert_record_metadata(approvals[0].metadata)
+    _assert_inert_record_metadata(runs[0].metadata)
+    _assert_inert_record_metadata(reports[0].metadata)
 
 
 def test_control_plane_validation_rejects_broad_or_executable_approvals(client):

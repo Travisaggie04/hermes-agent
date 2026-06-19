@@ -19,6 +19,22 @@ def _dict(value: Any) -> dict[str, Any]:
     return dict(value)
 
 
+def _inert_execution_metadata(value: Any) -> dict[str, Any]:
+    metadata = _dict(value)
+    metadata.update(
+        {
+            "would_execute": False,
+            "execution_enabled": False,
+            "dispatch_enabled": False,
+            "session_send_enabled": False,
+            "worker_dispatch_enabled": False,
+            "trusted_for_execution": False,
+            "inert_context_only": True,
+        }
+    )
+    return metadata
+
+
 def _required(data: dict[str, Any], field_name: str) -> Any:
     try:
         return data[field_name]
@@ -983,7 +999,7 @@ class ApprovalRecord:
         object.__setattr__(self, "forbidden_actions", tuple(str(item) for item in _tuple(self.forbidden_actions)))
         object.__setattr__(self, "approval_mode", self.approval_mode or "one_time")
         object.__setattr__(self, "expires_at", str(self.expires_at).strip() if self.expires_at else None)
-        object.__setattr__(self, "metadata", _dict(self.metadata))
+        object.__setattr__(self, "metadata", _inert_execution_metadata(self.metadata))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1084,7 +1100,7 @@ class RunRecord:
         object.__setattr__(self, "safety_gate_reasons", tuple(str(item) for item in _tuple(self.safety_gate_reasons)))
         object.__setattr__(self, "report_ids", tuple(str(item) for item in _tuple(self.report_ids)))
         object.__setattr__(self, "result_record_ids", tuple(str(item) for item in _tuple(self.result_record_ids)))
-        object.__setattr__(self, "metadata", _dict(self.metadata))
+        object.__setattr__(self, "metadata", _inert_execution_metadata(self.metadata))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1188,7 +1204,7 @@ class ReportRecord:
         object.__setattr__(self, "evidence_refs", tuple(str(item) for item in _tuple(self.evidence_refs)))
         object.__setattr__(self, "artifact_refs", tuple(str(item) for item in _tuple(self.artifact_refs)))
         object.__setattr__(self, "redaction_status", self.redaction_status or "operator_supplied_redacted")
-        object.__setattr__(self, "metadata", _dict(self.metadata))
+        object.__setattr__(self, "metadata", _inert_execution_metadata(self.metadata))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1273,17 +1289,10 @@ class ChildRunRecord:
         object.__setattr__(self, "allowed_actions", tuple(str(item) for item in _tuple(self.allowed_actions)))
         object.__setattr__(self, "forbidden_actions", tuple(str(item) for item in _tuple(self.forbidden_actions)))
         object.__setattr__(self, "depends_on_child_run_ids", tuple(str(item) for item in _tuple(self.depends_on_child_run_ids)))
-        metadata = _dict(self.metadata)
+        metadata = _inert_execution_metadata(self.metadata)
         metadata.update(
             {
                 "display_only": True,
-                "would_execute": False,
-                "execution_enabled": False,
-                "dispatch_enabled": False,
-                "session_send_enabled": False,
-                "worker_dispatch_enabled": False,
-                "trusted_for_execution": False,
-                "inert_context_only": True,
             }
         )
         object.__setattr__(self, "metadata", metadata)
@@ -1371,17 +1380,10 @@ class WorkerNodeRunRecord:
         object.__setattr__(self, "forbidden_actions", tuple(str(item) for item in _tuple(self.forbidden_actions)))
         object.__setattr__(self, "blocked_reasons", tuple(str(item) for item in _tuple(self.blocked_reasons)))
         object.__setattr__(self, "worker_dispatch_enabled", False)
-        metadata = _dict(self.metadata)
+        metadata = _inert_execution_metadata(self.metadata)
         metadata.update(
             {
                 "display_only": True,
-                "would_execute": False,
-                "execution_enabled": False,
-                "dispatch_enabled": False,
-                "session_send_enabled": False,
-                "worker_dispatch_enabled": False,
-                "trusted_for_execution": False,
-                "inert_context_only": True,
             }
         )
         object.__setattr__(self, "metadata", metadata)

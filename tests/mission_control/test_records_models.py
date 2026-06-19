@@ -3,6 +3,7 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from mission_control.records.models import (
+    ApprovalRecord,
     ApprovalSlice,
     ArtifactRef,
     ChallengeReviewRecord,
@@ -23,13 +24,25 @@ from mission_control.records.models import (
     OperatorAction,
     ProjectBriefRecord,
     ProjectRecord,
+    ReportRecord,
     RECORD_TYPES,
     RoomContractRecord,
     RoomJournalEventRecord,
+    RunRecord,
     StartGateCheck,
     TaskControlEnvelope,
     WorkerNodeRunRecord,
 )
+
+
+def _assert_inert_execution_metadata(metadata):
+    assert metadata["would_execute"] is False
+    assert metadata["execution_enabled"] is False
+    assert metadata["dispatch_enabled"] is False
+    assert metadata["session_send_enabled"] is False
+    assert metadata["worker_dispatch_enabled"] is False
+    assert metadata["trusted_for_execution"] is False
+    assert metadata["inert_context_only"] is True
 
 
 def test_project_record_round_trips_workspace_fields():
@@ -225,6 +238,61 @@ def test_jenny_report_record_round_trips_manual_report_fields():
     assert JennyReportRecord.from_dict(data) == record
     assert isinstance(JennyReportRecord.from_dict(data).changed_files, tuple)
     assert RECORD_TYPES["JennyReportRecord"] is JennyReportRecord
+
+
+def test_control_plane_lifecycle_records_force_inert_execution_metadata():
+    approval = ApprovalRecord(
+        approval_id="approval-1",
+        project_id="project-hermes",
+        action_class="read_only_lane",
+        approval_scope="bounded read-only audit",
+        approved_actions=("inspect",),
+        status="approved",
+        metadata={
+            "would_execute": True,
+            "execution_enabled": True,
+            "dispatch_enabled": True,
+            "session_send_enabled": True,
+            "worker_dispatch_enabled": True,
+            "trusted_for_execution": True,
+        },
+    )
+    run = RunRecord(
+        run_id="run-1",
+        project_id="project-hermes",
+        lane_type="read_only_inspection",
+        objective="Inspect status only.",
+        metadata={
+            "would_execute": True,
+            "execution_enabled": True,
+            "dispatch_enabled": True,
+            "session_send_enabled": True,
+            "worker_dispatch_enabled": True,
+            "trusted_for_execution": True,
+        },
+    )
+    report = ReportRecord(
+        report_id="report-1",
+        run_id="run-1",
+        project_id="project-hermes",
+        summary="Reported status only.",
+        metadata={
+            "would_execute": True,
+            "execution_enabled": True,
+            "dispatch_enabled": True,
+            "session_send_enabled": True,
+            "worker_dispatch_enabled": True,
+            "trusted_for_execution": True,
+        },
+    )
+
+    for record in (approval, run, report):
+        _assert_inert_execution_metadata(record.to_dict()["metadata"])
+        assert type(record).from_dict(record.to_dict()) == record
+
+    assert RECORD_TYPES["ApprovalRecord"] is ApprovalRecord
+    assert RECORD_TYPES["RunRecord"] is RunRecord
+    assert RECORD_TYPES["ReportRecord"] is ReportRecord
 
 
 def test_jenny_bridge_message_request_record_round_trips_outbound_fields():
@@ -948,13 +1016,7 @@ def test_child_run_record_round_trips_orchestration_status_and_forces_disabled_f
     assert data["allowed_actions"] == ["read files"]
     assert data["depends_on_child_run_ids"] == ["child-run-0"]
     assert data["metadata"]["display_only"] is True
-    assert data["metadata"]["would_execute"] is False
-    assert data["metadata"]["execution_enabled"] is False
-    assert data["metadata"]["dispatch_enabled"] is False
-    assert data["metadata"]["session_send_enabled"] is False
-    assert data["metadata"]["worker_dispatch_enabled"] is False
-    assert data["metadata"]["trusted_for_execution"] is False
-    assert data["metadata"]["inert_context_only"] is True
+    _assert_inert_execution_metadata(data["metadata"])
     assert ChildRunRecord.from_dict(data) == record
     assert RECORD_TYPES["ChildRunRecord"] is ChildRunRecord
 
@@ -996,12 +1058,6 @@ def test_worker_node_run_record_round_trips_laptop_codex_state_and_forces_disabl
     assert data["capability_summary"] == "repo-local engineering worker with guarded shell and patch tools"
     assert data["worker_dispatch_enabled"] is False
     assert data["metadata"]["display_only"] is True
-    assert data["metadata"]["would_execute"] is False
-    assert data["metadata"]["execution_enabled"] is False
-    assert data["metadata"]["dispatch_enabled"] is False
-    assert data["metadata"]["session_send_enabled"] is False
-    assert data["metadata"]["worker_dispatch_enabled"] is False
-    assert data["metadata"]["trusted_for_execution"] is False
-    assert data["metadata"]["inert_context_only"] is True
+    _assert_inert_execution_metadata(data["metadata"])
     assert WorkerNodeRunRecord.from_dict(data) == record
     assert RECORD_TYPES["WorkerNodeRunRecord"] is WorkerNodeRunRecord
