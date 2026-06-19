@@ -38,9 +38,10 @@ Jenny packet as permission to bypass Codex safety checks.
   operator-packet, or readiness lock fields expose any truthy execution,
   dispatch, session-send, worker-dispatch, worker, or live-operation flag.
 - `/mission-control-compact` is the old compact Mission Control route.
-  Its compact chat controls follow the same manual-only bridge rule; the
-  manual report/challenge/lane draft buttons are separate record actions and
-  remain visibly guarded.
+  Its compact chat controls follow the same manual-only bridge rule and the
+  same workspace execution-lock gating for hard-boundary, operator-packet, and
+  readiness flags; the manual report/challenge/lane draft buttons are separate
+  record actions and remain visibly guarded.
   Its compact health dashboard also treats any true execution lock on the
   execution mode preview, execution packet wrapper, execution packet body,
   worker contract, operator decision packet, readiness summary, worker handoff
