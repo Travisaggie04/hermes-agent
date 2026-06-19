@@ -75,6 +75,10 @@ def test_jenny_mobile_renders_codex_like_mobile_chat_controls() -> None:
         "Send Jenny message",
         "Open activity",
         "Extra high",
+        "Report lifecycle",
+        "Report gaps",
+        "Report lifecycle needs Jenny review",
+        "dup {reportLifecycle?.duplicate_report_ids?.length ?? 0} / overwrite",
     ]:
         assert expected in src
 
@@ -146,6 +150,9 @@ def test_jenny_mobile_bridge_controls_fail_closed_on_live_flags() -> None:
         "operatorPacket?.execution_lock_blocked_reasons",
         'mobileExecutionLockReasons("operator_decision_packet", operatorPacket)',
         'mobileExecutionLockReasons("orchestration_readiness", status?.orchestration_readiness)',
+        'mobileExecutionLockReasons("report_lifecycle", status?.report_lifecycle)',
+        "interface MobileReportLifecycle extends MobileExecutionLockSource",
+        "report_lifecycle?: MobileReportLifecycle",
         "function combineMobileSafety(...checks: MobileBridgeSafety[]): MobileBridgeSafety",
         "fetchJSON<MobileWorkspaceStatus>(WORKSPACE_STATUS_URL)",
         "const bridgeSafety = useMemo(() => mobileBridgeSafety(bridgeStatus), [bridgeStatus]);",

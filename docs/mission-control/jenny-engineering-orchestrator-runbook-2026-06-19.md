@@ -37,7 +37,9 @@ Jenny packet as permission to bypass Codex safety checks.
   `hard_boundary_contract` is missing or blocked, or if hard-boundary,
   operator-packet, or readiness lock fields expose any truthy execution,
   dispatch, send-to-Jenny, session-send, worker-dispatch, worker, or
-  live-operation flag.
+  live-operation flag. Its activity drawer also shows report lifecycle counts,
+  report gap counts, and the first report lifecycle review blockers so Travis
+  can see when Jenny still needs to review report history from the phone route.
 - `/mission-control-compact` is the old compact Mission Control route.
   Its compact chat controls follow the same manual-only bridge rule and the
   same workspace execution-lock gating for hard-boundary, operator-packet, and

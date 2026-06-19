@@ -154,6 +154,19 @@ interface MobileExecutionLockSource {
   would_session_send?: unknown;
 }
 
+interface MobileReportLifecycle extends MobileExecutionLockSource {
+  blocked?: boolean;
+  blocked_reasons?: string[];
+  duplicate_report_ids?: string[];
+  open_report_ids?: string[];
+  report_overwrite_conflict_count?: number;
+  report_overwrite_conflict_ids?: string[];
+  reviewed_report_ids?: string[];
+  runs_missing_report?: string[];
+  runs_with_missing_linked_report_ids?: Record<string, string[]>;
+  terminal_report_ids?: string[];
+}
+
 interface MobileWorkspaceStatus {
   hard_boundary_contract?: MobileExecutionLockSource & {
     blocked?: boolean;
@@ -164,6 +177,7 @@ interface MobileWorkspaceStatus {
     execution_lock_blocked_reasons?: string[];
   };
   orchestration_readiness?: MobileExecutionLockSource;
+  report_lifecycle?: MobileReportLifecycle;
 }
 
 interface OutboxResponse {
@@ -531,6 +545,7 @@ function mobileWorkspaceSafety(status: MobileWorkspaceStatus | null): MobileBrid
   reasons.push(...(operatorPacket?.execution_lock_blocked_reasons ?? []));
   reasons.push(...mobileExecutionLockReasons("operator_decision_packet", operatorPacket));
   reasons.push(...mobileExecutionLockReasons("orchestration_readiness", status?.orchestration_readiness));
+  reasons.push(...mobileExecutionLockReasons("report_lifecycle", status?.report_lifecycle));
 
   const uniqueReasons = [...new Set(reasons)];
   return { reasons: uniqueReasons, safe: uniqueReasons.length === 0 };
@@ -774,6 +789,17 @@ export default function JennyMobilePage() {
   const statusRecords = unwrapRecords(bridgeStatus?.status_records).slice(-5).reverse();
   const latestPendingId = latestPendingRequestId(messages);
   const sendDisabled = sending || loading || !composer.trim() || !mobileSafety.safe;
+  const reportLifecycle = workspaceStatus?.report_lifecycle;
+  const reportMissingLinkedCount = Object.values(reportLifecycle?.runs_with_missing_linked_report_ids ?? {}).reduce(
+    (count, reportIds) => count + reportIds.length,
+    0,
+  );
+  const reportOverwriteConflictCount = reportLifecycle?.report_overwrite_conflict_count ?? reportLifecycle?.report_overwrite_conflict_ids?.length ?? 0;
+  const reportGapCount =
+    (reportLifecycle?.duplicate_report_ids?.length ?? 0)
+    + reportOverwriteConflictCount
+    + (reportLifecycle?.runs_missing_report?.length ?? 0)
+    + reportMissingLinkedCount;
 
   const refreshMessages = useCallback(async (projectId: string) => {
     const [status, workspace] = await Promise.all([
@@ -1206,6 +1232,21 @@ export default function JennyMobilePage() {
                     {mobileSafety.safe ? "manual foreground only" : "blocked"}
                   </dd>
                 </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-zinc-400">Report lifecycle</dt>
+                  <dd className={cn("min-w-0 truncate text-right", reportLifecycle?.blocked ? "text-amber-300" : "text-emerald-300")}>
+                    open {reportLifecycle?.open_report_ids?.length ?? 0} / reviewed{" "}
+                    {reportLifecycle?.reviewed_report_ids?.length ?? 0} / terminal{" "}
+                    {reportLifecycle?.terminal_report_ids?.length ?? 0}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-zinc-400">Report gaps</dt>
+                  <dd className={cn("min-w-0 truncate text-right", reportGapCount ? "text-amber-300" : "text-emerald-300")}>
+                    dup {reportLifecycle?.duplicate_report_ids?.length ?? 0} / overwrite {reportOverwriteConflictCount} / missing{" "}
+                    {reportLifecycle?.runs_missing_report?.length ?? 0} / stale {reportMissingLinkedCount}
+                  </dd>
+                </div>
               </dl>
 
               {!mobileSafety.safe ? (
@@ -1213,6 +1254,16 @@ export default function JennyMobilePage() {
                   <p className="font-medium">Manual chat blocked</p>
                   <ul className="mt-1 list-disc space-y-1 pl-4">
                     {mobileSafety.reasons.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {reportLifecycle?.blocked_reasons?.length ? (
+                <div className="mt-3 rounded-lg border border-amber-400/30 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
+                  <p className="font-medium">Report lifecycle needs Jenny review</p>
+                  <ul className="mt-1 list-disc space-y-1 pl-4">
+                    {reportLifecycle.blocked_reasons.slice(0, 4).map((reason) => (
                       <li key={reason}>{reason}</li>
                     ))}
                   </ul>
