@@ -19,6 +19,7 @@ from mission_control.records import (
     ApprovalSlice,
     ArtifactRef,
     ChallengeReviewRecord,
+    ChildRunRecord,
     EvidenceCard,
     GoalContract,
     GitHubBridgeMailboxStatusRecord,
@@ -41,6 +42,7 @@ from mission_control.records import (
     StartGateCheck,
     TaskControlEnvelope,
     VerifierWorkflowEvidenceRecord,
+    WorkerNodeRunRecord,
 )
 
 
@@ -2505,6 +2507,8 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace-status/preview": {"POST"},
         "/workspace/runtime-provenance/preview": {"POST"},
         "/workspace/autonomy-eligibility/preview": {"POST"},
+        "/workspace/scoped-pr-eligibility/preview": {"POST"},
+        "/workspace/execution-packet/preview": {"POST"},
         "/pr-merge-verifier-gate/evaluate": {"POST"},
         "/pr-merge-verifier-gate/visibility": {"POST"},
         "/verifier-workflow/evidence": {"GET"},
@@ -2547,6 +2551,10 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/runs/create": {"POST"},
         "/workspace/report-inbox": {"GET"},
         "/workspace/reports/ingest": {"POST"},
+        "/workspace/child-runs": {"GET"},
+        "/workspace/child-runs/create": {"POST"},
+        "/workspace/worker-node-runs": {"GET"},
+        "/workspace/worker-node-runs/create": {"POST"},
         "/workspace/session-project-links": {"GET"},
         "/workspace/session-project-links/create": {"POST"},
         "/workspace/project-sessions": {"GET"},
@@ -2584,6 +2592,8 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/approvals",
         "/workspace/runs",
         "/workspace/report-inbox",
+        "/workspace/child-runs",
+        "/workspace/worker-node-runs",
         "/workspace/session-project-links",
         "/workspace/project-sessions",
         "/workspace/project-state",
@@ -5009,6 +5019,159 @@ def test_read_only_autonomy_preview_is_inert_and_stores_nothing(plugin_api, clie
     assert payload["dispatch_enabled"] is False
     assert payload["session_send_enabled"] is False
     assert plugin_api.record_store_path().exists() is False
+
+
+def test_scoped_pr_and_execution_packet_previews_are_inert_and_store_nothing(plugin_api, client):
+    forbidden_actions = [
+        "merge",
+        "deploy",
+        "restart",
+        "runtime switch",
+        "Waha",
+        "social",
+        "payment",
+        "model routing",
+        "queue mutation",
+        "worker",
+        "timer",
+        "daemon",
+        "dispatch",
+        "session-send",
+    ]
+    payload = {
+        "mode": "scoped_pr",
+        "runtime_provenance": {
+            "primary_status": "CLEAN_AND_ALIGNED",
+            "autonomy_blocked": False,
+            "autonomy_blocked_reasons": [],
+        },
+        "approval": {
+            "approval_id": "approval-pr-1",
+            "status": "approved",
+            "approval_mode": "one_time",
+            "approval_scope": "project-hermes-mission-control:scoped-pr:mission_control/",
+            "action_class": "pr_creation",
+            "approved_files": ["mission_control/autonomy_eligibility.py"],
+            "expires_at": "2099-01-01T00:00:00Z",
+        },
+        "run": {
+            "run_id": "run-pr-1",
+            "project_id": "project-hermes-mission-control",
+            "approval_id": "approval-pr-1",
+            "lane_type": "pr_creation",
+            "status": "requested",
+            "dispatch_state": False,
+            "forbidden_actions": forbidden_actions,
+        },
+        "lane": {
+            "lane_type": "pr_creation",
+            "allowed_files": ["mission_control/autonomy_eligibility.py"],
+            "forbidden_actions": forbidden_actions,
+            "tests_required": True,
+            "review_required": True,
+        },
+        "report_contract": {"required": True, "tests_required": True, "review_required": True},
+        "active_mutation_lane_count": 1,
+        "bridge": {"manual_start_only": True},
+        "capabilities": {},
+        "now": "2026-06-19T00:00:00Z",
+    }
+
+    scoped = client.post(
+        "/api/plugins/mission-control-governance/workspace/scoped-pr-eligibility/preview",
+        json=payload,
+    )
+    packet = client.post(
+        "/api/plugins/mission-control-governance/workspace/execution-packet/preview",
+        json=payload,
+    )
+
+    assert scoped.status_code == 200
+    scoped_payload = scoped.json()
+    assert scoped_payload["source"] == "caller_supplied_scoped_pr_lane_preview"
+    assert scoped_payload["stored"] is False
+    assert scoped_payload["eligible"] is True
+    assert scoped_payload["would_execute"] is False
+    assert scoped_payload["would_create_pr"] is False
+    assert scoped_payload["dispatch_enabled"] is False
+    assert scoped_payload["session_send_enabled"] is False
+    assert scoped_payload["worker_dispatch_enabled"] is False
+
+    assert packet.status_code == 200
+    packet_payload = packet.json()
+    assert packet_payload["source"] == "caller_supplied_execution_packet_preview"
+    assert packet_payload["stored"] is False
+    assert packet_payload["packet"]["mode"] == "scoped_pr"
+    assert packet_payload["would_execute"] is False
+    assert packet_payload["would_dispatch"] is False
+    assert packet_payload["would_session_send"] is False
+    assert packet_payload["worker_dispatch_enabled"] is False
+    assert plugin_api.record_store_path().exists() is False
+
+
+def test_child_and_worker_node_run_records_stay_inert(plugin_api, client):
+    child_response = client.post(
+        "/api/plugins/mission-control-governance/workspace/child-runs/create",
+        json={
+            "child_run_id": "child-run-1",
+            "parent_run_id": "run-parent-1",
+            "project_id": "project-hermes-mission-control",
+            "agent_identity": "jenny-child",
+            "delegation_source": "mission-control-preview",
+            "objective": "Inspect bounded context.",
+            "allowed_actions": ["read files"],
+            "forbidden_actions": ["dispatch", "deploy"],
+            "status": "running",
+            "dispatch_enabled": True,
+            "worker_dispatch_enabled": True,
+        },
+    )
+    worker_response = client.post(
+        "/api/plugins/mission-control-governance/workspace/worker-node-runs/create",
+        json={
+            "worker_run_id": "worker-run-1",
+            "parent_run_id": "run-parent-1",
+            "project_id": "project-hermes-mission-control",
+            "worker_identity": "codex",
+            "worker_host_label": "laptop-codex",
+            "objective": "Prepare a scoped PR.",
+            "blocked_reasons": ["worker node offline"],
+            "status": "blocked",
+            "worker_dispatch_enabled": True,
+        },
+    )
+
+    assert child_response.status_code == 200
+    child_payload = child_response.json()
+    assert child_payload["stored"] is True
+    assert child_payload["dispatch_enabled"] is False
+    assert child_payload["session_send_enabled"] is False
+    assert child_payload["worker_dispatch_enabled"] is False
+    assert child_payload["child_run"]["metadata"]["dispatch_enabled"] is False
+    assert child_payload["child_run"]["metadata"]["worker_dispatch_enabled"] is False
+
+    assert worker_response.status_code == 200
+    worker_payload = worker_response.json()
+    assert worker_payload["stored"] is True
+    assert worker_payload["dispatch_enabled"] is False
+    assert worker_payload["session_send_enabled"] is False
+    assert worker_payload["worker_dispatch_enabled"] is False
+    assert worker_payload["worker_node_run"]["worker_host_label"] == "laptop-codex"
+    assert worker_payload["worker_node_run"]["worker_dispatch_enabled"] is False
+    assert worker_payload["worker_node_run"]["metadata"]["worker_dispatch_enabled"] is False
+
+    child_runs = client.get("/api/plugins/mission-control-governance/workspace/child-runs")
+    worker_runs = client.get("/api/plugins/mission-control-governance/workspace/worker-node-runs")
+    assert child_runs.status_code == 200
+    assert child_runs.json()["count"] == 1
+    assert child_runs.json()["child_runs"][0]["record_type"] == "ChildRunRecord"
+    assert worker_runs.status_code == 200
+    assert worker_runs.json()["count"] == 1
+    assert worker_runs.json()["worker_node_runs"][0]["record_type"] == "WorkerNodeRunRecord"
+
+    records = JsonlRecordStore(plugin_api.record_store_path())
+    assert len(records.read_all(ChildRunRecord)) == 1
+    assert len(records.read_all(WorkerNodeRunRecord)) == 1
 
 
 def test_workspace_status_has_no_action_routes(client):

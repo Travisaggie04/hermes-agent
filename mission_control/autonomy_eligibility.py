@@ -28,7 +28,6 @@ _STATUS_PRIORITY = (
 _BROAD_APPROVAL_VALUES = {"*", "all", "any", "global", "everything", "unlimited", "blanket"}
 
 _ACTIVE_RUN_STATUSES = {"requested", "preflight_passed", "running", "stopping"}
-_ACTIVE_MUTATION_RUN_STATUSES = {"requested", "preflight_passed", "running", "stopping"}
 _READ_ONLY_LANE_TYPES = {"read_only_lane", "read_only_design", "read_only_inspection"}
 _APPROVED_ACTION_CLASSES = _READ_ONLY_LANE_TYPES
 
@@ -36,6 +35,23 @@ _MUTATION_FORBIDDEN_CLASSES = (
     ("write", "file write", "file-write"),
     ("commit",),
     ("pr", "pull request", "pr creation"),
+    ("merge",),
+    ("deploy",),
+    ("restart",),
+    ("runtime switch", "switch runtime", "runtime-switch"),
+    ("waha", "whatsapp"),
+    ("social",),
+    ("payment",),
+    ("model routing", "model-routing"),
+    ("queue",),
+    ("worker",),
+    ("timer",),
+    ("daemon",),
+    ("dispatch",),
+    ("session-send", "session send", "session_send"),
+)
+
+_PR_FORBIDDEN_CLASSES = (
     ("merge",),
     ("deploy",),
     ("restart",),
@@ -71,6 +87,24 @@ _CAPABILITY_KEYS = (
     "dispatch",
     "session_send",
 )
+
+_PR_BLOCKED_CAPABILITY_KEYS = (
+    "merge",
+    "deploy",
+    "restart",
+    "runtime_switch",
+    "waha",
+    "social",
+    "payment",
+    "model_routing",
+    "queue_mutation",
+    "worker",
+    "timer",
+    "dispatch",
+    "session_send",
+)
+
+_ACTIVE_PR_STATUSES = {"requested", "preflight_passed", "running", "stopping"}
 
 
 def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -167,6 +201,7 @@ def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) ->
         "execution_enabled": False,
         "dispatch_enabled": False,
         "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
     }
 
 
@@ -176,8 +211,8 @@ def classify_bridge_permissions(bridge_state: dict[str, Any] | None = None) -> d
     state = dict(bridge_state or {})
     reasons: list[str] = []
 
-    if any(_safe_bool(state.get(key)) for key in ("dispatch_enabled", "session_send_enabled", "worker_enabled", "timer_enabled", "daemon_enabled")):
-        return _bridge_result("unsafe_for_autonomy", False, ["bridge can dispatch, session-send, or run background work"])
+    if any(_safe_bool(state.get(key)) for key in ("dispatch_enabled", "session_send_enabled", "worker_enabled", "worker_dispatch_enabled", "timer_enabled", "daemon_enabled")):
+        return _bridge_result("write_capable_not_safe_for_autonomy", False, ["bridge can dispatch, session-send, or run background work"])
 
     if any(
         _safe_bool(state.get(key))
@@ -190,7 +225,7 @@ def classify_bridge_permissions(bridge_state: dict[str, Any] | None = None) -> d
             "post_github_comment",
         )
     ):
-        return _bridge_result("write_capable", False, ["bridge can execute or write an external/response record"])
+        return _bridge_result("write_capable_not_safe_for_autonomy", False, ["bridge can execute or write an external/response record"])
 
     if _safe_bool(state.get("append_records")) or _safe_bool(state.get("stored")):
         _add(reasons, "bridge appends records and is manual-only, not a read-only executor")
@@ -203,7 +238,7 @@ def classify_bridge_permissions(bridge_state: dict[str, Any] | None = None) -> d
     if _safe_bool(state.get("read_only_safe")):
         return _bridge_result("read_only_safe", True, [])
 
-    return _bridge_result("manual_only", False, ["bridge safety is not proven; defaulting to manual-only"])
+    return _bridge_result("unknown_blocked", False, ["bridge safety is not proven; defaulting to blocked"])
 
 
 def evaluate_read_only_autonomy_eligibility(observed_state: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -238,7 +273,7 @@ def evaluate_read_only_autonomy_eligibility(observed_state: dict[str, Any] | Non
 
     if _safe_int(state.get("active_mutation_lane_count")) > 0:
         _add(blocked, "active mutation lane count must be 0")
-    if bridge["permission_classification"] in {"write_capable", "unsafe_for_autonomy"}:
+    if bridge["permission_classification"] in {"write_capable", "unsafe_for_autonomy", "write_capable_not_safe_for_autonomy", "unknown_blocked"}:
         _add(blocked, "bridge path is not read-only safe")
     elif bridge["permission_classification"] == "manual_only":
         _add(warnings, "bridge path is manual-only; preview must not execute")
@@ -255,6 +290,129 @@ def evaluate_read_only_autonomy_eligibility(observed_state: dict[str, Any] | Non
         "execution_enabled": False,
         "dispatch_enabled": False,
         "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+    }
+
+
+def evaluate_scoped_pr_lane_eligibility(observed_state: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Preview whether a scoped PR-creation lane is eligible without running it."""
+
+    state = dict(observed_state or {})
+    provenance = state.get("runtime_provenance")
+    if not isinstance(provenance, dict):
+        provenance = evaluate_runtime_provenance(_section(state, "runtime"))
+
+    approval = _section(state, "approval")
+    run = _section(state, "run")
+    lane = _section(state, "lane")
+    capabilities = _section(state, "capabilities")
+    report_contract = _section(state, "report_contract")
+    bridge = classify_bridge_permissions(_section(state, "bridge"))
+
+    blocked: list[str] = []
+    warnings: list[str] = []
+
+    if provenance.get("autonomy_blocked") is not False or provenance.get("primary_status") != PROVENANCE_CLEAN:
+        _add(blocked, "runtime provenance is not clean")
+        for reason in provenance.get("autonomy_blocked_reasons", ()):
+            _add(blocked, str(reason))
+
+    _check_pr_approval(approval, blocked, now=_safe_text(state.get("now")))
+    _check_pr_run(run, approval, blocked)
+    _check_pr_scope(approval, lane, blocked)
+    _check_pr_forbidden_actions(run, lane, blocked)
+    _check_pr_capabilities(capabilities, blocked)
+
+    active_mutation_lane_count = _safe_int(state.get("active_mutation_lane_count"))
+    if active_mutation_lane_count > 1:
+        _add(blocked, "scoped PR lane requires at most one active mutation lane")
+    if active_mutation_lane_count == 1 and _safe_text(run.get("lane_type")) != "pr_creation":
+        _add(blocked, "the only active mutation lane must be this scoped PR lane")
+    if _safe_bool(state.get("merge_allowed")) or _safe_bool(lane.get("merge_allowed")):
+        _add(blocked, "merge is not allowed in scoped PR lanes")
+    if _safe_bool(state.get("deploy_allowed")) or _safe_bool(lane.get("deploy_allowed")):
+        _add(blocked, "deploy is not allowed in scoped PR lanes")
+    if _safe_bool(state.get("runtime_switch_allowed")) or _safe_bool(lane.get("runtime_switch_allowed")):
+        _add(blocked, "runtime switch is not allowed in scoped PR lanes")
+    if _safe_bool(report_contract.get("required")) is not True:
+        _add(blocked, "report/result contract is required")
+    if _safe_bool(report_contract.get("tests_required")) is not True and _safe_bool(lane.get("tests_required")) is not True:
+        _add(blocked, "tests are required for scoped PR lanes")
+    if _safe_bool(report_contract.get("review_required")) is not True and _safe_bool(lane.get("review_required")) is not True:
+        _add(blocked, "human review is required before merge")
+    if bridge["permission_classification"] in {"write_capable", "unsafe_for_autonomy", "write_capable_not_safe_for_autonomy"}:
+        _add(blocked, "write-capable bridge path cannot be used for scoped PR lane execution")
+    elif bridge["permission_classification"] in {"manual_only", "unknown_blocked"}:
+        _add(warnings, "bridge path is not an executor; PR lane preview remains inert")
+
+    scope = _explicit_scope(approval, lane)
+    return {
+        "eligible": not blocked,
+        "blocked_reasons": blocked,
+        "warnings": warnings,
+        "runtime_provenance": provenance,
+        "bridge_permissions": bridge,
+        "scope": scope,
+        "would_execute": False,
+        "would_create_pr": False,
+        "would_commit": False,
+        "stored": False,
+        "dry_run_only": True,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "merge_enabled": False,
+        "deploy_enabled": False,
+        "runtime_switch_enabled": False,
+    }
+
+
+def build_execution_packet_preview(observed_state: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Build a future work-packet preview while keeping execution disabled."""
+
+    state = dict(observed_state or {})
+    mode = _safe_text(state.get("mode") or state.get("execution_mode"))
+    if mode not in {"read_only", "scoped_pr"}:
+        mode = "blocked"
+    eligibility = (
+        evaluate_read_only_autonomy_eligibility(state)
+        if mode == "read_only"
+        else evaluate_scoped_pr_lane_eligibility(state)
+        if mode == "scoped_pr"
+        else {
+            "eligible": False,
+            "blocked_reasons": ["execution mode is not recognized"],
+            "warnings": [],
+        }
+    )
+    packet = {
+        "packet_version": "mission_control_execution_packet_preview_v1",
+        "mode": mode,
+        "run_id": _safe_text(_section(state, "run").get("run_id")),
+        "approval_id": _safe_text(_section(state, "approval").get("approval_id")),
+        "project_id": _safe_text(_section(state, "run").get("project_id") or _section(state, "approval").get("project_id")),
+        "objective": _safe_text(_section(state, "run").get("objective") or _section(state, "lane").get("objective"), max_chars=800),
+        "allowed_actions": _bounded_texts(_as_list(_section(state, "run").get("allowed_actions")) + _as_list(_section(state, "lane").get("allowed_actions"))),
+        "forbidden_actions": _bounded_texts(_as_list(_section(state, "run").get("forbidden_actions")) + _as_list(_section(state, "lane").get("forbidden_actions"))),
+        "scope": _explicit_scope(_section(state, "approval"), _section(state, "lane")),
+        "report_contract": _section(state, "report_contract"),
+        "child_run_contract": _section(state, "child_run_contract"),
+    }
+    return {
+        "eligible": bool(eligibility.get("eligible")),
+        "blocked_reasons": list(eligibility.get("blocked_reasons") or ()),
+        "warnings": list(eligibility.get("warnings") or ()),
+        "packet": packet,
+        "would_execute": False,
+        "would_dispatch": False,
+        "would_session_send": False,
+        "stored": False,
+        "dry_run_only": True,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
     }
 
 
@@ -270,10 +428,28 @@ def _check_approval(approval: dict[str, Any], blocked: list[str], *, now: str = 
         _add(blocked, "approval is consumed")
     if _is_expired(_safe_text(approval.get("expires_at")), now=now):
         _add(blocked, "approval is expired")
-    if _looks_broad(_safe_text(approval.get("approval_scope"))):
+    if _scope_is_missing_or_broad(_safe_text(approval.get("approval_scope"))):
         _add(blocked, "approval scope must be exact and bounded")
     if _safe_text(approval.get("action_class")) not in _APPROVED_ACTION_CLASSES:
         _add(blocked, "approval action_class must be read-only")
+
+
+def _check_pr_approval(approval: dict[str, Any], blocked: list[str], *, now: str = "") -> None:
+    if not approval:
+        _add(blocked, "exact approved ApprovalRecord is required")
+        return
+    if _safe_text(approval.get("status")) != "approved":
+        _add(blocked, "approval status must be approved")
+    if _safe_text(approval.get("approval_mode") or "one_time") != "one_time":
+        _add(blocked, "approval_mode must be one_time")
+    if _safe_text(approval.get("consumed_at")) or _safe_text(approval.get("status")) == "consumed":
+        _add(blocked, "approval is consumed")
+    if _is_expired(_safe_text(approval.get("expires_at")), now=now):
+        _add(blocked, "approval is expired")
+    if _scope_is_missing_or_broad(_safe_text(approval.get("approval_scope"))):
+        _add(blocked, "approval scope must be exact and bounded")
+    if _safe_text(approval.get("action_class")) != "pr_creation":
+        _add(blocked, "approval action_class must be pr_creation")
 
 
 def _check_run(run: dict[str, Any], approval: dict[str, Any], blocked: list[str]) -> None:
@@ -284,6 +460,20 @@ def _check_run(run: dict[str, Any], approval: dict[str, Any], blocked: list[str]
         _add(blocked, "run status must be an active pre-execution/read-only state")
     if _safe_text(run.get("approval_id")) != _safe_text(approval.get("approval_id")):
         _add(blocked, "run approval_id must match the exact ApprovalRecord")
+    if _safe_text(run.get("dispatch_state")) == "true" or run.get("dispatch_state") is True:
+        _add(blocked, "run dispatch_state must be false")
+
+
+def _check_pr_run(run: dict[str, Any], approval: dict[str, Any], blocked: list[str]) -> None:
+    if not run:
+        _add(blocked, "valid RunRecord is required")
+        return
+    if _safe_text(run.get("status")) not in _ACTIVE_PR_STATUSES:
+        _add(blocked, "run status must be an active pre-execution/PR state")
+    if _safe_text(run.get("approval_id")) != _safe_text(approval.get("approval_id")):
+        _add(blocked, "run approval_id must match the exact ApprovalRecord")
+    if _safe_text(run.get("lane_type")) != "pr_creation":
+        _add(blocked, "run lane_type must be pr_creation")
     if _safe_text(run.get("dispatch_state")) == "true" or run.get("dispatch_state") is True:
         _add(blocked, "run dispatch_state must be false")
 
@@ -320,10 +510,35 @@ def _check_forbidden_actions(run: dict[str, Any], lane: dict[str, Any], blocked:
         _add(blocked, f"forbidden actions missing mutation classes: {', '.join(missing[:8])}")
 
 
+def _check_pr_forbidden_actions(run: dict[str, Any], lane: dict[str, Any], blocked: list[str]) -> None:
+    forbidden = tuple(_safe_text(item).lower() for item in _as_list(run.get("forbidden_actions")) + _as_list(lane.get("forbidden_actions")))
+    missing = [
+        aliases[0]
+        for aliases in _PR_FORBIDDEN_CLASSES
+        if not any(alias in item for item in forbidden for alias in aliases)
+    ]
+    if missing:
+        _add(blocked, f"forbidden actions missing protected classes: {', '.join(missing[:8])}")
+
+
 def _check_capabilities(capabilities: dict[str, Any], blocked: list[str]) -> None:
     for key in _CAPABILITY_KEYS:
         if _safe_bool(capabilities.get(key)):
             _add(blocked, f"capability {key} must be disabled")
+
+
+def _check_pr_capabilities(capabilities: dict[str, Any], blocked: list[str]) -> None:
+    for key in _PR_BLOCKED_CAPABILITY_KEYS:
+        if _safe_bool(capabilities.get(key)):
+            _add(blocked, f"capability {key} must be disabled")
+
+
+def _check_pr_scope(approval: dict[str, Any], lane: dict[str, Any], blocked: list[str]) -> None:
+    scope = _explicit_scope(approval, lane)
+    if not scope["files"] and not scope["directories"]:
+        _add(blocked, "explicit files or directories are required")
+    if scope["has_wildcard"]:
+        _add(blocked, "scoped PR lane cannot use wildcard paths")
 
 
 def _runtime_summary(name: str, runtime: dict[str, Any]) -> dict[str, Any]:
@@ -356,11 +571,13 @@ def _runtime_summary(name: str, runtime: dict[str, Any]) -> dict[str, Any]:
 def _bridge_result(classification: str, read_only_safe: bool, reasons: list[str]) -> dict[str, Any]:
     return {
         "permission_classification": classification,
+        "legacy_permission_classification": "write_capable" if classification == "write_capable_not_safe_for_autonomy" else classification,
         "read_only_safe": read_only_safe,
         "reasons": reasons,
         "execution_enabled": False,
         "dispatch_enabled": False,
         "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
     }
 
 
@@ -387,6 +604,11 @@ def _parse_datetime(value: str) -> datetime | None:
 def _looks_broad(value: str) -> bool:
     lowered = value.lower().strip()
     return lowered in _BROAD_APPROVAL_VALUES or any(term in lowered for term in ("approve all", "anything", "everything", "unlimited", "blanket approval"))
+
+
+def _scope_is_missing_or_broad(value: str) -> bool:
+    lowered = value.lower().strip()
+    return not lowered or "*" in lowered or _looks_broad(lowered)
 
 
 def _primary_status(statuses: list[str]) -> str:
@@ -431,6 +653,39 @@ def _as_list(value: Any) -> list[Any]:
     if isinstance(value, tuple):
         return list(value)
     return [value]
+
+
+def _bounded_texts(values: list[Any], *, max_items: int = 40) -> list[str]:
+    output: list[str] = []
+    for item in values:
+        text = _safe_text(item)
+        if text and text not in output:
+            output.append(text)
+        if len(output) >= max_items:
+            break
+    return output
+
+
+def _explicit_scope(approval: dict[str, Any], lane: dict[str, Any]) -> dict[str, Any]:
+    files = _bounded_texts(
+        _as_list(approval.get("approved_files"))
+        + _as_list(approval.get("files"))
+        + _as_list(lane.get("allowed_files"))
+        + _as_list(lane.get("files"))
+    )
+    directories = _bounded_texts(
+        _as_list(approval.get("approved_directories"))
+        + _as_list(approval.get("directories"))
+        + _as_list(lane.get("allowed_directories"))
+        + _as_list(lane.get("directories"))
+    )
+    all_paths = files + directories
+    return {
+        "files": files,
+        "directories": directories,
+        "has_wildcard": any(path in {"*", ".", "/"} or path.endswith("/*") for path in all_paths),
+        "explicit": bool(files or directories),
+    }
 
 
 def _add(items: list[str], value: str) -> None:

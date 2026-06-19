@@ -85,6 +85,53 @@ def test_workspace_status_returns_inert_display_only_flags_and_baselines():
     assert status["read_only_autonomy_eligibility"]["eligible"] is False
 
 
+def test_workspace_status_surfaces_scoped_pr_lane_eligibility_as_inert_preview():
+    status = build_workspace_status(
+        _baseline_payload(
+            scoped_pr_eligibility={
+                "approval": {
+                    "approval_id": "approval-pr-1",
+                    "status": "approved",
+                    "approval_mode": "one_time",
+                    "approval_scope": "project-hermes-mission-control:scoped-pr:mission_control/",
+                    "action_class": "pr_creation",
+                    "approved_files": ["mission_control/workspace_status.py"],
+                    "expires_at": "2099-01-01T00:00:00Z",
+                },
+                "run": {
+                    "run_id": "run-pr-1",
+                    "project_id": "project-hermes-mission-control",
+                    "approval_id": "approval-pr-1",
+                    "lane_type": "pr_creation",
+                    "status": "requested",
+                    "forbidden_actions": ["merge", "deploy", "restart", "runtime switch"],
+                },
+                "lane": {
+                    "lane_type": "pr_creation",
+                    "allowed_files": ["mission_control/workspace_status.py"],
+                    "forbidden_actions": ["merge", "deploy", "restart", "runtime switch"],
+                    "tests_required": True,
+                    "review_required": True,
+                },
+                "report_contract": {"required": True, "tests_required": True, "review_required": True},
+            }
+        )
+    )
+
+    scoped_pr = status["scoped_pr_lane_eligibility"]
+    assert scoped_pr["stored"] is False
+    assert scoped_pr["dry_run_only"] is True
+    assert scoped_pr["would_execute"] is False
+    assert scoped_pr["would_create_pr"] is False
+    assert scoped_pr["would_commit"] is False
+    assert scoped_pr["execution_enabled"] is False
+    assert scoped_pr["dispatch_enabled"] is False
+    assert scoped_pr["session_send_enabled"] is False
+    assert scoped_pr["worker_dispatch_enabled"] is False
+    assert scoped_pr["eligible"] is False
+    assert "runtime provenance is not clean" in scoped_pr["blocked_reasons"]
+
+
 def test_workspace_status_warns_on_stale_baseline_dispatch_lane_and_workers():
     status = build_workspace_status(
         _baseline_payload(

@@ -80,6 +80,32 @@ beforeEach(() => {
       head: '9f8863c0bf28dc0b7da702480b9b3337b983e7e8',
       runtime_path: '/home/jenny/.hermes/hermes-runtime-project-seed-9f8863c'
     },
+    child_agent_orchestration: {
+      active_count: 1,
+      active_runs: [
+        {
+          agent_identity: 'jenny-child',
+          child_run_id: 'child-run-1',
+          objective: 'Inspect bounded Mission Control context.',
+          parent_run_id: 'run-parent-1',
+          status: 'running'
+        }
+      ],
+      blocked_reasons: [],
+      dispatch_enabled: false,
+      display_only: true,
+      execution_enabled: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false
+    },
+    control_plane_lifecycle: {
+      active_mutation_lane_count: 0,
+      append_only_projection: true,
+      latest_runs_by_id: {
+        'run-parent-1': { run_id: 'run-parent-1', status: 'running' }
+      },
+      source: 'mission_control_records_jsonl'
+    },
     deployment_gap: {
       accepted_live_head: '0f87620038d220eb016612ba0b466c2407663743',
       dashboard_deploy_needed: true,
@@ -101,6 +127,24 @@ beforeEach(() => {
       session_send_enabled: false,
       would_execute: false
     },
+    scoped_pr_lane_eligibility: {
+      blocked_reasons: ['exact approved ApprovalRecord is required'],
+      bridge_permissions: {
+        permission_classification: 'manual_only',
+        read_only_safe: false
+      },
+      dispatch_enabled: false,
+      dry_run_only: true,
+      eligible: false,
+      execution_enabled: false,
+      merge_enabled: false,
+      scope: { directories: [], files: [] },
+      session_send_enabled: false,
+      worker_dispatch_enabled: false,
+      would_commit: false,
+      would_create_pr: false,
+      would_execute: false
+    },
     runtime_provenance: {
       autonomy_blocked: true,
       autonomy_blocked_reasons: ['gateway git metadata is broken'],
@@ -110,7 +154,31 @@ beforeEach(() => {
     },
     runtime_worktree_guard: { decision_state: 'pass' },
     safety: { dispatch_in_gateway: false, send_to_jenny_enabled: false },
-    stale_context: { warnings: [] }
+    stale_context: { warnings: [] },
+    worker_node_orchestration: {
+      active_count: 1,
+      active_runs: [
+        {
+          blocked_reasons: ['worker node offline'],
+          objective: 'Prepare bounded scoped PR packet.',
+          parent_run_id: 'run-parent-1',
+          report_contract_status: 'required',
+          report_review_status: 'waiting',
+          status: 'blocked',
+          worker_dispatch_enabled: false,
+          worker_host_label: 'laptop-codex',
+          worker_identity: 'codex',
+          worker_kind: 'laptop_codex',
+          worker_run_id: 'worker-run-1'
+        }
+      ],
+      blocked_reasons: ['worker node offline'],
+      dispatch_enabled: false,
+      display_only: true,
+      execution_enabled: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false
+    }
   })
   createMissionControlReport.mockResolvedValue({
     dispatch_enabled: false,
@@ -895,9 +963,28 @@ describe('MissionControlView', () => {
     expect(screen.getByText('runtime provenance')).toBeTruthy()
     expect(screen.getByText('GATEWAY UNTRUSTED')).toBeTruthy()
     expect(screen.getByText('read-only autonomy')).toBeTruthy()
-    expect(screen.getByText('blocked / no execution')).toBeTruthy()
+    expect(screen.getAllByText('blocked / no execution').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('bridge permission')).toBeTruthy()
     expect(screen.getByText('write capable')).toBeTruthy()
+    expect(screen.getByText('scoped PR lane')).toBeTruthy()
+    expect(screen.getByText('scoped PR bridge')).toBeTruthy()
+    expect(screen.getByText('manual only')).toBeTruthy()
+    expect(screen.getByText('lifecycle projection')).toBeTruthy()
+    expect(screen.getByText('append-only yes / active mutation lanes 0')).toBeTruthy()
+    expect(screen.getByText('child-agent status')).toBeTruthy()
+    expect(screen.getByText('1 active / latest running')).toBeTruthy()
+    expect(screen.getByText('child-agent objective')).toBeTruthy()
+    expect(screen.getByText('Inspect bounded Mission Control context.')).toBeTruthy()
+    expect(screen.getByText('laptop Codex worker-node')).toBeTruthy()
+    expect(screen.getByText('laptop-codex / blocked')).toBeTruthy()
+    expect(screen.getByText('worker-node objective')).toBeTruthy()
+    expect(screen.getByText('Prepare bounded scoped PR packet.')).toBeTruthy()
+    expect(screen.getByText('worker-node report')).toBeTruthy()
+    expect(screen.getByText('required / waiting')).toBeTruthy()
+    expect(screen.getByText('worker-node blockers')).toBeTruthy()
+    expect(screen.getByText('worker node offline')).toBeTruthy()
+    expect(screen.getByText('scoped PR blockers')).toBeTruthy()
+    expect(screen.getByText('exact approved ApprovalRecord is required')).toBeTruthy()
     expect(screen.getByText('autonomy blockers')).toBeTruthy()
     expect(screen.getAllByText(/gateway git metadata is broken/).length).toBeGreaterThan(0)
     expect(screen.getByText(/Desktop can be current while phone\/web waits for a safe dashboard-only update/)).toBeTruthy()

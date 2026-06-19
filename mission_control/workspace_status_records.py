@@ -14,10 +14,12 @@ from hermes_constants import get_hermes_home
 from mission_control.records import (
     AcceptedBaselineRecord,
     ApprovalRecord,
+    ChildRunRecord,
     JsonlRecordStore,
     OperatingWorkspaceHandoffRecord,
     ReportRecord,
     RunRecord,
+    WorkerNodeRunRecord,
 )
 from mission_control.records.errors import RecordStoreError
 from mission_control.workspace_status import (
@@ -27,6 +29,7 @@ from mission_control.workspace_status import (
 
 
 ACTIVE_RUN_STATUSES = {"requested", "preflight_passed", "running", "stopping"}
+ACTIVE_ORCHESTRATION_STATUSES = {"requested", "assigned", "preflight_passed", "running", "stopping", "blocked"}
 PENDING_APPROVAL_STATUSES = {"proposed"}
 AVAILABLE_APPROVAL_STATUSES = {"approved"}
 MUTATION_LANE_TYPES = {
@@ -68,14 +71,29 @@ def build_workspace_status_from_records(
         try:
             latest_baseline = _latest_record_payload(store, AcceptedBaselineRecord)
             latest_handoff = _latest_record_payload(store, OperatingWorkspaceHandoffRecord)
-            recent_runs = tuple(
+            recent_runs_raw = tuple(
                 record for _index, record in store.read_latest(RunRecord, limit=50)
             )
-            recent_approvals = tuple(
+            recent_approvals_raw = tuple(
                 record for _index, record in store.read_latest(ApprovalRecord, limit=50)
             )
-            recent_reports = tuple(
+            recent_reports_raw = tuple(
                 record for _index, record in store.read_latest(ReportRecord, limit=50)
+            )
+            recent_runs = tuple(_latest_records_by_id(recent_runs_raw, "run_id").values())
+            recent_approvals = tuple(_latest_records_by_id(recent_approvals_raw, "approval_id").values())
+            recent_reports = tuple(_latest_records_by_id(recent_reports_raw, "report_id").values())
+            recent_child_runs = tuple(
+                _latest_records_by_id(
+                    tuple(record for _index, record in store.read_latest(ChildRunRecord, limit=50)),
+                    "child_run_id",
+                ).values()
+            )
+            recent_worker_runs = tuple(
+                _latest_records_by_id(
+                    tuple(record for _index, record in store.read_latest(WorkerNodeRunRecord, limit=50)),
+                    "worker_run_id",
+                ).values()
             )
         except RecordStoreError as exc:
             store_status = "malformed"
@@ -85,12 +103,16 @@ def build_workspace_status_from_records(
             recent_runs = ()
             recent_approvals = ()
             recent_reports = ()
+            recent_child_runs = ()
+            recent_worker_runs = ()
     else:
         latest_baseline = {}
         latest_handoff = {}
         recent_runs = ()
         recent_approvals = ()
         recent_reports = ()
+        recent_child_runs = ()
+        recent_worker_runs = ()
 
     if latest_baseline:
         status_input["accepted_baseline_record"] = latest_baseline
@@ -138,7 +160,23 @@ def build_workspace_status_from_records(
         active_mutation_lane_count=len(active_mutation_runs),
     )
 
+    active_child_runs = tuple(record for record in recent_child_runs if record.status in ACTIVE_ORCHESTRATION_STATUSES)
+    active_worker_runs = tuple(record for record in recent_worker_runs if record.status in ACTIVE_ORCHESTRATION_STATUSES)
+
     status = build_workspace_status(status_input)
+    status["child_agent_orchestration"] = _orchestration_projection(
+        records=recent_child_runs,
+        active_records=active_child_runs,
+        id_field="child_run_id",
+        source="ChildRunRecord",
+    )
+    status["worker_node_orchestration"] = _orchestration_projection(
+        records=recent_worker_runs,
+        active_records=active_worker_runs,
+        id_field="worker_run_id",
+        source="WorkerNodeRunRecord",
+    )
+    status["control_plane_lifecycle"] = status_input["control_plane_lifecycle"]
     status["record_store"] = {
         "status": store_status,
         "error": store_error,
@@ -155,6 +193,8 @@ def build_workspace_status_from_records(
             1 for record in recent_approvals if record.status in AVAILABLE_APPROVAL_STATUSES
         ),
         "active_mutation_lane_count": len(active_mutation_runs),
+        "active_child_run_count": len(active_child_runs),
+        "active_worker_node_run_count": len(active_worker_runs),
     }
     return status
 
@@ -202,12 +242,55 @@ def _control_plane_lifecycle_payload(
 
 
 def _latest_by_id(records: tuple[Any, ...], field_name: str) -> dict[str, dict[str, Any]]:
-    output: dict[str, dict[str, Any]] = {}
+    return {
+        record_id: record.to_dict()
+        for record_id, record in _latest_records_by_id(records, field_name).items()
+    }
+
+
+def _latest_records_by_id(records: tuple[Any, ...], field_name: str) -> dict[str, Any]:
+    output: dict[str, Any] = {}
     for record in records:
         record_id = str(getattr(record, field_name, "") or "")
         if record_id:
-            output[record_id] = record.to_dict()
+            output.pop(record_id, None)
+            output[record_id] = record
     return output
+
+
+def _orchestration_projection(
+    *,
+    records: tuple[Any, ...],
+    active_records: tuple[Any, ...],
+    id_field: str,
+    source: str,
+) -> dict[str, Any]:
+    return {
+        "source": source,
+        "display_only": True,
+        "trusted_for_execution": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "active_count": len(active_records),
+        "latest_by_id": _latest_by_id(records, id_field),
+        "active_runs": [record.to_dict() for record in active_records],
+        "blocked_reasons": _projection_blocked_reasons(active_records),
+    }
+
+
+def _projection_blocked_reasons(records: tuple[Any, ...]) -> list[str]:
+    reasons: list[str] = []
+    for record in records:
+        for item in getattr(record, "blocked_reasons", ()) or ():
+            text = str(item).strip()
+            if text and text not in reasons:
+                reasons.append(text)
+        failure_reason = str(getattr(record, "failure_reason", "") or "").strip()
+        if failure_reason and failure_reason not in reasons:
+            reasons.append(failure_reason)
+    return reasons
 
 
 def _merge_status_input(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:

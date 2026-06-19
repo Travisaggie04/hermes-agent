@@ -1247,6 +1247,194 @@ class ReportRecord:
 
 
 @dataclass(frozen=True)
+class ChildRunRecord:
+    child_run_id: str
+    parent_run_id: str
+    project_id: str = ""
+    agent_identity: str = ""
+    delegation_source: str = ""
+    objective: str = ""
+    allowed_actions: tuple[str, ...] = ()
+    forbidden_actions: tuple[str, ...] = ()
+    status: str = "requested"
+    failure_reason: str = ""
+    report_id: str = ""
+    result_record_id: str = ""
+    depends_on_child_run_ids: tuple[str, ...] = ()
+    created_at: str = ""
+    updated_at: str = ""
+    stopped_at: str = ""
+    stop_reason: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "ChildRunRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "allowed_actions", tuple(str(item) for item in _tuple(self.allowed_actions)))
+        object.__setattr__(self, "forbidden_actions", tuple(str(item) for item in _tuple(self.forbidden_actions)))
+        object.__setattr__(self, "depends_on_child_run_ids", tuple(str(item) for item in _tuple(self.depends_on_child_run_ids)))
+        metadata = _dict(self.metadata)
+        metadata.update(
+            {
+                "display_only": True,
+                "execution_enabled": False,
+                "dispatch_enabled": False,
+                "session_send_enabled": False,
+                "worker_dispatch_enabled": False,
+                "trusted_for_execution": False,
+            }
+        )
+        object.__setattr__(self, "metadata", metadata)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "child_run_id": self.child_run_id,
+            "parent_run_id": self.parent_run_id,
+            "project_id": self.project_id,
+            "agent_identity": self.agent_identity,
+            "delegation_source": self.delegation_source,
+            "objective": self.objective,
+            "allowed_actions": list(self.allowed_actions),
+            "forbidden_actions": list(self.forbidden_actions),
+            "status": self.status,
+            "failure_reason": self.failure_reason,
+            "report_id": self.report_id,
+            "result_record_id": self.result_record_id,
+            "depends_on_child_run_ids": list(self.depends_on_child_run_ids),
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "stopped_at": self.stopped_at,
+            "stop_reason": self.stop_reason,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ChildRunRecord:
+        return cls(
+            child_run_id=_required(data, "child_run_id"),
+            parent_run_id=_required(data, "parent_run_id"),
+            project_id=data.get("project_id", ""),
+            agent_identity=data.get("agent_identity", ""),
+            delegation_source=data.get("delegation_source", ""),
+            objective=data.get("objective", ""),
+            allowed_actions=data.get("allowed_actions") or (),
+            forbidden_actions=data.get("forbidden_actions") or (),
+            status=data.get("status", "requested"),
+            failure_reason=data.get("failure_reason", ""),
+            report_id=data.get("report_id", ""),
+            result_record_id=data.get("result_record_id", ""),
+            depends_on_child_run_ids=data.get("depends_on_child_run_ids") or (),
+            created_at=data.get("created_at", ""),
+            updated_at=data.get("updated_at", ""),
+            stopped_at=data.get("stopped_at", ""),
+            stop_reason=data.get("stop_reason", ""),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
+class WorkerNodeRunRecord:
+    worker_run_id: str
+    parent_run_id: str
+    project_id: str = ""
+    worker_identity: str = "codex"
+    worker_host_label: str = "laptop-codex"
+    worker_kind: str = "laptop_codex"
+    objective: str = ""
+    assigned_packet_id: str = ""
+    assigned_packet_summary: str = ""
+    allowed_actions: tuple[str, ...] = ()
+    forbidden_actions: tuple[str, ...] = ()
+    status: str = "requested"
+    blocked_reasons: tuple[str, ...] = ()
+    failure_reason: str = ""
+    report_id: str = ""
+    report_review_status: str = ""
+    report_contract_status: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    stopped_at: str = ""
+    stop_reason: str = ""
+    worker_dispatch_enabled: bool = False
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "WorkerNodeRunRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "allowed_actions", tuple(str(item) for item in _tuple(self.allowed_actions)))
+        object.__setattr__(self, "forbidden_actions", tuple(str(item) for item in _tuple(self.forbidden_actions)))
+        object.__setattr__(self, "blocked_reasons", tuple(str(item) for item in _tuple(self.blocked_reasons)))
+        object.__setattr__(self, "worker_dispatch_enabled", False)
+        metadata = _dict(self.metadata)
+        metadata.update(
+            {
+                "display_only": True,
+                "execution_enabled": False,
+                "dispatch_enabled": False,
+                "session_send_enabled": False,
+                "worker_dispatch_enabled": False,
+                "trusted_for_execution": False,
+            }
+        )
+        object.__setattr__(self, "metadata", metadata)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "worker_run_id": self.worker_run_id,
+            "parent_run_id": self.parent_run_id,
+            "project_id": self.project_id,
+            "worker_identity": self.worker_identity,
+            "worker_host_label": self.worker_host_label,
+            "worker_kind": self.worker_kind,
+            "objective": self.objective,
+            "assigned_packet_id": self.assigned_packet_id,
+            "assigned_packet_summary": self.assigned_packet_summary,
+            "allowed_actions": list(self.allowed_actions),
+            "forbidden_actions": list(self.forbidden_actions),
+            "status": self.status,
+            "blocked_reasons": list(self.blocked_reasons),
+            "failure_reason": self.failure_reason,
+            "report_id": self.report_id,
+            "report_review_status": self.report_review_status,
+            "report_contract_status": self.report_contract_status,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "stopped_at": self.stopped_at,
+            "stop_reason": self.stop_reason,
+            "worker_dispatch_enabled": False,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> WorkerNodeRunRecord:
+        return cls(
+            worker_run_id=_required(data, "worker_run_id"),
+            parent_run_id=_required(data, "parent_run_id"),
+            project_id=data.get("project_id", ""),
+            worker_identity=data.get("worker_identity", "codex"),
+            worker_host_label=data.get("worker_host_label", "laptop-codex"),
+            worker_kind=data.get("worker_kind", "laptop_codex"),
+            objective=data.get("objective", ""),
+            assigned_packet_id=data.get("assigned_packet_id", ""),
+            assigned_packet_summary=data.get("assigned_packet_summary", ""),
+            allowed_actions=data.get("allowed_actions") or (),
+            forbidden_actions=data.get("forbidden_actions") or (),
+            status=data.get("status", "requested"),
+            blocked_reasons=data.get("blocked_reasons") or (),
+            failure_reason=data.get("failure_reason", ""),
+            report_id=data.get("report_id", ""),
+            report_review_status=data.get("report_review_status", ""),
+            report_contract_status=data.get("report_contract_status", ""),
+            created_at=data.get("created_at", ""),
+            updated_at=data.get("updated_at", ""),
+            stopped_at=data.get("stopped_at", ""),
+            stop_reason=data.get("stop_reason", ""),
+            worker_dispatch_enabled=False,
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
 class TaskControlEnvelope:
     envelope_id: str = ""
     active_lane: str = ""
@@ -2211,6 +2399,7 @@ RECORD_TYPES = {
         AcceptedBaselineRecord,
         ApprovalRecord,
         ApprovalSlice,
+        ChildRunRecord,
         PrMergeApprovalRecord,
         ArtifactRef,
         ChallengeReviewRecord,
@@ -2237,5 +2426,6 @@ RECORD_TYPES = {
         StartGateCheck,
         TaskControlEnvelope,
         VerifierWorkflowEvidenceRecord,
+        WorkerNodeRunRecord,
     )
 }

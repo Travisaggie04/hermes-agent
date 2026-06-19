@@ -6,6 +6,7 @@ from mission_control.records.models import (
     ApprovalSlice,
     ArtifactRef,
     ChallengeReviewRecord,
+    ChildRunRecord,
     EvidenceCard,
     GoalContract,
     GitHubBridgeMailboxStatusRecord,
@@ -30,6 +31,7 @@ from mission_control.records.models import (
     StartGateCheck,
     TaskControlEnvelope,
     VerifierWorkflowEvidenceRecord,
+    WorkerNodeRunRecord,
 )
 from mission_control.records.store import JsonlRecordStore
 
@@ -39,6 +41,7 @@ __all__ = [
     "ApprovalSlice",
     "ArtifactRef",
     "ChallengeReviewRecord",
+    "ChildRunRecord",
     "EvidenceCard",
     "GoalContract",
     "GitHubBridgeMailboxStatusRecord",
@@ -64,4 +67,5 @@ __all__ = [
     "StartGateCheck",
     "TaskControlEnvelope",
     "VerifierWorkflowEvidenceRecord",
+    "WorkerNodeRunRecord",
 ]

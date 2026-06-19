@@ -14,6 +14,7 @@ from typing import Any
 from mission_control.autonomy_eligibility import (
     evaluate_read_only_autonomy_eligibility,
     evaluate_runtime_provenance,
+    evaluate_scoped_pr_lane_eligibility,
 )
 from mission_control.runtime_worktree_guard import evaluate_runtime_worktree_guard
 
@@ -208,6 +209,18 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
             },
         )
     )
+    scoped_pr_lane_eligibility = evaluate_scoped_pr_lane_eligibility(
+        _merge_dicts(
+            _section(source, "scoped_pr_eligibility"),
+            {
+                "runtime_provenance": runtime_provenance,
+                "active_mutation_lane_count": _safe_int(
+                    _section(source, "control_plane_lifecycle").get("active_mutation_lane_count"),
+                    default=0,
+                ),
+            },
+        )
+    )
 
     warnings: list[str] = []
     if accepted_source == "static_fallback":
@@ -277,6 +290,7 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         "runtime_worktree_guard": runtime_guard,
         "runtime_provenance": runtime_provenance,
         "read_only_autonomy_eligibility": read_only_autonomy_eligibility,
+        "scoped_pr_lane_eligibility": scoped_pr_lane_eligibility,
         "latest_handoff": latest_handoff,
         "stale_context": {
             "baseline_mismatch": "baseline_mismatch" in warnings,

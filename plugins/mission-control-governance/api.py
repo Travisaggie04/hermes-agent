@@ -19,8 +19,10 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from hermes_constants import get_hermes_home
 from mission_control.autonomy_eligibility import (
+    build_execution_packet_preview,
     evaluate_read_only_autonomy_eligibility,
     evaluate_runtime_provenance,
+    evaluate_scoped_pr_lane_eligibility,
 )
 from mission_control.action_policy_guardrails import (
     evaluate_action_policy,
@@ -59,6 +61,7 @@ from mission_control.records import (
     ApprovalRecord,
     ApprovalSlice,
     ChallengeReviewRecord,
+    ChildRunRecord,
     EvidenceCard,
     GoalContract,
     GitHubBridgeMailboxStatusRecord,
@@ -81,6 +84,7 @@ from mission_control.records import (
     StartGateCheck,
     TaskControlEnvelope,
     VerifierWorkflowEvidenceRecord,
+    WorkerNodeRunRecord,
 )
 
 
@@ -143,6 +147,8 @@ CONTROL_PLANE_INERT_FLAGS = {
     "manual_copy_only": True,
     "send_to_jenny_enabled": False,
     "dispatch_enabled": False,
+    "session_send_enabled": False,
+    "worker_dispatch_enabled": False,
 }
 APPROVAL_STATUSES = {"proposed", "approved", "rejected", "expired", "consumed", "cancelled"}
 RUN_STATUSES = {"requested", "preflight_passed", "running", "stopping", "stopped", "completed", "failed", "cancelled", "blocked"}
@@ -2120,6 +2126,85 @@ def _build_report_record(payload: dict[str, Any]) -> ReportRecord:
     )
 
 
+def _build_child_run_record(payload: dict[str, Any]) -> ChildRunRecord:
+    parent_run_id = _workspace_text(payload.get("parent_run_id"), max_chars=120)
+    if not parent_run_id:
+        raise HTTPException(status_code=422, detail="parent_run_id is required")
+    now = _utc_now()
+    return ChildRunRecord(
+        child_run_id=_workspace_text(payload.get("child_run_id"), max_chars=120) or f"child-run-{uuid.uuid4().hex[:12]}",
+        parent_run_id=parent_run_id,
+        project_id=_workspace_text(payload.get("project_id"), max_chars=120),
+        agent_identity=_workspace_text(payload.get("agent_identity"), max_chars=120),
+        delegation_source=_workspace_text(payload.get("delegation_source"), max_chars=120),
+        objective=_workspace_text(payload.get("objective"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
+        allowed_actions=_workspace_list(payload.get("allowed_actions")),
+        forbidden_actions=_workspace_list(payload.get("forbidden_actions")),
+        status=_workspace_text(payload.get("status"), max_chars=80) or "requested",
+        failure_reason=_workspace_text(payload.get("failure_reason"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
+        report_id=_workspace_text(payload.get("report_id"), max_chars=120),
+        result_record_id=_workspace_text(payload.get("result_record_id"), max_chars=120),
+        depends_on_child_run_ids=_workspace_list(payload.get("depends_on_child_run_ids")),
+        created_at=_workspace_text(payload.get("created_at"), max_chars=80) or now,
+        updated_at=_workspace_text(payload.get("updated_at"), max_chars=80),
+        stopped_at=_workspace_text(payload.get("stopped_at"), max_chars=80),
+        stop_reason=_workspace_text(payload.get("stop_reason"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
+        metadata={
+            "source": "mission_control_child_run_tracking_v1",
+            "display_only": True,
+            "manual_copy_only": True,
+            "send_to_jenny_enabled": False,
+            "dispatch_enabled": False,
+            "session_send_enabled": False,
+            "worker_dispatch_enabled": False,
+            "execution_enabled": False,
+            "trusted_for_execution": False,
+        },
+    )
+
+
+def _build_worker_node_run_record(payload: dict[str, Any]) -> WorkerNodeRunRecord:
+    parent_run_id = _workspace_text(payload.get("parent_run_id"), max_chars=120)
+    if not parent_run_id:
+        raise HTTPException(status_code=422, detail="parent_run_id is required")
+    now = _utc_now()
+    return WorkerNodeRunRecord(
+        worker_run_id=_workspace_text(payload.get("worker_run_id"), max_chars=120) or f"worker-run-{uuid.uuid4().hex[:12]}",
+        parent_run_id=parent_run_id,
+        project_id=_workspace_text(payload.get("project_id"), max_chars=120),
+        worker_identity=_workspace_text(payload.get("worker_identity"), max_chars=120) or "codex",
+        worker_host_label=_workspace_text(payload.get("worker_host_label"), max_chars=120) or "laptop-codex",
+        worker_kind=_workspace_text(payload.get("worker_kind"), max_chars=80) or "laptop_codex",
+        objective=_workspace_text(payload.get("objective"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
+        assigned_packet_id=_workspace_text(payload.get("assigned_packet_id"), max_chars=120),
+        assigned_packet_summary=_workspace_text(payload.get("assigned_packet_summary"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
+        allowed_actions=_workspace_list(payload.get("allowed_actions")),
+        forbidden_actions=_workspace_list(payload.get("forbidden_actions")),
+        status=_workspace_text(payload.get("status"), max_chars=80) or "requested",
+        blocked_reasons=_workspace_list(payload.get("blocked_reasons")),
+        failure_reason=_workspace_text(payload.get("failure_reason"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
+        report_id=_workspace_text(payload.get("report_id"), max_chars=120),
+        report_review_status=_workspace_text(payload.get("report_review_status"), max_chars=80),
+        report_contract_status=_workspace_text(payload.get("report_contract_status"), max_chars=80),
+        created_at=_workspace_text(payload.get("created_at"), max_chars=80) or now,
+        updated_at=_workspace_text(payload.get("updated_at"), max_chars=80),
+        stopped_at=_workspace_text(payload.get("stopped_at"), max_chars=80),
+        stop_reason=_workspace_text(payload.get("stop_reason"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
+        worker_dispatch_enabled=False,
+        metadata={
+            "source": "mission_control_worker_node_tracking_v1",
+            "display_only": True,
+            "manual_copy_only": True,
+            "send_to_jenny_enabled": False,
+            "dispatch_enabled": False,
+            "session_send_enabled": False,
+            "worker_dispatch_enabled": False,
+            "execution_enabled": False,
+            "trusted_for_execution": False,
+        },
+    )
+
+
 def _safe_records_limit(limit: str | None) -> int:
     if limit is None:
         return DEFAULT_RECORDS_LIMIT
@@ -3218,6 +3303,28 @@ async def workspace_autonomy_eligibility_preview(request: Request) -> dict[str, 
     }
 
 
+@router.post("/workspace/scoped-pr-eligibility/preview")
+async def workspace_scoped_pr_eligibility_preview(request: Request) -> dict[str, Any]:
+    payload = await _read_json_object_body(request)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": False,
+        "source": "caller_supplied_scoped_pr_lane_preview",
+        **evaluate_scoped_pr_lane_eligibility(payload),
+    }
+
+
+@router.post("/workspace/execution-packet/preview")
+async def workspace_execution_packet_preview(request: Request) -> dict[str, Any]:
+    payload = await _read_json_object_body(request)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": False,
+        "source": "caller_supplied_execution_packet_preview",
+        **build_execution_packet_preview(payload),
+    }
+
+
 @router.post("/pr-merge-verifier-gate/evaluate")
 async def pr_merge_verifier_gate_evaluate(request: Request) -> dict[str, Any]:
     observed_state = await _read_pr_merge_gate_json_body(request)
@@ -4088,6 +4195,58 @@ async def workspace_report_ingest(request: Request) -> dict[str, Any]:
         "record_index": index,
         "record_type": record.record_type,
         "report": record.to_dict(),
+    }
+
+
+@router.get("/workspace/child-runs")
+async def workspace_child_runs(limit: str | None = Query(default=None)) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    child_runs = _latest_workspace_records(ChildRunRecord, applied_limit)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": False,
+        "count": len(child_runs),
+        "child_runs": child_runs,
+    }
+
+
+@router.post("/workspace/child-runs/create")
+async def workspace_child_run_create(request: Request) -> dict[str, Any]:
+    payload = await _read_workspace_json_body(request)
+    record = _build_child_run_record(payload)
+    index = JsonlRecordStore(record_store_path()).append(record)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": True,
+        "record_index": index,
+        "record_type": record.record_type,
+        "child_run": record.to_dict(),
+    }
+
+
+@router.get("/workspace/worker-node-runs")
+async def workspace_worker_node_runs(limit: str | None = Query(default=None)) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    worker_runs = _latest_workspace_records(WorkerNodeRunRecord, applied_limit)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": False,
+        "count": len(worker_runs),
+        "worker_node_runs": worker_runs,
+    }
+
+
+@router.post("/workspace/worker-node-runs/create")
+async def workspace_worker_node_run_create(request: Request) -> dict[str, Any]:
+    payload = await _read_workspace_json_body(request)
+    record = _build_worker_node_run_record(payload)
+    index = JsonlRecordStore(record_store_path()).append(record)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": True,
+        "record_index": index,
+        "record_type": record.record_type,
+        "worker_node_run": record.to_dict(),
     }
 
 

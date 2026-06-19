@@ -6,6 +6,7 @@ from mission_control.records.models import (
     ApprovalSlice,
     ArtifactRef,
     ChallengeReviewRecord,
+    ChildRunRecord,
     EvidenceCard,
     GoalContract,
     GitHubBridgeMailboxStatusRecord,
@@ -27,6 +28,7 @@ from mission_control.records.models import (
     RoomJournalEventRecord,
     StartGateCheck,
     TaskControlEnvelope,
+    WorkerNodeRunRecord,
 )
 
 
@@ -921,3 +923,71 @@ def test_accepted_baseline_record_sanitizes_bounds_shas_and_forbidden_fields():
     rendered = str(data).lower()
     for forbidden in ("raw_log", "transcript", "discord_messages", "pr_body", "github_response", "placeholder-token", "canonical_packet_json"):
         assert forbidden not in rendered
+
+
+def test_child_run_record_round_trips_orchestration_status_and_forces_disabled_flags():
+    record = ChildRunRecord(
+        child_run_id="child-run-1",
+        parent_run_id="run-parent-1",
+        project_id="project-hermes-mission-control",
+        agent_identity="jenny-child",
+        delegation_source="mission-control-preview",
+        objective="Inspect one scoped file and report risks.",
+        allowed_actions=("read files",),
+        forbidden_actions=("dispatch", "deploy", "session-send"),
+        status="running",
+        report_id="report-child-1",
+        result_record_id="result-child-1",
+        depends_on_child_run_ids=("child-run-0",),
+        metadata={"dispatch_enabled": True, "worker_dispatch_enabled": True},
+    )
+
+    data = record.to_dict()
+
+    assert data["child_run_id"] == "child-run-1"
+    assert data["allowed_actions"] == ["read files"]
+    assert data["depends_on_child_run_ids"] == ["child-run-0"]
+    assert data["metadata"]["display_only"] is True
+    assert data["metadata"]["execution_enabled"] is False
+    assert data["metadata"]["dispatch_enabled"] is False
+    assert data["metadata"]["session_send_enabled"] is False
+    assert data["metadata"]["worker_dispatch_enabled"] is False
+    assert ChildRunRecord.from_dict(data) == record
+    assert RECORD_TYPES["ChildRunRecord"] is ChildRunRecord
+
+
+def test_worker_node_run_record_round_trips_laptop_codex_state_and_forces_disabled_flags():
+    record = WorkerNodeRunRecord(
+        worker_run_id="worker-run-1",
+        parent_run_id="run-parent-1",
+        project_id="project-hermes-mission-control",
+        worker_identity="codex",
+        worker_host_label="laptop-codex",
+        worker_kind="laptop_codex",
+        objective="Prepare a scoped PR and report test results.",
+        assigned_packet_id="packet-1",
+        assigned_packet_summary="Scoped PR packet preview.",
+        allowed_actions=("edit scoped files", "run focused tests"),
+        forbidden_actions=("deploy", "restart", "runtime switch"),
+        status="blocked",
+        blocked_reasons=("worker node offline",),
+        report_id="report-worker-1",
+        report_review_status="needs_review",
+        report_contract_status="incomplete",
+        worker_dispatch_enabled=True,
+        metadata={"execution_enabled": True, "dispatch_enabled": True},
+    )
+
+    data = record.to_dict()
+
+    assert data["worker_run_id"] == "worker-run-1"
+    assert data["worker_host_label"] == "laptop-codex"
+    assert data["blocked_reasons"] == ["worker node offline"]
+    assert data["worker_dispatch_enabled"] is False
+    assert data["metadata"]["display_only"] is True
+    assert data["metadata"]["execution_enabled"] is False
+    assert data["metadata"]["dispatch_enabled"] is False
+    assert data["metadata"]["session_send_enabled"] is False
+    assert data["metadata"]["worker_dispatch_enabled"] is False
+    assert WorkerNodeRunRecord.from_dict(data) == record
+    assert RECORD_TYPES["WorkerNodeRunRecord"] is WorkerNodeRunRecord

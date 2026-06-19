@@ -1215,14 +1215,65 @@ function latestForProject<T extends { project_id?: string }>(projectId: string, 
   return [...records].reverse().find(record => record.project_id === projectId) ?? null
 }
 
+function latestProjectionRecord<T>(projection?: { active_runs?: T[]; latest_by_id?: Record<string, T> }): T | null {
+  const activeRuns = projection?.active_runs ?? []
+  if (activeRuns.length) {
+    return activeRuns[activeRuns.length - 1]
+  }
+
+  const latestRecords = Object.values(projection?.latest_by_id ?? {})
+  return latestRecords.length ? latestRecords[latestRecords.length - 1] : null
+}
+
+function projectionRecordText(record: Record<string, unknown> | null, key: string): string {
+  const value = record?.[key]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function projectionRecordList(record: Record<string, unknown> | null, key: string): string[] {
+  const value = record?.[key]
+  return Array.isArray(value) ? value.map(item => String(item)).filter(Boolean) : []
+}
+
+function uniqueTextList(values: string[]): string[] {
+  return [...new Set(values.map(value => value.trim()).filter(Boolean))]
+}
+
+function labelText(value: string): string {
+  return (value || 'unknown').replaceAll('_', ' ')
+}
+
 export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) {
   const runtimeProvenance = status.runtime_provenance
   const autonomyEligibility = status.read_only_autonomy_eligibility
+  const scopedPrEligibility = status.scoped_pr_lane_eligibility
+  const childRecord = latestProjectionRecord(status.child_agent_orchestration) as Record<string, unknown> | null
+  const workerRecord = latestProjectionRecord(status.worker_node_orchestration) as Record<string, unknown> | null
+  const childBlockedReasons = uniqueTextList([
+    ...(status.child_agent_orchestration?.blocked_reasons ?? []),
+    ...projectionRecordList(childRecord, 'blocked_reasons'),
+    projectionRecordText(childRecord, 'failure_reason')
+  ])
+  const workerBlockedReasons = uniqueTextList([
+    ...(status.worker_node_orchestration?.blocked_reasons ?? []),
+    ...projectionRecordList(workerRecord, 'blocked_reasons'),
+    projectionRecordText(workerRecord, 'failure_reason')
+  ])
+  const scopedPrScopeCount = (scopedPrEligibility?.scope?.files?.length ?? 0) + (scopedPrEligibility?.scope?.directories?.length ?? 0)
   return {
     activeLaneCount: status.lane?.active_lane_count ?? 0,
+    activeMutationLaneCount: status.control_plane_lifecycle?.active_mutation_lane_count ?? 0,
+    appendOnlyProjection: status.control_plane_lifecycle?.append_only_projection === true,
     autonomyBlockedReasons: autonomyEligibility?.blocked_reasons ?? [],
     autonomyEligible: autonomyEligibility?.eligible,
     bridgePermission: autonomyEligibility?.bridge_permissions?.permission_classification ?? 'unknown',
+    childActiveCount: status.child_agent_orchestration?.active_count ?? 0,
+    childBlockedReasons,
+    childDispatchEnabled: status.child_agent_orchestration?.dispatch_enabled,
+    childExecutionEnabled: status.child_agent_orchestration?.execution_enabled,
+    childLatestAgent: projectionRecordText(childRecord, 'agent_identity') || 'no child agent recorded',
+    childLatestObjective: projectionRecordText(childRecord, 'objective'),
+    childLatestStatus: projectionRecordText(childRecord, 'status') || 'none',
     deploymentGapState: status.deployment_gap?.state ?? 'unknown',
     deploymentNeeded: status.deployment_gap?.dashboard_deploy_needed ?? false,
     deployedHead: status.deployment_gap?.deployed_head ?? status.accepted_baseline?.head ?? 'unknown',
@@ -1234,7 +1285,25 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     provenanceReasons: runtimeProvenance?.autonomy_blocked_reasons ?? [],
     provenanceStatus: runtimeProvenance?.primary_status ?? runtimeProvenance?.status ?? 'unknown',
     runtime: status.accepted_baseline?.runtime_path ?? 'unknown',
-    staleWarnings: status.stale_context?.warnings ?? []
+    scopedPrBlockedReasons: scopedPrEligibility?.blocked_reasons ?? [],
+    scopedPrBridgePermission: scopedPrEligibility?.bridge_permissions?.permission_classification ?? 'unknown',
+    scopedPrEligible: scopedPrEligibility?.eligible,
+    scopedPrExecutionEnabled: scopedPrEligibility?.execution_enabled,
+    scopedPrScopeCount,
+    scopedPrWouldCommit: scopedPrEligibility?.would_commit,
+    scopedPrWouldCreatePr: scopedPrEligibility?.would_create_pr,
+    staleWarnings: status.stale_context?.warnings ?? [],
+    workerActiveCount: status.worker_node_orchestration?.active_count ?? 0,
+    workerBlockedReasons,
+    workerDispatchEnabled: status.worker_node_orchestration?.worker_dispatch_enabled,
+    workerExecutionEnabled: status.worker_node_orchestration?.execution_enabled,
+    workerHostLabel: projectionRecordText(workerRecord, 'worker_host_label') || 'laptop-codex',
+    workerIdentity: projectionRecordText(workerRecord, 'worker_identity') || 'codex',
+    workerLatestObjective: projectionRecordText(workerRecord, 'objective'),
+    workerLatestStatus: projectionRecordText(workerRecord, 'status') || 'none',
+    workerReportContractStatus: projectionRecordText(workerRecord, 'report_contract_status') || 'not reported',
+    workerReportId: projectionRecordText(workerRecord, 'report_id'),
+    workerReportReviewStatus: projectionRecordText(workerRecord, 'report_review_status') || 'not reviewed'
   }
 }
 
@@ -3829,21 +3898,35 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
   const deploymentTone = status.deploymentGapState === 'deployed_and_accepted' ? 'good' : status.deploymentNeeded ? 'warn' : undefined
   const provenanceTone = status.provenanceStatus === 'CLEAN_AND_ALIGNED' && status.provenanceBlocked === false ? 'good' : 'warn'
   const autonomyLabel = status.autonomyEligible === true ? 'eligible preview only' : status.autonomyEligible === false ? 'blocked / no execution' : 'unknown / no execution'
+  const scopedPrLabel = status.scopedPrEligible === true ? `preview-ready / ${status.scopedPrScopeCount} scoped path${status.scopedPrScopeCount === 1 ? '' : 's'}` : status.scopedPrEligible === false ? 'blocked / no execution' : 'unknown / no execution'
+  const workerLockTone = status.workerExecutionEnabled === false && status.workerDispatchEnabled === false ? 'good' : 'warn'
+  const childLockTone = status.childExecutionEnabled === false && status.childDispatchEnabled === false ? 'good' : 'warn'
   return (
     <div className="grid gap-3 rounded-xl border border-border/70 bg-background/40 p-4 md:grid-cols-3">
       <StatusItem label="Runtime Worktree Guard" tone={status.guard === 'pass' ? 'good' : 'warn'} value={status.guard} />
-      <StatusItem label="runtime provenance" tone={provenanceTone} value={status.provenanceStatus.replaceAll('_', ' ')} />
+      <StatusItem label="runtime provenance" tone={provenanceTone} value={labelText(status.provenanceStatus)} />
       <StatusItem label="read-only autonomy" tone={status.autonomyEligible === true ? 'good' : 'warn'} value={autonomyLabel} />
       <StatusItem label="dispatch_in_gateway" tone={status.dispatch === false ? 'good' : 'warn'} value={yesNo(status.dispatch)} />
       <StatusItem label="active_lane_count" tone={status.activeLaneCount === 0 ? 'good' : 'warn'} value={String(status.activeLaneCount)} />
-      <StatusItem label="deploy state" tone={deploymentTone} value={status.deploymentGapState.replaceAll('_', ' ')} />
-      <StatusItem label="bridge permission" tone={status.bridgePermission === 'read_only_safe' ? 'good' : 'warn'} value={status.bridgePermission.replaceAll('_', ' ')} />
+      <StatusItem label="deploy state" tone={deploymentTone} value={labelText(status.deploymentGapState)} />
+      <StatusItem label="bridge permission" tone={status.bridgePermission === 'read_only_safe' ? 'good' : 'warn'} value={labelText(status.bridgePermission)} />
+      <StatusItem label="scoped PR lane" tone={status.scopedPrEligible === true ? 'good' : 'warn'} value={scopedPrLabel} />
+      <StatusItem label="scoped PR bridge" tone={status.scopedPrBridgePermission === 'read_only_safe' ? 'good' : 'warn'} value={labelText(status.scopedPrBridgePermission)} />
+      <StatusItem label="lifecycle projection" tone={status.appendOnlyProjection ? 'good' : 'warn'} value={`append-only ${yesNo(status.appendOnlyProjection)} / active mutation lanes ${status.activeMutationLaneCount}`} />
       <StatusItem className="md:col-span-2" label="accepted runtime" value={status.runtime} />
       <StatusItem label="accepted-live head" value={status.head.slice(0, 12)} />
       <StatusItem label="deployed head" value={status.deployedHead.slice(0, 12)} />
       <StatusItem label="latest merged PR" value={status.latestMergedPr || 'unknown'} />
+      <StatusItem label="child-agent status" tone={childLockTone} value={`${status.childActiveCount} active / latest ${labelText(status.childLatestStatus)}`} />
+      <StatusItem className="md:col-span-2" label="child-agent objective" value={status.childLatestObjective || status.childLatestAgent} />
+      <StatusItem label="laptop Codex worker-node" tone={workerLockTone} value={`${status.workerHostLabel} / ${labelText(status.workerLatestStatus)}`} />
+      <StatusItem className="md:col-span-2" label="worker-node objective" value={status.workerLatestObjective || `${status.workerIdentity} has no assigned objective recorded`} />
+      <StatusItem label="worker-node report" tone={status.workerReportId ? 'good' : 'warn'} value={`${status.workerReportContractStatus} / ${status.workerReportReviewStatus}${status.workerReportId ? ` / ${status.workerReportId}` : ''}`} />
+      <StatusItem className="md:col-span-2" label="worker-node blockers" tone={status.workerBlockedReasons.length ? 'warn' : 'good'} value={status.workerBlockedReasons.length ? status.workerBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="desktop app install" tone="warn" value="separate laptop worker-node update; bottom-bar version is not changed by accepted-live/dashboard deploy" />
       <StatusItem className="md:col-span-3" label="autonomy blockers" tone={status.autonomyBlockedReasons.length || status.provenanceReasons.length ? 'warn' : 'good'} value={[...status.provenanceReasons, ...status.autonomyBlockedReasons].length ? [...status.provenanceReasons, ...status.autonomyBlockedReasons].join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="scoped PR blockers" tone={status.scopedPrBlockedReasons.length ? 'warn' : 'good'} value={status.scopedPrBlockedReasons.length ? status.scopedPrBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="child-agent blockers" tone={status.childBlockedReasons.length ? 'warn' : 'good'} value={status.childBlockedReasons.length ? status.childBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="stale warnings" tone={status.staleWarnings.length ? 'warn' : 'good'} value={status.staleWarnings.length ? status.staleWarnings.join(', ') : 'none'} />
     </div>
   )

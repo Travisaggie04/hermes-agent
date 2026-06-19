@@ -306,6 +306,67 @@ export interface MissionControlReportRecord {
   metadata?: { artifact_links?: string[]; [key: string]: unknown }
 }
 
+export interface MissionControlChildRunRecord {
+  agent_identity?: string
+  allowed_actions?: string[]
+  child_run_id: string
+  created_at?: string
+  delegation_source?: string
+  depends_on_child_run_ids?: string[]
+  failure_reason?: string
+  forbidden_actions?: string[]
+  metadata?: Record<string, unknown>
+  objective?: string
+  parent_run_id: string
+  project_id?: string
+  report_id?: string
+  result_record_id?: string
+  status?: string
+  stop_reason?: string
+  stopped_at?: string
+  updated_at?: string
+}
+
+export interface MissionControlWorkerNodeRunRecord {
+  allowed_actions?: string[]
+  assigned_packet_id?: string
+  assigned_packet_summary?: string
+  blocked_reasons?: string[]
+  created_at?: string
+  failure_reason?: string
+  forbidden_actions?: string[]
+  metadata?: Record<string, unknown>
+  objective?: string
+  parent_run_id: string
+  project_id?: string
+  report_contract_status?: string
+  report_id?: string
+  report_review_status?: string
+  status?: string
+  stop_reason?: string
+  stopped_at?: string
+  updated_at?: string
+  worker_dispatch_enabled?: boolean
+  worker_host_label?: string
+  worker_identity?: string
+  worker_kind?: string
+  worker_run_id: string
+}
+
+export interface MissionControlOrchestrationProjection<T> {
+  active_count?: number
+  active_runs?: T[]
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  execution_enabled?: boolean
+  latest_by_id?: Record<string, T>
+  session_send_enabled?: boolean
+  source?: string
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+}
+
 export interface MissionControlProjectSession {
   cwd?: null | string
   durable_session_id?: string
@@ -683,6 +744,15 @@ export interface MissionControlJennyBridgeResponseCreateResponse {
 
 export interface MissionControlWorkspaceStatus {
   accepted_baseline?: { head?: string; runtime_path?: string }
+  child_agent_orchestration?: MissionControlOrchestrationProjection<MissionControlChildRunRecord>
+  control_plane_lifecycle?: {
+    active_mutation_lane_count?: number
+    append_only_projection?: boolean
+    latest_approvals_by_id?: Record<string, Record<string, unknown>>
+    latest_reports_by_id?: Record<string, Record<string, unknown>>
+    latest_runs_by_id?: Record<string, Record<string, unknown>>
+    source?: string
+  }
   deployment_gap?: { dashboard_deploy_needed?: boolean; deployed_head?: string; accepted_live_head?: string; latest_merged_pr?: string; state?: string }
   lane?: { active_lane_count?: number; max_active_lane?: number }
   read_only_autonomy_eligibility?: {
@@ -696,6 +766,22 @@ export interface MissionControlWorkspaceStatus {
     warnings?: string[]
     would_execute?: boolean
   }
+  scoped_pr_lane_eligibility?: {
+    blocked_reasons?: string[]
+    bridge_permissions?: { permission_classification?: string; read_only_safe?: boolean; reasons?: string[] }
+    dispatch_enabled?: boolean
+    dry_run_only?: boolean
+    eligible?: boolean
+    execution_enabled?: boolean
+    merge_enabled?: boolean
+    scope?: { directories?: string[]; files?: string[] }
+    session_send_enabled?: boolean
+    warnings?: string[]
+    worker_dispatch_enabled?: boolean
+    would_commit?: boolean
+    would_create_pr?: boolean
+    would_execute?: boolean
+  }
   runtime_provenance?: {
     autonomy_blocked?: boolean
     autonomy_blocked_reasons?: string[]
@@ -707,6 +793,7 @@ export interface MissionControlWorkspaceStatus {
   runtime_worktree_guard?: { decision_state?: string; reason?: string }
   safety?: { dispatch_in_gateway?: boolean; send_to_jenny_enabled?: boolean }
   stale_context?: { warnings?: string[] }
+  worker_node_orchestration?: MissionControlOrchestrationProjection<MissionControlWorkerNodeRunRecord>
 }
 
 export interface MissionControlMemoryFileLevel {

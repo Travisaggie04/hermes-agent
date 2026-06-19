@@ -1,0 +1,233 @@
+# Jenny Engineering Orchestrator Runbook - 2026-06-19
+
+This runbook explains the code-side Mission Control direction for Travis.
+Jenny is the orchestrator and report reviewer. Codex on the laptop is a
+supervised engineering worker node with its own engineering hardness.
+
+The preferred model posture for this lane is ChatGPT 5.5 extra high, or the
+strongest available reasoning mode. Larger architectural chunks are preferred
+when they stay reviewable, tested, and reversible.
+
+## Roles
+
+- Travis is the operator. Mission Control should explain state in plain
+  language and make the next safe action obvious.
+- Jenny is the orchestrator. Jenny can inspect state, prepare bounded work
+  packets, review reports, challenge unsafe requests, and recommend the next
+  lane.
+- Codex on the laptop is a worker node. It may receive bounded work packets and
+  return structured reports, but it still enforces its own repository,
+  worktree, test, secret, approval, and live-operation safeguards.
+- Mission Control is the control plane. It shows projects, sessions,
+  approvals, runs, reports, provenance, bridge status, blocked reasons, child
+  runs, worker-node runs, and next safe actions.
+
+Jenny must not treat Codex as an uncontrolled executor. Codex must not treat a
+Jenny packet as permission to bypass Codex safety checks.
+
+## Routes
+
+- `/jenny-mobile` is the phone Jenny mobile chat route.
+- `/mission-control-compact` is the old compact Mission Control route.
+- Desktop Mission Control is the advanced audit and recovery surface.
+
+## Runtime Provenance
+
+Runtime provenance answers one question: can Mission Control prove that source,
+accepted baseline, dashboard runtime, gateway runtime, rollback runtime, dirty
+state, and dispatch state are safe enough for autonomy?
+
+Important statuses:
+
+- `CLEAN_AND_ALIGNED`: the only clean state for autonomy previews.
+- `SOURCE_CURRENT_BUT_BASELINE_STALE`: source moved after the accepted runtime.
+- `DASHBOARD_GATEWAY_DRIFT`: dashboard and gateway do not agree.
+- `GATEWAY_UNTRUSTED`: gateway runtime cannot be trusted.
+- `DIRTY_RUNTIME`: runtime has dirty or untracked files.
+- `BROKEN_GIT_METADATA`: runtime git metadata is missing or broken.
+- `ROLLBACK_STALE`: rollback no longer matches the expected safe fallback.
+- `BLOCKED_UNSAFE_FOR_AUTONOMY`: Mission Control must not treat autonomy as
+  available.
+
+If provenance is not clean, Jenny may still explain what is wrong, but work
+stays blocked or preview-only.
+
+## Why Baseline, Gateway, And Dirty State Block Autonomy
+
+- A stale `AcceptedBaselineRecord` means the accepted runtime does not prove the
+  current source is safe.
+- Broken gateway git metadata means Mission Control cannot prove what code the
+  gateway is serving.
+- Dirty runtime files mean a live runtime has unreviewed changes that did not
+  come from a clean PR path.
+- Missing runtime paths mean Mission Control cannot verify the runtime it is
+  being asked to trust.
+
+These states block autonomy because Jenny must not act from uncertain source
+truth.
+
+## Preview-Only
+
+Preview-only means Mission Control may calculate eligibility, build a work
+packet preview, and show blocked reasons. It does not execute the work.
+
+All current execution scaffolding must remain disabled:
+
+- `would_execute: false`
+- `execution_enabled: false`
+- `dispatch_enabled: false`
+- `session_send_enabled: false`
+- `worker_dispatch_enabled: false`
+
+## Supervised Read-Only Autonomy
+
+Read-only autonomy is only a preview today. It requires clean provenance, an
+exact unexpired approval, an unconsumed one-time scope, no active mutation
+lane, a valid read-only run, report inbox readiness, and no write-capable
+bridge or tool path.
+
+Blocked examples:
+
+- stale baseline
+- dirty runtime
+- broken gateway metadata
+- broad or wildcard scope
+- expired or consumed approval
+- active mutation lane
+- write-capable bridge
+- commit, PR creation, deploy, restart, runtime switch, queue, worker, timer,
+  daemon, Waha, social, payment, or model-routing capability
+
+Current state target: blocked or preview-ready, never execution-ready.
+
+## Scoped PR Creation
+
+Scoped PR creation is also preview-only. It is meant for a future bounded lane
+where Jenny can prepare a PR packet and Codex can implement under its own
+engineering checks.
+
+Scoped PR preview requires:
+
+- clean runtime provenance
+- exact approved scope
+- explicit files or directories
+- at most one active mutation lane
+- no merge
+- no deploy
+- no restart
+- no runtime switch
+- report/result contract
+- tests required
+- human review required
+
+Current state target: blocked or preview-ready, never execution-ready.
+
+## Laptop Codex Worker Node
+
+The laptop Codex worker-node model tracks:
+
+- parent run ID
+- worker-node run ID
+- worker identity
+- worker host label, usually `laptop-codex`
+- assigned objective
+- assigned packet summary
+- allowed and forbidden actions
+- status
+- blocked reasons
+- report ID
+- report contract status
+- report review status
+- stop/cancel semantics
+
+The laptop can be offline. Mission Control must show that honestly. Jenny may
+prepare instructions and review reports, but worker dispatch remains disabled.
+
+Current state target: preview-ready tracking, not execution-ready.
+
+## Child-Agent Tracking
+
+Child-agent records track planned delegation without enabling live delegation.
+They show parent run, child run, agent identity, objective, status, failure
+reason, report linkage, dependencies, and stop/cancel state.
+
+Child-agent records are display-only and not trusted for execution.
+
+## Reports
+
+Jenny should not mark work done just because a worker says it is done. The
+report should answer the contract:
+
+- what changed
+- what evidence proves it
+- what tests ran
+- what risks remain
+- what is blocked
+- what the next safe action is
+
+Reports are append-only. A later report can supersede or correct an earlier
+one, but it should not overwrite history.
+
+## Mission Control Reading Guide
+
+- Runtime provenance: source and runtime trust.
+- Read-only autonomy: whether a read-only lane could be preview-ready.
+- Scoped PR lane: whether a bounded PR packet could be preview-ready.
+- Bridge permission: whether the bridge is manual-only, read-only safe,
+  write-capable, or unknown-blocked.
+- Child-agent status: planned delegation state.
+- Laptop Codex worker-node: worker host, assignment, blocked reasons, and
+  report status.
+- Lifecycle projection: latest-by-ID approvals, runs, and reports from
+  append-only records.
+
+If a row says blocked, Travis should read the blocker first instead of trying
+to force the action.
+
+## Still Forbidden
+
+Until separately approved, do not use this lane for:
+
+- live deploy
+- restart
+- runtime switch
+- appending `AcceptedBaselineRecord`
+- live state database mutation
+- live config mutation
+- live record mutation
+- live operational endpoint calls
+- worker dispatch
+- session sending
+- Waha, social, payment, model-routing, queue, worker, timer, or daemon
+  activation
+- secrets inspection or output
+- PR merge
+- operational reconciliation of gateway, dashboard, or baseline
+- `9121 /api/status` as a gate
+
+## Future Live Reconciliation
+
+Live operational reconciliation remains a separate approval lane. Before it can
+be considered, Mission Control must already prove:
+
+- clean runtime provenance
+- exact accepted baseline truth
+- dashboard and gateway truth
+- rollback truth
+- zero unsafe active lanes
+- explicit approval and report contract
+- tests and review gates
+- a manual recovery path
+
+## Audit After Code Changes
+
+After each code-side change:
+
+1. Check git status and branch.
+2. Confirm no unrelated dirty files were touched.
+3. Run focused tests for the changed boundary.
+4. Run broader checks when the change touches shared contracts.
+5. Confirm Mission Control still shows disabled execution, dispatch, session
+   sending, and worker dispatch.
+6. Confirm no secrets or raw private paths were added to docs, tests, or UI.
+7. Commit coherent chunks and keep the PR reviewable.

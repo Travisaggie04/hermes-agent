@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from mission_control.autonomy_eligibility import (
+    build_execution_packet_preview,
     classify_bridge_permissions,
     evaluate_read_only_autonomy_eligibility,
     evaluate_runtime_provenance,
+    evaluate_scoped_pr_lane_eligibility,
 )
 from mission_control.workspace_status import build_workspace_status
 
@@ -92,6 +94,45 @@ def _eligible_preview_payload(**overrides):
         "report_inbox_ready": True,
         "active_mutation_lane_count": 0,
         "bridge": {"manual_start_only": True, "dispatch_enabled": False, "session_send_enabled": False},
+        "capabilities": {},
+        "now": "2026-06-19T00:00:00Z",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _eligible_pr_preview_payload(**overrides):
+    payload = {
+        "runtime_provenance": evaluate_runtime_provenance(_clean_runtime_state()),
+        "approval": {
+            "approval_id": "approval-pr-1",
+            "status": "approved",
+            "approval_mode": "one_time",
+            "approval_scope": "project-hermes-mission-control:scoped-pr:mission_control/",
+            "action_class": "pr_creation",
+            "expires_at": "2099-01-01T00:00:00Z",
+            "consumed_at": "",
+            "approved_files": ["mission_control/autonomy_eligibility.py"],
+        },
+        "run": {
+            "run_id": "run-pr-1",
+            "project_id": "project-hermes-mission-control",
+            "approval_id": "approval-pr-1",
+            "lane_type": "pr_creation",
+            "status": "requested",
+            "dispatch_state": False,
+            "forbidden_actions": _forbidden_actions(),
+        },
+        "lane": {
+            "lane_type": "pr_creation",
+            "allowed_files": ["mission_control/autonomy_eligibility.py"],
+            "forbidden_actions": _forbidden_actions(),
+            "tests_required": True,
+            "review_required": True,
+        },
+        "report_contract": {"required": True, "tests_required": True, "review_required": True},
+        "active_mutation_lane_count": 1,
+        "bridge": {"manual_start_only": True},
         "capabilities": {},
         "now": "2026-06-19T00:00:00Z",
     }
@@ -227,9 +268,97 @@ def test_write_capable_bridge_is_not_read_only_safe():
         _eligible_preview_payload(bridge={"manual_hermes_answer_enabled": True})
     )
 
-    assert bridge["permission_classification"] == "write_capable"
+    assert bridge["permission_classification"] == "write_capable_not_safe_for_autonomy"
     assert result["eligible"] is False
     assert "bridge path is not read-only safe" in result["blocked_reasons"]
+
+
+def test_worker_dispatch_bridge_path_is_not_read_only_safe():
+    bridge = classify_bridge_permissions({"worker_dispatch_enabled": True})
+    result = evaluate_read_only_autonomy_eligibility(
+        _eligible_preview_payload(bridge={"worker_dispatch_enabled": True})
+    )
+
+    assert bridge["permission_classification"] == "write_capable_not_safe_for_autonomy"
+    assert bridge["worker_dispatch_enabled"] is False
+    assert result["eligible"] is False
+    assert "bridge path is not read-only safe" in result["blocked_reasons"]
+
+
+def test_scoped_pr_lane_preview_is_inert_and_eligible_with_exact_scope():
+    result = evaluate_scoped_pr_lane_eligibility(_eligible_pr_preview_payload())
+
+    assert result["eligible"] is True
+    assert result["would_execute"] is False
+    assert result["would_create_pr"] is False
+    assert result["would_commit"] is False
+    assert result["dispatch_enabled"] is False
+    assert result["session_send_enabled"] is False
+    assert result["worker_dispatch_enabled"] is False
+    assert result["scope"]["files"] == ["mission_control/autonomy_eligibility.py"]
+
+
+def test_scoped_pr_lane_blocks_wildcard_scope_and_missing_report_contract():
+    result = evaluate_scoped_pr_lane_eligibility(
+        _eligible_pr_preview_payload(
+            approval={
+                "approval_id": "approval-pr-1",
+                "status": "approved",
+                "approval_mode": "one_time",
+                "approval_scope": "project-hermes-mission-control:scoped-pr:*",
+                "action_class": "pr_creation",
+                "approved_files": ["*"],
+            },
+            lane={"lane_type": "pr_creation", "allowed_files": ["*"], "forbidden_actions": _forbidden_actions()},
+            report_contract={},
+        )
+    )
+
+    assert result["eligible"] is False
+    assert "approval scope must be exact and bounded" in result["blocked_reasons"]
+    assert "scoped PR lane cannot use wildcard paths" in result["blocked_reasons"]
+    assert "report/result contract is required" in result["blocked_reasons"]
+
+
+def test_scoped_pr_lane_blocks_merge_deploy_and_runtime_switch():
+    result = evaluate_scoped_pr_lane_eligibility(
+        _eligible_pr_preview_payload(
+            lane={
+                "lane_type": "pr_creation",
+                "allowed_files": ["mission_control/autonomy_eligibility.py"],
+                "forbidden_actions": _forbidden_actions(),
+                "merge_allowed": True,
+                "deploy_allowed": True,
+                "runtime_switch_allowed": True,
+                "tests_required": True,
+                "review_required": True,
+            },
+            capabilities={"merge": True, "deploy": True, "runtime_switch": True},
+        )
+    )
+
+    assert result["eligible"] is False
+    assert "merge is not allowed in scoped PR lanes" in result["blocked_reasons"]
+    assert "deploy is not allowed in scoped PR lanes" in result["blocked_reasons"]
+    assert "runtime switch is not allowed in scoped PR lanes" in result["blocked_reasons"]
+    assert "capability merge must be disabled" in result["blocked_reasons"]
+    assert "capability deploy must be disabled" in result["blocked_reasons"]
+    assert "capability runtime_switch must be disabled" in result["blocked_reasons"]
+
+
+def test_execution_packet_preview_is_never_an_execution_path():
+    result = build_execution_packet_preview(_eligible_pr_preview_payload(mode="scoped_pr"))
+
+    assert result["eligible"] is True
+    assert result["packet"]["mode"] == "scoped_pr"
+    assert result["packet"]["run_id"] == "run-pr-1"
+    assert result["would_execute"] is False
+    assert result["would_dispatch"] is False
+    assert result["would_session_send"] is False
+    assert result["execution_enabled"] is False
+    assert result["dispatch_enabled"] is False
+    assert result["session_send_enabled"] is False
+    assert result["worker_dispatch_enabled"] is False
 
 
 def test_workspace_status_surfaces_provenance_and_blocks_when_gateway_untrusted():
