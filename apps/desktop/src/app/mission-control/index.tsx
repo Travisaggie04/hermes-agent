@@ -1254,6 +1254,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
   const reportReviewQueue = status.report_review_queue
   const nextSafeActions = status.next_safe_actions
   const nextSafePrimaryAction = nextSafeActions?.primary_action
+  const operatorDecisionPacket = status.operator_decision_packet
   const orchestrationReadiness = status.orchestration_readiness
   const orchestrationRunGraph = status.orchestration_run_graph
   const childInstruction = status.child_agent_instruction_preview
@@ -1340,6 +1341,21 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
       'Keep Mission Control preview-only',
     nextSafePrimaryActionId: nextSafePrimaryAction?.action_id ?? nextSafeActions?.primary_action_id ?? '',
     nextSafePrimaryReason: nextSafePrimaryAction?.reason ?? nextSafeActionReasons[0] ?? 'No executable action is enabled by this projection.',
+    operatorPacketApprovalRequired: operatorDecisionPacket?.approval_required,
+    operatorPacketBlockedReasons: operatorDecisionPacket?.blocked_reasons ?? [],
+    operatorPacketDisplayOnly: operatorDecisionPacket?.display_only,
+    operatorPacketExecutionEnabled: operatorDecisionPacket?.execution_enabled,
+    operatorPacketExecutionReady: operatorDecisionPacket?.execution_ready,
+    operatorPacketJennyReviewRequired: operatorDecisionPacket?.jenny_review_required,
+    operatorPacketManualOnly: operatorDecisionPacket?.manual_operator_review_only,
+    operatorPacketNextInstruction:
+      operatorDecisionPacket?.recommended_operator_instruction ??
+      operatorDecisionPacket?.next_safe_action_label ??
+      'Keep Mission Control preview-only and wait for exact approval.',
+    operatorPacketReportQueueCount: operatorDecisionPacket?.report_review_queue_count ?? 0,
+    operatorPacketState: operatorDecisionPacket?.state ?? 'unknown',
+    operatorPacketSummary: operatorDecisionPacket?.plain_language_summary ?? 'No operator decision packet recorded.',
+    operatorPacketWorkerDispatchEnabled: operatorDecisionPacket?.worker_dispatch_enabled,
     orchestrationReadinessBlockedReasons: orchestrationReadiness?.blocked_reasons ?? [],
     orchestrationReadinessDispatchEnabled: orchestrationReadiness?.dispatch_enabled,
     orchestrationReadinessDisplayOnly: orchestrationReadiness?.display_only,
@@ -4058,6 +4074,15 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
         ? 'warn'
         : 'good'
       : 'warn'
+  const operatorPacketTone =
+    status.operatorPacketExecutionEnabled === false &&
+    status.operatorPacketWorkerDispatchEnabled === false &&
+    status.operatorPacketManualOnly === true &&
+    status.operatorPacketExecutionReady === false
+      ? status.operatorPacketBlockedReasons.length || status.operatorPacketJennyReviewRequired
+        ? 'warn'
+        : 'good'
+      : 'warn'
   const readinessTone =
     status.orchestrationReadinessExecutionEnabled === false &&
     status.orchestrationReadinessDispatchEnabled === false &&
@@ -4097,6 +4122,8 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="lifecycle projection" tone={status.appendOnlyProjection ? 'good' : 'warn'} value={`append-only ${yesNo(status.appendOnlyProjection)} / active mutation lanes ${status.activeMutationLaneCount}`} />
       <StatusItem className="md:col-span-2" label="next safe action" tone={nextSafeActionTone} value={status.nextSafePrimaryAction} />
       <StatusItem label="next action mode" tone={nextSafeActionTone} value={`display-only ${yesNo(status.nextSafeActionDisplayOnly)} / actions ${status.nextSafeActionCount}`} />
+      <StatusItem label="operator packet" tone={operatorPacketTone} value={`${labelText(status.operatorPacketState)} / display-only ${yesNo(status.operatorPacketDisplayOnly)}`} />
+      <StatusItem className="md:col-span-2" label="operator next instruction" tone={operatorPacketTone} value={status.operatorPacketNextInstruction} />
       <StatusItem className="md:col-span-2" label="orchestration readiness" tone={readinessTone} value={`read-only ${labelText(status.readinessReadOnlyState)} / scoped PR ${labelText(status.readinessScopedPrState)}`} />
       <StatusItem label="worker readiness" tone={readinessTone} value={`laptop Codex ${labelText(status.readinessWorkerNodeState)} / execution-ready ${yesNo(status.orchestrationReadinessExecutionReady)}`} />
       <StatusItem className="md:col-span-2" label="orchestration run graph" tone={runGraphTone} value={`nodes ${status.orchestrationRunGraphNodeCount} / edges ${status.orchestrationRunGraphEdgeCount}`} />
@@ -4127,6 +4154,8 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-3" label="worker instruction blockers" tone={status.workerInstructionBlockedReasons.length ? 'warn' : 'good'} value={status.workerInstructionBlockedReasons.length ? status.workerInstructionBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="desktop app install" tone="warn" value="separate laptop worker-node update; bottom-bar version is not changed by accepted-live/dashboard deploy" />
       <StatusItem className="md:col-span-3" label="next action reasons" tone={status.nextSafeActionReasons.length ? 'warn' : 'good'} value={status.nextSafeActionReasons.length ? status.nextSafeActionReasons.join(', ') : status.nextSafePrimaryReason} />
+      <StatusItem className="md:col-span-3" label="operator summary" tone={operatorPacketTone} value={status.operatorPacketSummary} />
+      <StatusItem className="md:col-span-3" label="operator blockers" tone={status.operatorPacketBlockedReasons.length ? 'warn' : 'good'} value={status.operatorPacketBlockedReasons.length ? status.operatorPacketBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="orchestration summary" tone={readinessTone} value={status.orchestrationReadinessSummary} />
       <StatusItem className="md:col-span-3" label="run graph blockers" tone={status.orchestrationRunGraphBlockedReasons.length ? 'warn' : 'good'} value={status.orchestrationRunGraphBlockedReasons.length ? status.orchestrationRunGraphBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="autonomy blockers" tone={status.autonomyBlockedReasons.length || status.provenanceReasons.length ? 'warn' : 'good'} value={[...status.provenanceReasons, ...status.autonomyBlockedReasons].length ? [...status.provenanceReasons, ...status.autonomyBlockedReasons].join(', ') : 'none'} />

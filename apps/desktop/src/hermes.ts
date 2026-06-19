@@ -549,6 +549,38 @@ export interface MissionControlReportReviewQueue {
   would_execute?: boolean
 }
 
+export interface MissionControlOperatorDecisionPacket {
+  approval_required?: boolean
+  blocked?: boolean
+  blocked_reasons?: string[]
+  child_instruction_available?: boolean
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  execution_ready?: boolean
+  jenny_review_required?: boolean
+  manual_operator_review_only?: boolean
+  next_safe_action_id?: string
+  next_safe_action_label?: string
+  next_safe_action_reason?: string
+  plain_language_summary?: string
+  recommended_operator_instruction?: string
+  report_review_queue_count?: number
+  session_send_enabled?: boolean
+  source?: string
+  state?: string
+  stored?: boolean
+  summary_lines?: string[]
+  top_report_review_item_id?: string
+  top_report_review_label?: string
+  top_report_review_reason?: string
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  worker_instruction_available?: boolean
+  would_execute?: boolean
+}
+
 export interface MissionControlNextSafeAction {
   action_id?: string
   blocked_until?: string
@@ -1109,6 +1141,7 @@ export interface MissionControlWorkspaceStatus {
   deployment_gap?: { dashboard_deploy_needed?: boolean; deployed_head?: string; accepted_live_head?: string; latest_merged_pr?: string; state?: string }
   lane?: { active_lane_count?: number; max_active_lane?: number }
   next_safe_actions?: MissionControlNextSafeActions
+  operator_decision_packet?: MissionControlOperatorDecisionPacket
   orchestration_readiness?: MissionControlOrchestrationReadiness
   orchestration_run_graph?: MissionControlOrchestrationRunGraph
   read_only_autonomy_eligibility?: {

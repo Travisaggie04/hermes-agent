@@ -202,6 +202,12 @@ or tool-permission blockers. The projection is advisory only: it is
 display-only, not stored as an approval, and keeps work execution, bridge
 sending, and worker-node dispatch disabled.
 
+The operator decision packet is the plain-language rollup for Travis. It
+combines runtime provenance, readiness, the next safe action, the report review
+queue, worker instruction availability, child instruction availability, and the
+hard locks into one advisory packet. It is not an approval and is not an
+execution command; it tells Jenny and Travis what to review next.
+
 The orchestration readiness summary rolls the backend gates into three plain
 states: supervised read-only autonomy, scoped PR creation, and laptop Codex
 worker-node. A state may be blocked or preview-ready, but this lane still keeps
@@ -247,6 +253,8 @@ not start delegation, send a session, mutate records, or enable dispatch.
   report, reason, missing report links, and worker/child report context.
 - Next safe action: the highest-priority manual review or preview-preparation
   step; it does not enable execution.
+- Operator decision packet: a plain-language packet for Travis showing state,
+  next instruction, top report review, blockers, and hard locks.
 - Orchestration readiness: blocked or preview-ready state for supervised
   read-only autonomy, scoped PR creation, and laptop Codex worker-node.
 - Worker instruction preview: a manual Codex handoff prompt with objective,

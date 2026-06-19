@@ -408,6 +408,32 @@ def test_record_sourced_workspace_status_projects_report_review_queue(tmp_path):
     assert "review_report_review_queue" in action_ids
     assert "report_id report-worker still needs Jenny review" in next_safe_actions["blocked_reasons"]
 
+    operator_packet = status["operator_decision_packet"]
+    assert operator_packet["source"] == "mission_control_operator_decision_packet_v1"
+    assert operator_packet["display_only"] is True
+    assert operator_packet["trusted_for_execution"] is False
+    assert operator_packet["would_execute"] is False
+    assert operator_packet["execution_enabled"] is False
+    assert operator_packet["dispatch_enabled"] is False
+    assert operator_packet["session_send_enabled"] is False
+    assert operator_packet["worker_dispatch_enabled"] is False
+    assert operator_packet["stored"] is False
+    assert operator_packet["dry_run_only"] is True
+    assert operator_packet["manual_operator_review_only"] is True
+    assert operator_packet["execution_ready"] is False
+    assert operator_packet["approval_required"] is True
+    assert operator_packet["jenny_review_required"] is True
+    assert operator_packet["state"] == "report_review_required"
+    assert operator_packet["report_review_queue_count"] == 3
+    assert operator_packet["top_report_review_item_id"] == "report:report-worker"
+    assert operator_packet["top_report_review_label"] == "Laptop Codex reported scoped PR evidence."
+    assert operator_packet["recommended_operator_instruction"] == (
+        "Jenny reviews Laptop Codex reported scoped PR evidence. before issuing another worker instruction."
+    )
+    assert "Top report review: Laptop Codex reported scoped PR evidence." in operator_packet["plain_language_summary"]
+    assert "worker activation" in operator_packet["plain_language_summary"]
+    assert "report_id report-worker still needs Jenny review" in operator_packet["blocked_reasons"]
+
 
 def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"

@@ -210,6 +210,50 @@ beforeEach(() => {
       worker_dispatch_enabled: false,
       would_execute: false
     },
+    operator_decision_packet: {
+      approval_required: true,
+      blocked: true,
+      blocked_reasons: [
+        'gateway git metadata is broken',
+        'report_id report-worker still needs Jenny review',
+        'worker node offline'
+      ],
+      child_instruction_available: true,
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      execution_ready: false,
+      jenny_review_required: true,
+      manual_operator_review_only: true,
+      next_safe_action_id: 'review_runtime_provenance_blockers',
+      next_safe_action_label: 'Review runtime provenance blockers',
+      next_safe_action_reason: 'gateway git metadata is broken',
+      plain_language_summary: 'Operator state: report review required. Runtime provenance: GATEWAY_UNTRUSTED. Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked. Next safe action: Review runtime provenance blockers. Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review. Worker instruction: manual handoff only; laptop Codex dispatch remains disabled. Child instruction: manual delegation preview only; execution remains disabled. Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation.',
+      recommended_operator_instruction: 'Jenny reviews Laptop Codex reported scoped PR evidence. before issuing another worker instruction.',
+      report_review_queue_count: 3,
+      session_send_enabled: false,
+      source: 'mission_control_operator_decision_packet_v1',
+      state: 'report_review_required',
+      stored: false,
+      summary_lines: [
+        'Operator state: report review required.',
+        'Runtime provenance: GATEWAY_UNTRUSTED.',
+        'Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked.',
+        'Next safe action: Review runtime provenance blockers.',
+        'Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review.',
+        'Worker instruction: manual handoff only; laptop Codex dispatch remains disabled.',
+        'Child instruction: manual delegation preview only; execution remains disabled.',
+        'Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation.'
+      ],
+      top_report_review_item_id: 'report:report-worker',
+      top_report_review_label: 'Laptop Codex reported scoped PR evidence.',
+      top_report_review_reason: 'report_id report-worker still needs Jenny review',
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      worker_instruction_available: true,
+      would_execute: false
+    },
     orchestration_readiness: {
       blocked: true,
       blocked_reasons: ['runtime provenance is not clean', 'exact approved ApprovalRecord is required', 'worker node offline'],
@@ -1376,8 +1420,16 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Review runtime provenance blockers')).toBeTruthy()
     expect(screen.getByText('next action mode')).toBeTruthy()
     expect(screen.getByText('display-only yes / actions 1')).toBeTruthy()
+    expect(screen.getByText('operator packet')).toBeTruthy()
+    expect(screen.getByText('report review required / display-only yes')).toBeTruthy()
+    expect(screen.getByText('operator next instruction')).toBeTruthy()
+    expect(screen.getByText('Jenny reviews Laptop Codex reported scoped PR evidence. before issuing another worker instruction.')).toBeTruthy()
     expect(screen.getByText('next action reasons')).toBeTruthy()
     expect(screen.getByText('gateway git metadata is broken, run_id run-parent-1 references unavailable approval_id approval-old')).toBeTruthy()
+    expect(screen.getByText('operator summary')).toBeTruthy()
+    expect(screen.getByText(/Operator state: report review required/)).toBeTruthy()
+    expect(screen.getByText('operator blockers')).toBeTruthy()
+    expect(screen.getByText('gateway git metadata is broken, report_id report-worker still needs Jenny review, worker node offline')).toBeTruthy()
     expect(screen.getByText('orchestration readiness')).toBeTruthy()
     expect(screen.getByText('read-only blocked / scoped PR blocked')).toBeTruthy()
     expect(screen.getByText('worker readiness')).toBeTruthy()

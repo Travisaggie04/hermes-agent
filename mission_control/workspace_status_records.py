@@ -249,6 +249,7 @@ def build_workspace_status_from_records(
     status["orchestration_readiness"] = _orchestration_readiness_payload(status)
     status["child_agent_instruction_preview"] = _child_agent_instruction_preview(status)
     status["worker_node_instruction_preview"] = _worker_node_instruction_preview(status)
+    status["operator_decision_packet"] = _operator_decision_packet_payload(status)
     return status
 
 
@@ -1526,6 +1527,122 @@ def _child_agent_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
+    runtime_provenance = _mapping(status.get("runtime_provenance"))
+    next_safe_actions = _mapping(status.get("next_safe_actions"))
+    readiness = _mapping(status.get("orchestration_readiness"))
+    report_queue = _mapping(status.get("report_review_queue"))
+    worker_instruction = _mapping(status.get("worker_node_instruction_preview"))
+    child_instruction = _mapping(status.get("child_agent_instruction_preview"))
+
+    queue_count = _safe_int(report_queue.get("queue_count"))
+    readiness_states = _mapping(readiness.get("states"))
+    next_label = _safe_text(next_safe_actions.get("primary_action_label"), max_chars=800)
+    next_reason = _safe_text(
+        _mapping(next_safe_actions.get("primary_action")).get("reason")
+        or next_safe_actions.get("primary_action_reason")
+        or _first_reason(_text_list(next_safe_actions.get("blocked_reasons")), ""),
+        max_chars=800,
+    )
+    report_label = _safe_text(report_queue.get("primary_review_label"), max_chars=800)
+    report_reason = _safe_text(report_queue.get("primary_review_reason"), max_chars=800)
+    blocked_reasons = _unique_reasons(
+        [
+            *_text_list(runtime_provenance.get("autonomy_blocked_reasons")),
+            *_text_list(readiness.get("blocked_reasons")),
+            *_text_list(report_queue.get("blocked_reasons")),
+            *_text_list(next_safe_actions.get("blocked_reasons")),
+            *_text_list(worker_instruction.get("blocked_reasons")),
+            *_text_list(child_instruction.get("blocked_reasons")),
+        ]
+    )
+    state = _operator_decision_state(
+        queue_count=queue_count,
+        next_safe_actions=next_safe_actions,
+        readiness_states=readiness_states,
+        blocked_reasons=blocked_reasons,
+    )
+    summary_lines = [
+        f"Operator state: {state.replace('_', ' ')}.",
+        f"Runtime provenance: {_safe_text(runtime_provenance.get('primary_status') or runtime_provenance.get('status')) or 'unknown'}.",
+        (
+            "Readiness: "
+            f"read-only {_safe_text(readiness_states.get('supervised_read_only_autonomy')) or 'unknown'}, "
+            f"scoped PR {_safe_text(readiness_states.get('scoped_pr_creation')) or 'unknown'}, "
+            f"laptop Codex {_safe_text(readiness_states.get('laptop_codex_worker_node')) or 'unknown'}."
+        ),
+    ]
+    if next_label:
+        summary_lines.append(f"Next safe action: {next_label}.")
+    if queue_count:
+        summary_lines.append(
+            f"Top report review: {report_label or 'unlabeled report'}"
+            f"{f' because {report_reason}' if report_reason else ''}."
+        )
+    if worker_instruction.get("available") is True:
+        summary_lines.append(
+            "Worker instruction: manual handoff only; laptop Codex dispatch remains disabled."
+        )
+    if child_instruction.get("available") is True:
+        summary_lines.append(
+            "Child instruction: manual delegation preview only; execution remains disabled."
+        )
+    summary_lines.append(
+        "Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation."
+    )
+    recommended_instruction = next_label or "Keep Mission Control preview-only and wait for exact approval."
+    if queue_count and report_label:
+        recommended_instruction = f"Jenny reviews {report_label} before issuing another worker instruction."
+
+    return {
+        "source": "mission_control_operator_decision_packet_v1",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "stored": False,
+        "dry_run_only": True,
+        "manual_operator_review_only": True,
+        "state": state,
+        "execution_ready": False,
+        "approval_required": True,
+        "jenny_review_required": queue_count > 0,
+        "next_safe_action_id": _safe_text(next_safe_actions.get("primary_action_id")),
+        "next_safe_action_label": next_label,
+        "next_safe_action_reason": next_reason,
+        "report_review_queue_count": queue_count,
+        "top_report_review_item_id": _safe_text(report_queue.get("primary_review_item_id")),
+        "top_report_review_label": report_label,
+        "top_report_review_reason": report_reason,
+        "worker_instruction_available": worker_instruction.get("available") is True,
+        "child_instruction_available": child_instruction.get("available") is True,
+        "summary_lines": summary_lines,
+        "plain_language_summary": " ".join(summary_lines),
+        "recommended_operator_instruction": _safe_text(recommended_instruction, max_chars=800),
+        "blocked": bool(blocked_reasons),
+        "blocked_reasons": blocked_reasons,
+    }
+
+
+def _operator_decision_state(
+    *,
+    queue_count: int,
+    next_safe_actions: dict[str, Any],
+    readiness_states: dict[str, Any],
+    blocked_reasons: list[str],
+) -> str:
+    if queue_count > 0:
+        return "report_review_required"
+    if next_safe_actions.get("blocked") is True or blocked_reasons:
+        return "blocked"
+    if any(_safe_text(value) == "preview_ready" for value in readiness_states.values()):
+        return "preview_ready"
+    return "awaiting_exact_approval"
+
+
 def _latest_by_id(records: tuple[Any, ...], field_name: str) -> dict[str, dict[str, Any]]:
     return {
         record_id: record.to_dict()
@@ -1764,6 +1881,13 @@ def _safe_text(value: Any, *, max_chars: int = 240) -> str:
     if value is None:
         return ""
     return str(value).strip().replace("\x00", "")[:max_chars]
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _merge_status_input(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
