@@ -381,6 +381,7 @@ interface WorkspaceStatus {
     blocked_reasons?: string[];
     dispatch_enabled?: boolean;
     display_only?: boolean;
+    execution_lock_blocked_reasons?: string[];
     execution_enabled?: boolean;
     jenny_review_required?: boolean;
     next_safe_action_label?: string;
@@ -1851,10 +1852,14 @@ function compactStateLabel(value: string | undefined, fallback = "unknown"): str
 function compactOperatorSummary(status: WorkspaceStatus): string {
   const packet = status.operator_decision_packet;
   return compactText(
-    packet?.recommended_operator_instruction
-    || packet?.next_safe_action_label
-    || packet?.plain_language_summary
-    || "Keep Mission Control preview-only and review the next safe action.",
+    packet?.execution_lock_blocked_reasons?.length
+      ? `Operator execution locks: ${firstReason(packet.execution_lock_blocked_reasons, "review nested execution lock blockers")}`
+      : (
+        packet?.recommended_operator_instruction
+        || packet?.next_safe_action_label
+        || packet?.plain_language_summary
+        || "Keep Mission Control preview-only and review the next safe action."
+      ),
     260,
   );
 }
@@ -4054,6 +4059,7 @@ function CompactHermesHealthDashboard({
   const executionPacketBodyLockReasons = compactExecutionLockReasons("Execution packet body", executionPacket?.packet);
   const workerContractLockReasons = compactExecutionLockReasons("Worker contract", executionPacket?.packet?.worker_node_contract);
   const operatorLockReasons = compactExecutionLockReasons("Operator decision", operatorPacket);
+  const operatorExecutionLockBlockedReasons = operatorPacket?.execution_lock_blocked_reasons ?? [];
   const readinessLockReasons = compactExecutionLockReasons("Preview readiness", readiness);
   const workerInstructionLockReasons = compactExecutionLockReasons("Worker handoff", workerInstruction);
   const workerLockReasons = compactExecutionLockReasons("Worker node", workerPresence);
@@ -4074,6 +4080,7 @@ function CompactHermesHealthDashboard({
     ...executionPacketBodyLockReasons,
     ...workerContractLockReasons,
     ...operatorLockReasons,
+    operatorExecutionLockBlockedReasons.length ? firstReason(operatorExecutionLockBlockedReasons, "Operator execution locks need review") : "",
     ...readinessLockReasons,
     ...workerInstructionLockReasons,
     ...workerLockReasons,
@@ -4103,7 +4110,9 @@ function CompactHermesHealthDashboard({
       : "good";
   const operatorTone: CompactHealthTone = operatorLockReasons.length
     ? "bad"
-    : operatorPacket?.blocked || operatorPacket?.jenny_review_required
+    : operatorExecutionLockBlockedReasons.length
+      ? "bad"
+      : operatorPacket?.blocked || operatorPacket?.jenny_review_required
       ? "warn"
       : "good";
   const readinessTone: CompactHealthTone = readinessLockReasons.length

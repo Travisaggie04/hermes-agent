@@ -1529,6 +1529,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     operatorPacketExecutionModeFamily: operatorDecisionPacket?.execution_mode_family ?? 'unknown',
     operatorPacketExecutionPacketEligible: operatorDecisionPacket?.execution_packet_eligible,
     operatorPacketExecutionPacketMode: operatorDecisionPacket?.execution_packet_mode ?? 'unknown',
+    operatorPacketExecutionLockBlockedReasons: operatorDecisionPacket?.execution_lock_blocked_reasons ?? [],
     operatorPacketExecutionEnabled: operatorDecisionPacket?.execution_enabled,
     operatorPacketExecutionReady: operatorDecisionPacket?.execution_ready,
     operatorPacketJennyReviewRequired: operatorDecisionPacket?.jenny_review_required,
@@ -4476,7 +4477,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
     status.operatorPacketWorkerDispatchEnabled === false &&
     status.operatorPacketManualOnly === true &&
     status.operatorPacketExecutionReady === false
-      ? status.operatorPacketBlockedReasons.length || status.operatorPacketJennyReviewRequired
+      ? status.operatorPacketBlockedReasons.length || status.operatorPacketExecutionLockBlockedReasons.length || status.operatorPacketJennyReviewRequired
         ? 'warn'
         : 'good'
       : 'warn'
@@ -4612,6 +4613,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-3" label="next action reasons" tone={status.nextSafeActionReasons.length ? 'warn' : 'good'} value={status.nextSafeActionReasons.length ? status.nextSafeActionReasons.join(', ') : status.nextSafePrimaryReason} />
       <StatusItem className="md:col-span-3" label="operator summary" tone={operatorPacketTone} value={status.operatorPacketSummary} />
       <StatusItem className="md:col-span-3" label="operator blockers" tone={status.operatorPacketBlockedReasons.length ? 'warn' : 'good'} value={status.operatorPacketBlockedReasons.length ? status.operatorPacketBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="operator execution locks" tone={status.operatorPacketExecutionLockBlockedReasons.length ? 'warn' : 'good'} value={status.operatorPacketExecutionLockBlockedReasons.length ? status.operatorPacketExecutionLockBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="execution mode blockers" tone={status.executionModeBlockedReasons.length ? 'warn' : 'good'} value={status.executionModeBlockedReasons.length ? status.executionModeBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="protected execution markers" tone={status.executionModeProtectedMarkers.length ? 'warn' : 'good'} value={status.executionModeProtectedMarkers.length ? status.executionModeProtectedMarkers.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="execution packet blockers" tone={status.executionPacketBlockedReasons.length ? 'warn' : 'good'} value={status.executionPacketBlockedReasons.length ? status.executionPacketBlockedReasons.join(', ') : 'none'} />

@@ -772,6 +772,7 @@ export interface MissionControlOperatorDecisionPacket {
   execution_packet_blocked_reasons?: string[]
   execution_packet_eligible?: boolean
   execution_packet_mode?: string
+  execution_lock_blocked_reasons?: string[]
   execution_enabled?: boolean
   execution_ready?: boolean
   jenny_review_required?: boolean
