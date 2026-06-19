@@ -38,12 +38,18 @@ Jenny packet as permission to bypass Codex safety checks.
   manual report/challenge/lane draft buttons are separate record actions and
   remain visibly guarded.
   Its compact health dashboard also treats any true execution lock on the
-  operator decision packet, readiness summary, worker presence, result
-  ingestion, report completion, or next-safe-action summary as a red health
-  issue instead of implying the lane is safe.
+  execution mode preview, execution packet wrapper, execution packet body,
+  worker contract, operator decision packet, readiness summary, worker handoff
+  preview, worker presence, result ingestion, report completion, or
+  next-safe-action summary as a red health issue instead of implying the lane is
+  safe.
 - Desktop Mission Control is the advanced audit and recovery surface.
   Any GitHub bridge write button there follows the same fail-closed status
   check before creating a bridge request.
+  The desktop status panel also shows execution packet body locks and worker
+  contract locks separately from the outer execution packet wrapper, so a
+  nested packet cannot quietly look executable while the wrapper says
+  preview-only.
 - Jenny and GitHub bridge status payloads explicitly report session-send and
   worker-dispatch as disabled, so control surfaces can fail closed on those
   backend flags instead of guessing.
@@ -308,6 +314,11 @@ always keeps `would_execute`, `execution_enabled`, `dispatch_enabled`,
 packet also requires explicit online worker presence before it can be
 preview-ready, and its worker-node contract carries the same Codex
 engineering safety-hardness requirement as the manual handoff prompt.
+Mission Control now checks those locks at three levels: the execution packet
+wrapper, the packet body, and the worker-node contract inside the packet. A
+true execution, dispatch, session-send, worker-dispatch, `would_dispatch`, or
+`would_session_send` flag at any level becomes an execution-lock blocker in the
+Desktop and compact health surfaces.
 
 The orchestration run graph joins parent runs, child-agent runs, laptop Codex
 worker-node runs, and reports into one display-only lineage view. Missing
@@ -395,7 +406,9 @@ next delegation instruction.
 - Worker instruction preview: a manual Codex handoff prompt with objective,
   allowed actions, forbidden actions, and report requirements.
 - Execution packet preview: the bounded work-packet contract for Jenny and
-  Travis to review; it is not a dispatch or approval.
+  Travis to review; it is not a dispatch or approval. Read the execution packet
+  body locks, worker contract locks, and execution lock blockers before using a
+  packet as manual context.
 - Orchestration run graph: parent/child/worker/report lineage and any missing
   parent or report-link blockers.
 - Child instruction preview: a manual child-agent delegation prompt and report
@@ -452,5 +465,7 @@ After each code-side change:
    Phone and compact routes must also fail closed on `would_execute`,
    dispatch, execution, session-send, worker-dispatch, worker, timer, daemon,
    Discord automation, and model-routing flags.
+   Desktop and compact Mission Control must also surface true nested execution
+   locks from the execution packet body and worker-node contract.
 6. Confirm no secrets or raw private paths were added to docs, tests, or UI.
 7. Commit coherent chunks and keep the PR reviewable.
