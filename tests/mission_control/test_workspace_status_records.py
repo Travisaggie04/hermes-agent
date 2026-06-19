@@ -944,6 +944,69 @@ def test_record_sourced_workspace_status_blocks_mismatched_worker_report_link(tm
     assert mismatch_reason in operator_packet["report_completion_blocked_reasons"]
 
 
+def test_child_agent_instruction_preview_blocks_projected_report_link_mismatch(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        ChildRunRecord(
+            child_run_id="child-run-1",
+            parent_run_id="run-parent",
+            project_id="project-hermes-mission-control",
+            agent_identity="jenny-child",
+            status="blocked",
+            objective="Inspect bounded evidence.",
+            report_id="report-child",
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-child",
+            run_id="other-child-run",
+            project_id="project-hermes-mission-control",
+            status="accepted",
+            summary="Accepted child report attached to the wrong child run.",
+            result="Inspected bounded evidence.",
+            risks=("none beyond lineage mismatch",),
+            changed_files=("docs/mission-control/evidence.md",),
+            tests=("read-only evidence review",),
+            next_recommended_lane="Jenny reviews the child report link mismatch.",
+            evidence_refs=("child report output",),
+            submitted_by="jenny-child",
+            submitted_from="child-agent",
+            reviewed_at="2026-06-19T10:00:00Z",
+            reviewed_by="jenny",
+            redaction_status="operator_supplied_redacted",
+            metadata={"safety_confirmation": "No live dispatch, delegation activation, record mutation, or secrets."},
+        )
+    )
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    mismatch_reason = (
+        "report_id report-child run_id other-child-run does not match linked child_run child-run-1"
+    )
+    child = status["child_agent_orchestration"]
+    assert child["active_runs"][0]["report_link_status"] == "linked_report_run_id_mismatch"
+    assert child["active_runs"][0]["report_link_mismatch"] is True
+    assert child["active_runs"][0]["report_link_mismatch_reason"] == mismatch_reason
+    assert mismatch_reason in child["blocked_reasons"]
+
+    instruction = status["child_agent_instruction_preview"]
+    assert instruction["available"] is True
+    assert instruction["ready_for_handoff"] is False
+    assert instruction["execution_enabled"] is False
+    assert instruction["dispatch_enabled"] is False
+    assert instruction["session_send_enabled"] is False
+    assert instruction["worker_dispatch_enabled"] is False
+    assert mismatch_reason in instruction["blocked_reasons"]
+    assert "Handoff readiness: blocked until child-agent blockers are cleared." in instruction["manual_handoff_prompt"]
+
+    next_safe_actions = status["next_safe_actions"]
+    action_ids = {action["action_id"] for action in next_safe_actions["actions"]}
+    assert "review_child_agent_blockers" in action_ids
+    assert mismatch_reason in next_safe_actions["blocked_reasons"]
+
+
 def test_record_sourced_workspace_status_projects_report_contract_compliance(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"
     store = JsonlRecordStore(records_path)

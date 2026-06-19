@@ -2548,6 +2548,7 @@ def _child_agent_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
     objective = _safe_text(child_record.get("objective"), max_chars=800)
     if child_record and not objective:
         blocked_reasons.append("child-agent objective is required")
+    blocked_reasons.extend(_text_list(child_projection.get("blocked_reasons")))
     blocked_reasons.extend(_text_list(child_record.get("blocked_reasons")))
     failure_reason = _safe_text(child_record.get("failure_reason"))
     if failure_reason:
@@ -2557,6 +2558,15 @@ def _child_agent_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
         or child_record.get("report_review_status")
     )
     report_id = _safe_text(child_record.get("report_id"))
+    report_link_status = _safe_text(child_record.get("report_link_status"))
+    child_run_id = _safe_text(child_record.get("child_run_id"))
+    if report_id and report_link_status == "linked_report_missing":
+        blocked_reasons.append(f"child_run_id {child_run_id} links missing report_id {report_id}")
+    if report_id and report_link_status == "linked_report_run_id_mismatch":
+        blocked_reasons.append(
+            _safe_text(child_record.get("report_link_mismatch_reason"))
+            or f"report_id {report_id} run_id does not match child_run_id {child_run_id}"
+        )
     if report_id and report_review_status == "needs_review":
         blocked_reasons.append(f"report_id {report_id} still needs review")
     for flag in ("execution_enabled", "dispatch_enabled", "session_send_enabled", "worker_dispatch_enabled"):
