@@ -11,7 +11,8 @@ const ASYNC_AGENT_LIVE_FLAGS: Array<keyof MissionControlAsyncAgentStatusResponse
   'timer_enabled',
   'daemon_enabled',
   'model_routing_enabled',
-  'trusted_for_execution'
+  'trusted_for_execution',
+  'would_execute'
 ]
 
 export function asyncAgentLiveSafetyReason(status?: MissionControlAsyncAgentStatusResponse | null): string {

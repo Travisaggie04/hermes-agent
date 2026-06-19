@@ -13,6 +13,7 @@ describe('asyncAgentLiveSafetyReason', () => {
         send_to_jenny_enabled: false,
         session_send_enabled: false,
         trusted_for_execution: false,
+        would_execute: false,
         worker_dispatch_enabled: false,
         worker_enabled: false
       })
@@ -31,7 +32,8 @@ describe('asyncAgentLiveSafetyReason', () => {
       'timer_enabled',
       'daemon_enabled',
       'model_routing_enabled',
-      'trusted_for_execution'
+      'trusted_for_execution',
+      'would_execute'
     ] as const) {
       expect(asyncAgentLiveSafetyReason({ [flag]: true })).toBe('live async-agent controls are not confirmed off')
     }
