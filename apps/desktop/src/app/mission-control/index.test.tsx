@@ -313,7 +313,7 @@ beforeEach(() => {
       next_safe_action_id: 'review_runtime_provenance_blockers',
       next_safe_action_label: 'Review runtime provenance blockers',
       next_safe_action_reason: 'gateway git metadata is broken',
-      plain_language_summary: 'Operator state: report review required. Runtime provenance: GATEWAY_UNTRUSTED. Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked. Worker presence: unknown. Execution mode: worker_node_preview; execution disabled. Execution packet preview: worker_node, eligible false; execution disabled. Next safe action: Review runtime provenance blockers. Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review. Result ingestion: 1 ready, 0 blocked. Report contract completeness: 0 complete, 1 incomplete. Report completion path: 0 ready, 2 blocked. Stop/cancel control: 1 item, blocked true. Worker instruction: manual handoff only; laptop Codex dispatch remains disabled. Child instruction: manual delegation preview only; execution remains disabled. Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation.',
+      plain_language_summary: 'Operator state: report review required. Approval required: yes. Runtime provenance: GATEWAY_UNTRUSTED. Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked. Worker presence: unknown. Execution mode: worker_node_preview; execution disabled. Execution packet preview: worker_node, eligible false; execution disabled. Next safe action: Review runtime provenance blockers. Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review. Result ingestion: 1 ready, 0 blocked. Report contract completeness: 0 complete, 1 incomplete. Report completion path: 0 ready, 2 blocked. Stop/cancel control: 1 item, blocked true. Worker instruction: manual handoff only; laptop Codex dispatch remains disabled. Child instruction: manual delegation preview only; execution remains disabled. Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation.',
       recommended_operator_instruction: 'Jenny reviews Laptop Codex reported scoped PR evidence. before issuing another worker instruction.',
       report_contract_blocked_reasons: ['report_id report-worker missing contract fields: result, evidence, tests, next lane, safety confirmation'],
       report_contract_incomplete_count: 1,
@@ -338,6 +338,7 @@ beforeEach(() => {
       stop_cancel_primary_item_id: 'run:run-stopped',
       summary_lines: [
         'Operator state: report review required.',
+        'Approval required: yes.',
         'Runtime provenance: GATEWAY_UNTRUSTED.',
         'Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked.',
         'Worker presence: unknown.',
@@ -1788,6 +1789,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('gateway git metadata is broken, run_id run-parent-1 references unavailable approval_id approval-old')).toBeTruthy()
     expect(screen.getByText('operator summary')).toBeTruthy()
     expect(screen.getByText(/Operator state: report review required/)).toBeTruthy()
+    expect(screen.getByText(/Approval required: yes/)).toBeTruthy()
     expect(screen.getByText('operator blockers')).toBeTruthy()
     expect(screen.getByText('gateway git metadata is broken, report_id report-worker still needs Jenny review, worker node offline, worker-node presence_status is not recorded, runtime provenance is not clean, worker-node presence is not confirmed online, report_id report-worker missing contract fields: result, evidence, tests, next lane, safety confirmation, run run-stopped has no stop_reason, run run-stopped has no linked stop/cancel report')).toBeTruthy()
     expect(screen.getByText('execution mode blockers')).toBeTruthy()

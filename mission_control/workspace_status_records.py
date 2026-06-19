@@ -2588,8 +2588,10 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         readiness_states=readiness_states,
         blocked_reasons=blocked_reasons,
     )
+    approval_required = True
     summary_lines = [
         f"Operator state: {state.replace('_', ' ')}.",
+        f"Approval required: {'yes' if approval_required else 'no'}.",
         f"Runtime provenance: {_safe_text(runtime_provenance.get('primary_status') or runtime_provenance.get('status')) or 'unknown'}.",
         (
             "Readiness: "
@@ -2671,7 +2673,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         "manual_operator_review_only": True,
         "state": state,
         "execution_ready": False,
-        "approval_required": True,
+        "approval_required": approval_required,
         "jenny_review_required": (
             queue_count > 0
             or result_ingestion_blocked_count > 0

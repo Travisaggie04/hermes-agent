@@ -729,6 +729,7 @@ def test_record_sourced_workspace_status_projects_report_review_queue(tmp_path):
     assert operator_packet["recommended_operator_instruction"] == (
         "Jenny reviews Laptop Codex reported scoped PR evidence. before issuing another worker instruction."
     )
+    assert "Approval required: yes." in operator_packet["plain_language_summary"]
     assert "Top report review: Laptop Codex reported scoped PR evidence." in operator_packet["plain_language_summary"]
     assert "worker activation" in operator_packet["plain_language_summary"]
     assert "report_id report-worker still needs Jenny review" in operator_packet["blocked_reasons"]
