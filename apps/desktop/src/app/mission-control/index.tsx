@@ -62,6 +62,11 @@ interface MissionControlSnapshot {
   workspaceStatus: MissionControlWorkspaceStatus
 }
 
+interface MissionControlBridgeSafety {
+  reasons: string[]
+  safe: boolean
+}
+
 const emptySnapshot: MissionControlSnapshot = {
   challengeReviews: [],
   jennyBridgeRequests: [],
@@ -904,6 +909,41 @@ function normalizedBridgeError(
     return ''
   }
   return hasGitHubBridgeSignal(githubBridgeStatus) ? '' : legacyError
+}
+
+function missionControlGitHubBridgeSafety(
+  status: MissionControlGitHubBridgeStatusResponse | undefined
+): MissionControlBridgeSafety {
+  const reasons: string[] = []
+  if (!status) {
+    reasons.push('GitHub bridge status not loaded')
+  } else {
+    if (status.manual_start_only !== true) {
+      reasons.push('manual_start_only is not confirmed')
+    }
+    const liveFlags: Array<[keyof MissionControlGitHubBridgeStatusResponse, string]> = [
+      ['dispatch_enabled', 'dispatch_enabled must remain false'],
+      ['execution_enabled', 'execution_enabled must remain false'],
+      ['session_send_enabled', 'session_send_enabled must remain false'],
+      ['worker_dispatch_enabled', 'worker_dispatch_enabled must remain false'],
+      ['worker_enabled', 'worker_enabled must remain false'],
+      ['timer_enabled', 'timer_enabled must remain false'],
+      ['daemon_enabled', 'daemon_enabled must remain false'],
+      ['discord_automation_enabled', 'discord_automation_enabled must remain false'],
+      ['model_routing_enabled', 'model_routing_enabled must remain false']
+    ]
+    for (const [flag, reason] of liveFlags) {
+      if (status[flag] === true) {
+        reasons.push(reason)
+      }
+    }
+  }
+
+  return { reasons, safe: reasons.length === 0 }
+}
+
+function missionControlBridgeBlockedMessage(safety: MissionControlBridgeSafety): string {
+  return `Manual Jenny bridge blocked: ${safety.reasons[0] ?? 'bridge safety is not confirmed'}`
 }
 
 function noReplyStatusMessage(error: unknown): string {
@@ -2541,6 +2581,13 @@ export function MissionControlView() {
       return
     }
 
+    const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus)
+    if (!bridgeSafety.safe) {
+      setProjectRoomMessage(missionControlBridgeBlockedMessage(bridgeSafety))
+
+      return
+    }
+
     const requestId = bridgeRequestId()
     setProjectRoomSaving(true)
     setProjectRoomMessage('')
@@ -2576,6 +2623,13 @@ export function MissionControlView() {
   }
 
   async function runJennyOnce(project: MissionControlProjectRecord, requestId?: string) {
+    const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus)
+    if (!bridgeSafety.safe) {
+      setProjectRoomMessage(missionControlBridgeBlockedMessage(bridgeSafety))
+
+      return
+    }
+
     const pendingRequestId = requestId || latestVisiblePendingGitHubBridgeMessageForProject(
       unwrapRecords(snapshot.githubBridgeStatus.visible_pending_messages),
       project.project_id
@@ -2664,6 +2718,13 @@ export function MissionControlView() {
   }
 
   async function queueHermesUpdateLane(project: MissionControlProjectRecord) {
+    const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus)
+    if (!bridgeSafety.safe) {
+      setProjectRoomMessage(missionControlBridgeBlockedMessage(bridgeSafety))
+
+      return
+    }
+
     setProjectRoomSaving(true)
     setProjectRoomMessage('')
     setProjectRequest(HERMES_UPDATE_LANE_REQUEST)
@@ -2687,6 +2748,13 @@ export function MissionControlView() {
   }
 
   async function queueHermesStorageCleanupLane(project: MissionControlProjectRecord) {
+    const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus)
+    if (!bridgeSafety.safe) {
+      setProjectRoomMessage(missionControlBridgeBlockedMessage(bridgeSafety))
+
+      return
+    }
+
     setProjectRoomSaving(true)
     setProjectRoomMessage('')
     setProjectRequest(HERMES_STORAGE_CLEANUP_LANE_REQUEST)
@@ -3379,6 +3447,8 @@ function ProjectRoomsWorkspace({
   const sendButtonLabel = jennySendButtonLabel(requestIntake)
   const latestReviewByResponseId = latestReplyReviewByResponseId(replyReviews)
   const bridgeError = normalizedBridgeError(bridgeStatus, githubBridgeStatus)
+  const githubBridgeSafety = missionControlGitHubBridgeSafety(githubBridgeStatus)
+  const bridgeActionDisabled = saving || paused || !githubBridgeSafety.safe
   const hasRunnablePendingMessage = Boolean(projectedVisiblePending ?? latestPending)
   const statusRecords = unwrapRecords(githubBridgeStatus.status_records)
   const statusSourceBridgeMessages = [
@@ -3738,6 +3808,11 @@ function ProjectRoomsWorkspace({
               Review the latest Jenny reply in the chat before acting on it.
             </p>
           ) : null}
+          {!githubBridgeSafety.safe ? (
+            <p className="mb-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200" role="status">
+              {missionControlBridgeBlockedMessage(githubBridgeSafety)}
+            </p>
+          ) : null}
           <label className="grid gap-1 text-sm font-medium">
             <span className="sr-only">Message Jenny</span>
             <textarea
@@ -3750,7 +3825,7 @@ function ProjectRoomsWorkspace({
           </label>
 
           <div className="mt-2 flex justify-end">
-            <button className="rounded-md border border-[#5ab896]/40 bg-[#5ab896]/10 px-5 py-2 text-sm font-semibold text-[#5ab896] hover:bg-[#5ab896]/15 disabled:opacity-60" disabled={saving || paused} onClick={onQueueBridge} type="button">
+            <button className="rounded-md border border-[#5ab896]/40 bg-[#5ab896]/10 px-5 py-2 text-sm font-semibold text-[#5ab896] hover:bg-[#5ab896]/15 disabled:opacity-60" disabled={bridgeActionDisabled} onClick={onQueueBridge} type="button">
               {sendButtonLabel}
             </button>
           </div>
@@ -3875,6 +3950,7 @@ function ProjectRoomsWorkspace({
             <Field label="challenge review" value={review ? `${review.decision_state ?? 'unknown'} / ${review.recommended_path ?? 'No recommended path recorded'}` : 'No challenge review recorded'} />
             <Field label="latest report contract" value={reportContractSummaryForState(state, report)} />
             <Field label="bridge mode" value={`manual relay: ${bridgeStatus.manual_start_only === false ? 'disabled' : 'manual-start only'} / GitHub: ${githubBridgeStatus.manual_start_only === false ? 'disabled' : 'manual-start only'}`} />
+            <Field label="GitHub safety" value={githubBridgeSafety.safe ? 'manual-only confirmed' : missionControlBridgeBlockedMessage(githubBridgeSafety)} />
           </div>
 
           <div className="mt-3 grid gap-2 md:grid-cols-4">
@@ -3902,7 +3978,7 @@ function ProjectRoomsWorkspace({
                     Starts a guarded update checklist for the VPS and laptop Hermes worker node. The bottom-bar desktop app version is separate from accepted-live/dashboard deploys. This queues a bridge request only; no runtime switch, restart, or laptop update happens here.
                   </p>
                 </div>
-                <button className="rounded-md border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300" disabled={saving} onClick={onQueueHermesUpdate} type="button">
+                <button className="rounded-md border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300" disabled={saving || !githubBridgeSafety.safe} onClick={onQueueHermesUpdate} type="button">
                   Start Hermes update lane
                 </button>
               </div>
@@ -3918,7 +3994,7 @@ function ProjectRoomsWorkspace({
                     Starts a guarded storage inventory for VPS programming buildup and laptop worker-node posture. This queues a request only; no files are deleted, moved, uploaded, pruned, restarted, or switched.
                   </p>
                 </div>
-                <button className="rounded-md border border-sky-500/40 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/10 disabled:opacity-60 dark:text-sky-300" disabled={saving} onClick={onQueueStorageCleanup} type="button">
+                <button className="rounded-md border border-sky-500/40 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/10 disabled:opacity-60 dark:text-sky-300" disabled={saving || !githubBridgeSafety.safe} onClick={onQueueStorageCleanup} type="button">
                   Start storage cleanup lane
                 </button>
               </div>
@@ -3977,6 +4053,7 @@ function ProjectRoomsWorkspace({
               </div>
               <div className="mt-3 grid gap-2 rounded-md border border-sky-500/20 bg-sky-500/5 p-2 text-xs md:grid-cols-2">
                 <Field label="GitHub mailbox" value={githubBridgeStatus.manual_start_only === false ? 'disabled' : 'manual-start only'} />
+                <Field label="GitHub safety" value={githubBridgeSafety.safe ? 'manual-only confirmed' : missionControlBridgeBlockedMessage(githubBridgeSafety)} />
                 <Field label="GitHub mode" value={githubBridgeStatus.mode || 'manual'} />
                 <Field
                   label="GitHub pending"

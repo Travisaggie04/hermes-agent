@@ -2906,4 +2906,47 @@ describe('MissionControlView', () => {
       expect(text).not.toContain(forbidden)
     }
   })
+
+  it('fails closed before Desktop Mission Control GitHub bridge writes when live flags are unsafe', async () => {
+    const source = await import('./index?raw')
+    const text = source.default as string
+
+    for (const expected of [
+      'function missionControlGitHubBridgeSafety(',
+      'reasons.push(\'GitHub bridge status not loaded\')',
+      'status.manual_start_only !== true',
+      '[\'dispatch_enabled\', \'dispatch_enabled must remain false\']',
+      '[\'execution_enabled\', \'execution_enabled must remain false\']',
+      '[\'session_send_enabled\', \'session_send_enabled must remain false\']',
+      '[\'worker_dispatch_enabled\', \'worker_dispatch_enabled must remain false\']',
+      '[\'worker_enabled\', \'worker_enabled must remain false\']',
+      '[\'timer_enabled\', \'timer_enabled must remain false\']',
+      '[\'daemon_enabled\', \'daemon_enabled must remain false\']',
+      '[\'discord_automation_enabled\', \'discord_automation_enabled must remain false\']',
+      '[\'model_routing_enabled\', \'model_routing_enabled must remain false\']',
+      'function missionControlBridgeBlockedMessage(safety: MissionControlBridgeSafety): string',
+      'const githubBridgeSafety = missionControlGitHubBridgeSafety(githubBridgeStatus)',
+      'const bridgeActionDisabled = saving || paused || !githubBridgeSafety.safe',
+      'disabled={bridgeActionDisabled}',
+      'Manual Jenny bridge blocked:'
+    ]) {
+      expect(text).toContain(expected)
+    }
+
+    const queue = text.slice(text.indexOf('async function queueJennyBridgeRequest'), text.indexOf('async function runJennyOnce'))
+    const runOnce = text.slice(text.indexOf('async function runJennyOnce'), text.indexOf('async function reviewJennyReply'))
+    const updateLane = text.slice(text.indexOf('async function queueHermesUpdateLane'), text.indexOf('async function queueHermesStorageCleanupLane'))
+    const cleanupLane = text.slice(text.indexOf('async function queueHermesStorageCleanupLane'), text.indexOf('async function saveChallengeDraft'))
+
+    for (const block of [queue, runOnce, updateLane, cleanupLane]) {
+      expect(block).toContain('const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus)')
+      expect(block).toContain('if (!bridgeSafety.safe)')
+      expect(block).toContain('setProjectRoomMessage(missionControlBridgeBlockedMessage(bridgeSafety))')
+    }
+
+    expect(queue.indexOf('if (!bridgeSafety.safe)')).toBeLessThan(queue.indexOf('createMissionControlGitHubBridgeRequest'))
+    expect(runOnce.indexOf('if (!bridgeSafety.safe)')).toBeLessThan(runOnce.indexOf('answerMissionControlGitHubBridgeOnce'))
+    expect(updateLane.indexOf('if (!bridgeSafety.safe)')).toBeLessThan(updateLane.indexOf('createMissionControlGitHubBridgeRequest'))
+    expect(cleanupLane.indexOf('if (!bridgeSafety.safe)')).toBeLessThan(cleanupLane.indexOf('createMissionControlGitHubBridgeRequest'))
+  })
 })

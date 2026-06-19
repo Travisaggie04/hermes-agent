@@ -1344,6 +1344,7 @@ export interface MissionControlGitHubBridgeStatusResponse {
   status_records?: Array<MissionControlRecordEnvelope<MissionControlGitHubBridgeMailboxStatusRecord>>
   stored?: boolean
   timer_enabled?: boolean
+  worker_dispatch_enabled?: boolean
   worker_enabled?: boolean
 }
 

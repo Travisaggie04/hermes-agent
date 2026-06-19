@@ -37,6 +37,8 @@ Jenny packet as permission to bypass Codex safety checks.
   manual report/challenge/lane draft buttons are separate record actions and
   remain visibly guarded.
 - Desktop Mission Control is the advanced audit and recovery surface.
+  Any GitHub bridge write button there follows the same fail-closed status
+  check before creating a bridge request.
 
 ## Runtime Provenance
 
