@@ -232,6 +232,14 @@ hard forbidden actions, and report contract. It is useful copy for Jenny or
 Travis to review, but it does not contact the laptop, start a worker, or enable
 execution.
 
+The execution mode classification is the early "what kind of work is this?"
+row. It only classifies the requested lane as read-only preview, scoped PR
+preview, laptop Codex worker-node preview, higher-risk blocked, or unknown
+blocked. Deploy, restart, runtime switch, merge, Waha/social/payment,
+model-routing, queue mutation, timers, live dispatch, session-send, and worker
+dispatch markers remain blocked and require a separate future approval. This
+classification is not a work packet and still keeps all execution flags false.
+
 The execution packet preview is the canonical bounded work-packet view. It
 wraps the active approval, run, scope, report contract, and worker-node
 contract into one advisory packet. It may say blocked or preview-ready, but it
@@ -258,6 +266,9 @@ not start delegation, send a session, mutate records, or enable dispatch.
 - Scoped PR lane: whether a bounded PR packet could be preview-ready.
 - Bridge permission: whether the bridge is manual-only, read-only safe,
   write-capable, or unknown-blocked.
+- Execution mode: whether the requested lane is read-only, scoped PR,
+  worker-node preview, or blocked as higher-risk/unknown before any packet is
+  considered.
 - Child-agent status: planned delegation state.
 - Laptop Codex worker-node: worker host, assignment, blocked reasons, and
   report status.

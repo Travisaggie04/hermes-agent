@@ -607,6 +607,8 @@ export interface MissionControlOperatorDecisionPacket {
   child_instruction_available?: boolean
   dispatch_enabled?: boolean
   display_only?: boolean
+  execution_mode_blocked_reasons?: string[]
+  execution_mode_family?: string
   dry_run_only?: boolean
   execution_packet_blocked_reasons?: string[]
   execution_packet_eligible?: boolean
@@ -638,6 +640,34 @@ export interface MissionControlOperatorDecisionPacket {
   worker_last_seen_at?: string
   worker_online?: boolean
   worker_presence_state?: string
+  would_execute?: boolean
+}
+
+export interface MissionControlExecutionModeClassification {
+  action_class?: string
+  blocked?: boolean
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  higher_risk?: boolean
+  lane_type?: string
+  manual_handoff_only?: boolean
+  mode_family?: string
+  preview_ready?: boolean
+  protected_action_markers?: string[]
+  read_only_preview_allowed?: boolean
+  requested_mode?: string
+  scoped_pr_preview_allowed?: boolean
+  separate_approval_required?: boolean
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  trusted_for_execution?: boolean
+  warnings?: string[]
+  worker_dispatch_enabled?: boolean
+  worker_node_preview_allowed?: boolean
   would_execute?: boolean
 }
 
@@ -1267,6 +1297,7 @@ export interface MissionControlWorkspaceStatus {
     source?: string
   }
   deployment_gap?: { dashboard_deploy_needed?: boolean; deployed_head?: string; accepted_live_head?: string; latest_merged_pr?: string; state?: string }
+  execution_mode_classification?: MissionControlExecutionModeClassification
   execution_packet_preview?: MissionControlExecutionPacketPreview
   lane?: { active_lane_count?: number; max_active_lane?: number }
   next_safe_actions?: MissionControlNextSafeActions

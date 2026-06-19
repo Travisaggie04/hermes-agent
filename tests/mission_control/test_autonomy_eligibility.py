@@ -4,6 +4,7 @@ from mission_control.autonomy_eligibility import (
     build_execution_packet_preview,
     classify_bridge_permissions,
     classify_control_path_permissions,
+    classify_execution_mode,
     evaluate_read_only_autonomy_eligibility,
     evaluate_runtime_provenance,
     evaluate_scoped_pr_lane_eligibility,
@@ -415,6 +416,70 @@ def test_scoped_pr_lane_blocks_merge_deploy_and_runtime_switch():
     assert "capability merge must be disabled" in result["blocked_reasons"]
     assert "capability deploy must be disabled" in result["blocked_reasons"]
     assert "capability runtime_switch must be disabled" in result["blocked_reasons"]
+
+
+def test_execution_mode_classification_allows_preview_families_without_execution():
+    cases = [
+        (_eligible_preview_payload(), "read_only_preview", "read_only_preview_allowed"),
+        (_eligible_pr_preview_payload(mode="scoped_pr"), "scoped_pr_preview", "scoped_pr_preview_allowed"),
+        (
+            _eligible_pr_preview_payload(
+                mode="worker_node",
+                worker_node={
+                    "parent_run_id": "run-pr-1",
+                    "worker_identity": "codex",
+                    "worker_host_label": "laptop-codex",
+                    "presence_status": "online",
+                },
+            ),
+            "worker_node_preview",
+            "worker_node_preview_allowed",
+        ),
+    ]
+
+    for payload, mode_family, allowed_key in cases:
+        result = classify_execution_mode(payload)
+
+        assert result["source"] == "mission_control_execution_mode_classification_v1"
+        assert result["mode_family"] == mode_family
+        assert result["preview_ready"] is True
+        assert result[allowed_key] is True
+        assert result["blocked"] is False
+        assert result["display_only"] is True
+        assert result["trusted_for_execution"] is False
+        assert result["would_execute"] is False
+        assert result["execution_enabled"] is False
+        assert result["dispatch_enabled"] is False
+        assert result["session_send_enabled"] is False
+        assert result["worker_dispatch_enabled"] is False
+        assert result["stored"] is False
+        assert result["dry_run_only"] is True
+
+
+def test_execution_mode_classification_blocks_protected_modes_and_enabled_flags():
+    cases = [
+        {"mode": "deploy", "action_class": "deploy"},
+        {"mode": "restart gateway", "lane_type": "restart"},
+        {"mode": "runtime switch", "action_class": "runtime_switch"},
+        {"mode": "read_only", "capabilities": {"payment": True}},
+        {"mode": "scoped_pr", "capabilities": {"waha": True}},
+        {"mode": "worker_node", "worker_node": {"worker_dispatch_enabled": True}},
+        {"mode": "read_only", "action_class": "model_routing"},
+        {"mode": "implementation", "action_class": "implementation"},
+    ]
+
+    for payload in cases:
+        result = classify_execution_mode(payload)
+
+        assert result["preview_ready"] is False
+        assert result["blocked"] is True
+        assert result["blocked_reasons"]
+        assert result["would_execute"] is False
+        assert result["execution_enabled"] is False
+        assert result["dispatch_enabled"] is False
+        assert result["session_send_enabled"] is False
+        assert result["worker_dispatch_enabled"] is False
+        assert result["trusted_for_execution"] is False
 
 
 def test_execution_packet_preview_is_never_an_execution_path():

@@ -1255,6 +1255,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
   const reportReviewQueue = status.report_review_queue
   const nextSafeActions = status.next_safe_actions
   const nextSafePrimaryAction = nextSafeActions?.primary_action
+  const executionModeClassification = status.execution_mode_classification
   const executionPacket = status.execution_packet_preview
   const operatorDecisionPacket = status.operator_decision_packet
   const orchestrationReadiness = status.orchestration_readiness
@@ -1328,6 +1329,14 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     deploymentNeeded: status.deployment_gap?.dashboard_deploy_needed ?? false,
     deployedHead: status.deployment_gap?.deployed_head ?? status.accepted_baseline?.head ?? 'unknown',
     dispatch: status.safety?.dispatch_in_gateway,
+    executionModeBlockedReasons: executionModeClassification?.blocked_reasons ?? [],
+    executionModeDispatchEnabled: executionModeClassification?.dispatch_enabled,
+    executionModeExecutionEnabled: executionModeClassification?.execution_enabled,
+    executionModeFamily: executionModeClassification?.mode_family ?? 'unknown',
+    executionModeHigherRisk: executionModeClassification?.higher_risk,
+    executionModePreviewReady: executionModeClassification?.preview_ready,
+    executionModeProtectedMarkers: executionModeClassification?.protected_action_markers ?? [],
+    executionModeWorkerDispatchEnabled: executionModeClassification?.worker_dispatch_enabled,
     executionPacketBlockedReasons: executionPacket?.blocked_reasons ?? [],
     executionPacketDispatchEnabled: executionPacket?.dispatch_enabled,
     executionPacketDisplayOnly: executionPacket?.display_only,
@@ -1358,6 +1367,8 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     operatorPacketApprovalRequired: operatorDecisionPacket?.approval_required,
     operatorPacketBlockedReasons: operatorDecisionPacket?.blocked_reasons ?? [],
     operatorPacketDisplayOnly: operatorDecisionPacket?.display_only,
+    operatorPacketExecutionModeBlockedReasons: operatorDecisionPacket?.execution_mode_blocked_reasons ?? [],
+    operatorPacketExecutionModeFamily: operatorDecisionPacket?.execution_mode_family ?? 'unknown',
     operatorPacketExecutionPacketEligible: operatorDecisionPacket?.execution_packet_eligible,
     operatorPacketExecutionPacketMode: operatorDecisionPacket?.execution_packet_mode ?? 'unknown',
     operatorPacketExecutionEnabled: operatorDecisionPacket?.execution_enabled,
@@ -4085,6 +4096,14 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
   const provenanceTone = status.provenanceStatus === 'CLEAN_AND_ALIGNED' && status.provenanceBlocked === false ? 'good' : 'warn'
   const autonomyLabel = status.autonomyEligible === true ? 'eligible preview only' : status.autonomyEligible === false ? 'blocked / no execution' : 'unknown / no execution'
   const scopedPrLabel = status.scopedPrEligible === true ? `preview-ready / ${status.scopedPrScopeCount} scoped path${status.scopedPrScopeCount === 1 ? '' : 's'}` : status.scopedPrEligible === false ? 'blocked / no execution' : 'unknown / no execution'
+  const executionModeTone =
+    status.executionModeExecutionEnabled === false &&
+    status.executionModeDispatchEnabled === false &&
+    status.executionModeWorkerDispatchEnabled === false
+      ? status.executionModeBlockedReasons.length || status.executionModeHigherRisk
+        ? 'warn'
+        : 'good'
+      : 'warn'
   const executionPacketTone =
     status.executionPacketExecutionEnabled === false &&
     status.executionPacketDispatchEnabled === false &&
@@ -4184,6 +4203,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="tool permissions" tone={toolPermissionTone} value={`${labelText(status.toolPermissionClassification)} / blocked paths ${status.toolPermissionBlockedCount}`} />
       <StatusItem label="scoped PR lane" tone={status.scopedPrEligible === true ? 'good' : 'warn'} value={scopedPrLabel} />
       <StatusItem label="scoped PR bridge" tone={status.scopedPrBridgePermission === 'read_only_safe' ? 'good' : 'warn'} value={labelText(status.scopedPrBridgePermission)} />
+      <StatusItem label="execution mode" tone={executionModeTone} value={`${labelText(status.executionModeFamily)} / preview ${yesNo(status.executionModePreviewReady)} / execution ${yesNo(status.executionModeExecutionEnabled)}`} />
       <StatusItem label="execution packet" tone={executionPacketTone} value={`${labelText(status.executionPacketMode)} / eligible ${yesNo(status.executionPacketEligible)} / execute ${yesNo(status.executionPacketExecutionEnabled)}`} />
       <StatusItem label="lifecycle projection" tone={status.appendOnlyProjection ? 'good' : 'warn'} value={`append-only ${yesNo(status.appendOnlyProjection)} / active mutation lanes ${status.activeMutationLaneCount}`} />
       <StatusItem className="md:col-span-2" label="next safe action" tone={nextSafeActionTone} value={status.nextSafePrimaryAction} />
@@ -4225,6 +4245,8 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-3" label="next action reasons" tone={status.nextSafeActionReasons.length ? 'warn' : 'good'} value={status.nextSafeActionReasons.length ? status.nextSafeActionReasons.join(', ') : status.nextSafePrimaryReason} />
       <StatusItem className="md:col-span-3" label="operator summary" tone={operatorPacketTone} value={status.operatorPacketSummary} />
       <StatusItem className="md:col-span-3" label="operator blockers" tone={status.operatorPacketBlockedReasons.length ? 'warn' : 'good'} value={status.operatorPacketBlockedReasons.length ? status.operatorPacketBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="execution mode blockers" tone={status.executionModeBlockedReasons.length ? 'warn' : 'good'} value={status.executionModeBlockedReasons.length ? status.executionModeBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="protected execution markers" tone={status.executionModeProtectedMarkers.length ? 'warn' : 'good'} value={status.executionModeProtectedMarkers.length ? status.executionModeProtectedMarkers.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="execution packet blockers" tone={status.executionPacketBlockedReasons.length ? 'warn' : 'good'} value={status.executionPacketBlockedReasons.length ? status.executionPacketBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="orchestration summary" tone={readinessTone} value={status.orchestrationReadinessSummary} />
       <StatusItem className="md:col-span-3" label="run graph blockers" tone={status.orchestrationRunGraphBlockedReasons.length ? 'warn' : 'good'} value={status.orchestrationRunGraphBlockedReasons.length ? status.orchestrationRunGraphBlockedReasons.join(', ') : 'none'} />

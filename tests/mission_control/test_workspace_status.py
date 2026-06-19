@@ -183,6 +183,43 @@ def test_workspace_status_surfaces_execution_packet_preview_as_inert_work_packet
     assert "runtime provenance is not clean" in packet["blocked_reasons"]
 
 
+def test_workspace_status_surfaces_execution_mode_classification_as_inert_preview():
+    status = build_workspace_status(
+        _baseline_payload(
+            execution_mode_classification={
+                "mode": "worker_node",
+                "run": {
+                    "run_id": "run-pr-1",
+                    "lane_type": "pr_creation",
+                    "objective": "Prepare bounded scoped PR evidence.",
+                },
+                "worker_node": {
+                    "parent_run_id": "run-pr-1",
+                    "worker_identity": "codex",
+                    "worker_host_label": "laptop-codex",
+                    "presence_status": "online",
+                },
+            }
+        )
+    )
+
+    mode = status["execution_mode_classification"]
+    assert mode["source"] == "mission_control_execution_mode_classification_v1"
+    assert mode["display_only"] is True
+    assert mode["trusted_for_execution"] is False
+    assert mode["would_execute"] is False
+    assert mode["execution_enabled"] is False
+    assert mode["dispatch_enabled"] is False
+    assert mode["session_send_enabled"] is False
+    assert mode["worker_dispatch_enabled"] is False
+    assert mode["stored"] is False
+    assert mode["dry_run_only"] is True
+    assert mode["mode_family"] == "worker_node_preview"
+    assert mode["manual_handoff_only"] is True
+    assert mode["preview_ready"] is True
+    assert mode["blocked"] is False
+
+
 def test_workspace_status_surfaces_tool_permission_classification():
     status = build_workspace_status(
         _baseline_payload(

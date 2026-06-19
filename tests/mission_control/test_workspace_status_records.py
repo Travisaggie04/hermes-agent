@@ -503,10 +503,97 @@ def test_record_sourced_workspace_status_projects_execution_packet_preview(tmp_p
     assert packet["packet"]["worker_node_contract"]["manual_handoff_only"] is True
     assert packet["packet"]["worker_node_contract"]["worker_dispatch_enabled"] is False
 
+    execution_mode = status["execution_mode_classification"]
+    assert execution_mode["source"] == "mission_control_execution_mode_classification_v1"
+    assert execution_mode["display_only"] is True
+    assert execution_mode["trusted_for_execution"] is False
+    assert execution_mode["would_execute"] is False
+    assert execution_mode["execution_enabled"] is False
+    assert execution_mode["dispatch_enabled"] is False
+    assert execution_mode["session_send_enabled"] is False
+    assert execution_mode["worker_dispatch_enabled"] is False
+    assert execution_mode["stored"] is False
+    assert execution_mode["dry_run_only"] is True
+    assert execution_mode["mode_family"] == "worker_node_preview"
+    assert execution_mode["preview_ready"] is True
+    assert execution_mode["manual_handoff_only"] is True
+
     operator_packet = status["operator_decision_packet"]
+    assert operator_packet["execution_mode_family"] == "worker_node_preview"
     assert operator_packet["execution_packet_mode"] == "worker_node"
     assert operator_packet["execution_packet_eligible"] is True
+    assert "Execution mode: worker_node_preview; execution disabled." in operator_packet["plain_language_summary"]
     assert "Execution packet preview: worker_node, eligible true; execution disabled." in operator_packet["plain_language_summary"]
+
+
+def test_record_sourced_workspace_status_blocks_higher_risk_execution_mode(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    head = "8ef64e370a51bc19e97fec1526f5bb3d42025a09"
+    store.append(
+        AcceptedBaselineRecord(
+            baseline_id="accepted",
+            runtime_path="/runtime/current",
+            head=head,
+            rollback_runtime_path="/runtime/rollback",
+            rollback_head=head,
+            max_active_lane=1,
+        )
+    )
+    store.append(
+        ApprovalRecord(
+            approval_id="approval-deploy-1",
+            project_id="project-hermes-mission-control",
+            action_class="deploy",
+            approval_scope="deploy Hermes runtime",
+            status="approved",
+            expires_at="2099-01-01T00:00:00Z",
+        )
+    )
+    store.append(
+        RunRecord(
+            run_id="run-deploy-1",
+            project_id="project-hermes-mission-control",
+            approval_id="approval-deploy-1",
+            lane_type="deploy",
+            title="Deploy runtime",
+            status="running",
+            execution_mode="deploy",
+        )
+    )
+
+    status = build_workspace_status_from_records(
+        {
+            "now": "2026-06-19T12:05:00Z",
+            "source_control": {"accepted_live_head": head},
+            "dashboard_runtime": {"path": "/runtime/current", "head": head},
+            "gateway_runtime": {"path": "/runtime/current", "head": head},
+            "rollback_runtime": {"path": "/runtime/rollback", "head": head},
+        },
+        records_path=records_path,
+    )
+
+    execution_mode = status["execution_mode_classification"]
+    assert execution_mode["mode_family"] == "higher_risk_blocked"
+    assert execution_mode["preview_ready"] is False
+    assert execution_mode["blocked"] is True
+    assert "deploy" in execution_mode["protected_action_markers"]
+    assert execution_mode["would_execute"] is False
+    assert execution_mode["execution_enabled"] is False
+    assert execution_mode["dispatch_enabled"] is False
+    assert execution_mode["session_send_enabled"] is False
+    assert execution_mode["worker_dispatch_enabled"] is False
+    assert "action_class deploy is not eligible for autonomous execution" in execution_mode["blocked_reasons"]
+
+    next_safe_actions = status["next_safe_actions"]
+    action_ids = {action["action_id"] for action in next_safe_actions["actions"]}
+    assert "review_execution_mode_classification" in action_ids
+    assert "action_class deploy is not eligible for autonomous execution" in next_safe_actions["blocked_reasons"]
+
+    operator_packet = status["operator_decision_packet"]
+    assert operator_packet["execution_mode_family"] == "higher_risk_blocked"
+    assert "action_class deploy is not eligible for autonomous execution" in operator_packet["execution_mode_blocked_reasons"]
+    assert "Execution mode: higher_risk_blocked; execution disabled." in operator_packet["plain_language_summary"]
 
 
 def test_record_sourced_workspace_status_projects_report_review_queue(tmp_path):

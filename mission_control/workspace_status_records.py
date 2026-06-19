@@ -182,6 +182,11 @@ def build_workspace_status_from_records(
     active_child_runs = tuple(record for record in recent_child_runs if record.status in ACTIVE_ORCHESTRATION_STATUSES)
     active_worker_runs = tuple(record for record in recent_worker_runs if record.status in ACTIVE_ORCHESTRATION_STATUSES)
     reports_by_id, reports_by_run_id = _report_lookup_maps(recent_reports)
+    status_input["execution_mode_classification"] = _record_execution_mode_classification_input(
+        latest_active_run=latest_active_run,
+        latest_approval=latest_approval,
+        active_worker_runs=active_worker_runs,
+    )
     status_input["execution_packet_preview"] = _record_execution_packet_preview_input(
         latest_active_run=latest_active_run,
         latest_approval=latest_approval,
@@ -298,6 +303,45 @@ def _latest_matching_approval(records: tuple[ApprovalRecord, ...], approval_id: 
         if record.approval_id == approval_id:
             return record
     return None
+
+
+def _record_execution_mode_classification_input(
+    *,
+    latest_active_run: RunRecord | None,
+    latest_approval: ApprovalRecord | None,
+    active_worker_runs: tuple[WorkerNodeRunRecord, ...],
+) -> dict[str, Any]:
+    worker = active_worker_runs[-1] if active_worker_runs else None
+    run_payload = latest_active_run.to_dict() if latest_active_run is not None else {}
+    worker_payload = worker.to_dict() if worker is not None else {}
+    lane_type = _safe_text(
+        run_payload.get("lane_type")
+        or worker_payload.get("lane_mode")
+        or worker_payload.get("mode")
+    )
+    if worker is not None:
+        mode = "worker_node"
+    elif lane_type in {"pr_creation", "scoped_pr"}:
+        mode = "scoped_pr"
+    elif lane_type in {"read_only_lane", "read_only_design", "read_only_inspection"} or lane_type.startswith("read_only"):
+        mode = "read_only"
+    else:
+        mode = _safe_text(run_payload.get("execution_mode"))
+    return {
+        "mode": mode,
+        "run": run_payload,
+        "approval": _approval_packet_payload(latest_approval),
+        "lane": {
+            "lane_type": lane_type,
+            "objective": _safe_text(
+                run_payload.get("objective")
+                or worker_payload.get("objective")
+                or run_payload.get("title"),
+                max_chars=800,
+            ),
+        },
+        "worker_node": worker_payload,
+    }
 
 
 def _record_execution_packet_preview_input(
@@ -816,6 +860,18 @@ def _next_safe_actions_payload(status: dict[str, Any]) -> dict[str, Any]:
             ),
             blocked_until="tool paths are manual-only or read-only safe",
             priority=70,
+        )
+
+    execution_mode = _mapping(status.get("execution_mode_classification"))
+    execution_mode_reasons = _text_list(execution_mode.get("blocked_reasons"))
+    if execution_mode.get("blocked") is True or execution_mode_reasons:
+        extend_blockers(execution_mode_reasons)
+        add_action(
+            action_id="review_execution_mode_classification",
+            label="Review execution mode classification",
+            reason=_first_reason(execution_mode_reasons, "The requested mode is not eligible for preview-only orchestration."),
+            blocked_until="mode is read-only, scoped PR, or worker-node preview with execution disabled",
+            priority=75,
         )
 
     read_only_eligibility = _mapping(status.get("read_only_autonomy_eligibility"))
@@ -1893,6 +1949,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     worker_presence = _mapping(status.get("worker_node_presence"))
     worker_instruction = _mapping(status.get("worker_node_instruction_preview"))
     child_instruction = _mapping(status.get("child_agent_instruction_preview"))
+    execution_mode = _mapping(status.get("execution_mode_classification"))
     execution_packet = _mapping(status.get("execution_packet_preview"))
 
     queue_count = _safe_int(report_queue.get("queue_count"))
@@ -1912,6 +1969,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     worker_seen_suffix = f" at {worker_last_seen_at}" if worker_last_seen_at else ""
     execution_packet_mode = _safe_text(_mapping(execution_packet.get("packet")).get("mode")) or "unknown"
     execution_packet_eligible = execution_packet.get("eligible") is True
+    execution_mode_family = _safe_text(execution_mode.get("mode_family")) or "unknown"
     blocked_reasons = _unique_reasons(
         [
             *_text_list(runtime_provenance.get("autonomy_blocked_reasons")),
@@ -1919,6 +1977,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             *_text_list(report_queue.get("blocked_reasons")),
             *_text_list(report_contract.get("blocked_reasons")),
             *_text_list(worker_presence.get("blocked_reasons")),
+            *_text_list(execution_mode.get("blocked_reasons")),
             *_text_list(execution_packet.get("blocked_reasons")),
             *_text_list(next_safe_actions.get("blocked_reasons")),
             *_text_list(worker_instruction.get("blocked_reasons")),
@@ -1944,6 +2003,10 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             "Worker presence: "
             f"{worker_presence_state}"
             f"{worker_seen_suffix}."
+        ),
+        (
+            "Execution mode: "
+            f"{execution_mode_family}; execution disabled."
         ),
         (
             "Execution packet preview: "
@@ -2001,6 +2064,8 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         "report_contract_incomplete_count": incomplete_report_contract_count,
         "report_contract_blocked_reasons": _text_list(report_contract.get("blocked_reasons")),
         "report_contract_primary_item_id": _safe_text(report_contract.get("primary_item_id")),
+        "execution_mode_family": execution_mode_family,
+        "execution_mode_blocked_reasons": _text_list(execution_mode.get("blocked_reasons")),
         "execution_packet_mode": execution_packet_mode,
         "execution_packet_eligible": execution_packet_eligible,
         "execution_packet_blocked_reasons": _text_list(execution_packet.get("blocked_reasons")),

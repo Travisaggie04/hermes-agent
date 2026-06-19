@@ -13,6 +13,7 @@ from typing import Any
 
 from mission_control.autonomy_eligibility import (
     build_execution_packet_preview,
+    classify_execution_mode,
     classify_control_path_permissions,
     evaluate_read_only_autonomy_eligibility,
     evaluate_runtime_provenance,
@@ -224,6 +225,9 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         )
     )
     tool_permission_classification = classify_control_path_permissions(_section(source, "tool_permissions"))
+    execution_mode_classification = classify_execution_mode(
+        _execution_mode_classification_input(source=source)
+    )
     execution_packet_preview = build_execution_packet_preview(
         _execution_packet_preview_input(
             source=source,
@@ -302,6 +306,7 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         "read_only_autonomy_eligibility": read_only_autonomy_eligibility,
         "scoped_pr_lane_eligibility": scoped_pr_lane_eligibility,
         "tool_permission_classification": tool_permission_classification,
+        "execution_mode_classification": execution_mode_classification,
         "execution_packet_preview": execution_packet_preview,
         "latest_handoff": latest_handoff,
         "stale_context": {
@@ -349,6 +354,21 @@ def _runtime_provenance_input(
         "active_lane_count": lane.get("active_lane_count"),
         "max_active_lane": lane.get("max_active_lane"),
     }
+
+
+def _execution_mode_classification_input(*, source: dict[str, Any]) -> dict[str, Any]:
+    section = _section(source, "execution_mode_classification")
+    return _merge_dicts(
+        section,
+        {
+            "mode": section.get("mode") or section.get("execution_mode") or _section(source, "lane").get("mode"),
+            "lane": _merge_dicts(_section(source, "lane"), _section(section, "lane")),
+            "run": _section(section, "run") or _section(source, "run"),
+            "approval": _section(section, "approval") or _section(source, "approval"),
+            "worker_node": _section(section, "worker_node") or _section(source, "worker_node"),
+            "capabilities": _section(section, "capabilities") or _section(source, "capabilities"),
+        },
+    )
 
 
 def _execution_packet_preview_input(

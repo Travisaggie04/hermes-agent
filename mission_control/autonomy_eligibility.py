@@ -106,6 +106,51 @@ _PR_BLOCKED_CAPABILITY_KEYS = (
 
 _ACTIVE_PR_STATUSES = {"requested", "preflight_passed", "running", "stopping"}
 
+_PROTECTED_EXECUTION_MARKERS = {
+    "deploy": "deploy",
+    "deployment": "deploy",
+    "restart": "restart",
+    "runtime switch": "runtime_switch",
+    "runtime_switch": "runtime_switch",
+    "runtime-switch": "runtime_switch",
+    "merge": "merge",
+    "payment": "payment",
+    "checkout": "payment",
+    "waha": "waha",
+    "whatsapp": "waha",
+    "social": "social",
+    "post": "social",
+    "publish": "social",
+    "model routing": "model_routing",
+    "model_routing": "model_routing",
+    "queue": "queue_mutation",
+    "timer": "worker_timer_enablement",
+    "daemon": "worker_timer_enablement",
+    "cron": "worker_timer_enablement",
+    "dispatch": "dispatch",
+    "session-send": "session_send",
+    "session_send": "session_send",
+    "session send": "session_send",
+}
+
+_PROTECTED_CAPABILITY_KEYS = {
+    "merge",
+    "deploy",
+    "restart",
+    "runtime_switch",
+    "waha",
+    "social",
+    "payment",
+    "model_routing",
+    "queue_mutation",
+    "worker",
+    "timer",
+    "daemon",
+    "dispatch",
+    "session_send",
+    "worker_dispatch_enabled",
+}
+
 _PATH_WRITE_CAPABILITY_KEYS = (
     "write_capable",
     "write_capable_tools",
@@ -409,6 +454,120 @@ def classify_control_path_permissions(observed_state: dict[str, Any] | list[Any]
     }
 
 
+def classify_execution_mode(observed_state: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Classify a requested orchestration mode without enabling execution."""
+
+    state = dict(observed_state or {})
+    run = _section(state, "run")
+    lane = _section(state, "lane")
+    approval = _section(state, "approval")
+    worker_node = _section(state, "worker_node")
+    capabilities = _section(state, "capabilities")
+    requested_mode = _safe_text(
+        state.get("mode")
+        or state.get("execution_mode")
+        or run.get("execution_mode")
+        or lane.get("mode")
+    )
+    lane_type = _safe_text(
+        state.get("lane_type")
+        or run.get("lane_type")
+        or lane.get("lane_type")
+    )
+    action_class = _safe_text(
+        state.get("action_class")
+        or approval.get("action_class")
+        or lane.get("action_class")
+    )
+    mode_terms = tuple(
+        text.lower()
+        for text in (
+            requested_mode,
+            lane_type,
+            action_class,
+            _safe_text(run.get("title")),
+            _safe_text(run.get("objective")),
+            _safe_text(lane.get("objective")),
+        )
+        if text
+    )
+    protected_markers = _execution_protected_markers(
+        mode_terms=mode_terms,
+        state=state,
+        lane=lane,
+        run=run,
+        capabilities=capabilities,
+    )
+    blocked_reasons: list[str] = []
+    warnings: list[str] = []
+
+    mode_family = "unknown_blocked"
+    if _worker_node_requested(state, worker_node, requested_mode, lane_type, action_class):
+        mode_family = "worker_node_preview"
+        _add(warnings, "worker-node mode is manual-handoff only and not an executor")
+    elif lane_type in {"pr_creation", "scoped_pr"} or action_class == "pr_creation" or requested_mode == "scoped_pr":
+        mode_family = "scoped_pr_preview"
+    elif (
+        lane_type in _READ_ONLY_LANE_TYPES
+        or lane_type.startswith("read_only")
+        or action_class in _APPROVED_ACTION_CLASSES
+        or requested_mode == "read_only"
+        or requested_mode.startswith("read_only")
+    ):
+        mode_family = "read_only_preview"
+    elif requested_mode or lane_type or action_class:
+        mode_family = "higher_risk_blocked"
+
+    if mode_family == "unknown_blocked":
+        _add(blocked_reasons, "execution mode is not recognized")
+    if protected_markers:
+        if mode_family in {"read_only_preview", "scoped_pr_preview", "worker_node_preview"}:
+            _add(blocked_reasons, f"requested mode includes protected actions: {', '.join(protected_markers[:8])}")
+        else:
+            mode_family = "higher_risk_blocked"
+            _add(blocked_reasons, f"higher-risk mode requires separate approval: {', '.join(protected_markers[:8])}")
+    if action_class in {"implementation", "deploy", "runtime_switch", "payment", "waha", "social_post", "model_routing", "queue_mutation", "worker_timer_enablement"}:
+        mode_family = "higher_risk_blocked"
+        _add(blocked_reasons, f"action_class {action_class} is not eligible for autonomous execution")
+    if _safe_bool(state.get("execution_enabled")) or _safe_bool(run.get("execution_enabled")):
+        _add(blocked_reasons, "execution_enabled must remain false")
+    if _safe_bool(state.get("dispatch_enabled")) or _safe_bool(run.get("dispatch_enabled")):
+        _add(blocked_reasons, "dispatch_enabled must remain false")
+    if _safe_bool(state.get("session_send_enabled")) or _safe_bool(run.get("session_send_enabled")):
+        _add(blocked_reasons, "session_send_enabled must remain false")
+    if _safe_bool(state.get("worker_dispatch_enabled")) or _safe_bool(worker_node.get("worker_dispatch_enabled")):
+        _add(blocked_reasons, "worker_dispatch_enabled must remain false")
+
+    preview_ready = mode_family in {"read_only_preview", "scoped_pr_preview", "worker_node_preview"} and not blocked_reasons
+    return {
+        "source": "mission_control_execution_mode_classification_v1",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "stored": False,
+        "dry_run_only": True,
+        "requested_mode": requested_mode,
+        "lane_type": lane_type,
+        "action_class": action_class,
+        "mode_family": mode_family,
+        "preview_ready": preview_ready,
+        "higher_risk": mode_family == "higher_risk_blocked",
+        "separate_approval_required": mode_family == "higher_risk_blocked" or bool(protected_markers),
+        "manual_handoff_only": mode_family == "worker_node_preview",
+        "read_only_preview_allowed": mode_family == "read_only_preview" and not blocked_reasons,
+        "scoped_pr_preview_allowed": mode_family == "scoped_pr_preview" and not blocked_reasons,
+        "worker_node_preview_allowed": mode_family == "worker_node_preview" and not blocked_reasons,
+        "protected_action_markers": protected_markers,
+        "blocked": bool(blocked_reasons),
+        "blocked_reasons": blocked_reasons,
+        "warnings": warnings,
+    }
+
+
 def evaluate_read_only_autonomy_eligibility(observed_state: dict[str, Any] | None = None) -> dict[str, Any]:
     """Preview whether a read-only Jenny lane is eligible without executing it."""
 
@@ -681,6 +840,44 @@ def _worker_node_contract(state: dict[str, Any]) -> dict[str, Any]:
         "session_send_enabled": False,
         "worker_dispatch_enabled": False,
     }
+
+
+def _worker_node_requested(
+    state: dict[str, Any],
+    worker_node: dict[str, Any],
+    requested_mode: str,
+    lane_type: str,
+    action_class: str,
+) -> bool:
+    return bool(worker_node) or requested_mode == "worker_node" or lane_type == "worker_node" or action_class == "worker_node"
+
+
+def _execution_protected_markers(
+    *,
+    mode_terms: tuple[str, ...],
+    state: dict[str, Any],
+    lane: dict[str, Any],
+    run: dict[str, Any],
+    capabilities: dict[str, Any],
+) -> list[str]:
+    markers: list[str] = []
+    for term in mode_terms:
+        if term in {"worker_node", "laptop_codex_worker_node"}:
+            continue
+        for pattern, marker in _PROTECTED_EXECUTION_MARKERS.items():
+            if pattern in term:
+                _add(markers, marker)
+    for key in _PROTECTED_CAPABILITY_KEYS:
+        if _safe_bool(state.get(key)) or _safe_bool(lane.get(key)) or _safe_bool(run.get(key)) or _safe_bool(capabilities.get(key)):
+            _add(markers, _permission_marker_label(key))
+    for key in ("allowed_actions", "requested_actions", "tools", "tool_names"):
+        for item in _as_list(state.get(key)) + _as_list(lane.get(key)) + _as_list(run.get(key)):
+            lowered = _safe_text(item).lower()
+            for pattern, marker in _PROTECTED_EXECUTION_MARKERS.items():
+                if pattern in lowered:
+                    _add(markers, marker)
+                    break
+    return markers
 
 
 def _optional_tool_permissions(state: dict[str, Any]) -> dict[str, Any]:

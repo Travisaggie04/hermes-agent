@@ -172,6 +172,33 @@ beforeEach(() => {
       latest_merged_pr: '108',
       state: 'merged_not_deployed'
     },
+    execution_mode_classification: {
+      action_class: 'pr_creation',
+      blocked: false,
+      blocked_reasons: [],
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      higher_risk: false,
+      lane_type: 'pr_creation',
+      manual_handoff_only: true,
+      mode_family: 'worker_node_preview',
+      preview_ready: true,
+      protected_action_markers: [],
+      read_only_preview_allowed: false,
+      requested_mode: 'worker_node',
+      scoped_pr_preview_allowed: false,
+      separate_approval_required: false,
+      session_send_enabled: false,
+      source: 'mission_control_execution_mode_classification_v1',
+      stored: false,
+      trusted_for_execution: false,
+      warnings: ['worker-node mode is manual-handoff only and not an executor'],
+      worker_dispatch_enabled: false,
+      worker_node_preview_allowed: true,
+      would_execute: false
+    },
     execution_packet_preview: {
       blocked_reasons: ['runtime provenance is not clean', 'worker-node presence is not confirmed online'],
       dispatch_enabled: false,
@@ -267,6 +294,8 @@ beforeEach(() => {
       dispatch_enabled: false,
       display_only: true,
       dry_run_only: true,
+      execution_mode_blocked_reasons: [],
+      execution_mode_family: 'worker_node_preview',
       execution_packet_blocked_reasons: ['runtime provenance is not clean', 'worker-node presence is not confirmed online'],
       execution_packet_eligible: false,
       execution_packet_mode: 'worker_node',
@@ -277,7 +306,7 @@ beforeEach(() => {
       next_safe_action_id: 'review_runtime_provenance_blockers',
       next_safe_action_label: 'Review runtime provenance blockers',
       next_safe_action_reason: 'gateway git metadata is broken',
-      plain_language_summary: 'Operator state: report review required. Runtime provenance: GATEWAY_UNTRUSTED. Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked. Worker presence: unknown. Execution packet preview: worker_node, eligible false; execution disabled. Next safe action: Review runtime provenance blockers. Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review. Report contract completeness: 0 complete, 1 incomplete. Worker instruction: manual handoff only; laptop Codex dispatch remains disabled. Child instruction: manual delegation preview only; execution remains disabled. Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation.',
+      plain_language_summary: 'Operator state: report review required. Runtime provenance: GATEWAY_UNTRUSTED. Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked. Worker presence: unknown. Execution mode: worker_node_preview; execution disabled. Execution packet preview: worker_node, eligible false; execution disabled. Next safe action: Review runtime provenance blockers. Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review. Report contract completeness: 0 complete, 1 incomplete. Worker instruction: manual handoff only; laptop Codex dispatch remains disabled. Child instruction: manual delegation preview only; execution remains disabled. Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation.',
       recommended_operator_instruction: 'Jenny reviews Laptop Codex reported scoped PR evidence. before issuing another worker instruction.',
       report_contract_blocked_reasons: ['report_id report-worker missing contract fields: result, evidence, tests, next lane, safety confirmation'],
       report_contract_incomplete_count: 1,
@@ -292,6 +321,7 @@ beforeEach(() => {
         'Runtime provenance: GATEWAY_UNTRUSTED.',
         'Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked.',
         'Worker presence: unknown.',
+        'Execution mode: worker_node_preview; execution disabled.',
         'Execution packet preview: worker_node, eligible false; execution disabled.',
         'Next safe action: Review runtime provenance blockers.',
         'Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review.',
@@ -1541,6 +1571,8 @@ describe('MissionControlView', () => {
     expect(screen.getByText('scoped PR lane')).toBeTruthy()
     expect(screen.getByText('scoped PR bridge')).toBeTruthy()
     expect(screen.getByText('manual only')).toBeTruthy()
+    expect(screen.getByText('execution mode')).toBeTruthy()
+    expect(screen.getByText('worker node preview / preview yes / execution no')).toBeTruthy()
     expect(screen.getByText('execution packet')).toBeTruthy()
     expect(screen.getByText('worker node / eligible no / execute no')).toBeTruthy()
     expect(screen.getByText('lifecycle projection')).toBeTruthy()
@@ -1559,6 +1591,8 @@ describe('MissionControlView', () => {
     expect(screen.getByText(/Operator state: report review required/)).toBeTruthy()
     expect(screen.getByText('operator blockers')).toBeTruthy()
     expect(screen.getByText('gateway git metadata is broken, report_id report-worker still needs Jenny review, worker node offline, worker-node presence_status is not recorded, runtime provenance is not clean, worker-node presence is not confirmed online, report_id report-worker missing contract fields: result, evidence, tests, next lane, safety confirmation')).toBeTruthy()
+    expect(screen.getByText('execution mode blockers')).toBeTruthy()
+    expect(screen.getByText('protected execution markers')).toBeTruthy()
     expect(screen.getByText('execution packet blockers')).toBeTruthy()
     expect(screen.getByText('runtime provenance is not clean, worker-node presence is not confirmed online')).toBeTruthy()
     expect(screen.getByText('orchestration readiness')).toBeTruthy()
