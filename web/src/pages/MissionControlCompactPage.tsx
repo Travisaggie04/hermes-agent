@@ -470,13 +470,43 @@ interface WorkspaceStatus {
     run_node_count?: number;
     worker_node_run_count?: number;
   };
+  orchestration_stop_control?: CompactExecutionLockSource & {
+    active_stop_count?: number;
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    link_mismatch_count?: number;
+    needs_report_count?: number;
+    needs_review_count?: number;
+    primary_item_id?: string;
+    primary_item_label?: string;
+    stop_cancel_count?: number;
+    terminal_stop_count?: number;
+  };
+  report_contract_compliance?: CompactExecutionLockSource & {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    complete_report_count?: number;
+    incomplete_report_count?: number;
+    primary_item_id?: string;
+    primary_item_label?: string;
+    report_count?: number;
+  };
   report_completion_path?: {
     blocked?: boolean;
     blocked_completion_count?: number;
     blocked_reasons?: string[];
     completion_ready_count?: number;
+    contract_incomplete_count?: number;
     dispatch_enabled?: boolean;
+    duplicate_report_count?: number;
     execution_enabled?: boolean;
+    ingestion_blocked_count?: number;
+    link_mismatch_count?: number;
+    missing_report_count?: number;
+    needs_review_count?: number;
+    primary_item_id?: string;
+    primary_item_label?: string;
+    rejected_report_count?: number;
     session_send_enabled?: boolean;
     terminal_item_count?: number;
     would_execute?: boolean;
@@ -496,15 +526,35 @@ interface WorkspaceStatus {
     runs_with_missing_linked_report_ids?: Record<string, string[]>;
     terminal_report_ids?: string[];
   };
+  report_review_queue?: CompactExecutionLockSource & {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    duplicate_report_count?: number;
+    link_mismatch_count?: number;
+    missing_report_count?: number;
+    needs_review_count?: number;
+    primary_review_item_id?: string;
+    primary_review_label?: string;
+    primary_review_reason?: string;
+    queue_count?: number;
+  };
   result_ingestion_contract?: {
     blocked?: boolean;
     blocked_reasons?: string[];
     blocked_report_count?: number;
     dispatch_enabled?: boolean;
+    duplicate_report_count?: number;
     execution_enabled?: boolean;
+    forbidden_metadata_count?: number;
     ingestion_ready_count?: number;
+    link_mismatch_count?: number;
+    missing_link_count?: number;
+    missing_safety_confirmation_count?: number;
+    primary_item_id?: string;
+    primary_item_label?: string;
     report_count?: number;
     session_send_enabled?: boolean;
+    unsafe_redaction_count?: number;
     would_execute?: boolean;
     worker_dispatch_enabled?: boolean;
     worker_enabled?: boolean;
@@ -4202,14 +4252,27 @@ function CompactHermesHealthDashboard({
   const childProjection = status.child_agent_orchestration;
   const childInstruction = status.child_agent_instruction_preview;
   const runGraph = status.orchestration_run_graph;
+  const reportReviewQueue = status.report_review_queue;
+  const reportContract = status.report_contract_compliance;
+  const stopControl = status.orchestration_stop_control;
   const workerInstruction = status.worker_node_instruction_preview;
   const workerPresence = status.worker_node_presence;
   const resultIngestion = status.result_ingestion_contract;
   const reportCompletion = status.report_completion_path;
   const reportLifecycle = status.report_lifecycle;
   const nextSafeActions = status.next_safe_actions;
+  const reportReviewQueueCount = reportReviewQueue?.queue_count ?? 0;
+  const reportReviewNeedsReviewCount = reportReviewQueue?.needs_review_count ?? 0;
+  const reportReviewMissingCount = reportReviewQueue?.missing_report_count ?? 0;
+  const reportReviewMismatchCount = reportReviewQueue?.link_mismatch_count ?? 0;
+  const reportContractIncompleteCount = reportContract?.incomplete_report_count ?? 0;
   const resultIngestionBlocked = resultIngestion?.blocked_report_count ?? 0;
   const reportCompletionBlocked = reportCompletion?.blocked_completion_count ?? 0;
+  const stopCancelCount = stopControl?.stop_cancel_count ?? 0;
+  const stopCancelBlockedCount =
+    (stopControl?.needs_report_count ?? 0)
+    + (stopControl?.needs_review_count ?? 0)
+    + (stopControl?.link_mismatch_count ?? 0);
   const approvalMissingRecordCount = Object.keys(approvalLifecycle?.runs_with_missing_approval_record ?? {}).length;
   const approvalUnavailableRunCount = Object.keys(approvalLifecycle?.runs_with_unavailable_approval ?? {}).length;
   const approvalGapCount =
@@ -4247,6 +4310,9 @@ function CompactHermesHealthDashboard({
   const runGraphLockReasons = compactExecutionLockReasons("Orchestration run graph", runGraph);
   const childProjectionLockReasons = compactExecutionLockReasons("Child agent", childProjection);
   const childInstructionLockReasons = compactExecutionLockReasons("Child handoff", childInstruction);
+  const reportReviewQueueLockReasons = compactExecutionLockReasons("Report review queue", reportReviewQueue);
+  const reportContractLockReasons = compactExecutionLockReasons("Report contract", reportContract);
+  const stopControlLockReasons = compactExecutionLockReasons("Stop/cancel control", stopControl);
   const executionModeLockReasons = compactExecutionLockReasons("Execution mode", executionMode);
   const executionPacketLockReasons = compactExecutionLockReasons("Execution packet", executionPacket);
   const executionPacketBodyLockReasons = compactExecutionLockReasons("Execution packet body", executionPacket?.packet);
@@ -4275,6 +4341,9 @@ function CompactHermesHealthDashboard({
     ...runGraphLockReasons,
     ...childProjectionLockReasons,
     ...childInstructionLockReasons,
+    ...reportReviewQueueLockReasons,
+    ...reportContractLockReasons,
+    ...stopControlLockReasons,
     ...executionModeLockReasons,
     ...executionPacketLockReasons,
     ...executionPacketBodyLockReasons,
@@ -4295,6 +4364,9 @@ function CompactHermesHealthDashboard({
     runGraph?.blocked ? firstReason(runGraph.blocked_reasons, "Orchestration run graph needs review") : "",
     childProjection?.blocked_reasons?.length ? firstReason(childProjection.blocked_reasons, "Child-agent projection needs review") : "",
     childInstruction?.blocked ? firstReason(childInstruction.blocked_reasons, "Child handoff preview needs review") : "",
+    reportReviewQueue?.blocked ? firstReason(reportReviewQueue.blocked_reasons, "Report review queue needs Jenny review") : "",
+    reportContract?.blocked ? firstReason(reportContract.blocked_reasons, "Report contract needs review") : "",
+    stopControl?.blocked ? firstReason(stopControl.blocked_reasons, "Stop/cancel control needs review") : "",
     executionMode?.blocked ? firstReason(executionMode.blocked_reasons, "Execution mode preview is blocked") : "",
     executionPacket?.blocked_reasons?.length ? firstReason(executionPacket.blocked_reasons, "Execution packet preview is blocked") : "",
     readiness?.blocked_reasons?.length ? firstReason(readiness.blocked_reasons, "Orchestration readiness is blocked") : "",
@@ -4330,6 +4402,21 @@ function CompactHermesHealthDashboard({
   const childInstructionTone: CompactHealthTone = childInstructionLockReasons.length
     ? "bad"
     : childInstruction?.blocked_reasons?.length || childInstruction?.ready_for_handoff !== true
+      ? "warn"
+      : "good";
+  const reportReviewQueueTone: CompactHealthTone = reportReviewQueueLockReasons.length
+    ? "bad"
+    : reportReviewQueue?.blocked || reportReviewQueueCount
+      ? "warn"
+      : "good";
+  const reportContractTone: CompactHealthTone = reportContractLockReasons.length
+    ? "bad"
+    : reportContract?.blocked || reportContractIncompleteCount
+      ? "warn"
+      : "good";
+  const stopControlTone: CompactHealthTone = stopControlLockReasons.length
+    ? "bad"
+    : stopControl?.blocked || stopCancelBlockedCount
       ? "warn"
       : "good";
   const executionPreviewTone: CompactHealthTone = [
@@ -4438,6 +4525,25 @@ function CompactHermesHealthDashboard({
     firstReason(childInstruction?.blocked_reasons, ""),
     childInstruction?.manual_handoff_prompt,
     "No child-agent instruction preview recorded.",
+  ].find(Boolean), 260);
+  const reportReviewQueueDetail = compactText([
+    ...reportReviewQueueLockReasons,
+    firstReason(reportReviewQueue?.blocked_reasons, ""),
+    reportReviewQueue?.primary_review_reason,
+    reportReviewQueue?.primary_review_label,
+    "No report review queue blockers recorded.",
+  ].find(Boolean), 260);
+  const reportContractDetail = compactText([
+    ...reportContractLockReasons,
+    firstReason(reportContract?.blocked_reasons, ""),
+    reportContract?.primary_item_label,
+    "Reports must include summary, result, risks or blockers, evidence, and tests before Jenny can rely on them.",
+  ].find(Boolean), 260);
+  const stopControlDetail = compactText([
+    ...stopControlLockReasons,
+    firstReason(stopControl?.blocked_reasons, ""),
+    stopControl?.primary_item_label,
+    "Stopped or cancelled work stays manual-review-only until reports and lineage are clean.",
   ].find(Boolean), 260);
   const reportLifecycleDetail = compactText([
     ...reportLifecycleLockReasons,
@@ -4565,6 +4671,24 @@ function CompactHermesHealthDashboard({
           value={`${compactStateLabel(workerPresenceState)} / online ${workerPresence?.online ? "yes" : "no"}`}
         />
         <CompactHealthTile
+          detail={reportReviewQueueDetail}
+          label="Report review queue"
+          tone={reportReviewQueueTone}
+          value={`items ${reportReviewQueueCount} / needs review ${reportReviewNeedsReviewCount} / missing ${reportReviewMissingCount} / mismatch ${reportReviewMismatchCount}`}
+        />
+        <CompactHealthTile
+          detail={reportReviewQueue?.primary_review_label || reportReviewQueue?.primary_review_reason || "No report waiting for review."}
+          label="Top report review"
+          tone={reportReviewQueueTone}
+          value={reportReviewQueue?.primary_review_item_id || "none"}
+        />
+        <CompactHealthTile
+          detail={reportContractDetail}
+          label="Report contract"
+          tone={reportContractTone}
+          value={`reports ${reportContract?.report_count ?? 0} / complete ${reportContract?.complete_report_count ?? 0} / incomplete ${reportContractIncompleteCount}`}
+        />
+        <CompactHealthTile
           detail={resultIngestionBlocked ? firstReason(resultIngestion?.blocked_reasons, "Reports need ingestion review.") : "Reports that Jenny can rely on are linked, redacted, metadata-safe, and safety-confirmed."}
           label="Result ingestion"
           tone={ingestionTone}
@@ -4575,6 +4699,12 @@ function CompactHermesHealthDashboard({
           label="Report completion"
           tone={completionTone}
           value={`${reportCompletion?.completion_ready_count ?? 0} ready / ${reportCompletionBlocked} blocked`}
+        />
+        <CompactHealthTile
+          detail={stopControlDetail}
+          label="Stop/cancel control"
+          tone={stopControlTone}
+          value={`items ${stopCancelCount} / stopping ${stopControl?.active_stop_count ?? 0} / terminal ${stopControl?.terminal_stop_count ?? 0} / mismatch ${stopControl?.link_mismatch_count ?? 0}`}
         />
         <CompactHealthTile
           detail={reportLifecycleDetail}

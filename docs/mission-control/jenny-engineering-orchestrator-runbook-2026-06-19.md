@@ -50,15 +50,18 @@ Jenny packet as permission to bypass Codex safety checks.
   and one-active-mutation-lane blockers from the same append-only projections as
   desktop Mission Control. Its compact health dashboard shows orchestration run
   graph counts, child-agent status, child report review state, and child handoff
-  preview blockers without enabling delegation. The manual report/challenge/lane
+  preview blockers without enabling delegation. It shows the report review
+  queue, top report review item, report contract completeness, and stop/cancel
+  control as manual-review-only health tiles. The manual report/challenge/lane
   draft buttons are separate record actions and remain visibly guarded.
   Its compact health dashboard also treats any true execution lock on the
   execution mode preview, execution packet wrapper, execution packet body,
   worker contract, operator decision packet, readiness summary, worker handoff
-  preview, worker presence, result ingestion, report completion, or
-  next-safe-action summary as a red health issue instead of implying the lane is
-  safe. Backend operator execution-lock rollups are also shown as health issues
-  even when the direct operator packet flags are false.
+  preview, worker presence, report review queue, report contract, result
+  ingestion, report completion, stop/cancel control, or next-safe-action summary
+  as a red health issue instead of implying the lane is safe. Backend operator
+  execution-lock rollups are also shown as health issues even when the direct
+  operator packet flags are false.
 - Desktop Mission Control is the advanced audit and recovery surface.
   Any GitHub bridge write button there follows the same fail-closed status
   check before creating a bridge request, including hard-boundary,
