@@ -261,6 +261,12 @@ def build_workspace_status_from_records(
         child_runs=recent_child_runs,
         worker_runs=recent_worker_runs,
     )
+    status["report_contract_compliance"] = _report_contract_compliance_payload(
+        reports=recent_reports,
+        runs=recent_runs,
+        child_runs=recent_child_runs,
+        worker_runs=recent_worker_runs,
+    )
     status["next_safe_actions"] = _next_safe_actions_payload(status)
     status["orchestration_readiness"] = _orchestration_readiness_payload(status)
     status["child_agent_instruction_preview"] = _child_agent_instruction_preview(status)
@@ -735,6 +741,18 @@ def _next_safe_actions_payload(status: dict[str, Any]) -> dict[str, Any]:
             priority=45,
         )
 
+    report_contract_compliance = _mapping(status.get("report_contract_compliance"))
+    report_contract_reasons = _text_list(report_contract_compliance.get("blocked_reasons"))
+    if report_contract_compliance.get("blocked") is True or report_contract_reasons:
+        extend_blockers(report_contract_reasons)
+        add_action(
+            action_id="review_report_contract_compliance",
+            label="Review report contract completeness",
+            reason=_first_reason(report_contract_reasons, "One or more reports are missing required result fields."),
+            blocked_until="reports include summary, result, evidence, risks/blockers, tests, next lane, and safety confirmation",
+            priority=47,
+        )
+
     worker_projection = _mapping(status.get("worker_node_orchestration"))
     worker_reasons = _text_list(worker_projection.get("blocked_reasons"))
     if worker_reasons:
@@ -1199,6 +1217,117 @@ def _report_review_queue_payload(
         "primary_review_reason": _safe_text(primary_item.get("reason"), max_chars=800),
         "items": items,
     }
+
+
+def _report_contract_compliance_payload(
+    *,
+    reports: tuple[ReportRecord, ...],
+    runs: tuple[RunRecord, ...],
+    child_runs: tuple[ChildRunRecord, ...],
+    worker_runs: tuple[WorkerNodeRunRecord, ...],
+) -> dict[str, Any]:
+    items: list[dict[str, Any]] = []
+    blocked_reasons: list[str] = []
+
+    for report in reports:
+        linked = _report_review_linked_record(
+            report=report,
+            runs=runs,
+            child_runs=child_runs,
+            worker_runs=worker_runs,
+        )
+        missing_fields = _report_contract_missing_fields(report)
+        complete = not missing_fields
+        if missing_fields:
+            blocked_reasons.append(
+                f"report_id {report.report_id} missing contract fields: {', '.join(missing_fields)}"
+            )
+        items.append(
+            {
+                "item_id": f"report-contract:{report.report_id}",
+                "report_id": report.report_id,
+                "run_id": report.run_id,
+                "linked_record_type": linked.get("linked_record_type", ""),
+                "linked_record_id": linked.get("linked_record_id", ""),
+                "status": report.status or "received",
+                "review_status": _linked_report_review_status(report),
+                "summary": report.summary,
+                "complete": complete,
+                "missing_fields": missing_fields,
+                "required_fields": [
+                    "summary",
+                    "result",
+                    "risks/blockers",
+                    "evidence",
+                    "tests",
+                    "next lane",
+                    "safety confirmation",
+                ],
+                "changed_files": list(report.changed_files),
+                "tests": list(report.tests),
+                "risks": list(report.risks),
+                "blockers": list(report.blockers),
+                "evidence_refs": list(report.evidence_refs),
+                "artifact_refs": list(report.artifact_refs),
+                "submitted_by": report.submitted_by,
+                "submitted_from": report.submitted_from,
+                "manual_only": True,
+                "recommended_action": (
+                    "Jenny reviews the report contract fields before accepting the worker or child result."
+                ),
+            }
+        )
+
+    incomplete_items = [item for item in items if item.get("complete") is not True]
+    primary_item = incomplete_items[0] if incomplete_items else {}
+    unique_blocked_reasons = _unique_reasons(blocked_reasons)
+    return {
+        "source": "mission_control_report_contract_compliance_v1",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "stored": False,
+        "dry_run_only": True,
+        "manual_review_only": True,
+        "report_count": len(items),
+        "complete_report_count": len(items) - len(incomplete_items),
+        "incomplete_report_count": len(incomplete_items),
+        "blocked": bool(unique_blocked_reasons),
+        "blocked_reasons": unique_blocked_reasons,
+        "primary_item": primary_item,
+        "primary_item_id": _safe_text(primary_item.get("item_id")),
+        "primary_item_label": _safe_text(primary_item.get("summary"), max_chars=800),
+        "items": items,
+    }
+
+
+def _report_contract_missing_fields(report: ReportRecord) -> list[str]:
+    missing: list[str] = []
+    if not _safe_text(report.summary):
+        missing.append("summary")
+    if not _safe_text(report.result):
+        missing.append("result")
+    if not report.risks and not report.blockers:
+        missing.append("risks/blockers")
+    if not report.changed_files and not report.evidence_refs and not report.artifact_refs:
+        missing.append("evidence")
+    if not report.tests:
+        missing.append("tests")
+    if not _safe_text(report.next_recommended_lane):
+        missing.append("next lane")
+    metadata = report.metadata if isinstance(report.metadata, dict) else {}
+    safety_confirmation = (
+        metadata.get("safety_confirmation")
+        or metadata.get("safety")
+        or metadata.get("safety_confirmed")
+    )
+    if not _safe_text(safety_confirmation):
+        missing.append("safety confirmation")
+    return missing
 
 
 def _report_review_linked_record(
@@ -1760,12 +1889,14 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     next_safe_actions = _mapping(status.get("next_safe_actions"))
     readiness = _mapping(status.get("orchestration_readiness"))
     report_queue = _mapping(status.get("report_review_queue"))
+    report_contract = _mapping(status.get("report_contract_compliance"))
     worker_presence = _mapping(status.get("worker_node_presence"))
     worker_instruction = _mapping(status.get("worker_node_instruction_preview"))
     child_instruction = _mapping(status.get("child_agent_instruction_preview"))
     execution_packet = _mapping(status.get("execution_packet_preview"))
 
     queue_count = _safe_int(report_queue.get("queue_count"))
+    incomplete_report_contract_count = _safe_int(report_contract.get("incomplete_report_count"))
     readiness_states = _mapping(readiness.get("states"))
     next_label = _safe_text(next_safe_actions.get("primary_action_label"), max_chars=800)
     next_reason = _safe_text(
@@ -1786,6 +1917,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             *_text_list(runtime_provenance.get("autonomy_blocked_reasons")),
             *_text_list(readiness.get("blocked_reasons")),
             *_text_list(report_queue.get("blocked_reasons")),
+            *_text_list(report_contract.get("blocked_reasons")),
             *_text_list(worker_presence.get("blocked_reasons")),
             *_text_list(execution_packet.get("blocked_reasons")),
             *_text_list(next_safe_actions.get("blocked_reasons")),
@@ -1825,6 +1957,12 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             f"Top report review: {report_label or 'unlabeled report'}"
             f"{f' because {report_reason}' if report_reason else ''}."
         )
+    if report_contract:
+        summary_lines.append(
+            "Report contract completeness: "
+            f"{_safe_int(report_contract.get('complete_report_count'))} complete, "
+            f"{incomplete_report_contract_count} incomplete."
+        )
     if worker_instruction.get("available") is True:
         summary_lines.append(
             "Worker instruction: manual handoff only; laptop Codex dispatch remains disabled."
@@ -1860,6 +1998,9 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         "next_safe_action_label": next_label,
         "next_safe_action_reason": next_reason,
         "report_review_queue_count": queue_count,
+        "report_contract_incomplete_count": incomplete_report_contract_count,
+        "report_contract_blocked_reasons": _text_list(report_contract.get("blocked_reasons")),
+        "report_contract_primary_item_id": _safe_text(report_contract.get("primary_item_id")),
         "execution_packet_mode": execution_packet_mode,
         "execution_packet_eligible": execution_packet_eligible,
         "execution_packet_blocked_reasons": _text_list(execution_packet.get("blocked_reasons")),

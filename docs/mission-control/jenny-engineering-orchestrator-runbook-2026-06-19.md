@@ -196,6 +196,11 @@ Travis what Jenny should read first and why. The queue is advisory and
 display-only; it does not write review records, contact Codex, dispatch work,
 or mark a report accepted.
 
+Mission Control also checks report contract completeness. A report should have
+summary, result, risks or blockers, evidence, tests, next lane, and safety
+confirmation. Missing fields stay as manual Jenny review blockers; the
+projection does not accept, reject, or mutate the report.
+
 Child-agent and laptop Codex worker-node rows also join against `ReportRecord`
 when possible. A worker row can therefore show whether the referenced report
 was found and whether Jenny has reviewed, accepted, rejected, or superseded it.
@@ -269,6 +274,8 @@ not start delegation, send a session, mutate records, or enable dispatch.
   stale report links, and exact review blockers.
 - Report review queue: Jenny's prioritized manual review list, including top
   report, reason, missing report links, and worker/child report context.
+- Report contract compliance: whether reports include required result fields
+  before Jenny accepts or relies on them.
 - Next safe action: the highest-priority manual review or preview-preparation
   step; it does not enable execution.
 - Operator decision packet: a plain-language packet for Travis showing state,

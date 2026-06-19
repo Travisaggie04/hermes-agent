@@ -553,6 +553,53 @@ export interface MissionControlReportReviewQueue {
   would_execute?: boolean
 }
 
+export interface MissionControlReportContractComplianceItem {
+  artifact_refs?: string[]
+  blockers?: string[]
+  changed_files?: string[]
+  complete?: boolean
+  evidence_refs?: string[]
+  item_id?: string
+  linked_record_id?: string
+  linked_record_type?: string
+  manual_only?: boolean
+  missing_fields?: string[]
+  recommended_action?: string
+  report_id?: string
+  required_fields?: string[]
+  review_status?: string
+  risks?: string[]
+  run_id?: string
+  status?: string
+  submitted_by?: string
+  submitted_from?: string
+  summary?: string
+  tests?: string[]
+}
+
+export interface MissionControlReportContractCompliance {
+  blocked?: boolean
+  blocked_reasons?: string[]
+  complete_report_count?: number
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  incomplete_report_count?: number
+  items?: MissionControlReportContractComplianceItem[]
+  manual_review_only?: boolean
+  primary_item?: MissionControlReportContractComplianceItem
+  primary_item_id?: string
+  primary_item_label?: string
+  report_count?: number
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
+}
+
 export interface MissionControlOperatorDecisionPacket {
   approval_required?: boolean
   blocked?: boolean
@@ -573,6 +620,9 @@ export interface MissionControlOperatorDecisionPacket {
   next_safe_action_reason?: string
   plain_language_summary?: string
   recommended_operator_instruction?: string
+  report_contract_blocked_reasons?: string[]
+  report_contract_incomplete_count?: number
+  report_contract_primary_item_id?: string
   report_review_queue_count?: number
   session_send_enabled?: boolean
   source?: string
@@ -1262,6 +1312,7 @@ export interface MissionControlWorkspaceStatus {
   safety?: { dispatch_in_gateway?: boolean; send_to_jenny_enabled?: boolean }
   stale_context?: { warnings?: string[] }
   report_lifecycle?: MissionControlReportLifecycle
+  report_contract_compliance?: MissionControlReportContractCompliance
   report_review_queue?: MissionControlReportReviewQueue
   run_lifecycle?: MissionControlRunLifecycle
   tool_permission_classification?: MissionControlToolPermissionClassification

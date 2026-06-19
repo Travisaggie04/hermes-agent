@@ -640,6 +640,96 @@ def test_record_sourced_workspace_status_projects_report_review_queue(tmp_path):
     assert "report_id report-worker still needs Jenny review" in operator_packet["blocked_reasons"]
 
 
+def test_record_sourced_workspace_status_projects_report_contract_compliance(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        WorkerNodeRunRecord(
+            worker_run_id="worker-run-1",
+            parent_run_id="run-parent",
+            project_id="project-hermes-mission-control",
+            worker_identity="codex",
+            worker_host_label="laptop-codex",
+            status="completed",
+            objective="Prepare scoped PR evidence.",
+            report_id="report-complete",
+        )
+    )
+    store.append(
+        ChildRunRecord(
+            child_run_id="child-run-1",
+            parent_run_id="run-parent",
+            project_id="project-hermes-mission-control",
+            agent_identity="jenny-child",
+            status="completed",
+            objective="Inspect bounded evidence.",
+            report_id="report-incomplete",
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-complete",
+            run_id="worker-run-1",
+            project_id="project-hermes-mission-control",
+            status="reviewed",
+            summary="Worker completed scoped PR evidence.",
+            result="Changed one bounded status projection and verified tests.",
+            risks=("focused coverage only",),
+            changed_files=("mission_control/workspace_status_records.py",),
+            tests=("mission_control status tests passed",),
+            next_recommended_lane="Jenny review and PR check wait.",
+            evidence_refs=("pytest output",),
+            submitted_by="codex",
+            submitted_from="laptop-codex",
+            metadata={"safety_confirmation": "No live dispatch, deploy, restart, runtime switch, or secrets."},
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-incomplete",
+            run_id="child-run-1",
+            project_id="project-hermes-mission-control",
+            status="received",
+            summary="Child found a possible gap.",
+            blockers=("needs tests",),
+        )
+    )
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    compliance = status["report_contract_compliance"]
+    assert compliance["source"] == "mission_control_report_contract_compliance_v1"
+    assert compliance["display_only"] is True
+    assert compliance["trusted_for_execution"] is False
+    assert compliance["would_execute"] is False
+    assert compliance["execution_enabled"] is False
+    assert compliance["dispatch_enabled"] is False
+    assert compliance["session_send_enabled"] is False
+    assert compliance["worker_dispatch_enabled"] is False
+    assert compliance["stored"] is False
+    assert compliance["dry_run_only"] is True
+    assert compliance["manual_review_only"] is True
+    assert compliance["report_count"] == 2
+    assert compliance["complete_report_count"] == 1
+    assert compliance["incomplete_report_count"] == 1
+    assert compliance["blocked"] is True
+    assert compliance["primary_item_id"] == "report-contract:report-incomplete"
+    incomplete = {item["report_id"]: item for item in compliance["items"]}["report-incomplete"]
+    assert incomplete["linked_record_type"] == "child_run"
+    assert incomplete["linked_record_id"] == "child-run-1"
+    assert incomplete["missing_fields"] == ["result", "evidence", "tests", "next lane", "safety confirmation"]
+    assert "report_id report-incomplete missing contract fields: result, evidence, tests, next lane, safety confirmation" in compliance["blocked_reasons"]
+
+    next_safe_actions = status["next_safe_actions"]
+    action_ids = {action["action_id"] for action in next_safe_actions["actions"]}
+    assert "review_report_contract_compliance" in action_ids
+
+    operator_packet = status["operator_decision_packet"]
+    assert operator_packet["report_contract_incomplete_count"] == 1
+    assert operator_packet["report_contract_primary_item_id"] == "report-contract:report-incomplete"
+    assert "Report contract completeness: 1 complete, 1 incomplete." in operator_packet["plain_language_summary"]
+
+
 def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"
     store = JsonlRecordStore(records_path)
