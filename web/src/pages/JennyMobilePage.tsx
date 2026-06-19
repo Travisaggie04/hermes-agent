@@ -28,6 +28,7 @@ const SELECTED_MODEL_STORAGE_KEY = "jenny-mobile-selected-model";
 const SELECTED_EFFORT_STORAGE_KEY = "jenny-mobile-selected-effort";
 const MOBILE_MESSAGE_LIMIT = 1800;
 const MAX_MODEL_CHOICES = 60;
+const ANSWER_ONCE_TIMEOUT_MS = 45_000;
 
 const MOBILE_PROJECTS: MobileProject[] = [
   {
@@ -185,6 +186,21 @@ function boundedMobileMessage(value: string): string {
   const trimmed = value.trim();
   if (trimmed.length <= MOBILE_MESSAGE_LIMIT) return trimmed;
   return `${trimmed.slice(0, MOBILE_MESSAGE_LIMIT - 3).trim()}...`;
+}
+
+async function fetchJSONWithTimeout<T>(url: string, init: RequestInit, timeoutMs: number): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetchJSON<T>(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("Jenny reply timed out. The message is still queued; retry when the bridge is ready.");
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
 
 function stripHiddenJennyContext(value: string): string {
@@ -527,6 +543,7 @@ function statusTone(status: MobileMessageStatus): string {
 export default function JennyMobilePage() {
   const { setTitle } = usePageHeader();
   const endRef = useRef<HTMLDivElement | null>(null);
+  const replyingRequestIdRef = useRef("");
   const [projects, setProjects] = useState<MobileProject[]>(MOBILE_PROJECTS);
   const [selectedProjectId, setSelectedProjectId] = useState(() => {
     try {
@@ -620,7 +637,7 @@ export default function JennyMobilePage() {
   const selectedModel = modelChoiceFromKey(currentModelChoice);
   const statusRecords = unwrapRecords(bridgeStatus?.status_records).slice(-5).reverse();
   const latestPendingId = latestPendingRequestId(messages);
-  const sendDisabled = sending || replyingRequestId !== "" || !composer.trim();
+  const sendDisabled = sending || !composer.trim();
 
   const refreshMessages = useCallback(async (projectId: string) => {
     const status = await fetchJSON<GitHubBridgeStatus>(
@@ -674,7 +691,8 @@ export default function JennyMobilePage() {
   }, []);
 
   const runJennyOnce = useCallback(async (projectId: string, requestId: string) => {
-    if (!requestId) return;
+    if (!requestId || replyingRequestIdRef.current) return;
+    replyingRequestIdRef.current = requestId;
     setReplyingRequestId(requestId);
     setRunByProject((prev) => ({
       ...prev,
@@ -682,7 +700,7 @@ export default function JennyMobilePage() {
     }));
     updateMessageStatus(projectId, requestId, "working");
     try {
-      const result = await fetchJSON<AnswerOnceResponse>(WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL, {
+      const result = await fetchJSONWithTimeout<AnswerOnceResponse>(WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL, {
         body: JSON.stringify({
           confirm_manual_hermes_answer: true,
           project_id: projectId,
@@ -690,7 +708,7 @@ export default function JennyMobilePage() {
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
-      });
+      }, ANSWER_ONCE_TIMEOUT_MS);
 
       if (result.response?.message) {
         appendMessage(projectId, {
@@ -704,16 +722,17 @@ export default function JennyMobilePage() {
       }
 
       const answered = Boolean(result.answered || result.response?.message);
-      updateMessageStatus(projectId, requestId, answered ? "replied" : "failed");
+      const nextStatus = answered ? "replied" : "failed";
       setRunByProject((prev) => ({
         ...prev,
         [projectId]: {
           detail: answered ? "Jenny replied." : result.status?.last_error || "Jenny did not return a reply.",
           requestId,
-          status: answered ? "replied" : "failed",
+          status: nextStatus,
         },
       }));
       await refreshMessages(projectId);
+      updateMessageStatus(projectId, requestId, nextStatus);
     } catch (err) {
       await refreshMessages(projectId).catch(() => undefined);
       updateMessageStatus(projectId, requestId, "failed");
@@ -726,6 +745,7 @@ export default function JennyMobilePage() {
         },
       }));
     } finally {
+      replyingRequestIdRef.current = "";
       setReplyingRequestId("");
     }
   }, [appendMessage, refreshMessages, updateMessageStatus]);
@@ -773,7 +793,8 @@ export default function JennyMobilePage() {
         method: "POST",
       });
       await refreshMessages(project.project_id);
-      await runJennyOnce(project.project_id, requestId);
+      setSending(false);
+      void runJennyOnce(project.project_id, requestId);
     } catch (err) {
       updateMessageStatus(project.project_id, requestId, "failed");
       const message = err instanceof Error ? err.message : String(err);

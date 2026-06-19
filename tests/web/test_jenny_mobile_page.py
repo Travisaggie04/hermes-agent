@@ -96,7 +96,11 @@ def test_jenny_mobile_send_is_optimistic_and_foreground_only() -> None:
     assert "optimistic: true" in src
     assert "status: \"queued\"" in src
     assert "await refreshMessages(project.project_id)" in src
-    assert "await runJennyOnce(project.project_id, requestId)" in src
+    assert "void runJennyOnce(project.project_id, requestId)" in src
+    assert "await runJennyOnce(project.project_id, requestId)" not in src
+    assert "const sendDisabled = sending || !composer.trim();" in src
+    assert 'const ANSWER_ONCE_TIMEOUT_MS = 45_000;' in src
+    assert "fetchJSONWithTimeout<AnswerOnceResponse>" in src
     assert "confirm_manual_hermes_answer: true" in src
     assert "manual foreground reply only" in src
     assert "no hidden worker, timer, daemon, gateway restart, deploy, Waha/social/payment/outreach" in src
