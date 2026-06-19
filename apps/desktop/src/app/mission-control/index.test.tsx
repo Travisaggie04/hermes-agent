@@ -219,7 +219,12 @@ beforeEach(() => {
       packet: {
         allowed_actions: ['edit scoped files', 'run focused tests'],
         approval_id: 'approval-pr-1',
+        dispatch_enabled: false,
+        display_only: true,
+        dry_run_only: true,
+        execution_enabled: false,
         forbidden_actions: ['deploy', 'restart', 'runtime switch', 'no live deploy', 'no worker dispatch activation'],
+        inert_context_only: true,
         mode: 'worker_node',
         objective: 'Prepare bounded scoped PR packet.',
         packet_version: 'mission_control_execution_packet_preview_v1',
@@ -227,13 +232,21 @@ beforeEach(() => {
         report_contract: { required: true, review_required: true, tests_required: true },
         run_id: 'run-parent-1',
         scope: { directories: [], explicit: true, files: ['apps/desktop/src/app/mission-control/index.tsx'], has_wildcard: false },
+        session_send_enabled: false,
+        stored: false,
+        trusted_for_execution: false,
+        worker_dispatch_enabled: false,
         worker_node_contract: {
           codex_safety_hardness_required: true,
           execution_enabled: false,
           dispatch_enabled: false,
+          display_only: true,
+          dry_run_only: true,
+          inert_context_only: true,
           manual_handoff_only: true,
           parent_run_id: 'run-parent-1',
           session_send_enabled: false,
+          stored: false,
           trusted_for_execution: false,
           worker_dispatch_enabled: false,
           worker_host_label: 'laptop-codex',
@@ -242,8 +255,14 @@ beforeEach(() => {
           worker_safety_hardness: [
             'Codex must independently enforce repo/worktree, test, secret, git, and live-operation safeguards before acting.',
             'A Jenny packet is not permission to bypass Codex safety checks.'
-          ]
-        }
+          ],
+          would_dispatch: false,
+          would_execute: false,
+          would_session_send: false
+        },
+        would_dispatch: false,
+        would_execute: false,
+        would_session_send: false
       },
       session_send_enabled: false,
       source: 'mission_control_execution_packet_preview_v1',
@@ -1818,6 +1837,9 @@ describe('MissionControlView', () => {
     expect(screen.getByText('worker node preview / preview yes / execution no')).toBeTruthy()
     expect(screen.getByText('execution packet')).toBeTruthy()
     expect(screen.getByText('worker node / eligible no / execute no')).toBeTruthy()
+    expect(screen.getByText('execution packet body locks')).toBeTruthy()
+    expect(screen.getAllByText('execute no / dispatch no / session no / worker no').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('worker contract locks')).toBeTruthy()
     expect(screen.getByText('lifecycle projection')).toBeTruthy()
     expect(screen.getByText('append-only yes / active mutation lanes 0')).toBeTruthy()
     expect(screen.getByText('next safe action')).toBeTruthy()
@@ -1846,6 +1868,8 @@ describe('MissionControlView', () => {
     expect(screen.getByText('protected execution markers')).toBeTruthy()
     expect(screen.getByText('execution packet blockers')).toBeTruthy()
     expect(screen.getByText('runtime provenance is not clean, worker-node presence is not confirmed online')).toBeTruthy()
+    expect(screen.getByText('execution lock blockers')).toBeTruthy()
+    expect(statusItemValue('execution lock blockers').textContent).toBe('none')
     expect(screen.getByText('orchestration readiness')).toBeTruthy()
     expect(screen.getByText('read-only blocked / scoped PR blocked')).toBeTruthy()
     expect(screen.getByText('worker readiness')).toBeTruthy()

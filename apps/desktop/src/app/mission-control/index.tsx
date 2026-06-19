@@ -184,6 +184,10 @@ function yesNo(value: unknown): string {
   return value === true ? 'yes' : value === false ? 'no' : 'unknown'
 }
 
+function allFalse(values: unknown[]): boolean {
+  return values.every(value => value === false)
+}
+
 function formatBytes(value: unknown): string {
   const bytes = typeof value === 'number' && Number.isFinite(value) ? value : 0
   if (bytes < 1024) {
@@ -1332,6 +1336,36 @@ function reportLinkValue({
     .join(' / ')
 }
 
+type ExecutionLockSource = {
+  dispatch_enabled?: boolean
+  execution_enabled?: boolean
+  session_send_enabled?: boolean
+  would_dispatch?: boolean
+  would_execute?: boolean
+  would_session_send?: boolean
+  worker_dispatch_enabled?: boolean
+}
+
+const EXECUTION_LOCK_FLAGS: Array<[keyof ExecutionLockSource, string]> = [
+  ['would_execute', 'would_execute must remain false'],
+  ['would_dispatch', 'would_dispatch must remain false'],
+  ['would_session_send', 'would_session_send must remain false'],
+  ['execution_enabled', 'execution_enabled must remain false'],
+  ['dispatch_enabled', 'dispatch_enabled must remain false'],
+  ['session_send_enabled', 'session_send_enabled must remain false'],
+  ['worker_dispatch_enabled', 'worker_dispatch_enabled must remain false']
+]
+
+function executionLockReasons(label: string, source?: ExecutionLockSource | null): string[] {
+  if (!source) {
+    return []
+  }
+
+  return EXECUTION_LOCK_FLAGS
+    .filter(([flag]) => source[flag] === true)
+    .map(([, reason]) => `${label}: ${reason}`)
+}
+
 export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) {
   const runtimeProvenance = status.runtime_provenance
   const autonomyEligibility = status.read_only_autonomy_eligibility
@@ -1349,6 +1383,8 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
   const nextSafePrimaryAction = nextSafeActions?.primary_action
   const executionModeClassification = status.execution_mode_classification
   const executionPacket = status.execution_packet_preview
+  const executionPacketBody = executionPacket?.packet
+  const workerContract = executionPacketBody?.worker_node_contract
   const operatorDecisionPacket = status.operator_decision_packet
   const orchestrationReadiness = status.orchestration_readiness
   const orchestrationRunGraph = status.orchestration_run_graph
@@ -1391,6 +1427,11 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
   const nextSafeActionReasons = uniqueTextList([
     ...(nextSafeActions?.blocked_reasons ?? []),
     ...(nextSafeActions?.actions ?? []).map(action => action.reason ?? '')
+  ])
+  const executionPacketLockReasons = uniqueTextList([
+    ...executionLockReasons('execution packet', executionPacket),
+    ...executionLockReasons('execution packet body', executionPacketBody),
+    ...executionLockReasons('worker contract', workerContract)
   ])
   return {
     activeLaneCount: status.lane?.active_lane_count ?? 0,
@@ -1445,11 +1486,20 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     executionModeProtectedMarkers: executionModeClassification?.protected_action_markers ?? [],
     executionModeWorkerDispatchEnabled: executionModeClassification?.worker_dispatch_enabled,
     executionPacketBlockedReasons: executionPacket?.blocked_reasons ?? [],
+    executionPacketBodyDispatchEnabled: executionPacketBody?.dispatch_enabled,
+    executionPacketBodyExecutionEnabled: executionPacketBody?.execution_enabled,
+    executionPacketBodySessionSendEnabled: executionPacketBody?.session_send_enabled,
+    executionPacketBodyWorkerDispatchEnabled: executionPacketBody?.worker_dispatch_enabled,
+    executionPacketBodyWouldDispatch: executionPacketBody?.would_dispatch,
+    executionPacketBodyWouldExecute: executionPacketBody?.would_execute,
+    executionPacketBodyWouldSessionSend: executionPacketBody?.would_session_send,
     executionPacketDispatchEnabled: executionPacket?.dispatch_enabled,
     executionPacketDisplayOnly: executionPacket?.display_only,
     executionPacketEligible: executionPacket?.eligible,
     executionPacketExecutionEnabled: executionPacket?.execution_enabled,
+    executionPacketLockReasons,
     executionPacketMode: executionPacket?.packet?.mode ?? 'unknown',
+    executionPacketSessionSendEnabled: executionPacket?.session_send_enabled,
     executionPacketWarnings: executionPacket?.warnings ?? [],
     executionPacketWorkerDispatchEnabled: executionPacket?.worker_dispatch_enabled,
     executionPacketWouldDispatch: executionPacket?.would_dispatch,
@@ -1648,6 +1698,15 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     workerActiveCount: status.worker_node_orchestration?.active_count ?? 0,
     workerBlockedReasons,
     workerCapabilitySummary: workerPresence?.capability_summary ?? '',
+    workerContractDispatchEnabled: workerContract?.dispatch_enabled,
+    workerContractExecutionEnabled: workerContract?.execution_enabled,
+    workerContractHostLabel: workerContract?.worker_host_label ?? '',
+    workerContractManualHandoffOnly: workerContract?.manual_handoff_only,
+    workerContractSessionSendEnabled: workerContract?.session_send_enabled,
+    workerContractWorkerDispatchEnabled: workerContract?.worker_dispatch_enabled,
+    workerContractWouldDispatch: workerContract?.would_dispatch,
+    workerContractWouldExecute: workerContract?.would_execute,
+    workerContractWouldSessionSend: workerContract?.would_session_send,
     workerDispatchEnabled: status.worker_node_orchestration?.worker_dispatch_enabled,
     workerExecutionEnabled: status.worker_node_orchestration?.execution_enabled,
     workerHostLabel: projectionRecordText(workerRecord, 'worker_host_label') || 'laptop-codex',
@@ -4317,11 +4376,29 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
         : 'good'
       : 'warn'
   const executionPacketTone =
-    status.executionPacketExecutionEnabled === false &&
-    status.executionPacketDispatchEnabled === false &&
-    status.executionPacketWorkerDispatchEnabled === false &&
-    status.executionPacketWouldExecute === false &&
-    status.executionPacketWouldDispatch === false
+    allFalse([
+      status.executionPacketExecutionEnabled,
+      status.executionPacketDispatchEnabled,
+      status.executionPacketSessionSendEnabled,
+      status.executionPacketWorkerDispatchEnabled,
+      status.executionPacketWouldExecute,
+      status.executionPacketWouldDispatch,
+      status.executionPacketWouldSessionSend,
+      status.executionPacketBodyExecutionEnabled,
+      status.executionPacketBodyDispatchEnabled,
+      status.executionPacketBodySessionSendEnabled,
+      status.executionPacketBodyWorkerDispatchEnabled,
+      status.executionPacketBodyWouldExecute,
+      status.executionPacketBodyWouldDispatch,
+      status.executionPacketBodyWouldSessionSend,
+      status.workerContractExecutionEnabled,
+      status.workerContractDispatchEnabled,
+      status.workerContractSessionSendEnabled,
+      status.workerContractWorkerDispatchEnabled,
+      status.workerContractWouldExecute,
+      status.workerContractWouldDispatch,
+      status.workerContractWouldSessionSend
+    ])
       ? status.executionPacketBlockedReasons.length
         ? 'warn'
         : 'good'
@@ -4482,6 +4559,8 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="scoped PR bridge" tone={status.scopedPrBridgePermission === 'read_only_safe' ? 'good' : 'warn'} value={labelText(status.scopedPrBridgePermission)} />
       <StatusItem label="execution mode" tone={executionModeTone} value={`${labelText(status.executionModeFamily)} / preview ${yesNo(status.executionModePreviewReady)} / execution ${yesNo(status.executionModeExecutionEnabled)}`} />
       <StatusItem label="execution packet" tone={executionPacketTone} value={`${labelText(status.executionPacketMode)} / eligible ${yesNo(status.executionPacketEligible)} / execute ${yesNo(status.executionPacketExecutionEnabled)}`} />
+      <StatusItem label="execution packet body locks" tone={executionPacketTone} value={`execute ${yesNo(status.executionPacketBodyExecutionEnabled)} / dispatch ${yesNo(status.executionPacketBodyDispatchEnabled)} / session ${yesNo(status.executionPacketBodySessionSendEnabled)} / worker ${yesNo(status.executionPacketBodyWorkerDispatchEnabled)}`} />
+      <StatusItem label="worker contract locks" tone={executionPacketTone} value={`execute ${yesNo(status.workerContractExecutionEnabled)} / dispatch ${yesNo(status.workerContractDispatchEnabled)} / session ${yesNo(status.workerContractSessionSendEnabled)} / worker ${yesNo(status.workerContractWorkerDispatchEnabled)}`} />
       <StatusItem label="lifecycle projection" tone={status.appendOnlyProjection ? 'good' : 'warn'} value={`append-only ${yesNo(status.appendOnlyProjection)} / active mutation lanes ${status.activeMutationLaneCount}`} />
       <StatusItem className="md:col-span-2" label="next safe action" tone={nextSafeActionTone} value={status.nextSafePrimaryAction} />
       <StatusItem label="next action mode" tone={nextSafeActionTone} value={`display-only ${yesNo(status.nextSafeActionDisplayOnly)} / actions ${status.nextSafeActionCount}`} />
@@ -4536,6 +4615,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-3" label="execution mode blockers" tone={status.executionModeBlockedReasons.length ? 'warn' : 'good'} value={status.executionModeBlockedReasons.length ? status.executionModeBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="protected execution markers" tone={status.executionModeProtectedMarkers.length ? 'warn' : 'good'} value={status.executionModeProtectedMarkers.length ? status.executionModeProtectedMarkers.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="execution packet blockers" tone={status.executionPacketBlockedReasons.length ? 'warn' : 'good'} value={status.executionPacketBlockedReasons.length ? status.executionPacketBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="execution lock blockers" tone={status.executionPacketLockReasons.length ? 'warn' : 'good'} value={status.executionPacketLockReasons.length ? status.executionPacketLockReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="orchestration summary" tone={readinessTone} value={status.orchestrationReadinessSummary} />
       <StatusItem className="md:col-span-3" label="run graph blockers" tone={status.orchestrationRunGraphBlockedReasons.length ? 'warn' : 'good'} value={status.orchestrationRunGraphBlockedReasons.length ? status.orchestrationRunGraphBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="autonomy blockers" tone={status.autonomyBlockedReasons.length || status.provenanceReasons.length ? 'warn' : 'good'} value={[...status.provenanceReasons, ...status.autonomyBlockedReasons].length ? [...status.provenanceReasons, ...status.autonomyBlockedReasons].join(', ') : 'none'} />

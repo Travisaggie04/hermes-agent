@@ -848,34 +848,54 @@ export interface MissionControlExecutionModeClassification {
   would_execute?: boolean
 }
 
-export interface MissionControlExecutionPacketPreview {
-  blocked_reasons?: string[]
+export interface MissionControlExecutionLockFields {
   dispatch_enabled?: boolean
   display_only?: boolean
   dry_run_only?: boolean
-  eligible?: boolean
   execution_enabled?: boolean
-  packet?: {
-    allowed_actions?: string[]
-    approval_id?: string
-    child_run_contract?: Record<string, unknown>
-    forbidden_actions?: string[]
-    mode?: string
-    objective?: string
-    packet_version?: string
-    project_id?: string
-    report_contract?: Record<string, unknown>
-    run_id?: string
-    scope?: { directories?: string[]; explicit?: boolean; files?: string[]; has_wildcard?: boolean }
-    worker_node_contract?: Record<string, unknown>
-  }
+  inert_context_only?: boolean
   session_send_enabled?: boolean
   stored?: boolean
-  warnings?: string[]
+  trusted_for_execution?: boolean
   worker_dispatch_enabled?: boolean
   would_dispatch?: boolean
   would_execute?: boolean
   would_session_send?: boolean
+}
+
+export interface MissionControlWorkerNodeContract extends MissionControlExecutionLockFields {
+  codex_safety_hardness_required?: boolean
+  manual_handoff_only?: boolean
+  parent_run_id?: string
+  report_contract_status?: string
+  report_review_status?: string
+  worker_host_label?: string
+  worker_identity?: string
+  worker_kind?: string
+  worker_safety_hardness?: string[]
+}
+
+export interface MissionControlExecutionPacketBody extends MissionControlExecutionLockFields {
+  allowed_actions?: string[]
+  approval_id?: string
+  child_run_contract?: Record<string, unknown>
+  forbidden_actions?: string[]
+  mode?: string
+  objective?: string
+  packet_version?: string
+  project_id?: string
+  report_contract?: Record<string, unknown>
+  run_id?: string
+  scope?: { directories?: string[]; explicit?: boolean; files?: string[]; has_wildcard?: boolean }
+  worker_node_contract?: MissionControlWorkerNodeContract
+}
+
+export interface MissionControlExecutionPacketPreview extends MissionControlExecutionLockFields {
+  blocked_reasons?: string[]
+  eligible?: boolean
+  packet?: MissionControlExecutionPacketBody
+  source?: string
+  warnings?: string[]
 }
 
 export interface MissionControlNextSafeAction {
