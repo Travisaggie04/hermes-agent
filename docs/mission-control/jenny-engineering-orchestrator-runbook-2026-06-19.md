@@ -30,12 +30,17 @@ Jenny packet as permission to bypass Codex safety checks.
 - `/jenny-mobile` is the phone Jenny mobile chat route.
   It may create a visible manual bridge request and ask Jenny for one foreground
   reply, but it must fail closed and disable send/retry controls unless the
-  GitHub bridge status confirms manual-only mode with dispatch, execution,
-  session-send, worker, timer, daemon, and model-routing flags off.
+  GitHub bridge status confirms manual-only mode with `would_execute`,
+  dispatch, execution, session-send, worker-dispatch, worker, timer, daemon,
+  Discord automation, and model-routing flags off.
 - `/mission-control-compact` is the old compact Mission Control route.
   Its compact chat controls follow the same manual-only bridge rule; the
   manual report/challenge/lane draft buttons are separate record actions and
   remain visibly guarded.
+  Its compact health dashboard also treats any true execution lock on the
+  operator decision packet, readiness summary, worker presence, result
+  ingestion, report completion, or next-safe-action summary as a red health
+  issue instead of implying the lane is safe.
 - Desktop Mission Control is the advanced audit and recovery surface.
   Any GitHub bridge write button there follows the same fail-closed status
   check before creating a bridge request.
@@ -444,5 +449,8 @@ After each code-side change:
 4. Run broader checks when the change touches shared contracts.
 5. Confirm Mission Control still shows disabled execution, dispatch, session
    sending, and worker dispatch.
+   Phone and compact routes must also fail closed on `would_execute`,
+   dispatch, execution, session-send, worker-dispatch, worker, timer, daemon,
+   Discord automation, and model-routing flags.
 6. Confirm no secrets or raw private paths were added to docs, tests, or UI.
 7. Commit coherent chunks and keep the PR reviewable.
