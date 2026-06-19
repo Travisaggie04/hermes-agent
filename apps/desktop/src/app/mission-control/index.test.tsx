@@ -216,7 +216,8 @@ beforeEach(() => {
       blocked_reasons: [
         'gateway git metadata is broken',
         'report_id report-worker still needs Jenny review',
-        'worker node offline'
+        'worker node offline',
+        'worker-node presence_status is not recorded'
       ],
       child_instruction_available: true,
       dispatch_enabled: false,
@@ -229,7 +230,7 @@ beforeEach(() => {
       next_safe_action_id: 'review_runtime_provenance_blockers',
       next_safe_action_label: 'Review runtime provenance blockers',
       next_safe_action_reason: 'gateway git metadata is broken',
-      plain_language_summary: 'Operator state: report review required. Runtime provenance: GATEWAY_UNTRUSTED. Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked. Next safe action: Review runtime provenance blockers. Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review. Worker instruction: manual handoff only; laptop Codex dispatch remains disabled. Child instruction: manual delegation preview only; execution remains disabled. Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation.',
+      plain_language_summary: 'Operator state: report review required. Runtime provenance: GATEWAY_UNTRUSTED. Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked. Worker presence: unknown. Next safe action: Review runtime provenance blockers. Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review. Worker instruction: manual handoff only; laptop Codex dispatch remains disabled. Child instruction: manual delegation preview only; execution remains disabled. Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation.',
       recommended_operator_instruction: 'Jenny reviews Laptop Codex reported scoped PR evidence. before issuing another worker instruction.',
       report_review_queue_count: 3,
       session_send_enabled: false,
@@ -240,6 +241,7 @@ beforeEach(() => {
         'Operator state: report review required.',
         'Runtime provenance: GATEWAY_UNTRUSTED.',
         'Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked.',
+        'Worker presence: unknown.',
         'Next safe action: Review runtime provenance blockers.',
         'Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review.',
         'Worker instruction: manual handoff only; laptop Codex dispatch remains disabled.',
@@ -252,6 +254,9 @@ beforeEach(() => {
       trusted_for_execution: false,
       worker_dispatch_enabled: false,
       worker_instruction_available: true,
+      worker_last_seen_at: '',
+      worker_online: false,
+      worker_presence_state: 'unknown',
       would_execute: false
     },
     orchestration_readiness: {
@@ -264,11 +269,13 @@ beforeEach(() => {
       execution_ready: false,
       laptop_codex_worker_node: {
         active_count: 1,
-        blocked_reasons: ['worker node offline'],
+        blocked_reasons: ['worker node offline', 'worker-node presence_status is not recorded', 'worker-node presence is not confirmed online'],
         dispatch_enabled: false,
         display_only: true,
         execution_enabled: false,
         execution_ready: false,
+        online: false,
+        presence_state: 'unknown',
         preview_ready: false,
         recorded: true,
         session_send_enabled: false,
@@ -554,6 +561,35 @@ beforeEach(() => {
       worker_dispatch_enabled: false,
       write_capable_path_ids: ['laptop_codex_worker_node']
     },
+    worker_node_presence: {
+      active_worker_node_run_count: 1,
+      blocked: true,
+      blocked_reasons: ['worker-node presence_status is not recorded'],
+      capability_summary: '',
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      last_seen_age_seconds: null,
+      last_seen_at: '',
+      online: false,
+      parent_run_id: 'run-parent-1',
+      presence_state: 'unknown',
+      presence_status: '',
+      recorded_worker_node_run_count: 1,
+      session_send_enabled: false,
+      source: 'mission_control_worker_node_presence_v1',
+      stale_after_seconds: 900,
+      stored: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      worker_host_label: 'laptop-codex',
+      worker_identity: 'codex',
+      worker_kind: 'laptop_codex',
+      worker_run_id: 'worker-run-1',
+      worker_version: '',
+      would_execute: false
+    },
     worker_node_orchestration: {
       active_count: 1,
       active_runs: [
@@ -589,7 +625,7 @@ beforeEach(() => {
       assigned_packet_summary: 'Prepare scoped PR evidence.',
       available: true,
       blocked: true,
-      blocked_reasons: ['worker node offline'],
+      blocked_reasons: ['worker node offline', 'worker-node presence_status is not recorded'],
       dispatch_enabled: false,
       display_only: true,
       dry_run_only: true,
@@ -606,7 +642,9 @@ beforeEach(() => {
       manual_handoff_only: true,
       manual_handoff_prompt: 'Worker: codex on laptop-codex.\nObjective: Prepare bounded scoped PR packet.\nAllowed actions: edit scoped files, run focused tests.\nForbidden actions: deploy, restart, runtime switch, no live deploy, no worker dispatch activation.\nReport contract: Report changed files, tests/checks, result, blockers, safety confirmation, and the next suggested chunk.\nManual handoff only; execution and worker dispatch remain disabled.',
       objective: 'Prepare bounded scoped PR packet.',
+      online: false,
       parent_run_id: 'run-parent-1',
+      presence_state: 'unknown',
       report_contract: 'Report changed files, tests/checks, result, blockers, safety confirmation, and the next suggested chunk.',
       report_id: 'report-worker',
       report_review_status: 'accepted',
@@ -1429,11 +1467,13 @@ describe('MissionControlView', () => {
     expect(screen.getByText('operator summary')).toBeTruthy()
     expect(screen.getByText(/Operator state: report review required/)).toBeTruthy()
     expect(screen.getByText('operator blockers')).toBeTruthy()
-    expect(screen.getByText('gateway git metadata is broken, report_id report-worker still needs Jenny review, worker node offline')).toBeTruthy()
+    expect(screen.getByText('gateway git metadata is broken, report_id report-worker still needs Jenny review, worker node offline, worker-node presence_status is not recorded')).toBeTruthy()
     expect(screen.getByText('orchestration readiness')).toBeTruthy()
     expect(screen.getByText('read-only blocked / scoped PR blocked')).toBeTruthy()
     expect(screen.getByText('worker readiness')).toBeTruthy()
     expect(screen.getByText('laptop Codex blocked / execution-ready no')).toBeTruthy()
+    expect(screen.getByText('worker presence')).toBeTruthy()
+    expect(screen.getByText('unknown / online no')).toBeTruthy()
     expect(screen.getByText('orchestration summary')).toBeTruthy()
     expect(screen.getByText(/Supervised read-only autonomy is blocked: runtime provenance is not clean/)).toBeTruthy()
     expect(screen.getByText('orchestration run graph')).toBeTruthy()
@@ -1484,7 +1524,9 @@ describe('MissionControlView', () => {
     expect(screen.getByText(/Worker: codex on laptop-codex/)).toBeTruthy()
     expect(screen.getByText('worker instruction blockers')).toBeTruthy()
     expect(screen.getByText('worker-node blockers')).toBeTruthy()
-    expect(screen.getAllByText('worker node offline').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('worker presence blockers')).toBeTruthy()
+    expect(screen.getAllByText('worker-node presence_status is not recorded').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('worker node offline').length).toBeGreaterThan(0)
     expect(screen.getByText('scoped PR blockers')).toBeTruthy()
     expect(screen.getByText('exact approved ApprovalRecord is required')).toBeTruthy()
     expect(screen.getByText('autonomy blockers')).toBeTruthy()

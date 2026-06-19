@@ -304,6 +304,97 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
     assert "Report contract:" in instruction["manual_handoff_prompt"]
 
 
+def test_record_sourced_workspace_status_projects_worker_node_presence(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        WorkerNodeRunRecord(
+            worker_run_id="worker-run-online",
+            parent_run_id="run-parent",
+            project_id="project-hermes-mission-control",
+            worker_identity="codex",
+            worker_host_label="laptop-codex",
+            status="running",
+            objective="Prepare scoped engineering evidence.",
+            presence_status="online",
+            last_seen_at="2026-06-19T12:00:00Z",
+            worker_version="codex-desktop-1.2.3",
+            capability_summary="repo-local engineering worker with guarded shell and patch tools",
+        )
+    )
+
+    status = build_workspace_status_from_records(
+        {"now": "2026-06-19T12:05:00Z"},
+        records_path=records_path,
+    )
+
+    presence = status["worker_node_presence"]
+    assert presence["source"] == "mission_control_worker_node_presence_v1"
+    assert presence["display_only"] is True
+    assert presence["trusted_for_execution"] is False
+    assert presence["would_execute"] is False
+    assert presence["execution_enabled"] is False
+    assert presence["dispatch_enabled"] is False
+    assert presence["session_send_enabled"] is False
+    assert presence["worker_dispatch_enabled"] is False
+    assert presence["stored"] is False
+    assert presence["dry_run_only"] is True
+    assert presence["presence_state"] == "online"
+    assert presence["online"] is True
+    assert presence["blocked"] is False
+    assert presence["blocked_reasons"] == []
+    assert presence["worker_run_id"] == "worker-run-online"
+    assert presence["worker_host_label"] == "laptop-codex"
+    assert presence["last_seen_age_seconds"] == 300
+    assert presence["stale_after_seconds"] == 900
+    assert presence["worker_version"] == "codex-desktop-1.2.3"
+    assert presence["capability_summary"] == "repo-local engineering worker with guarded shell and patch tools"
+
+    readiness = status["orchestration_readiness"]["laptop_codex_worker_node"]
+    assert readiness["state"] == "preview_ready"
+    assert readiness["online"] is True
+    assert readiness["presence_state"] == "online"
+    assert readiness["execution_ready"] is False
+
+
+def test_record_sourced_workspace_status_blocks_worker_node_when_presence_unknown(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        WorkerNodeRunRecord(
+            worker_run_id="worker-run-unknown",
+            parent_run_id="run-parent",
+            project_id="project-hermes-mission-control",
+            worker_identity="codex",
+            worker_host_label="laptop-codex",
+            status="running",
+            objective="Prepare scoped engineering evidence.",
+        )
+    )
+
+    status = build_workspace_status_from_records(
+        {"now": "2026-06-19T12:05:00Z"},
+        records_path=records_path,
+    )
+
+    presence = status["worker_node_presence"]
+    assert presence["presence_state"] == "unknown"
+    assert presence["online"] is False
+    assert presence["blocked"] is True
+    assert "worker-node presence_status is not recorded" in presence["blocked_reasons"]
+
+    readiness = status["orchestration_readiness"]["laptop_codex_worker_node"]
+    assert readiness["state"] == "blocked"
+    assert readiness["online"] is False
+    assert readiness["presence_state"] == "unknown"
+    assert "worker-node presence_status is not recorded" in readiness["blocked_reasons"]
+    assert "worker-node presence is not confirmed online" in readiness["blocked_reasons"]
+
+    next_safe_actions = status["next_safe_actions"]
+    action_ids = {action["action_id"] for action in next_safe_actions["actions"]}
+    assert "review_worker_node_presence" in action_ids
+
+
 def test_record_sourced_workspace_status_projects_report_review_queue(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"
     store = JsonlRecordStore(records_path)

@@ -138,10 +138,17 @@ The laptop Codex worker-node model tracks:
 - report ID
 - report contract status
 - report review status
+- presence status
+- last seen timestamp
+- worker version and capability summary
 - stop/cancel semantics
 
 The laptop can be offline. Mission Control must show that honestly. Jenny may
 prepare instructions and review reports, but worker dispatch remains disabled.
+Worker-node readiness now requires append-only evidence that the laptop Codex
+worker is explicitly online and recently seen. Missing, unrecognized, offline,
+or stale presence records block the worker-node lane. This is record-based
+truth only; Mission Control does not ping the laptop or activate a worker.
 
 Current state target: preview-ready tracking, not execution-ready.
 
@@ -241,6 +248,9 @@ not start delegation, send a session, mutate records, or enable dispatch.
 - Child-agent status: planned delegation state.
 - Laptop Codex worker-node: worker host, assignment, blocked reasons, and
   report status.
+- Worker presence: whether the latest laptop Codex worker record proves
+  online, recently seen presence; unknown, offline, or stale presence blocks
+  readiness.
 - Lifecycle projection: latest-by-ID approvals, runs, and reports from
   append-only records.
 - Approval lifecycle: available, pending, expired, consumed, rejected, missing,

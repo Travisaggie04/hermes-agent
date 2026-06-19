@@ -352,10 +352,14 @@ export interface MissionControlWorkerNodeRunRecord {
   report_contract_status?: string
   report_id?: string
   report_review_status?: string
+  capability_summary?: string
+  last_seen_at?: string
+  presence_status?: string
   status?: string
   stop_reason?: string
   stopped_at?: string
   updated_at?: string
+  worker_version?: string
   worker_dispatch_enabled?: boolean
   worker_host_label?: string
   worker_identity?: string
@@ -578,6 +582,9 @@ export interface MissionControlOperatorDecisionPacket {
   trusted_for_execution?: boolean
   worker_dispatch_enabled?: boolean
   worker_instruction_available?: boolean
+  worker_last_seen_at?: string
+  worker_online?: boolean
+  worker_presence_state?: string
   would_execute?: boolean
 }
 
@@ -619,6 +626,8 @@ export interface MissionControlOrchestrationReadinessLane {
   eligible?: boolean
   execution_enabled?: boolean
   execution_ready?: boolean
+  online?: boolean
+  presence_state?: string
   preview_ready?: boolean
   recorded?: boolean
   session_send_enabled?: boolean
@@ -668,7 +677,12 @@ export interface MissionControlWorkerNodeInstructionPreview {
   manual_handoff_only?: boolean
   manual_handoff_prompt?: string
   objective?: string
+  capability_summary?: string
+  last_seen_age_seconds?: number | null
+  last_seen_at?: string
+  online?: boolean
   parent_run_id?: string
+  presence_state?: string
   report_contract?: string
   report_id?: string
   report_review_status?: string
@@ -679,7 +693,38 @@ export interface MissionControlWorkerNodeInstructionPreview {
   worker_dispatch_enabled?: boolean
   worker_host_label?: string
   worker_identity?: string
+  worker_version?: string
   worker_run_id?: string
+  would_execute?: boolean
+}
+
+export interface MissionControlWorkerNodePresence {
+  active_worker_node_run_count?: number
+  blocked?: boolean
+  blocked_reasons?: string[]
+  capability_summary?: string
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  last_seen_age_seconds?: number | null
+  last_seen_at?: string
+  online?: boolean
+  parent_run_id?: string
+  presence_state?: string
+  presence_status?: string
+  recorded_worker_node_run_count?: number
+  session_send_enabled?: boolean
+  source?: string
+  stale_after_seconds?: number
+  stored?: boolean
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  worker_host_label?: string
+  worker_identity?: string
+  worker_kind?: string
+  worker_run_id?: string
+  worker_version?: string
   would_execute?: boolean
 }
 
@@ -1188,6 +1233,7 @@ export interface MissionControlWorkspaceStatus {
   tool_permission_classification?: MissionControlToolPermissionClassification
   worker_node_instruction_preview?: MissionControlWorkerNodeInstructionPreview
   worker_node_orchestration?: MissionControlOrchestrationProjection<MissionControlWorkerNodeRunRecord>
+  worker_node_presence?: MissionControlWorkerNodePresence
 }
 
 export interface MissionControlMemoryFileLevel {

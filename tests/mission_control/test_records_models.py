@@ -974,6 +974,10 @@ def test_worker_node_run_record_round_trips_laptop_codex_state_and_forces_disabl
         report_id="report-worker-1",
         report_review_status="needs_review",
         report_contract_status="incomplete",
+        presence_status="online",
+        last_seen_at="2026-06-19T12:00:00Z",
+        worker_version="codex-desktop-1.2.3",
+        capability_summary="repo-local engineering worker with guarded shell and patch tools",
         worker_dispatch_enabled=True,
         metadata={"execution_enabled": True, "dispatch_enabled": True},
     )
@@ -983,6 +987,10 @@ def test_worker_node_run_record_round_trips_laptop_codex_state_and_forces_disabl
     assert data["worker_run_id"] == "worker-run-1"
     assert data["worker_host_label"] == "laptop-codex"
     assert data["blocked_reasons"] == ["worker node offline"]
+    assert data["presence_status"] == "online"
+    assert data["last_seen_at"] == "2026-06-19T12:00:00Z"
+    assert data["worker_version"] == "codex-desktop-1.2.3"
+    assert data["capability_summary"] == "repo-local engineering worker with guarded shell and patch tools"
     assert data["worker_dispatch_enabled"] is False
     assert data["metadata"]["display_only"] is True
     assert data["metadata"]["execution_enabled"] is False

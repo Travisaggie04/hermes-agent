@@ -1355,6 +1355,10 @@ class WorkerNodeRunRecord:
     updated_at: str = ""
     stopped_at: str = ""
     stop_reason: str = ""
+    presence_status: str = ""
+    last_seen_at: str = ""
+    worker_version: str = ""
+    capability_summary: str = ""
     worker_dispatch_enabled: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -1401,6 +1405,10 @@ class WorkerNodeRunRecord:
             "updated_at": self.updated_at,
             "stopped_at": self.stopped_at,
             "stop_reason": self.stop_reason,
+            "presence_status": self.presence_status,
+            "last_seen_at": self.last_seen_at,
+            "worker_version": self.worker_version,
+            "capability_summary": self.capability_summary,
             "worker_dispatch_enabled": False,
             "metadata": dict(self.metadata),
         }
@@ -1429,6 +1437,10 @@ class WorkerNodeRunRecord:
             updated_at=data.get("updated_at", ""),
             stopped_at=data.get("stopped_at", ""),
             stop_reason=data.get("stop_reason", ""),
+            presence_status=data.get("presence_status", ""),
+            last_seen_at=data.get("last_seen_at", ""),
+            worker_version=data.get("worker_version", ""),
+            capability_summary=data.get("capability_summary", ""),
             worker_dispatch_enabled=False,
             metadata=data.get("metadata") or {},
         )

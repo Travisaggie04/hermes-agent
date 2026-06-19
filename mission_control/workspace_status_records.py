@@ -40,6 +40,7 @@ REPORT_TERMINAL_STATUSES = {"accepted", "rejected", "superseded"}
 RUN_REPORT_REQUIRED_STATUSES = {"completed", "failed", "blocked", "stopped", "cancelled"}
 RUN_TERMINAL_STATUSES = {"completed", "failed", "blocked", "stopped", "cancelled"}
 RUN_STOP_CANCEL_STATUSES = {"stopping", "stopped", "cancelled"}
+WORKER_NODE_PRESENCE_STALE_SECONDS = 15 * 60
 MUTATION_LANE_TYPES = {
     "implementation",
     "pr_creation",
@@ -194,6 +195,11 @@ def build_workspace_status_from_records(
         reports_by_id=reports_by_id,
         reports_by_run_id=reports_by_run_id,
         source="WorkerNodeRunRecord",
+    )
+    status["worker_node_presence"] = _worker_node_presence_payload(
+        worker_runs=recent_worker_runs,
+        active_worker_runs=active_worker_runs,
+        now=_safe_text(status_input.get("now")),
     )
     status["control_plane_lifecycle"] = status_input["control_plane_lifecycle"]
     status["approval_lifecycle"] = _approval_lifecycle_payload(
@@ -641,6 +647,18 @@ def _next_safe_actions_payload(status: dict[str, Any]) -> dict[str, Any]:
             reason=_first_reason(worker_reasons, "The laptop Codex worker-node is not ready for a reviewed report loop."),
             blocked_until="worker-node status and report contract are clear",
             priority=50,
+        )
+
+    worker_presence = _mapping(status.get("worker_node_presence"))
+    worker_presence_reasons = _text_list(worker_presence.get("blocked_reasons"))
+    if worker_presence_reasons:
+        extend_blockers(worker_presence_reasons)
+        add_action(
+            action_id="review_worker_node_presence",
+            label="Review laptop Codex worker-node presence",
+            reason=_first_reason(worker_presence_reasons, "The laptop Codex worker-node is not proven online."),
+            blocked_until="worker-node presence is explicitly online and recent",
+            priority=55,
         )
 
     child_projection = _mapping(status.get("child_agent_orchestration"))
@@ -1156,6 +1174,80 @@ def _report_review_queue_item(
     }
 
 
+def _worker_node_presence_payload(
+    *,
+    worker_runs: tuple[WorkerNodeRunRecord, ...],
+    active_worker_runs: tuple[WorkerNodeRunRecord, ...],
+    now: str = "",
+) -> dict[str, Any]:
+    latest_worker = active_worker_runs[-1] if active_worker_runs else worker_runs[-1] if worker_runs else None
+    blocked_reasons: list[str] = []
+    presence_state = "missing"
+    last_seen_age_seconds: int | None = None
+    worker_payload: dict[str, Any] = latest_worker.to_dict() if latest_worker else {}
+
+    if latest_worker is None:
+        blocked_reasons.append("no laptop Codex worker-node run is recorded")
+    else:
+        presence_status = _safe_text(getattr(latest_worker, "presence_status", "")).lower()
+        last_seen_at = _safe_text(getattr(latest_worker, "last_seen_at", ""))
+        parsed_last_seen = _parse_datetime(last_seen_at)
+        parsed_now = _parse_datetime(now) if now else datetime.now(timezone.utc)
+        if not presence_status:
+            presence_state = "unknown"
+            blocked_reasons.append("worker-node presence_status is not recorded")
+        elif presence_status not in {"online", "offline"}:
+            presence_state = "unknown"
+            blocked_reasons.append(f"worker-node presence_status {presence_status} is not recognized")
+        elif presence_status == "offline":
+            presence_state = "offline"
+            blocked_reasons.append("worker-node presence_status is offline")
+        else:
+            if parsed_last_seen is None:
+                presence_state = "unknown"
+                blocked_reasons.append("worker-node last_seen_at is required to prove online presence")
+            elif parsed_now is None:
+                presence_state = "unknown"
+                blocked_reasons.append("current time is unavailable for worker-node presence freshness")
+            else:
+                last_seen_age_seconds = max(0, int((parsed_now - parsed_last_seen).total_seconds()))
+                if last_seen_age_seconds > WORKER_NODE_PRESENCE_STALE_SECONDS:
+                    presence_state = "stale"
+                    blocked_reasons.append("worker-node last_seen_at is stale")
+                else:
+                    presence_state = "online"
+
+    return {
+        "source": "mission_control_worker_node_presence_v1",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "stored": False,
+        "dry_run_only": True,
+        "presence_state": presence_state,
+        "online": presence_state == "online",
+        "blocked": bool(blocked_reasons),
+        "blocked_reasons": _unique_reasons(blocked_reasons),
+        "worker_run_id": _safe_text(worker_payload.get("worker_run_id")),
+        "parent_run_id": _safe_text(worker_payload.get("parent_run_id")),
+        "worker_identity": _safe_text(worker_payload.get("worker_identity")) or "codex",
+        "worker_host_label": _safe_text(worker_payload.get("worker_host_label")) or "laptop-codex",
+        "worker_kind": _safe_text(worker_payload.get("worker_kind")) or "laptop_codex",
+        "presence_status": _safe_text(worker_payload.get("presence_status")),
+        "last_seen_at": _safe_text(worker_payload.get("last_seen_at")),
+        "last_seen_age_seconds": last_seen_age_seconds,
+        "stale_after_seconds": WORKER_NODE_PRESENCE_STALE_SECONDS,
+        "worker_version": _safe_text(worker_payload.get("worker_version")),
+        "capability_summary": _safe_text(worker_payload.get("capability_summary"), max_chars=800),
+        "active_worker_node_run_count": len(active_worker_runs),
+        "recorded_worker_node_run_count": len(worker_runs),
+    }
+
+
 def _append_report_graph_edge(
     *,
     record_id: str,
@@ -1259,7 +1351,10 @@ def _orchestration_readiness_payload(status: dict[str, Any]) -> dict[str, Any]:
             "runtime_switch_enabled",
         ),
     )
-    worker_node = _worker_node_readiness(_mapping(status.get("worker_node_orchestration")))
+    worker_node = _worker_node_readiness(
+        _mapping(status.get("worker_node_orchestration")),
+        _mapping(status.get("worker_node_presence")),
+    )
     states = {
         "supervised_read_only_autonomy": read_only["state"],
         "scoped_pr_creation": scoped_pr["state"],
@@ -1335,12 +1430,16 @@ def _eligibility_readiness(
     }
 
 
-def _worker_node_readiness(worker_projection: dict[str, Any]) -> dict[str, Any]:
+def _worker_node_readiness(
+    worker_projection: dict[str, Any],
+    worker_presence: dict[str, Any],
+) -> dict[str, Any]:
     blocked_reasons = _text_list(worker_projection.get("blocked_reasons"))
+    blocked_reasons.extend(_text_list(worker_presence.get("blocked_reasons")))
     enabled_flags = [
         flag
         for flag in ("execution_enabled", "dispatch_enabled", "session_send_enabled", "worker_dispatch_enabled")
-        if worker_projection.get(flag) is True
+        if worker_projection.get(flag) is True or worker_presence.get(flag) is True
     ]
     blocked_reasons.extend(f"{flag} must remain disabled" for flag in enabled_flags)
     latest_by_id = _mapping(worker_projection.get("latest_by_id"))
@@ -1348,11 +1447,22 @@ def _worker_node_readiness(worker_projection: dict[str, Any]) -> dict[str, Any]:
     has_worker_record = bool(latest_by_id) or (isinstance(active_count, int) and active_count > 0)
     if not has_worker_record:
         blocked_reasons.append("no laptop Codex worker-node run is recorded")
-    state = "preview_ready" if has_worker_record and not blocked_reasons and not enabled_flags else "blocked"
+    if has_worker_record and worker_presence.get("online") is not True:
+        blocked_reasons.append("worker-node presence is not confirmed online")
+    state = (
+        "preview_ready"
+        if has_worker_record
+        and worker_presence.get("online") is True
+        and not blocked_reasons
+        and not enabled_flags
+        else "blocked"
+    )
     unique_blocked_reasons = _unique_reasons(blocked_reasons)
     return {
         "state": state,
         "recorded": has_worker_record,
+        "presence_state": _safe_text(worker_presence.get("presence_state")) or "unknown",
+        "online": worker_presence.get("online") is True,
         "active_count": active_count if isinstance(active_count, int) else 0,
         "preview_ready": state == "preview_ready",
         "execution_ready": False,
@@ -1376,6 +1486,7 @@ def _readiness_line(label: str, payload: dict[str, Any]) -> str:
 
 def _worker_node_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
     worker_projection = _mapping(status.get("worker_node_orchestration"))
+    worker_presence = _mapping(status.get("worker_node_presence"))
     worker_record = _latest_projection_payload(worker_projection)
     blocked_reasons: list[str] = []
     if not worker_record:
@@ -1384,6 +1495,7 @@ def _worker_node_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
     if worker_record and not objective:
         blocked_reasons.append("worker-node objective is required")
     blocked_reasons.extend(_text_list(worker_record.get("blocked_reasons")))
+    blocked_reasons.extend(_text_list(worker_presence.get("blocked_reasons")))
     if worker_record.get("worker_dispatch_enabled") is True:
         blocked_reasons.append("worker dispatch must stay disabled")
 
@@ -1433,6 +1545,12 @@ def _worker_node_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
         "parent_run_id": _safe_text(worker_record.get("parent_run_id")),
         "worker_identity": worker_identity,
         "worker_host_label": worker_host_label,
+        "presence_state": _safe_text(worker_presence.get("presence_state")) or "unknown",
+        "online": worker_presence.get("online") is True,
+        "last_seen_at": _safe_text(worker_presence.get("last_seen_at")),
+        "last_seen_age_seconds": worker_presence.get("last_seen_age_seconds"),
+        "worker_version": _safe_text(worker_presence.get("worker_version")),
+        "capability_summary": _safe_text(worker_presence.get("capability_summary"), max_chars=800),
         "objective": objective,
         "assigned_packet_id": _safe_text(worker_record.get("assigned_packet_id")),
         "assigned_packet_summary": _safe_text(worker_record.get("assigned_packet_summary"), max_chars=800),
@@ -1532,6 +1650,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     next_safe_actions = _mapping(status.get("next_safe_actions"))
     readiness = _mapping(status.get("orchestration_readiness"))
     report_queue = _mapping(status.get("report_review_queue"))
+    worker_presence = _mapping(status.get("worker_node_presence"))
     worker_instruction = _mapping(status.get("worker_node_instruction_preview"))
     child_instruction = _mapping(status.get("child_agent_instruction_preview"))
 
@@ -1546,11 +1665,15 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     )
     report_label = _safe_text(report_queue.get("primary_review_label"), max_chars=800)
     report_reason = _safe_text(report_queue.get("primary_review_reason"), max_chars=800)
+    worker_presence_state = _safe_text(worker_presence.get("presence_state")) or "unknown"
+    worker_last_seen_at = _safe_text(worker_presence.get("last_seen_at"))
+    worker_seen_suffix = f" at {worker_last_seen_at}" if worker_last_seen_at else ""
     blocked_reasons = _unique_reasons(
         [
             *_text_list(runtime_provenance.get("autonomy_blocked_reasons")),
             *_text_list(readiness.get("blocked_reasons")),
             *_text_list(report_queue.get("blocked_reasons")),
+            *_text_list(worker_presence.get("blocked_reasons")),
             *_text_list(next_safe_actions.get("blocked_reasons")),
             *_text_list(worker_instruction.get("blocked_reasons")),
             *_text_list(child_instruction.get("blocked_reasons")),
@@ -1570,6 +1693,11 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             f"read-only {_safe_text(readiness_states.get('supervised_read_only_autonomy')) or 'unknown'}, "
             f"scoped PR {_safe_text(readiness_states.get('scoped_pr_creation')) or 'unknown'}, "
             f"laptop Codex {_safe_text(readiness_states.get('laptop_codex_worker_node')) or 'unknown'}."
+        ),
+        (
+            "Worker presence: "
+            f"{worker_presence_state}"
+            f"{worker_seen_suffix}."
         ),
     ]
     if next_label:
@@ -1614,6 +1742,9 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         "next_safe_action_label": next_label,
         "next_safe_action_reason": next_reason,
         "report_review_queue_count": queue_count,
+        "worker_presence_state": worker_presence_state,
+        "worker_online": worker_presence.get("online") is True,
+        "worker_last_seen_at": worker_last_seen_at,
         "top_report_review_item_id": _safe_text(report_queue.get("primary_review_item_id")),
         "top_report_review_label": report_label,
         "top_report_review_reason": report_reason,

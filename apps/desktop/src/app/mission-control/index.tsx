@@ -1259,6 +1259,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
   const orchestrationRunGraph = status.orchestration_run_graph
   const childInstruction = status.child_agent_instruction_preview
   const workerInstruction = status.worker_node_instruction_preview
+  const workerPresence = status.worker_node_presence
   const childRecord = latestProjectionRecord(status.child_agent_orchestration) as Record<string, unknown> | null
   const workerRecord = latestProjectionRecord(status.worker_node_orchestration) as Record<string, unknown> | null
   const childBlockedReasons = uniqueTextList([
@@ -1356,6 +1357,8 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     operatorPacketState: operatorDecisionPacket?.state ?? 'unknown',
     operatorPacketSummary: operatorDecisionPacket?.plain_language_summary ?? 'No operator decision packet recorded.',
     operatorPacketWorkerDispatchEnabled: operatorDecisionPacket?.worker_dispatch_enabled,
+    operatorPacketWorkerOnline: operatorDecisionPacket?.worker_online,
+    operatorPacketWorkerPresenceState: operatorDecisionPacket?.worker_presence_state ?? 'unknown',
     orchestrationReadinessBlockedReasons: orchestrationReadiness?.blocked_reasons ?? [],
     orchestrationReadinessDispatchEnabled: orchestrationReadiness?.dispatch_enabled,
     orchestrationReadinessDisplayOnly: orchestrationReadiness?.display_only,
@@ -1432,6 +1435,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     toolPermissionWritePaths: toolPermissions?.write_capable_path_ids ?? [],
     workerActiveCount: status.worker_node_orchestration?.active_count ?? 0,
     workerBlockedReasons,
+    workerCapabilitySummary: workerPresence?.capability_summary ?? '',
     workerDispatchEnabled: status.worker_node_orchestration?.worker_dispatch_enabled,
     workerExecutionEnabled: status.worker_node_orchestration?.execution_enabled,
     workerHostLabel: projectionRecordText(workerRecord, 'worker_host_label') || 'laptop-codex',
@@ -1445,6 +1449,14 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     workerInstructionWorkerDispatchEnabled: workerInstruction?.worker_dispatch_enabled,
     workerLatestObjective: projectionRecordText(workerRecord, 'objective'),
     workerLatestStatus: projectionRecordText(workerRecord, 'status') || 'none',
+    workerPresenceBlockedReasons: workerPresence?.blocked_reasons ?? [],
+    workerPresenceDisplayOnly: workerPresence?.display_only,
+    workerPresenceExecutionEnabled: workerPresence?.execution_enabled,
+    workerPresenceLastSeen: workerPresence?.last_seen_at ?? '',
+    workerPresenceOnline: workerPresence?.online,
+    workerPresenceState: workerPresence?.presence_state ?? 'unknown',
+    workerPresenceWorkerDispatchEnabled: workerPresence?.worker_dispatch_enabled,
+    workerVersion: workerPresence?.worker_version ?? '',
     workerReportContractStatus: projectionRecordText(workerRecord, 'report_contract_status') || 'not reported',
     workerReportId: projectionRecordText(workerRecord, 'report_id'),
     workerReportLinkStatus: projectionRecordText(workerRecord, 'report_link_status') || 'no report id recorded',
@@ -4045,6 +4057,12 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
   const autonomyLabel = status.autonomyEligible === true ? 'eligible preview only' : status.autonomyEligible === false ? 'blocked / no execution' : 'unknown / no execution'
   const scopedPrLabel = status.scopedPrEligible === true ? `preview-ready / ${status.scopedPrScopeCount} scoped path${status.scopedPrScopeCount === 1 ? '' : 's'}` : status.scopedPrEligible === false ? 'blocked / no execution' : 'unknown / no execution'
   const workerLockTone = status.workerExecutionEnabled === false && status.workerDispatchEnabled === false ? 'good' : 'warn'
+  const workerPresenceTone =
+    status.workerPresenceExecutionEnabled === false &&
+    status.workerPresenceWorkerDispatchEnabled === false &&
+    status.workerPresenceOnline === true
+      ? 'good'
+      : 'warn'
   const childLockTone = status.childExecutionEnabled === false && status.childDispatchEnabled === false ? 'good' : 'warn'
   const childInstructionTone =
     status.childInstructionExecutionEnabled === false &&
@@ -4126,6 +4144,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-2" label="operator next instruction" tone={operatorPacketTone} value={status.operatorPacketNextInstruction} />
       <StatusItem className="md:col-span-2" label="orchestration readiness" tone={readinessTone} value={`read-only ${labelText(status.readinessReadOnlyState)} / scoped PR ${labelText(status.readinessScopedPrState)}`} />
       <StatusItem label="worker readiness" tone={readinessTone} value={`laptop Codex ${labelText(status.readinessWorkerNodeState)} / execution-ready ${yesNo(status.orchestrationReadinessExecutionReady)}`} />
+      <StatusItem label="worker presence" tone={workerPresenceTone} value={`${labelText(status.workerPresenceState)} / online ${yesNo(status.workerPresenceOnline)}${status.workerPresenceLastSeen ? ` / seen ${status.workerPresenceLastSeen}` : ''}`} />
       <StatusItem className="md:col-span-2" label="orchestration run graph" tone={runGraphTone} value={`nodes ${status.orchestrationRunGraphNodeCount} / edges ${status.orchestrationRunGraphEdgeCount}`} />
       <StatusItem label="run graph nodes" tone={runGraphTone} value={`runs ${status.orchestrationRunGraphRunCount} / child ${status.orchestrationRunGraphChildCount} / worker ${status.orchestrationRunGraphWorkerCount} / reports ${status.orchestrationRunGraphReportCount}`} />
       <StatusItem label="approval lifecycle" tone={approvalLifecycleTone} value={`available ${status.approvalAvailableCount} / pending ${status.approvalPendingCount} / expired ${status.approvalExpiredCount}`} />
@@ -4152,6 +4171,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-2" label="worker-node blockers" tone={status.workerBlockedReasons.length ? 'warn' : 'good'} value={status.workerBlockedReasons.length ? status.workerBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="worker instruction prompt" tone={workerInstructionTone} value={status.workerInstructionPrompt} />
       <StatusItem className="md:col-span-3" label="worker instruction blockers" tone={status.workerInstructionBlockedReasons.length ? 'warn' : 'good'} value={status.workerInstructionBlockedReasons.length ? status.workerInstructionBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="worker presence blockers" tone={status.workerPresenceBlockedReasons.length ? 'warn' : 'good'} value={status.workerPresenceBlockedReasons.length ? status.workerPresenceBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="desktop app install" tone="warn" value="separate laptop worker-node update; bottom-bar version is not changed by accepted-live/dashboard deploy" />
       <StatusItem className="md:col-span-3" label="next action reasons" tone={status.nextSafeActionReasons.length ? 'warn' : 'good'} value={status.nextSafeActionReasons.length ? status.nextSafeActionReasons.join(', ') : status.nextSafePrimaryReason} />
       <StatusItem className="md:col-span-3" label="operator summary" tone={operatorPacketTone} value={status.operatorPacketSummary} />
