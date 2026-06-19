@@ -335,9 +335,69 @@ interface WorkspaceStatus {
   accepted_baseline?: { head?: string; runtime_path?: string };
   deployment_gap?: { accepted_live_head?: string; dashboard_deploy_needed?: boolean; deployed_head?: string; latest_merged_pr?: string; state?: string };
   lane?: { active_lane_count?: number };
+  next_safe_actions?: {
+    action_count?: number;
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    display_only?: boolean;
+    execution_enabled?: boolean;
+    primary_action_label?: string;
+    worker_dispatch_enabled?: boolean;
+  };
+  operator_decision_packet?: {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    display_only?: boolean;
+    execution_enabled?: boolean;
+    jenny_review_required?: boolean;
+    next_safe_action_label?: string;
+    plain_language_summary?: string;
+    recommended_operator_instruction?: string;
+    state?: string;
+    worker_dispatch_enabled?: boolean;
+  };
+  orchestration_readiness?: {
+    blocked_reasons?: string[];
+    execution_enabled?: boolean;
+    execution_ready?: boolean;
+    states?: {
+      laptop_codex_worker_node?: string;
+      scoped_pr_creation?: string;
+      supervised_read_only_autonomy?: string;
+    };
+    worker_dispatch_enabled?: boolean;
+  };
+  report_completion_path?: {
+    blocked?: boolean;
+    blocked_completion_count?: number;
+    blocked_reasons?: string[];
+    completion_ready_count?: number;
+    execution_enabled?: boolean;
+    terminal_item_count?: number;
+    worker_dispatch_enabled?: boolean;
+  };
+  result_ingestion_contract?: {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    blocked_report_count?: number;
+    execution_enabled?: boolean;
+    ingestion_ready_count?: number;
+    report_count?: number;
+    worker_dispatch_enabled?: boolean;
+  };
   runtime_worktree_guard?: { decision_state?: string };
   safety?: { dispatch_in_gateway?: boolean };
   stale_context?: { warnings?: string[] };
+  worker_node_presence?: {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    execution_enabled?: boolean;
+    online?: boolean;
+    presence_state?: string;
+    worker_dispatch_enabled?: boolean;
+    worker_host_label?: string;
+    worker_run_id?: string;
+  };
 }
 
 interface MemoryFileLevel {
@@ -1689,6 +1749,34 @@ function safetySummary(status: WorkspaceStatus): string {
   const activeLaneCount = status.lane?.active_lane_count ?? 0;
   const staleWarnings = status.stale_context?.warnings ?? [];
   return `guard=${guard}; dispatch=${dispatch}; active_lane_count=${activeLaneCount}; stale_warnings=${staleWarnings.length ? staleWarnings.join(", ") : "none"}`;
+}
+
+function firstReason(values: string[] | undefined, fallback: string): string {
+  return values?.find(value => value.trim()) ?? fallback;
+}
+
+function compactStateLabel(value: string | undefined, fallback = "unknown"): string {
+  return (value?.trim() || fallback).replaceAll("_", " ");
+}
+
+function compactOperatorSummary(status: WorkspaceStatus): string {
+  const packet = status.operator_decision_packet;
+  return compactText(
+    packet?.recommended_operator_instruction
+    || packet?.next_safe_action_label
+    || packet?.plain_language_summary
+    || "Keep Mission Control preview-only and review the next safe action.",
+    260,
+  );
+}
+
+function compactReadinessSummary(status: WorkspaceStatus): string {
+  const states = status.orchestration_readiness?.states;
+  return [
+    `read-only ${compactStateLabel(states?.supervised_read_only_autonomy)}`,
+    `scoped PR ${compactStateLabel(states?.scoped_pr_creation)}`,
+    `laptop Codex ${compactStateLabel(states?.laptop_codex_worker_node)}`,
+  ].join("; ");
 }
 
 function structuredJennyHandoff(projectName: string): string {
@@ -3809,6 +3897,16 @@ function CompactHermesHealthDashboard({
   const memoryErrors = snapshot.memoryStorage.errors ?? [];
   const reportCount = activeProjectViews.filter(projectView => projectView.projectState?.has_real_report || projectView.report).length;
   const deployedHead = status.deployment_gap?.deployed_head ?? status.accepted_baseline?.head ?? "unknown";
+  const operatorPacket = status.operator_decision_packet;
+  const readiness = status.orchestration_readiness;
+  const workerPresence = status.worker_node_presence;
+  const resultIngestion = status.result_ingestion_contract;
+  const reportCompletion = status.report_completion_path;
+  const nextSafeActions = status.next_safe_actions;
+  const resultIngestionBlocked = resultIngestion?.blocked_report_count ?? 0;
+  const reportCompletionBlocked = reportCompletion?.blocked_completion_count ?? 0;
+  const workerPresenceState = workerPresence?.presence_state ?? "unknown";
+  const readinessStates = readiness?.states;
   const issues = [
     bridgeError ? `Jenny bridge error: ${bridgeError}` : "",
     guard !== "pass" ? `Runtime guard is ${guard}` : "",
@@ -3817,10 +3915,40 @@ function CompactHermesHealthDashboard({
     status.deployment_gap?.dashboard_deploy_needed ? "Phone/web dashboard needs a dashboard-only update" : "",
     staleWarnings.length ? `Stale context: ${staleWarnings.join(", ")}` : "",
     memoryErrors.length ? `${memoryErrors.length} memory storage warning${memoryErrors.length === 1 ? "" : "s"}` : "",
+    operatorPacket?.blocked ? firstReason(operatorPacket.blocked_reasons, "Operator decision packet is blocked") : "",
+    readiness?.blocked_reasons?.length ? firstReason(readiness.blocked_reasons, "Orchestration readiness is blocked") : "",
+    workerPresence?.blocked ? firstReason(workerPresence.blocked_reasons, "Laptop Codex worker-node presence is blocked") : "",
+    resultIngestionBlocked ? firstReason(resultIngestion?.blocked_reasons, "Result ingestion needs review") : "",
+    reportCompletionBlocked ? firstReason(reportCompletion?.blocked_reasons, "Report completion path needs review") : "",
   ].filter(Boolean);
   const overallTone: CompactHealthTone = issues.length ? "warn" : "good";
   const bridgeTone: CompactHealthTone = bridgeError ? "bad" : bridgePending ? "warn" : "good";
   const safetyOk = guard === "pass" && dispatch === false && activeLaneCount <= 1 && staleWarnings.length === 0;
+  const operatorTone: CompactHealthTone = operatorPacket?.execution_enabled || operatorPacket?.worker_dispatch_enabled
+    ? "bad"
+    : operatorPacket?.blocked || operatorPacket?.jenny_review_required
+      ? "warn"
+      : "good";
+  const readinessTone: CompactHealthTone = readiness?.execution_enabled || readiness?.worker_dispatch_enabled || readiness?.execution_ready
+    ? "bad"
+    : readiness?.blocked_reasons?.length
+      ? "warn"
+      : "good";
+  const workerTone: CompactHealthTone = workerPresence?.execution_enabled || workerPresence?.worker_dispatch_enabled
+    ? "bad"
+    : workerPresence?.online
+      ? "good"
+      : "warn";
+  const ingestionTone: CompactHealthTone = resultIngestion?.execution_enabled || resultIngestion?.worker_dispatch_enabled
+    ? "bad"
+    : resultIngestionBlocked
+      ? "warn"
+      : "good";
+  const completionTone: CompactHealthTone = reportCompletion?.execution_enabled || reportCompletion?.worker_dispatch_enabled
+    ? "bad"
+    : reportCompletionBlocked
+      ? "warn"
+      : "good";
   const maxMountPercent = Math.max(0, ...(snapshot.memoryStorage.profiles ?? []).map(profile => profile.mount?.percent_used ?? 0));
 
   return (
@@ -3857,6 +3985,36 @@ function CompactHermesHealthDashboard({
           label="Safety locks"
           tone={safetyOk ? "good" : "warn"}
           value={safetyOk ? "Holding" : "Check"}
+        />
+        <CompactHealthTile
+          detail={compactOperatorSummary(status)}
+          label="Operator decision"
+          tone={operatorTone}
+          value={`${compactStateLabel(operatorPacket?.state)} / display-only ${operatorPacket?.display_only === false ? "no" : "yes"}`}
+        />
+        <CompactHealthTile
+          detail={`${compactReadinessSummary(status)}. Next safe action: ${nextSafeActions?.primary_action_label || operatorPacket?.next_safe_action_label || "review Mission Control status"}.`}
+          label="Preview readiness"
+          tone={readinessTone}
+          value={`read-only ${compactStateLabel(readinessStates?.supervised_read_only_autonomy)} / worker ${compactStateLabel(readinessStates?.laptop_codex_worker_node)}`}
+        />
+        <CompactHealthTile
+          detail={workerPresence?.blocked_reasons?.length ? firstReason(workerPresence.blocked_reasons, "Worker-node presence needs review.") : `${workerPresence?.worker_host_label ?? "laptop Codex"} ${workerPresence?.online ? "is online" : "is not confirmed online"}.`}
+          label="Worker node"
+          tone={workerTone}
+          value={`${compactStateLabel(workerPresenceState)} / online ${workerPresence?.online ? "yes" : "no"}`}
+        />
+        <CompactHealthTile
+          detail={resultIngestionBlocked ? firstReason(resultIngestion?.blocked_reasons, "Reports need ingestion review.") : "Reports that Jenny can rely on are linked, redacted, metadata-safe, and safety-confirmed."}
+          label="Result ingestion"
+          tone={ingestionTone}
+          value={`${resultIngestion?.ingestion_ready_count ?? 0} ready / ${resultIngestionBlocked} blocked`}
+        />
+        <CompactHealthTile
+          detail={reportCompletionBlocked ? firstReason(reportCompletion?.blocked_reasons, "Terminal work needs report completion review.") : "Terminal runs, child runs, and worker-node runs have reviewed completion evidence."}
+          label="Report completion"
+          tone={completionTone}
+          value={`${reportCompletion?.completion_ready_count ?? 0} ready / ${reportCompletionBlocked} blocked`}
         />
         <CompactHealthTile
           detail={`${reportCount} active project${reportCount === 1 ? "" : "s"} have live report evidence. ${pausedProjects.length} projects remain intentionally on hold.`}
