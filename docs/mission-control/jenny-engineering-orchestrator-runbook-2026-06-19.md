@@ -367,9 +367,10 @@ cancel work, dispatch agents, or mutate records.
 The result ingestion contract checks whether a report is safe for Jenny to
 rely on. It requires append-only consistency, linkage to a parent/child/worker
 run, an accepted redaction status, no forbidden raw metadata keys such as
-tokens, transcripts, raw logs, local paths, or API responses, and an explicit
-safety confirmation. It never accepts or rewrites the report; it only tells
-Travis which reports are ready for manual review and which need repair.
+tokens, cookies, API keys, env secrets, authorization headers, transcripts, raw
+logs, local paths, or API responses, and an explicit safety confirmation. It
+never accepts or rewrites the report; it only tells Travis which reports are
+ready for manual review and which need repair.
 
 The report completion path checks terminal run, child-run, and laptop Codex
 worker-node records before Jenny treats work as closed. A completed, failed,

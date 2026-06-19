@@ -51,23 +51,54 @@ RESULT_INGESTION_ACCEPTED_REDACTION_STATUSES = {
 RESULT_INGESTION_FORBIDDEN_METADATA_KEYS = {
     "api_key",
     "api_response",
+    "auth_header",
+    "auth_token",
+    "authorization",
+    "bearer_token",
     "canonical_packet_json",
+    "client_secret",
     "comments",
+    "cookie",
+    "cookies",
     "discord_history",
     "discord_messages",
+    "dotenv",
+    "env_file",
+    "env_secret",
+    "environment_secret",
     "full_observed_state",
     "github_response",
     "local_path",
+    "password",
     "path",
+    "private_key",
     "pr_body",
     "raw_log",
     "raw_logs",
+    "refresh_token",
     "secret",
+    "session_cookie",
     "service_status",
     "token",
     "transcript",
     "transcripts",
 }
+RESULT_INGESTION_FORBIDDEN_METADATA_KEY_MARKERS = (
+    "api_key",
+    "auth_header",
+    "authorization",
+    "bearer",
+    "client_secret",
+    "cookie",
+    "dotenv",
+    "env_secret",
+    "environment_secret",
+    "password",
+    "private_key",
+    "refresh_token",
+    "secret",
+    "token",
+)
 MUTATION_LANE_TYPES = {
     "implementation",
     "pr_creation",
@@ -1669,10 +1700,22 @@ def _result_ingestion_contract_payload(
 def _result_ingestion_forbidden_metadata_keys(metadata: dict[str, Any]) -> list[str]:
     keys: list[str] = []
     for key in metadata:
-        normalized = _safe_text(key).lower()
-        if normalized in RESULT_INGESTION_FORBIDDEN_METADATA_KEYS:
+        normalized = _normalized_metadata_key(key)
+        if normalized in RESULT_INGESTION_FORBIDDEN_METADATA_KEYS or any(
+            marker in normalized for marker in RESULT_INGESTION_FORBIDDEN_METADATA_KEY_MARKERS
+        ):
             keys.append(normalized)
     return sorted(set(keys))
+
+
+def _normalized_metadata_key(value: Any) -> str:
+    return (
+        _safe_text(value)
+        .lower()
+        .replace("-", "_")
+        .replace(".", "_")
+        .replace(" ", "_")
+    )
 
 
 def _result_ingestion_safety_confirmation_present(metadata: dict[str, Any]) -> bool:

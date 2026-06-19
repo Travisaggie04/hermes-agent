@@ -1183,7 +1183,14 @@ def test_record_sourced_workspace_status_projects_result_ingestion_contract(tmp_
             status="received",
             summary="Unsafe unlinked report.",
             redaction_status="raw",
-            metadata={"raw_log": "forbidden", "token": "placeholder-token"},
+            metadata={
+                "Authorization": "Bearer fake-token-for-test",
+                "OpenAI-API-Key": "fake-api-key-for-test",
+                "SessionCookie": "fake-cookie-for-test",
+                "env.secret": "fake-env-secret-for-test",
+                "raw_log": "forbidden",
+                "token": "placeholder-token",
+            },
         )
     )
 
@@ -1214,7 +1221,19 @@ def test_record_sourced_workspace_status_projects_result_ingestion_contract(tmp_
     assert "report_id report-unsafe has multiple append-only records" in ingestion["blocked_reasons"]
     assert "report_id report-unsafe is not linked to a run, child, or worker record" in ingestion["blocked_reasons"]
     assert "report_id report-unsafe redaction_status raw is not accepted" in ingestion["blocked_reasons"]
-    assert "report_id report-unsafe metadata contains forbidden keys: raw_log, token" in ingestion["blocked_reasons"]
+    expected_forbidden_keys = [
+        "authorization",
+        "env_secret",
+        "openai_api_key",
+        "raw_log",
+        "sessioncookie",
+        "token",
+    ]
+    expected_forbidden_reason = (
+        "report_id report-unsafe metadata contains forbidden keys: "
+        f"{', '.join(expected_forbidden_keys)}"
+    )
+    assert expected_forbidden_reason in ingestion["blocked_reasons"]
     assert "report_id report-unsafe is missing safety confirmation for ingestion" in ingestion["blocked_reasons"]
 
     items = {item["report_id"]: item for item in ingestion["items"]}
@@ -1222,13 +1241,17 @@ def test_record_sourced_workspace_status_projects_result_ingestion_contract(tmp_
     assert items["report-ready"]["linked_record_type"] == "worker_node_run"
     assert items["report-ready"]["safety_confirmation_present"] is True
     assert items["report-unsafe"]["ingestion_ready"] is False
-    assert items["report-unsafe"]["forbidden_metadata_keys"] == ["raw_log", "token"]
+    assert items["report-unsafe"]["forbidden_metadata_keys"] == expected_forbidden_keys
     assert "placeholder-token" not in str(ingestion)
+    assert "fake-token-for-test" not in str(ingestion)
+    assert "fake-api-key-for-test" not in str(ingestion)
+    assert "fake-cookie-for-test" not in str(ingestion)
+    assert "fake-env-secret-for-test" not in str(ingestion)
 
     next_safe_actions = status["next_safe_actions"]
     action_ids = {action["action_id"] for action in next_safe_actions["actions"]}
     assert "review_result_ingestion_contract" in action_ids
-    assert "report_id report-unsafe metadata contains forbidden keys: raw_log, token" in next_safe_actions["blocked_reasons"]
+    assert expected_forbidden_reason in next_safe_actions["blocked_reasons"]
 
     operator_packet = status["operator_decision_packet"]
     assert operator_packet["result_ingestion_blocked_count"] == 1
