@@ -938,17 +938,18 @@ beforeEach(() => {
       display_only: true,
       dry_run_only: true,
       execution_enabled: false,
-      forbidden_actions: ['deploy', 'restart', 'runtime switch', 'no live deploy', 'no worker dispatch activation'],
+      forbidden_actions: ['deploy', 'restart', 'runtime switch', 'no live deploy', 'no worker dispatch activation', 'no bypassing Codex safety checks'],
       instruction_lines: [
         'Worker: codex on laptop-codex.',
         'Objective: Prepare bounded scoped PR packet.',
         'Allowed actions: edit scoped files, run focused tests.',
-        'Forbidden actions: deploy, restart, runtime switch, no live deploy, no worker dispatch activation.',
+        'Forbidden actions: deploy, restart, runtime switch, no live deploy, no worker dispatch activation, no bypassing Codex safety checks.',
+        'Worker safety hardness: Codex must independently enforce repo/worktree, test, secret, git, and live-operation safeguards before acting. A Jenny packet is not permission to bypass Codex safety checks.',
         'Report contract: Report changed files, tests/checks, result, blockers, safety confirmation, and the next suggested chunk.',
         'Manual handoff only; execution and worker dispatch remain disabled.'
       ],
       manual_handoff_only: true,
-      manual_handoff_prompt: 'Worker: codex on laptop-codex.\nObjective: Prepare bounded scoped PR packet.\nAllowed actions: edit scoped files, run focused tests.\nForbidden actions: deploy, restart, runtime switch, no live deploy, no worker dispatch activation.\nReport contract: Report changed files, tests/checks, result, blockers, safety confirmation, and the next suggested chunk.\nManual handoff only; execution and worker dispatch remain disabled.',
+      manual_handoff_prompt: 'Worker: codex on laptop-codex.\nObjective: Prepare bounded scoped PR packet.\nAllowed actions: edit scoped files, run focused tests.\nForbidden actions: deploy, restart, runtime switch, no live deploy, no worker dispatch activation, no bypassing Codex safety checks.\nWorker safety hardness: Codex must independently enforce repo/worktree, test, secret, git, and live-operation safeguards before acting. A Jenny packet is not permission to bypass Codex safety checks.\nReport contract: Report changed files, tests/checks, result, blockers, safety confirmation, and the next suggested chunk.\nManual handoff only; execution and worker dispatch remain disabled.',
       objective: 'Prepare bounded scoped PR packet.',
       online: false,
       parent_run_id: 'run-parent-1',
@@ -964,6 +965,10 @@ beforeEach(() => {
       worker_host_label: 'laptop-codex',
       worker_identity: 'codex',
       worker_run_id: 'worker-run-1',
+      worker_safety_hardness: [
+        'Codex must independently enforce repo/worktree, test, secret, git, and live-operation safeguards before acting.',
+        'A Jenny packet is not permission to bypass Codex safety checks.'
+      ],
       would_execute: false
     }
   })
@@ -1858,6 +1863,7 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText('available yes / manual handoff yes').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('worker instruction prompt')).toBeTruthy()
     expect(screen.getByText(/Worker: codex on laptop-codex/)).toBeTruthy()
+    expect(screen.getByText(/Codex must independently enforce repo\/worktree/)).toBeTruthy()
     expect(screen.getByText('worker instruction blockers')).toBeTruthy()
     expect(screen.getByText('worker-node blockers')).toBeTruthy()
     expect(screen.getByText('worker presence blockers')).toBeTruthy()

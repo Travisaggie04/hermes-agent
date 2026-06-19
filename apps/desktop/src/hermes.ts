@@ -957,6 +957,7 @@ export interface MissionControlWorkerNodeInstructionPreview {
   worker_dispatch_enabled?: boolean
   worker_host_label?: string
   worker_identity?: string
+  worker_safety_hardness?: string[]
   worker_version?: string
   worker_run_id?: string
   would_execute?: boolean

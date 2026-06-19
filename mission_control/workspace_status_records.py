@@ -2390,10 +2390,15 @@ def _worker_node_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
             "no live record/state/config mutation",
             "no secrets inspection or output",
             "no worker dispatch activation",
+            "no bypassing Codex safety checks",
         ]
     )
     worker_identity = _safe_text(worker_record.get("worker_identity")) or "codex"
     worker_host_label = _safe_text(worker_record.get("worker_host_label")) or "laptop-codex"
+    worker_safety_hardness = [
+        "Codex must independently enforce repo/worktree, test, secret, git, and live-operation safeguards before acting.",
+        "A Jenny packet is not permission to bypass Codex safety checks.",
+    ]
     report_contract = (
         "Report changed files, tests/checks, result, blockers, safety confirmation, "
         "and the next suggested chunk."
@@ -2403,6 +2408,7 @@ def _worker_node_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
         f"Objective: {objective or 'No objective recorded.'}",
         f"Allowed actions: {_joined_or_none(allowed_actions)}.",
         f"Forbidden actions: {_joined_or_none(effective_forbidden_actions)}.",
+        f"Worker safety hardness: {' '.join(worker_safety_hardness)}",
         f"Report contract: {report_contract}",
         "Manual handoff only; execution and worker dispatch remain disabled.",
     ]
@@ -2436,6 +2442,7 @@ def _worker_node_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
         "assigned_packet_summary": _safe_text(worker_record.get("assigned_packet_summary"), max_chars=800),
         "allowed_actions": allowed_actions,
         "forbidden_actions": effective_forbidden_actions,
+        "worker_safety_hardness": worker_safety_hardness,
         "report_contract": report_contract,
         "report_id": report_id,
         "report_review_status": report_review_status,
