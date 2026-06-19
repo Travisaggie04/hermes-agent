@@ -2195,8 +2195,11 @@ export default function MissionControlCompactPage() {
         phase: "queued",
       });
       setProjectRequest("");
-      await refreshSnapshot();
       setRoomMessage("Message sent. Use Get reply to run one foreground Jenny answer, or Refresh to check for an existing reply.");
+      setRoomBusy(false);
+      void refreshSnapshot().catch(err => {
+        console.warn("[mission-control] compact chat snapshot refresh failed after queue", err);
+      });
     } catch (err) {
       setRoomMessage(jennyChatErrorMessage(err));
     } finally {
