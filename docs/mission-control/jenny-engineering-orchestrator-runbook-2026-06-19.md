@@ -168,6 +168,19 @@ report should answer the contract:
 Reports are append-only. A later report can supersede or correct an earlier
 one, but it should not overwrite history.
 
+Mission Control now projects a report lifecycle summary from append-only
+records. The report lifecycle row shows open, reviewed, and terminal report
+counts. The report gaps row shows duplicate report IDs, completed runs with no
+report, and stale run-to-report links. The report review blockers row lists
+the exact report or run IDs Jenny must review before treating the work as
+closed.
+
+Child-agent and laptop Codex worker-node rows also join against `ReportRecord`
+when possible. A worker row can therefore show whether the referenced report
+was found and whether Jenny has reviewed, accepted, rejected, or superseded it.
+Missing or unreviewed linked reports remain display-only blockers; they do not
+enable worker dispatch or execution.
+
 ## Mission Control Reading Guide
 
 - Runtime provenance: source and runtime trust.
@@ -180,6 +193,8 @@ one, but it should not overwrite history.
   report status.
 - Lifecycle projection: latest-by-ID approvals, runs, and reports from
   append-only records.
+- Report lifecycle: report inbox/review state, duplicate IDs, missing reports,
+  stale report links, and exact review blockers.
 
 If a row says blocked, Travis should read the blocker first instead of trying
 to force the action.
