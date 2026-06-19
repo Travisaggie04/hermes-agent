@@ -42,6 +42,11 @@ def test_clean_non_runtime_worktree_passes_for_pr_create():
     assert result["default_off"] is True
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
+    assert result["would_execute"] is False
+    assert result["execution_enabled"] is False
+    assert result["dispatch_enabled"] is False
+    assert result["session_send_enabled"] is False
+    assert result["worker_dispatch_enabled"] is False
     assert result["decision_state"] == "pass"
     assert result["would_block"] is False
     assert result["blockers"] == []

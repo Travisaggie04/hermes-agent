@@ -65,7 +65,11 @@ def test_workspace_status_returns_inert_display_only_flags_and_baselines():
     assert status["display_only"] is True
     assert status["trusted_for_execution"] is False
     assert status["inert_context_only"] is True
+    assert status["would_execute"] is False
     assert status["execution_enabled"] is False
+    assert status["dispatch_enabled"] is False
+    assert status["session_send_enabled"] is False
+    assert status["worker_dispatch_enabled"] is False
     assert status["enforcement_enabled"] is False
     assert status["dry_run_only"] is True
     assert status["enforces_runtime"] is False
@@ -282,6 +286,11 @@ def test_workspace_status_exposes_runtime_worktree_guard_blockers_display_only()
     guard = status["runtime_worktree_guard"]
     assert guard["dry_run_only"] is True
     assert guard["enforces_runtime"] is False
+    assert guard["would_execute"] is False
+    assert guard["execution_enabled"] is False
+    assert guard["dispatch_enabled"] is False
+    assert guard["session_send_enabled"] is False
+    assert guard["worker_dispatch_enabled"] is False
     assert guard["would_block"] is True
     assert guard["decision_state"] == "blocked"
     assert "dev_worktree_is_live_runtime" in guard["blockers"]
@@ -553,7 +562,11 @@ def test_workspace_status_record_source_defaults_lane_to_idle_and_matching_basel
     assert status["safety"]["queue_mutation_enabled"] is False
     assert status["safety"]["model_routing_enabled"] is False
     assert status["safety"]["enforcement_enabled"] is False
+    assert status["would_execute"] is False
     assert status["execution_enabled"] is False
+    assert status["dispatch_enabled"] is False
+    assert status["session_send_enabled"] is False
+    assert status["worker_dispatch_enabled"] is False
     assert status["display_only"] is True
     assert status["dry_run_only"] is True
     assert status["enforces_runtime"] is False

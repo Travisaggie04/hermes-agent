@@ -66,7 +66,11 @@ def test_record_sourced_workspace_status_defaults_to_idle_and_dispatch_false():
     assert status["accepted_baseline_source"] == "record"
     assert status["display_only"] is True
     assert status["trusted_for_execution"] is False
+    assert status["would_execute"] is False
     assert status["execution_enabled"] is False
+    assert status["dispatch_enabled"] is False
+    assert status["session_send_enabled"] is False
+    assert status["worker_dispatch_enabled"] is False
     assert status["enforcement_enabled"] is False
     assert status["dry_run_only"] is True
     assert status["enforces_runtime"] is False
