@@ -2884,6 +2884,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             or report_overwrite_conflict_count > 0
             or result_ingestion_blocked_count > 0
             or report_link_mismatch_count > 0
+            or incomplete_report_contract_count > 0
             or report_completion_blocked_count > 0
             or stop_cancel_count > 0
         ),

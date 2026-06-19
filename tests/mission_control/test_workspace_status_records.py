@@ -1126,6 +1126,48 @@ def test_record_sourced_workspace_status_projects_report_contract_compliance(tmp
     assert "Report contract completeness: 1 complete, 1 incomplete." in operator_packet["plain_language_summary"]
 
 
+def test_operator_decision_packet_requires_review_for_incomplete_accepted_report_contract(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        WorkerNodeRunRecord(
+            worker_run_id="worker-run-1",
+            parent_run_id="run-parent",
+            project_id="project-hermes-mission-control",
+            worker_identity="codex",
+            worker_host_label="laptop-codex",
+            status="running",
+            objective="Prepare scoped PR evidence.",
+            report_id="report-incomplete-accepted",
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-incomplete-accepted",
+            run_id="worker-run-1",
+            project_id="project-hermes-mission-control",
+            status="accepted",
+            summary="Accepted report missing the full contract.",
+            risks=("focused evidence only",),
+            reviewed_at="2026-06-19T10:00:00Z",
+            reviewed_by="jenny",
+            redaction_status="operator_supplied_redacted",
+            metadata={"safety_confirmation": "No live dispatch, deploy, restart, runtime switch, records, or secrets."},
+        )
+    )
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    operator_packet = status["operator_decision_packet"]
+    assert operator_packet["report_review_queue_count"] == 0
+    assert operator_packet["result_ingestion_blocked_count"] == 0
+    assert operator_packet["report_completion_blocked_count"] == 0
+    assert operator_packet["stop_cancel_count"] == 0
+    assert operator_packet["report_contract_incomplete_count"] == 1
+    assert operator_packet["jenny_review_required"] is True
+    assert "Report contract completeness: 0 complete, 1 incomplete." in operator_packet["plain_language_summary"]
+
+
 def test_record_sourced_workspace_status_projects_report_completion_path(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"
     store = JsonlRecordStore(records_path)
