@@ -440,6 +440,19 @@ interface WorkspaceStatus {
     worker_dispatch_enabled?: boolean;
     worker_enabled?: boolean;
   };
+  report_lifecycle?: CompactExecutionLockSource & {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    duplicate_report_ids?: string[];
+    open_report_ids?: string[];
+    report_overwrite_conflict_count?: number;
+    report_overwrite_conflict_ids?: string[];
+    report_overwrite_conflicts?: Record<string, string[]>;
+    reviewed_report_ids?: string[];
+    runs_missing_report?: string[];
+    runs_with_missing_linked_report_ids?: Record<string, string[]>;
+    terminal_report_ids?: string[];
+  };
   result_ingestion_contract?: {
     blocked?: boolean;
     blocked_reasons?: string[];
@@ -4125,9 +4138,18 @@ function CompactHermesHealthDashboard({
   const workerPresence = status.worker_node_presence;
   const resultIngestion = status.result_ingestion_contract;
   const reportCompletion = status.report_completion_path;
+  const reportLifecycle = status.report_lifecycle;
   const nextSafeActions = status.next_safe_actions;
   const resultIngestionBlocked = resultIngestion?.blocked_report_count ?? 0;
   const reportCompletionBlocked = reportCompletion?.blocked_completion_count ?? 0;
+  const reportDuplicateCount = reportLifecycle?.duplicate_report_ids?.length ?? 0;
+  const reportMissingRunCount = reportLifecycle?.runs_missing_report?.length ?? 0;
+  const reportMissingLinkedCount = Object.values(reportLifecycle?.runs_with_missing_linked_report_ids ?? {}).reduce(
+    (count, reportIds) => count + reportIds.length,
+    0,
+  );
+  const reportOverwriteConflictCount = reportLifecycle?.report_overwrite_conflict_count ?? reportLifecycle?.report_overwrite_conflict_ids?.length ?? 0;
+  const reportGapCount = reportDuplicateCount + reportOverwriteConflictCount + reportMissingRunCount + reportMissingLinkedCount;
   const hardBoundaryViolationCount = hardBoundary?.live_flag_violation_count ?? hardBoundary?.live_flag_violations?.length ?? 0;
   const hardBoundaryForbiddenCount = hardBoundary?.forbidden_action_count ?? hardBoundary?.forbidden_actions?.length ?? 0;
   const hardBoundarySeparateApprovalCount = hardBoundary?.separate_approval_action_count ?? hardBoundary?.separate_approval_actions?.length ?? 0;
@@ -4146,6 +4168,7 @@ function CompactHermesHealthDashboard({
   const workerLockReasons = compactExecutionLockReasons("Worker node", workerPresence);
   const ingestionLockReasons = compactExecutionLockReasons("Result ingestion", resultIngestion);
   const completionLockReasons = compactExecutionLockReasons("Report completion", reportCompletion);
+  const reportLifecycleLockReasons = compactExecutionLockReasons("Report lifecycle", reportLifecycle);
   const issues = [
     bridgeError ? `Jenny bridge error: ${bridgeError}` : "",
     guard !== "pass" ? `Runtime guard is ${guard}` : "",
@@ -4168,6 +4191,7 @@ function CompactHermesHealthDashboard({
     ...workerLockReasons,
     ...ingestionLockReasons,
     ...completionLockReasons,
+    ...reportLifecycleLockReasons,
     hardBoundary?.blocked ? firstReason(hardBoundary.blocked_reasons, "Hard boundary contract needs review") : "",
     operatorPacket?.blocked ? firstReason(operatorPacket.blocked_reasons, "Operator decision packet is blocked") : "",
     executionMode?.blocked ? firstReason(executionMode.blocked_reasons, "Execution mode preview is blocked") : "",
@@ -4177,6 +4201,7 @@ function CompactHermesHealthDashboard({
     workerPresence?.blocked ? firstReason(workerPresence.blocked_reasons, "Laptop Codex worker-node presence is blocked") : "",
     resultIngestionBlocked ? firstReason(resultIngestion?.blocked_reasons, "Result ingestion needs review") : "",
     reportCompletionBlocked ? firstReason(reportCompletion?.blocked_reasons, "Report completion path needs review") : "",
+    reportLifecycle?.blocked ? firstReason(reportLifecycle.blocked_reasons, "Report lifecycle needs review") : "",
   ].filter(Boolean);
   const overallTone: CompactHealthTone = issues.length ? "warn" : "good";
   const bridgeTone: CompactHealthTone = bridgeError ? "bad" : bridgePending ? "warn" : "good";
@@ -4228,6 +4253,11 @@ function CompactHermesHealthDashboard({
     : reportCompletionBlocked
       ? "warn"
       : "good";
+  const reportLifecycleTone: CompactHealthTone = reportLifecycleLockReasons.length
+    ? "bad"
+    : reportLifecycle?.blocked || reportGapCount
+      ? "warn"
+      : "good";
   const maxMountPercent = Math.max(0, ...(snapshot.memoryStorage.profiles ?? []).map(profile => profile.mount?.percent_used ?? 0));
   const executionPreviewDetail = compactText([
     ...executionModeLockReasons,
@@ -4252,6 +4282,11 @@ function CompactHermesHealthDashboard({
     workerInstruction?.manual_handoff_prompt,
     "No worker-node instruction preview recorded.",
   ].find(Boolean) ?? "No worker-node instruction preview recorded.", 260);
+  const reportLifecycleDetail = compactText([
+    ...reportLifecycleLockReasons,
+    firstReason(reportLifecycle?.blocked_reasons, ""),
+    `Report gaps: duplicates ${reportDuplicateCount}, overwrite conflicts ${reportOverwriteConflictCount}, missing ${reportMissingRunCount}, stale links ${reportMissingLinkedCount}.`,
+  ].find(Boolean), 260);
 
   return (
     <section className="max-w-full overflow-hidden rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-3" aria-label="Hermes health dashboard">
@@ -4335,6 +4370,18 @@ function CompactHermesHealthDashboard({
           label="Report completion"
           tone={completionTone}
           value={`${reportCompletion?.completion_ready_count ?? 0} ready / ${reportCompletionBlocked} blocked`}
+        />
+        <CompactHealthTile
+          detail={reportLifecycleDetail}
+          label="Report lifecycle"
+          tone={reportLifecycleTone}
+          value={`open ${reportLifecycle?.open_report_ids?.length ?? 0} / reviewed ${reportLifecycle?.reviewed_report_ids?.length ?? 0} / terminal ${reportLifecycle?.terminal_report_ids?.length ?? 0}`}
+        />
+        <CompactHealthTile
+          detail={reportOverwriteConflictCount ? "Overwrite conflicts quarantine duplicate report IDs until Travis reviews the append-only report history." : "No duplicate report overwrite conflict is currently recorded."}
+          label="Report gaps"
+          tone={reportGapCount ? "warn" : "good"}
+          value={`duplicates ${reportDuplicateCount} / overwrite conflicts ${reportOverwriteConflictCount} / missing ${reportMissingRunCount} / stale links ${reportMissingLinkedCount}`}
         />
         <CompactHealthTile
           detail={`${reportCount} active project${reportCount === 1 ? "" : "s"} have live report evidence. ${pausedProjects.length} projects remain intentionally on hold.`}
