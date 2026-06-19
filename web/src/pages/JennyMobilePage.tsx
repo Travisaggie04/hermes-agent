@@ -791,7 +791,7 @@ export default function JennyMobilePage() {
       className="relative min-h-[100dvh] w-full min-w-0 overflow-x-hidden bg-[#070808] text-zinc-100 [overflow-wrap:anywhere]"
       data-testid="jenny-mobile-route"
     >
-      <div className="sticky top-0 z-20 border-b border-white/10 bg-[#070808] px-3 pb-2 pt-[calc(0.65rem+env(safe-area-inset-top,0px))]">
+      <div className="fixed inset-x-0 top-0 z-30 border-b border-white/10 bg-[#070808] px-3 pb-2 pt-[calc(0.65rem+env(safe-area-inset-top,0px))]">
         <div className="mx-auto flex max-w-2xl items-center gap-2">
           <button
             type="button"
@@ -832,7 +832,7 @@ export default function JennyMobilePage() {
         </div>
       </div>
 
-      <section className="mx-auto flex min-h-[calc(100dvh-9rem)] max-w-2xl flex-col gap-4 px-3 pb-[calc(9.75rem+env(safe-area-inset-bottom,0px))] pt-4">
+      <section className="mx-auto flex min-h-[calc(100dvh-9rem)] max-w-2xl flex-col gap-4 px-3 pb-[calc(9.75rem+env(safe-area-inset-bottom,0px))] pt-[calc(4.75rem+env(safe-area-inset-top,0px))]">
         <div className="flex items-center justify-between gap-3 px-1 text-xs text-zinc-400">
           <span className={cn(
             "inline-flex items-center gap-1 font-medium",
