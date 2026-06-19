@@ -82,6 +82,8 @@ MUTATION_LANE_TYPES = {
 }
 LIVE_EXECUTION_FLAG_NAMES = (
     "would_execute",
+    "would_dispatch",
+    "would_session_send",
     "execution_enabled",
     "dispatch_enabled",
     "session_send_enabled",
@@ -92,6 +94,8 @@ INERT_PROJECTION_FLAGS = {
     "trusted_for_execution": False,
     "inert_context_only": True,
     "would_execute": False,
+    "would_dispatch": False,
+    "would_session_send": False,
     "execution_enabled": False,
     "dispatch_enabled": False,
     "session_send_enabled": False,
@@ -2739,6 +2743,8 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     child_instruction = _mapping(status.get("child_agent_instruction_preview"))
     execution_mode = _mapping(status.get("execution_mode_classification"))
     execution_packet = _mapping(status.get("execution_packet_preview"))
+    execution_packet_body = _mapping(execution_packet.get("packet"))
+    worker_contract = _mapping(execution_packet_body.get("worker_node_contract"))
 
     queue_count = _safe_int(report_queue.get("queue_count"))
     report_overwrite_conflict_count = _safe_int(report_lifecycle.get("report_overwrite_conflict_count"))
@@ -2773,6 +2779,11 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     execution_packet_mode = _safe_text(_mapping(execution_packet.get("packet")).get("mode")) or "unknown"
     execution_packet_eligible = execution_packet.get("eligible") is True
     execution_mode_family = _safe_text(execution_mode.get("mode_family")) or "unknown"
+    execution_lock_reasons = _execution_lock_blockers(
+        ("execution packet", execution_packet),
+        ("execution packet body", execution_packet_body),
+        ("worker contract", worker_contract),
+    )
     blocked_reasons = _unique_reasons(
         [
             *_text_list(runtime_provenance.get("autonomy_blocked_reasons")),
@@ -2786,6 +2797,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             *_text_list(worker_presence.get("blocked_reasons")),
             *_text_list(execution_mode.get("blocked_reasons")),
             *_text_list(execution_packet.get("blocked_reasons")),
+            *execution_lock_reasons,
             *_text_list(next_safe_actions.get("blocked_reasons")),
             *_text_list(worker_instruction.get("blocked_reasons")),
             *_text_list(child_instruction.get("blocked_reasons")),
@@ -2884,6 +2896,11 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     summary_lines.append(
         "Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation."
     )
+    if execution_lock_reasons:
+        summary_lines.append(
+            "Execution lock blockers: "
+            f"{', '.join(execution_lock_reasons[:6])}."
+        )
     recommended_instruction = next_label or "Keep Mission Control preview-only and wait for exact approval."
     if queue_count and report_label:
         recommended_instruction = f"Jenny reviews {report_label} before issuing another worker instruction."
@@ -2912,6 +2929,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             or incomplete_report_contract_count > 0
             or report_completion_blocked_count > 0
             or stop_cancel_count > 0
+            or bool(execution_lock_reasons)
         ),
         "next_safe_action_id": _safe_text(next_safe_actions.get("primary_action_id")),
         "next_safe_action_label": next_label,
@@ -2940,6 +2958,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         "execution_packet_mode": execution_packet_mode,
         "execution_packet_eligible": execution_packet_eligible,
         "execution_packet_blocked_reasons": _text_list(execution_packet.get("blocked_reasons")),
+        "execution_lock_blocked_reasons": execution_lock_reasons,
         "worker_presence_state": worker_presence_state,
         "worker_online": worker_presence.get("online") is True,
         "worker_last_seen_at": worker_last_seen_at,
@@ -3194,6 +3213,14 @@ def _enabled_live_flag_names(*payloads: Any) -> list[str]:
         if any(payload.get(flag) is True for payload in mapped_payloads):
             enabled.append(flag)
     return enabled
+
+
+def _execution_lock_blockers(*labeled_payloads: tuple[str, Any]) -> list[str]:
+    blockers: list[str] = []
+    for label, payload in labeled_payloads:
+        for flag in _enabled_live_flag_names(payload):
+            blockers.append(f"{label} {flag} must remain disabled")
+    return _unique_reasons(blockers)
 
 
 def _text_list(value: Any) -> list[str]:

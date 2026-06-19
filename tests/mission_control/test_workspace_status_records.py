@@ -11,6 +11,7 @@ from mission_control.records import (
 )
 from mission_control.workspace_status_records import (
     _child_agent_instruction_preview,
+    _operator_decision_packet_payload,
     _orchestration_readiness_payload,
     _worker_node_instruction_preview,
     build_workspace_status_from_records,
@@ -22,6 +23,8 @@ def _assert_inert_projection(payload: dict[str, object]) -> None:
     assert payload["trusted_for_execution"] is False
     assert payload["inert_context_only"] is True
     assert payload["would_execute"] is False
+    assert payload["would_dispatch"] is False
+    assert payload["would_session_send"] is False
     assert payload["execution_enabled"] is False
     assert payload["dispatch_enabled"] is False
     assert payload["session_send_enabled"] is False
@@ -633,6 +636,10 @@ def test_record_sourced_workspace_status_projects_execution_packet_preview(tmp_p
     assert packet["packet"]["worker_node_contract"]["worker_host_label"] == "laptop-codex"
     assert packet["packet"]["worker_node_contract"]["parent_run_id"] == "run-pr-1"
     assert packet["packet"]["worker_node_contract"]["manual_handoff_only"] is True
+    assert packet["packet"]["would_dispatch"] is False
+    assert packet["packet"]["would_session_send"] is False
+    assert packet["packet"]["worker_node_contract"]["would_dispatch"] is False
+    assert packet["packet"]["worker_node_contract"]["would_session_send"] is False
     assert packet["packet"]["worker_node_contract"]["worker_dispatch_enabled"] is False
 
     execution_mode = status["execution_mode_classification"]
@@ -656,6 +663,48 @@ def test_record_sourced_workspace_status_projects_execution_packet_preview(tmp_p
     assert operator_packet["execution_packet_eligible"] is True
     assert "Execution mode: worker_node_preview; execution disabled." in operator_packet["plain_language_summary"]
     assert "Execution packet preview: worker_node, eligible true; execution disabled." in operator_packet["plain_language_summary"]
+    assert operator_packet["execution_lock_blocked_reasons"] == []
+
+
+def test_operator_decision_packet_rolls_up_nested_execution_locks():
+    operator_packet = _operator_decision_packet_payload(
+        {
+            "runtime_provenance": {"primary_status": "CLEAN_AND_ALIGNED", "autonomy_blocked_reasons": []},
+            "next_safe_actions": {"primary_action_label": "Review execution packet blockers"},
+            "orchestration_readiness": {
+                "states": {
+                    "supervised_read_only_autonomy": "preview_ready",
+                    "scoped_pr_creation": "preview_ready",
+                    "laptop_codex_worker_node": "preview_ready",
+                },
+                "blocked_reasons": [],
+            },
+            "execution_mode_classification": {"mode_family": "worker_node_preview", "blocked_reasons": []},
+            "execution_packet_preview": {
+                "eligible": True,
+                "would_dispatch": True,
+                "packet": {
+                    "mode": "worker_node",
+                    "session_send_enabled": True,
+                    "worker_node_contract": {
+                        "would_session_send": True,
+                        "worker_dispatch_enabled": True,
+                    },
+                },
+            },
+        }
+    )
+
+    _assert_inert_projection(operator_packet)
+    assert operator_packet["execution_ready"] is False
+    assert operator_packet["execution_lock_blocked_reasons"] == [
+        "execution packet would_dispatch must remain disabled",
+        "execution packet body session_send_enabled must remain disabled",
+        "worker contract would_session_send must remain disabled",
+        "worker contract worker_dispatch_enabled must remain disabled",
+    ]
+    assert operator_packet["blocked_reasons"] == operator_packet["execution_lock_blocked_reasons"]
+    assert "Execution lock blockers:" in operator_packet["plain_language_summary"]
 
 
 def test_record_sourced_workspace_status_blocks_higher_risk_execution_mode(tmp_path):
