@@ -529,3 +529,22 @@ def test_record_sourced_workspace_status_projects_approval_and_run_lifecycle_blo
     assert "approval_id approval-duplicate has multiple append-only records" in next_safe_actions["blocked_reasons"]
     assert "terminal run_id run-terminal-missing-report has no linked report" in next_safe_actions["blocked_reasons"]
     assert "run_id run-terminal-missing-report has no linked report" in next_safe_actions["blocked_reasons"]
+
+    readiness = status["orchestration_readiness"]
+    assert readiness["display_only"] is True
+    assert readiness["trusted_for_execution"] is False
+    assert readiness["would_execute"] is False
+    assert readiness["execution_enabled"] is False
+    assert readiness["dispatch_enabled"] is False
+    assert readiness["session_send_enabled"] is False
+    assert readiness["worker_dispatch_enabled"] is False
+    assert readiness["stored"] is False
+    assert readiness["dry_run_only"] is True
+    assert readiness["execution_ready"] is False
+    assert readiness["states"]["supervised_read_only_autonomy"] == "blocked"
+    assert readiness["states"]["scoped_pr_creation"] == "blocked"
+    assert readiness["states"]["laptop_codex_worker_node"] == "blocked"
+    assert readiness["next_safe_action_id"] == next_safe_actions["primary_action_id"]
+    assert "no laptop Codex worker-node run is recorded" in readiness["laptop_codex_worker_node"]["blocked_reasons"]
+    assert "Supervised read-only autonomy is blocked:" in readiness["plain_language_summary"]
+    assert "Next safe action:" in readiness["plain_language_summary"]

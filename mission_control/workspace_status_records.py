@@ -233,6 +233,7 @@ def build_workspace_status_from_records(
         "active_worker_node_run_count": len(active_worker_runs),
     }
     status["next_safe_actions"] = _next_safe_actions_payload(status)
+    status["orchestration_readiness"] = _orchestration_readiness_payload(status)
     return status
 
 
@@ -712,6 +713,149 @@ def _next_safe_actions_payload(status: dict[str, Any]) -> dict[str, Any]:
         "primary_action_label": str(primary_action.get("label") or ""),
         "actions": actions,
     }
+
+
+def _orchestration_readiness_payload(status: dict[str, Any]) -> dict[str, Any]:
+    read_only = _eligibility_readiness(
+        _mapping(status.get("read_only_autonomy_eligibility")),
+        default_blocked_reason="read-only preview eligibility is not satisfied",
+        disabled_flag_names=(
+            "would_execute",
+            "execution_enabled",
+            "dispatch_enabled",
+            "session_send_enabled",
+            "worker_dispatch_enabled",
+        ),
+    )
+    scoped_pr = _eligibility_readiness(
+        _mapping(status.get("scoped_pr_lane_eligibility")),
+        default_blocked_reason="scoped PR preview eligibility is not satisfied",
+        disabled_flag_names=(
+            "would_execute",
+            "would_commit",
+            "would_create_pr",
+            "execution_enabled",
+            "dispatch_enabled",
+            "session_send_enabled",
+            "worker_dispatch_enabled",
+            "merge_enabled",
+            "deploy_enabled",
+            "runtime_switch_enabled",
+        ),
+    )
+    worker_node = _worker_node_readiness(_mapping(status.get("worker_node_orchestration")))
+    states = {
+        "supervised_read_only_autonomy": read_only["state"],
+        "scoped_pr_creation": scoped_pr["state"],
+        "laptop_codex_worker_node": worker_node["state"],
+    }
+    summary_lines = [
+        _readiness_line("Supervised read-only autonomy", read_only),
+        _readiness_line("Scoped PR creation", scoped_pr),
+        _readiness_line("Laptop Codex worker-node", worker_node),
+    ]
+    next_safe_actions = _mapping(status.get("next_safe_actions"))
+    next_safe_action_label = _safe_text(next_safe_actions.get("primary_action_label"))
+    if next_safe_action_label:
+        summary_lines.append(f"Next safe action: {next_safe_action_label}.")
+    blocked_reasons = _unique_reasons(
+        [
+            *_text_list(read_only.get("blocked_reasons")),
+            *_text_list(scoped_pr.get("blocked_reasons")),
+            *_text_list(worker_node.get("blocked_reasons")),
+        ]
+    )
+    return {
+        "source": "mission_control_orchestration_readiness_v1",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "stored": False,
+        "dry_run_only": True,
+        "states": states,
+        "supervised_read_only_autonomy": read_only,
+        "scoped_pr_creation": scoped_pr,
+        "laptop_codex_worker_node": worker_node,
+        "summary_lines": summary_lines,
+        "plain_language_summary": " ".join(summary_lines),
+        "blocked": bool(blocked_reasons),
+        "blocked_reasons": blocked_reasons,
+        "next_safe_action_id": _safe_text(next_safe_actions.get("primary_action_id")),
+        "next_safe_action_label": next_safe_action_label,
+        "execution_ready": False,
+    }
+
+
+def _eligibility_readiness(
+    payload: dict[str, Any],
+    *,
+    default_blocked_reason: str,
+    disabled_flag_names: tuple[str, ...],
+) -> dict[str, Any]:
+    blocked_reasons = _text_list(payload.get("blocked_reasons"))
+    enabled_flags = [flag for flag in disabled_flag_names if payload.get(flag) is True]
+    blocked_reasons.extend(f"{flag} must remain disabled" for flag in enabled_flags)
+    if payload.get("eligible") is not True and not blocked_reasons:
+        blocked_reasons.append(default_blocked_reason)
+    unique_blocked_reasons = _unique_reasons(blocked_reasons)
+    state = "preview_ready" if payload.get("eligible") is True and not unique_blocked_reasons else "blocked"
+    return {
+        "state": state,
+        "eligible": payload.get("eligible") is True,
+        "preview_ready": state == "preview_ready",
+        "execution_ready": False,
+        "blocked_reasons": unique_blocked_reasons,
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+    }
+
+
+def _worker_node_readiness(worker_projection: dict[str, Any]) -> dict[str, Any]:
+    blocked_reasons = _text_list(worker_projection.get("blocked_reasons"))
+    enabled_flags = [
+        flag
+        for flag in ("execution_enabled", "dispatch_enabled", "session_send_enabled", "worker_dispatch_enabled")
+        if worker_projection.get(flag) is True
+    ]
+    blocked_reasons.extend(f"{flag} must remain disabled" for flag in enabled_flags)
+    latest_by_id = _mapping(worker_projection.get("latest_by_id"))
+    active_count = worker_projection.get("active_count")
+    has_worker_record = bool(latest_by_id) or (isinstance(active_count, int) and active_count > 0)
+    if not has_worker_record:
+        blocked_reasons.append("no laptop Codex worker-node run is recorded")
+    state = "preview_ready" if has_worker_record and not blocked_reasons and not enabled_flags else "blocked"
+    unique_blocked_reasons = _unique_reasons(blocked_reasons)
+    return {
+        "state": state,
+        "recorded": has_worker_record,
+        "active_count": active_count if isinstance(active_count, int) else 0,
+        "preview_ready": state == "preview_ready",
+        "execution_ready": False,
+        "blocked_reasons": unique_blocked_reasons,
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+    }
+
+
+def _readiness_line(label: str, payload: dict[str, Any]) -> str:
+    if payload.get("state") == "preview_ready":
+        return f"{label} is preview-ready; execution remains disabled."
+    reason = _first_reason(_text_list(payload.get("blocked_reasons")), "required evidence is missing")
+    return f"{label} is blocked: {reason}."
 
 
 def _latest_by_id(records: tuple[Any, ...], field_name: str) -> dict[str, dict[str, Any]]:

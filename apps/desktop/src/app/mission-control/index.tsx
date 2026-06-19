@@ -1253,6 +1253,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
   const reportLifecycle = status.report_lifecycle
   const nextSafeActions = status.next_safe_actions
   const nextSafePrimaryAction = nextSafeActions?.primary_action
+  const orchestrationReadiness = status.orchestration_readiness
   const childRecord = latestProjectionRecord(status.child_agent_orchestration) as Record<string, unknown> | null
   const workerRecord = latestProjectionRecord(status.worker_node_orchestration) as Record<string, unknown> | null
   const childBlockedReasons = uniqueTextList([
@@ -1329,6 +1330,16 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
       'Keep Mission Control preview-only',
     nextSafePrimaryActionId: nextSafePrimaryAction?.action_id ?? nextSafeActions?.primary_action_id ?? '',
     nextSafePrimaryReason: nextSafePrimaryAction?.reason ?? nextSafeActionReasons[0] ?? 'No executable action is enabled by this projection.',
+    orchestrationReadinessBlockedReasons: orchestrationReadiness?.blocked_reasons ?? [],
+    orchestrationReadinessDispatchEnabled: orchestrationReadiness?.dispatch_enabled,
+    orchestrationReadinessDisplayOnly: orchestrationReadiness?.display_only,
+    orchestrationReadinessExecutionEnabled: orchestrationReadiness?.execution_enabled,
+    orchestrationReadinessExecutionReady: orchestrationReadiness?.execution_ready,
+    orchestrationReadinessSummary: orchestrationReadiness?.plain_language_summary ?? 'No orchestration readiness summary recorded.',
+    orchestrationReadinessWorkerDispatchEnabled: orchestrationReadiness?.worker_dispatch_enabled,
+    readinessReadOnlyState: orchestrationReadiness?.states?.supervised_read_only_autonomy ?? 'unknown',
+    readinessScopedPrState: orchestrationReadiness?.states?.scoped_pr_creation ?? 'unknown',
+    readinessWorkerNodeState: orchestrationReadiness?.states?.laptop_codex_worker_node ?? 'unknown',
     provenanceBlocked: runtimeProvenance?.autonomy_blocked,
     provenanceReasons: runtimeProvenance?.autonomy_blocked_reasons ?? [],
     provenanceStatus: runtimeProvenance?.primary_status ?? runtimeProvenance?.status ?? 'unknown',
@@ -3985,6 +3996,15 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
         ? 'warn'
         : 'good'
       : 'warn'
+  const readinessTone =
+    status.orchestrationReadinessExecutionEnabled === false &&
+    status.orchestrationReadinessDispatchEnabled === false &&
+    status.orchestrationReadinessWorkerDispatchEnabled === false &&
+    status.orchestrationReadinessExecutionReady === false
+      ? status.orchestrationReadinessBlockedReasons.length
+        ? 'warn'
+        : 'good'
+      : 'warn'
   return (
     <div className="grid gap-3 rounded-xl border border-border/70 bg-background/40 p-4 md:grid-cols-3">
       <StatusItem label="Runtime Worktree Guard" tone={status.guard === 'pass' ? 'good' : 'warn'} value={status.guard} />
@@ -4000,6 +4020,8 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="lifecycle projection" tone={status.appendOnlyProjection ? 'good' : 'warn'} value={`append-only ${yesNo(status.appendOnlyProjection)} / active mutation lanes ${status.activeMutationLaneCount}`} />
       <StatusItem className="md:col-span-2" label="next safe action" tone={nextSafeActionTone} value={status.nextSafePrimaryAction} />
       <StatusItem label="next action mode" tone={nextSafeActionTone} value={`display-only ${yesNo(status.nextSafeActionDisplayOnly)} / actions ${status.nextSafeActionCount}`} />
+      <StatusItem className="md:col-span-2" label="orchestration readiness" tone={readinessTone} value={`read-only ${labelText(status.readinessReadOnlyState)} / scoped PR ${labelText(status.readinessScopedPrState)}`} />
+      <StatusItem label="worker readiness" tone={readinessTone} value={`laptop Codex ${labelText(status.readinessWorkerNodeState)} / execution-ready ${yesNo(status.orchestrationReadinessExecutionReady)}`} />
       <StatusItem label="approval lifecycle" tone={approvalLifecycleTone} value={`available ${status.approvalAvailableCount} / pending ${status.approvalPendingCount} / expired ${status.approvalExpiredCount}`} />
       <StatusItem label="approval gaps" tone={status.approvalDuplicateCount || status.approvalConsumedCount || status.approvalRejectedCount || status.approvalRunMissingIdCount || status.approvalMissingRecordCount || status.approvalUnavailableRunCount ? 'warn' : 'good'} value={`duplicates ${status.approvalDuplicateCount} / consumed ${status.approvalConsumedCount} / unavailable runs ${status.approvalUnavailableRunCount}`} />
       <StatusItem label="run lifecycle" tone={runLifecycleTone} value={`active ${status.runActiveCount} / terminal ${status.runTerminalCount} / stop-cancel ${status.runStopCancelCount}`} />
@@ -4019,6 +4041,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-2" label="worker-node blockers" tone={status.workerBlockedReasons.length ? 'warn' : 'good'} value={status.workerBlockedReasons.length ? status.workerBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="desktop app install" tone="warn" value="separate laptop worker-node update; bottom-bar version is not changed by accepted-live/dashboard deploy" />
       <StatusItem className="md:col-span-3" label="next action reasons" tone={status.nextSafeActionReasons.length ? 'warn' : 'good'} value={status.nextSafeActionReasons.length ? status.nextSafeActionReasons.join(', ') : status.nextSafePrimaryReason} />
+      <StatusItem className="md:col-span-3" label="orchestration summary" tone={readinessTone} value={status.orchestrationReadinessSummary} />
       <StatusItem className="md:col-span-3" label="autonomy blockers" tone={status.autonomyBlockedReasons.length || status.provenanceReasons.length ? 'warn' : 'good'} value={[...status.provenanceReasons, ...status.autonomyBlockedReasons].length ? [...status.provenanceReasons, ...status.autonomyBlockedReasons].join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="approval blockers" tone={status.approvalBlockedReasons.length ? 'warn' : 'good'} value={status.approvalBlockedReasons.length ? status.approvalBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="run blockers" tone={status.runBlockedReasons.length ? 'warn' : 'good'} value={status.runBlockedReasons.length ? status.runBlockedReasons.join(', ') : 'none'} />

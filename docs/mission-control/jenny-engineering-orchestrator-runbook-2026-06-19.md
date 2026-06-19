@@ -195,6 +195,12 @@ or tool-permission blockers. The projection is advisory only: it is
 display-only, not stored as an approval, and keeps work execution, bridge
 sending, and worker-node dispatch disabled.
 
+The orchestration readiness summary rolls the backend gates into three plain
+states: supervised read-only autonomy, scoped PR creation, and laptop Codex
+worker-node. A state may be blocked or preview-ready, but this lane still keeps
+execution-ready false. Travis should treat preview-ready as "safe to prepare a
+manual packet for review," not "safe to run automatically."
+
 ## Mission Control Reading Guide
 
 - Runtime provenance: source and runtime trust.
@@ -215,6 +221,8 @@ sending, and worker-node dispatch disabled.
   stale report links, and exact review blockers.
 - Next safe action: the highest-priority manual review or preview-preparation
   step; it does not enable execution.
+- Orchestration readiness: blocked or preview-ready state for supervised
+  read-only autonomy, scoped PR creation, and laptop Codex worker-node.
 
 If a row says blocked, Travis should read the blocker first instead of trying
 to force the action.

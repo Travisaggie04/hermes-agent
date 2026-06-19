@@ -532,6 +532,47 @@ export interface MissionControlNextSafeActions {
   would_execute?: boolean
 }
 
+export interface MissionControlOrchestrationReadinessLane {
+  active_count?: number
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  eligible?: boolean
+  execution_enabled?: boolean
+  execution_ready?: boolean
+  preview_ready?: boolean
+  recorded?: boolean
+  session_send_enabled?: boolean
+  state?: string
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
+}
+
+export interface MissionControlOrchestrationReadiness {
+  blocked?: boolean
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  execution_ready?: boolean
+  laptop_codex_worker_node?: MissionControlOrchestrationReadinessLane
+  next_safe_action_id?: string
+  next_safe_action_label?: string
+  plain_language_summary?: string
+  scoped_pr_creation?: MissionControlOrchestrationReadinessLane
+  session_send_enabled?: boolean
+  source?: string
+  states?: Record<string, string>
+  stored?: boolean
+  summary_lines?: string[]
+  supervised_read_only_autonomy?: MissionControlOrchestrationReadinessLane
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
+}
+
 export interface MissionControlProjectSession {
   cwd?: null | string
   durable_session_id?: string
@@ -922,6 +963,7 @@ export interface MissionControlWorkspaceStatus {
   deployment_gap?: { dashboard_deploy_needed?: boolean; deployed_head?: string; accepted_live_head?: string; latest_merged_pr?: string; state?: string }
   lane?: { active_lane_count?: number; max_active_lane?: number }
   next_safe_actions?: MissionControlNextSafeActions
+  orchestration_readiness?: MissionControlOrchestrationReadiness
   read_only_autonomy_eligibility?: {
     blocked_reasons?: string[]
     bridge_permissions?: { permission_classification?: string; read_only_safe?: boolean; reasons?: string[] }

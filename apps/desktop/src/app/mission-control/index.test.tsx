@@ -176,6 +176,78 @@ beforeEach(() => {
       worker_dispatch_enabled: false,
       would_execute: false
     },
+    orchestration_readiness: {
+      blocked: true,
+      blocked_reasons: ['runtime provenance is not clean', 'exact approved ApprovalRecord is required', 'worker node offline'],
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      execution_ready: false,
+      laptop_codex_worker_node: {
+        active_count: 1,
+        blocked_reasons: ['worker node offline'],
+        dispatch_enabled: false,
+        display_only: true,
+        execution_enabled: false,
+        execution_ready: false,
+        preview_ready: false,
+        recorded: true,
+        session_send_enabled: false,
+        state: 'blocked',
+        trusted_for_execution: false,
+        worker_dispatch_enabled: false,
+        would_execute: false
+      },
+      next_safe_action_id: 'review_runtime_provenance_blockers',
+      next_safe_action_label: 'Review runtime provenance blockers',
+      plain_language_summary: 'Supervised read-only autonomy is blocked: runtime provenance is not clean. Scoped PR creation is blocked: exact approved ApprovalRecord is required. Laptop Codex worker-node is blocked: worker node offline. Next safe action: Review runtime provenance blockers.',
+      scoped_pr_creation: {
+        blocked_reasons: ['exact approved ApprovalRecord is required'],
+        dispatch_enabled: false,
+        display_only: true,
+        eligible: false,
+        execution_enabled: false,
+        execution_ready: false,
+        preview_ready: false,
+        session_send_enabled: false,
+        state: 'blocked',
+        trusted_for_execution: false,
+        worker_dispatch_enabled: false,
+        would_execute: false
+      },
+      session_send_enabled: false,
+      source: 'mission_control_orchestration_readiness_v1',
+      states: {
+        laptop_codex_worker_node: 'blocked',
+        scoped_pr_creation: 'blocked',
+        supervised_read_only_autonomy: 'blocked'
+      },
+      stored: false,
+      summary_lines: [
+        'Supervised read-only autonomy is blocked: runtime provenance is not clean.',
+        'Scoped PR creation is blocked: exact approved ApprovalRecord is required.',
+        'Laptop Codex worker-node is blocked: worker node offline.',
+        'Next safe action: Review runtime provenance blockers.'
+      ],
+      supervised_read_only_autonomy: {
+        blocked_reasons: ['runtime provenance is not clean'],
+        dispatch_enabled: false,
+        display_only: true,
+        eligible: false,
+        execution_enabled: false,
+        execution_ready: false,
+        preview_ready: false,
+        session_send_enabled: false,
+        state: 'blocked',
+        trusted_for_execution: false,
+        worker_dispatch_enabled: false,
+        would_execute: false
+      },
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      would_execute: false
+    },
     read_only_autonomy_eligibility: {
       blocked_reasons: ['runtime provenance is not clean', 'gateway git metadata is broken'],
       bridge_permissions: {
@@ -1123,6 +1195,12 @@ describe('MissionControlView', () => {
     expect(screen.getByText('display-only yes / actions 1')).toBeTruthy()
     expect(screen.getByText('next action reasons')).toBeTruthy()
     expect(screen.getByText('gateway git metadata is broken, run_id run-parent-1 references unavailable approval_id approval-old')).toBeTruthy()
+    expect(screen.getByText('orchestration readiness')).toBeTruthy()
+    expect(screen.getByText('read-only blocked / scoped PR blocked')).toBeTruthy()
+    expect(screen.getByText('worker readiness')).toBeTruthy()
+    expect(screen.getByText('laptop Codex blocked / execution-ready no')).toBeTruthy()
+    expect(screen.getByText('orchestration summary')).toBeTruthy()
+    expect(screen.getByText(/Supervised read-only autonomy is blocked: runtime provenance is not clean/)).toBeTruthy()
     expect(screen.getByText('approval lifecycle')).toBeTruthy()
     expect(screen.getByText('available 1 / pending 1 / expired 1')).toBeTruthy()
     expect(screen.getByText('approval gaps')).toBeTruthy()
