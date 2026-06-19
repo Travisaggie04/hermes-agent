@@ -727,6 +727,110 @@ def test_record_sourced_workspace_status_projects_report_review_queue(tmp_path):
     assert "report_id report-worker still needs Jenny review" in operator_packet["blocked_reasons"]
 
 
+def test_record_sourced_workspace_status_projects_result_ingestion_contract(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        WorkerNodeRunRecord(
+            worker_run_id="worker-run-complete",
+            parent_run_id="run-parent",
+            project_id="project-hermes-mission-control",
+            worker_identity="codex",
+            worker_host_label="laptop-codex",
+            status="completed",
+            objective="Prepare scoped PR evidence.",
+            report_id="report-ready",
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-ready",
+            run_id="worker-run-complete",
+            project_id="project-hermes-mission-control",
+            status="reviewed",
+            summary="Worker report is linked and redacted.",
+            result="Prepared the bounded projection.",
+            risks=("focused checks only",),
+            changed_files=("mission_control/workspace_status_records.py",),
+            tests=("mission_control status tests passed",),
+            next_recommended_lane="Jenny review.",
+            evidence_refs=("pytest output",),
+            submitted_by="codex",
+            submitted_from="laptop-codex",
+            redaction_status="operator_supplied_redacted",
+            metadata={"safety_confirmation": "No live dispatch, deploy, restart, runtime switch, records, or secrets."},
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-unsafe",
+            run_id="missing-run",
+            project_id="project-hermes-mission-control",
+            status="received",
+            summary="Older unsafe report record.",
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-unsafe",
+            run_id="",
+            project_id="project-hermes-mission-control",
+            status="received",
+            summary="Unsafe unlinked report.",
+            redaction_status="raw",
+            metadata={"raw_log": "forbidden", "token": "placeholder-token"},
+        )
+    )
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    ingestion = status["result_ingestion_contract"]
+    assert ingestion["source"] == "mission_control_result_ingestion_contract_v1"
+    assert ingestion["display_only"] is True
+    assert ingestion["trusted_for_execution"] is False
+    assert ingestion["would_execute"] is False
+    assert ingestion["execution_enabled"] is False
+    assert ingestion["dispatch_enabled"] is False
+    assert ingestion["session_send_enabled"] is False
+    assert ingestion["worker_dispatch_enabled"] is False
+    assert ingestion["stored"] is False
+    assert ingestion["dry_run_only"] is True
+    assert ingestion["manual_review_only"] is True
+    assert ingestion["raw_report_count"] == 3
+    assert ingestion["report_count"] == 2
+    assert ingestion["ingestion_ready_count"] == 1
+    assert ingestion["blocked_report_count"] == 1
+    assert ingestion["duplicate_report_count"] == 1
+    assert ingestion["missing_link_count"] == 1
+    assert ingestion["unsafe_redaction_count"] == 1
+    assert ingestion["forbidden_metadata_count"] == 1
+    assert ingestion["missing_safety_confirmation_count"] == 1
+    assert ingestion["blocked"] is True
+    assert "report_id report-unsafe has multiple append-only records" in ingestion["blocked_reasons"]
+    assert "report_id report-unsafe is not linked to a run, child, or worker record" in ingestion["blocked_reasons"]
+    assert "report_id report-unsafe redaction_status raw is not accepted" in ingestion["blocked_reasons"]
+    assert "report_id report-unsafe metadata contains forbidden keys: raw_log, token" in ingestion["blocked_reasons"]
+    assert "report_id report-unsafe is missing safety confirmation for ingestion" in ingestion["blocked_reasons"]
+
+    items = {item["report_id"]: item for item in ingestion["items"]}
+    assert items["report-ready"]["ingestion_ready"] is True
+    assert items["report-ready"]["linked_record_type"] == "worker_node_run"
+    assert items["report-ready"]["safety_confirmation_present"] is True
+    assert items["report-unsafe"]["ingestion_ready"] is False
+    assert items["report-unsafe"]["forbidden_metadata_keys"] == ["raw_log", "token"]
+    assert "placeholder-token" not in str(ingestion)
+
+    next_safe_actions = status["next_safe_actions"]
+    action_ids = {action["action_id"] for action in next_safe_actions["actions"]}
+    assert "review_result_ingestion_contract" in action_ids
+    assert "report_id report-unsafe metadata contains forbidden keys: raw_log, token" in next_safe_actions["blocked_reasons"]
+
+    operator_packet = status["operator_decision_packet"]
+    assert operator_packet["result_ingestion_blocked_count"] == 1
+    assert "report_id report-unsafe redaction_status raw is not accepted" in operator_packet["result_ingestion_blocked_reasons"]
+    assert "Result ingestion: 1 ready, 1 blocked." in operator_packet["plain_language_summary"]
+
+
 def test_record_sourced_workspace_status_projects_report_contract_compliance(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"
     store = JsonlRecordStore(records_path)

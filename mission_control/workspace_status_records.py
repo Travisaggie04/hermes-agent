@@ -42,6 +42,32 @@ RUN_TERMINAL_STATUSES = {"completed", "failed", "blocked", "stopped", "cancelled
 RUN_STOP_CANCEL_STATUSES = {"stopping", "stopped", "cancelled"}
 ORCHESTRATION_STOP_CANCEL_STATUSES = {"stopping", "stopped", "cancelled"}
 WORKER_NODE_PRESENCE_STALE_SECONDS = 15 * 60
+RESULT_INGESTION_ACCEPTED_REDACTION_STATUSES = {
+    "operator_supplied_redacted",
+    "redacted",
+    "reviewed_redacted",
+    "system_redacted",
+}
+RESULT_INGESTION_FORBIDDEN_METADATA_KEYS = {
+    "api_key",
+    "api_response",
+    "canonical_packet_json",
+    "comments",
+    "discord_history",
+    "discord_messages",
+    "full_observed_state",
+    "github_response",
+    "local_path",
+    "path",
+    "pr_body",
+    "raw_log",
+    "raw_logs",
+    "secret",
+    "service_status",
+    "token",
+    "transcript",
+    "transcripts",
+}
 MUTATION_LANE_TYPES = {
     "implementation",
     "pr_creation",
@@ -261,6 +287,13 @@ def build_workspace_status_from_records(
         reports=recent_reports,
     )
     status["report_review_queue"] = _report_review_queue_payload(
+        reports=recent_reports,
+        raw_reports=recent_reports_raw,
+        runs=recent_runs,
+        child_runs=recent_child_runs,
+        worker_runs=recent_worker_runs,
+    )
+    status["result_ingestion_contract"] = _result_ingestion_contract_payload(
         reports=recent_reports,
         raw_reports=recent_reports_raw,
         runs=recent_runs,
@@ -792,6 +825,18 @@ def _next_safe_actions_payload(status: dict[str, Any]) -> dict[str, Any]:
             priority=45,
         )
 
+    result_ingestion = _mapping(status.get("result_ingestion_contract"))
+    result_ingestion_reasons = _text_list(result_ingestion.get("blocked_reasons"))
+    if result_ingestion.get("blocked") is True or result_ingestion_reasons:
+        extend_blockers(result_ingestion_reasons)
+        add_action(
+            action_id="review_result_ingestion_contract",
+            label="Review result ingestion contract",
+            reason=_first_reason(result_ingestion_reasons, "One or more reports are not safe for Jenny to ingest."),
+            blocked_until="reports are linked, redacted, and include safety confirmation",
+            priority=46,
+        )
+
     report_contract_compliance = _mapping(status.get("report_contract_compliance"))
     report_contract_reasons = _text_list(report_contract_compliance.get("blocked_reasons"))
     if report_contract_compliance.get("blocked") is True or report_contract_reasons:
@@ -1292,6 +1337,127 @@ def _report_review_queue_payload(
         "primary_review_reason": _safe_text(primary_item.get("reason"), max_chars=800),
         "items": items,
     }
+
+
+def _result_ingestion_contract_payload(
+    *,
+    reports: tuple[ReportRecord, ...],
+    raw_reports: tuple[ReportRecord, ...],
+    runs: tuple[RunRecord, ...],
+    child_runs: tuple[ChildRunRecord, ...],
+    worker_runs: tuple[WorkerNodeRunRecord, ...],
+) -> dict[str, Any]:
+    duplicate_report_ids = set(_duplicate_record_ids(raw_reports, "report_id"))
+    items: list[dict[str, Any]] = []
+    blocked_reasons: list[str] = []
+
+    for report in reports:
+        linked = _report_review_linked_record(
+            report=report,
+            runs=runs,
+            child_runs=child_runs,
+            worker_runs=worker_runs,
+        )
+        metadata = report.metadata if isinstance(report.metadata, dict) else {}
+        forbidden_metadata_keys = _result_ingestion_forbidden_metadata_keys(metadata)
+        safety_confirmation_present = _result_ingestion_safety_confirmation_present(metadata)
+        redaction_status = _safe_text(report.redaction_status) or "missing"
+        review_status = _linked_report_review_status(report)
+        item_reasons: list[str] = []
+
+        if report.report_id in duplicate_report_ids:
+            item_reasons.append(f"report_id {report.report_id} has multiple append-only records")
+        if not linked.get("linked_record_type") or not linked.get("linked_record_id"):
+            item_reasons.append(f"report_id {report.report_id} is not linked to a run, child, or worker record")
+        if redaction_status not in RESULT_INGESTION_ACCEPTED_REDACTION_STATUSES:
+            item_reasons.append(f"report_id {report.report_id} redaction_status {redaction_status} is not accepted")
+        if forbidden_metadata_keys:
+            item_reasons.append(
+                f"report_id {report.report_id} metadata contains forbidden keys: {', '.join(forbidden_metadata_keys)}"
+            )
+        if not safety_confirmation_present:
+            item_reasons.append(f"report_id {report.report_id} is missing safety confirmation for ingestion")
+
+        blocked_reasons.extend(item_reasons)
+        items.append(
+            {
+                "item_id": f"result-ingestion:{report.report_id}",
+                "report_id": report.report_id,
+                "run_id": report.run_id,
+                "linked_record_type": linked.get("linked_record_type", ""),
+                "linked_record_id": linked.get("linked_record_id", ""),
+                "status": report.status or "received",
+                "review_status": review_status,
+                "summary": report.summary,
+                "submitted_by": report.submitted_by,
+                "submitted_from": report.submitted_from,
+                "redaction_status": redaction_status,
+                "safety_confirmation_present": safety_confirmation_present,
+                "forbidden_metadata_keys": forbidden_metadata_keys,
+                "ingestion_ready": not item_reasons,
+                "manual_review_required": True,
+                "blocked_reasons": item_reasons,
+                "recommended_action": (
+                    "Jenny reviews the linked, redacted report and safety confirmation before relying on it."
+                ),
+            }
+        )
+
+    blocked_items = [item for item in items if item.get("ingestion_ready") is not True]
+    primary_item = blocked_items[0] if blocked_items else {}
+    unique_blocked_reasons = _unique_reasons(blocked_reasons)
+    return {
+        "source": "mission_control_result_ingestion_contract_v1",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "stored": False,
+        "dry_run_only": True,
+        "manual_review_only": True,
+        "report_count": len(items),
+        "raw_report_count": len(raw_reports),
+        "ingestion_ready_count": len(items) - len(blocked_items),
+        "blocked_report_count": len(blocked_items),
+        "duplicate_report_count": len(duplicate_report_ids),
+        "missing_link_count": sum(1 for item in items if not item.get("linked_record_type")),
+        "unsafe_redaction_count": sum(
+            1
+            for item in items
+            if item.get("redaction_status") not in RESULT_INGESTION_ACCEPTED_REDACTION_STATUSES
+        ),
+        "forbidden_metadata_count": sum(1 for item in items if item.get("forbidden_metadata_keys")),
+        "missing_safety_confirmation_count": sum(
+            1 for item in items if item.get("safety_confirmation_present") is not True
+        ),
+        "blocked": bool(unique_blocked_reasons),
+        "blocked_reasons": unique_blocked_reasons,
+        "primary_item": primary_item,
+        "primary_item_id": _safe_text(primary_item.get("item_id")),
+        "primary_item_label": _safe_text(primary_item.get("summary"), max_chars=800),
+        "items": items,
+    }
+
+
+def _result_ingestion_forbidden_metadata_keys(metadata: dict[str, Any]) -> list[str]:
+    keys: list[str] = []
+    for key in metadata:
+        normalized = _safe_text(key).lower()
+        if normalized in RESULT_INGESTION_FORBIDDEN_METADATA_KEYS:
+            keys.append(normalized)
+    return sorted(set(keys))
+
+
+def _result_ingestion_safety_confirmation_present(metadata: dict[str, Any]) -> bool:
+    safety_confirmation = (
+        metadata.get("safety_confirmation")
+        or metadata.get("safety")
+        or metadata.get("safety_confirmed")
+    )
+    return bool(_safe_text(safety_confirmation))
 
 
 def _report_contract_compliance_payload(
@@ -2134,6 +2300,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     next_safe_actions = _mapping(status.get("next_safe_actions"))
     readiness = _mapping(status.get("orchestration_readiness"))
     report_queue = _mapping(status.get("report_review_queue"))
+    result_ingestion = _mapping(status.get("result_ingestion_contract"))
     report_contract = _mapping(status.get("report_contract_compliance"))
     stop_control = _mapping(status.get("orchestration_stop_control"))
     worker_presence = _mapping(status.get("worker_node_presence"))
@@ -2143,6 +2310,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     execution_packet = _mapping(status.get("execution_packet_preview"))
 
     queue_count = _safe_int(report_queue.get("queue_count"))
+    result_ingestion_blocked_count = _safe_int(result_ingestion.get("blocked_report_count"))
     incomplete_report_contract_count = _safe_int(report_contract.get("incomplete_report_count"))
     stop_cancel_count = _safe_int(stop_control.get("stop_cancel_count"))
     readiness_states = _mapping(readiness.get("states"))
@@ -2166,6 +2334,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             *_text_list(runtime_provenance.get("autonomy_blocked_reasons")),
             *_text_list(readiness.get("blocked_reasons")),
             *_text_list(report_queue.get("blocked_reasons")),
+            *_text_list(result_ingestion.get("blocked_reasons")),
             *_text_list(report_contract.get("blocked_reasons")),
             *_text_list(stop_control.get("blocked_reasons")),
             *_text_list(worker_presence.get("blocked_reasons")),
@@ -2212,6 +2381,12 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             f"Top report review: {report_label or 'unlabeled report'}"
             f"{f' because {report_reason}' if report_reason else ''}."
         )
+    if result_ingestion:
+        summary_lines.append(
+            "Result ingestion: "
+            f"{_safe_int(result_ingestion.get('ingestion_ready_count'))} ready, "
+            f"{result_ingestion_blocked_count} blocked."
+        )
     if report_contract:
         summary_lines.append(
             "Report contract completeness: "
@@ -2254,11 +2429,14 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         "state": state,
         "execution_ready": False,
         "approval_required": True,
-        "jenny_review_required": queue_count > 0 or stop_cancel_count > 0,
+        "jenny_review_required": queue_count > 0 or result_ingestion_blocked_count > 0 or stop_cancel_count > 0,
         "next_safe_action_id": _safe_text(next_safe_actions.get("primary_action_id")),
         "next_safe_action_label": next_label,
         "next_safe_action_reason": next_reason,
         "report_review_queue_count": queue_count,
+        "result_ingestion_blocked_count": result_ingestion_blocked_count,
+        "result_ingestion_blocked_reasons": _text_list(result_ingestion.get("blocked_reasons")),
+        "result_ingestion_primary_item_id": _safe_text(result_ingestion.get("primary_item_id")),
         "report_contract_incomplete_count": incomplete_report_contract_count,
         "report_contract_blocked_reasons": _text_list(report_contract.get("blocked_reasons")),
         "report_contract_primary_item_id": _safe_text(report_contract.get("primary_item_id")),

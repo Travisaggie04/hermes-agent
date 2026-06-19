@@ -600,6 +600,55 @@ export interface MissionControlReportContractCompliance {
   would_execute?: boolean
 }
 
+export interface MissionControlResultIngestionContractItem {
+  blocked_reasons?: string[]
+  forbidden_metadata_keys?: string[]
+  ingestion_ready?: boolean
+  item_id?: string
+  linked_record_id?: string
+  linked_record_type?: string
+  manual_review_required?: boolean
+  recommended_action?: string
+  redaction_status?: string
+  report_id?: string
+  review_status?: string
+  run_id?: string
+  safety_confirmation_present?: boolean
+  status?: string
+  submitted_by?: string
+  submitted_from?: string
+  summary?: string
+}
+
+export interface MissionControlResultIngestionContract {
+  blocked?: boolean
+  blocked_reasons?: string[]
+  blocked_report_count?: number
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  duplicate_report_count?: number
+  execution_enabled?: boolean
+  forbidden_metadata_count?: number
+  ingestion_ready_count?: number
+  items?: MissionControlResultIngestionContractItem[]
+  manual_review_only?: boolean
+  missing_link_count?: number
+  missing_safety_confirmation_count?: number
+  primary_item?: MissionControlResultIngestionContractItem
+  primary_item_id?: string
+  primary_item_label?: string
+  raw_report_count?: number
+  report_count?: number
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  trusted_for_execution?: boolean
+  unsafe_redaction_count?: number
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
+}
+
 export interface MissionControlOrchestrationStopControlItem {
   item_id?: string
   label?: string
@@ -667,6 +716,9 @@ export interface MissionControlOperatorDecisionPacket {
   report_contract_incomplete_count?: number
   report_contract_primary_item_id?: string
   report_review_queue_count?: number
+  result_ingestion_blocked_count?: number
+  result_ingestion_blocked_reasons?: string[]
+  result_ingestion_primary_item_id?: string
   session_send_enabled?: boolean
   source?: string
   state?: string
@@ -1390,6 +1442,7 @@ export interface MissionControlWorkspaceStatus {
   report_lifecycle?: MissionControlReportLifecycle
   report_contract_compliance?: MissionControlReportContractCompliance
   report_review_queue?: MissionControlReportReviewQueue
+  result_ingestion_contract?: MissionControlResultIngestionContract
   run_lifecycle?: MissionControlRunLifecycle
   tool_permission_classification?: MissionControlToolPermissionClassification
   worker_node_instruction_preview?: MissionControlWorkerNodeInstructionPreview

@@ -308,12 +308,15 @@ beforeEach(() => {
       next_safe_action_id: 'review_runtime_provenance_blockers',
       next_safe_action_label: 'Review runtime provenance blockers',
       next_safe_action_reason: 'gateway git metadata is broken',
-      plain_language_summary: 'Operator state: report review required. Runtime provenance: GATEWAY_UNTRUSTED. Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked. Worker presence: unknown. Execution mode: worker_node_preview; execution disabled. Execution packet preview: worker_node, eligible false; execution disabled. Next safe action: Review runtime provenance blockers. Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review. Report contract completeness: 0 complete, 1 incomplete. Stop/cancel control: 1 item, blocked true. Worker instruction: manual handoff only; laptop Codex dispatch remains disabled. Child instruction: manual delegation preview only; execution remains disabled. Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation.',
+      plain_language_summary: 'Operator state: report review required. Runtime provenance: GATEWAY_UNTRUSTED. Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked. Worker presence: unknown. Execution mode: worker_node_preview; execution disabled. Execution packet preview: worker_node, eligible false; execution disabled. Next safe action: Review runtime provenance blockers. Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review. Result ingestion: 1 ready, 0 blocked. Report contract completeness: 0 complete, 1 incomplete. Stop/cancel control: 1 item, blocked true. Worker instruction: manual handoff only; laptop Codex dispatch remains disabled. Child instruction: manual delegation preview only; execution remains disabled. Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation.',
       recommended_operator_instruction: 'Jenny reviews Laptop Codex reported scoped PR evidence. before issuing another worker instruction.',
       report_contract_blocked_reasons: ['report_id report-worker missing contract fields: result, evidence, tests, next lane, safety confirmation'],
       report_contract_incomplete_count: 1,
       report_contract_primary_item_id: 'report-contract:report-worker',
       report_review_queue_count: 3,
+      result_ingestion_blocked_count: 0,
+      result_ingestion_blocked_reasons: [],
+      result_ingestion_primary_item_id: '',
       session_send_enabled: false,
       source: 'mission_control_operator_decision_packet_v1',
       state: 'report_review_required',
@@ -330,6 +333,7 @@ beforeEach(() => {
         'Execution packet preview: worker_node, eligible false; execution disabled.',
         'Next safe action: Review runtime provenance blockers.',
         'Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review.',
+        'Result ingestion: 1 ready, 0 blocked.',
         'Report contract completeness: 0 complete, 1 incomplete.',
         'Stop/cancel control: 1 item, blocked true.',
         'Worker instruction: manual handoff only; laptop Codex dispatch remains disabled.',
@@ -630,6 +634,51 @@ beforeEach(() => {
       source: 'mission_control_report_review_queue_v1',
       stored: false,
       trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      would_execute: false
+    },
+    result_ingestion_contract: {
+      blocked: false,
+      blocked_reasons: [],
+      blocked_report_count: 0,
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      duplicate_report_count: 0,
+      execution_enabled: false,
+      forbidden_metadata_count: 0,
+      ingestion_ready_count: 1,
+      items: [
+        {
+          ingestion_ready: true,
+          item_id: 'result-ingestion:report-worker',
+          linked_record_id: 'worker-run-1',
+          linked_record_type: 'worker_node_run',
+          manual_review_required: true,
+          recommended_action: 'Jenny reviews the linked, redacted report and safety confirmation before relying on it.',
+          redaction_status: 'operator_supplied_redacted',
+          report_id: 'report-worker',
+          review_status: 'needs_review',
+          run_id: 'worker-run-1',
+          safety_confirmation_present: true,
+          status: 'needs_review',
+          submitted_by: 'codex',
+          submitted_from: 'laptop-codex',
+          summary: 'Laptop Codex reported scoped PR evidence.'
+        }
+      ],
+      manual_review_only: true,
+      missing_link_count: 0,
+      missing_safety_confirmation_count: 0,
+      primary_item_id: '',
+      primary_item_label: '',
+      raw_report_count: 1,
+      report_count: 1,
+      session_send_enabled: false,
+      source: 'mission_control_result_ingestion_contract_v1',
+      stored: false,
+      trusted_for_execution: false,
+      unsafe_redaction_count: 0,
       worker_dispatch_enabled: false,
       would_execute: false
     },
@@ -1676,6 +1725,8 @@ describe('MissionControlView', () => {
     expect(screen.getByText('reports 1 / complete 0 / incomplete 1')).toBeTruthy()
     expect(screen.getByText('report review queue')).toBeTruthy()
     expect(screen.getByText('items 3 / needs review 2 / missing 1')).toBeTruthy()
+    expect(screen.getByText('result ingestion')).toBeTruthy()
+    expect(screen.getByText('ready 1 / blocked 0 / reports 1')).toBeTruthy()
     expect(screen.getByText('stop/cancel control')).toBeTruthy()
     expect(screen.getByText('items 1 / stopping 0 / terminal 1')).toBeTruthy()
     expect(screen.getByText('top report review')).toBeTruthy()
@@ -1686,6 +1737,10 @@ describe('MissionControlView', () => {
     expect(screen.getByText('report_id report-worker missing contract fields: result, evidence, tests, next lane, safety confirmation')).toBeTruthy()
     expect(screen.getByText('report queue reason')).toBeTruthy()
     expect(screen.getByText('report_id report-worker still needs Jenny review, report_id report-child still needs Jenny review, run_id run-parent-1 has no linked report')).toBeTruthy()
+    expect(screen.getByText('result ingestion blockers')).toBeTruthy()
+    expect(screen.getByText('No result ingestion blockers recorded')).toBeTruthy()
+    expect(screen.getByText('result ingestion gaps')).toBeTruthy()
+    expect(screen.getByText('duplicates 0 / unlinked 0 / redaction 0 / metadata 0 / safety 0')).toBeTruthy()
     expect(screen.getByText('stop/cancel blockers')).toBeTruthy()
     expect(screen.getByText('run run-stopped has no stop_reason, run run-stopped has no linked stop/cancel report')).toBeTruthy()
     expect(screen.getByText('child-agent status')).toBeTruthy()

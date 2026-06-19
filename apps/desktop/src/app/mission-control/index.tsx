@@ -1253,6 +1253,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
   const reportLifecycle = status.report_lifecycle
   const reportContractCompliance = status.report_contract_compliance
   const reportReviewQueue = status.report_review_queue
+  const resultIngestionContract = status.result_ingestion_contract
   const stopControl = status.orchestration_stop_control
   const nextSafeActions = status.next_safe_actions
   const nextSafePrimaryAction = nextSafeActions?.primary_action
@@ -1451,6 +1452,24 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
       reportReviewQueue?.primary_review_item?.reason ??
       'No report review queue blockers recorded.',
     reportReviewQueueWorkerDispatchEnabled: reportReviewQueue?.worker_dispatch_enabled,
+    resultIngestionBlocked: resultIngestionContract?.blocked,
+    resultIngestionBlockedCount: resultIngestionContract?.blocked_report_count ?? 0,
+    resultIngestionBlockedReasons: resultIngestionContract?.blocked_reasons ?? [],
+    resultIngestionDisplayOnly: resultIngestionContract?.display_only,
+    resultIngestionDuplicateCount: resultIngestionContract?.duplicate_report_count ?? 0,
+    resultIngestionExecutionEnabled: resultIngestionContract?.execution_enabled,
+    resultIngestionForbiddenMetadataCount: resultIngestionContract?.forbidden_metadata_count ?? 0,
+    resultIngestionManualOnly: resultIngestionContract?.manual_review_only,
+    resultIngestionMissingLinkCount: resultIngestionContract?.missing_link_count ?? 0,
+    resultIngestionMissingSafetyCount: resultIngestionContract?.missing_safety_confirmation_count ?? 0,
+    resultIngestionPrimaryLabel:
+      resultIngestionContract?.primary_item_label?.trim() ||
+      resultIngestionContract?.primary_item?.summary?.trim() ||
+      'No result ingestion blockers recorded',
+    resultIngestionReadyCount: resultIngestionContract?.ingestion_ready_count ?? 0,
+    resultIngestionReportCount: resultIngestionContract?.report_count ?? 0,
+    resultIngestionUnsafeRedactionCount: resultIngestionContract?.unsafe_redaction_count ?? 0,
+    resultIngestionWorkerDispatchEnabled: resultIngestionContract?.worker_dispatch_enabled,
     reportReviewedCount: reportLifecycle?.reviewed_report_ids?.length ?? 0,
     reportTerminalCount: reportLifecycle?.terminal_report_ids?.length ?? 0,
     stopControlActiveCount: stopControl?.active_stop_count ?? 0,
@@ -4158,6 +4177,14 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
         ? 'warn'
         : 'good'
       : 'warn'
+  const resultIngestionTone =
+    status.resultIngestionExecutionEnabled === false &&
+    status.resultIngestionWorkerDispatchEnabled === false &&
+    status.resultIngestionManualOnly === true
+      ? status.resultIngestionBlocked || status.resultIngestionBlockedCount
+        ? 'warn'
+        : 'good'
+      : 'warn'
   const reportContractTone =
     status.reportContractExecutionEnabled === false &&
     status.reportContractWorkerDispatchEnabled === false &&
@@ -4247,6 +4274,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="report gaps" tone={status.reportDuplicateCount || status.reportMissingRunCount || status.reportMissingLinkedCount ? 'warn' : 'good'} value={`duplicates ${status.reportDuplicateCount} / missing ${status.reportMissingRunCount} / stale links ${status.reportMissingLinkedCount}`} />
       <StatusItem label="report contract" tone={reportContractTone} value={`reports ${status.reportContractReportCount} / complete ${status.reportContractCompleteCount} / incomplete ${status.reportContractIncompleteCount}`} />
       <StatusItem label="report review queue" tone={reportReviewQueueTone} value={`items ${status.reportReviewQueueCount} / needs review ${status.reportReviewQueueNeedsReviewCount} / missing ${status.reportReviewQueueMissingCount}`} />
+      <StatusItem label="result ingestion" tone={resultIngestionTone} value={`ready ${status.resultIngestionReadyCount} / blocked ${status.resultIngestionBlockedCount} / reports ${status.resultIngestionReportCount}`} />
       <StatusItem label="stop/cancel control" tone={stopControlTone} value={`items ${status.stopControlCount} / stopping ${status.stopControlActiveCount} / terminal ${status.stopControlTerminalCount}`} />
       <StatusItem className="md:col-span-2" label="top report review" tone={reportReviewQueueTone} value={status.reportReviewQueuePrimaryLabel} />
       <StatusItem className="md:col-span-2" label="accepted runtime" value={status.runtime} />
@@ -4281,6 +4309,8 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-3" label="report review blockers" tone={status.reportLifecycleBlockedReasons.length ? 'warn' : 'good'} value={status.reportLifecycleBlockedReasons.length ? status.reportLifecycleBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="report contract blockers" tone={status.reportContractBlockedReasons.length ? 'warn' : 'good'} value={status.reportContractBlockedReasons.length ? status.reportContractBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="report queue reason" tone={reportReviewQueueTone} value={status.reportReviewQueueBlockedReasons.length ? status.reportReviewQueueBlockedReasons.join(', ') : status.reportReviewQueuePrimaryReason} />
+      <StatusItem className="md:col-span-3" label="result ingestion blockers" tone={status.resultIngestionBlockedReasons.length ? 'warn' : 'good'} value={status.resultIngestionBlockedReasons.length ? status.resultIngestionBlockedReasons.join(', ') : status.resultIngestionPrimaryLabel} />
+      <StatusItem className="md:col-span-3" label="result ingestion gaps" tone={resultIngestionTone} value={`duplicates ${status.resultIngestionDuplicateCount} / unlinked ${status.resultIngestionMissingLinkCount} / redaction ${status.resultIngestionUnsafeRedactionCount} / metadata ${status.resultIngestionForbiddenMetadataCount} / safety ${status.resultIngestionMissingSafetyCount}`} />
       <StatusItem className="md:col-span-3" label="stop/cancel blockers" tone={status.stopControlBlockedReasons.length ? 'warn' : 'good'} value={status.stopControlBlockedReasons.length ? status.stopControlBlockedReasons.join(', ') : status.stopControlPrimaryLabel} />
       <StatusItem className="md:col-span-3" label="write-capable tool paths" tone={status.toolPermissionWritePaths.length ? 'warn' : 'good'} value={status.toolPermissionWritePaths.length ? status.toolPermissionWritePaths.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="scoped PR blockers" tone={status.scopedPrBlockedReasons.length ? 'warn' : 'good'} value={status.scopedPrBlockedReasons.length ? status.scopedPrBlockedReasons.join(', ') : 'none'} />

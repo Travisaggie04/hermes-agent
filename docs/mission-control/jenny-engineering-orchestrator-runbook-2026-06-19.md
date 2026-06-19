@@ -261,6 +261,13 @@ instruction depends on it. A stopping item remains blocked until a human
 confirms the stop state. This is only a review surface; it does not send stop
 signals, cancel work, dispatch agents, or mutate records.
 
+The result ingestion contract checks whether a report is safe for Jenny to
+rely on. It requires append-only consistency, linkage to a parent/child/worker
+run, an accepted redaction status, no forbidden raw metadata keys such as
+tokens, transcripts, raw logs, local paths, or API responses, and an explicit
+safety confirmation. It never accepts or rewrites the report; it only tells
+Travis which reports are ready for manual review and which need repair.
+
 The child-agent instruction preview mirrors the laptop Codex worker preview for
 planned delegation. It gives Jenny a manual prompt with child-agent identity,
 objective, allowed actions, forbidden actions, and report requirements. It does
@@ -292,6 +299,8 @@ not start delegation, send a session, mutate records, or enable dispatch.
   stale report links, and exact review blockers.
 - Report review queue: Jenny's prioritized manual review list, including top
   report, reason, missing report links, and worker/child report context.
+- Result ingestion: whether reports are linked, redacted, metadata-safe, and
+  include a safety confirmation before Jenny relies on them.
 - Report contract compliance: whether reports include required result fields
   before Jenny accepts or relies on them.
 - Stop/cancel control: whether stopping, stopped, or cancelled runs have a
