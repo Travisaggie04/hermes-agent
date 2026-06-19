@@ -138,7 +138,9 @@ _PR_MERGE_GATE_LIST_FIELDS = {"blocked_actions"}
 _VERIFIER_EVIDENCE_FIELDS = {"source", "lane_id", "task_id", "domain_id", "action_class"}
 _SECRET_LIKE_RE = re.compile(
     r"(?i)(sk-[a-z0-9_-]{8,}|gh[pousr]_[a-z0-9_]{8,}|"
-    r"(?:api[_-]?key|token|secret|password|bearer)\s*[:=]\s*[^\s,;]+)"
+    r"(?:api[_-]?key|auth(?:orization|[_-]?header)?|bearer|client[_-]?secret|cookie|"
+    r"env[_-]?secret|password|private[_-]?key|refresh[_-]?token|session[_-]?cookie|secret|token)"
+    r"\s*[:=]\s*[^\s,;]+)"
 )
 _PATH_LIKE_RE = re.compile(r"(?<!\w)(?:/[A-Za-z0-9._@%+\-]+){2,}|[A-Za-z]:\\[^\s,;]+")
 INERT_FLAGS = {

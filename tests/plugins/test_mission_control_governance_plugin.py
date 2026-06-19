@@ -5592,6 +5592,76 @@ def test_child_and_worker_node_run_records_stay_inert(plugin_api, client):
     _assert_inert_record_metadata(stored_worker_runs[0].metadata)
 
 
+def test_control_plane_record_create_redacts_secret_like_text_and_drops_metadata(plugin_api, client):
+    fake_values = (
+        "fake-cookie-for-test",
+        "fake-api-key-for-test",
+        "fake-env-secret-for-test",
+        "fake-authorization-for-test",
+    )
+    report_response = client.post(
+        "/api/plugins/mission-control-governance/workspace/reports/ingest",
+        json={
+            "report_id": "report-sensitive-input",
+            "run_id": "run-sensitive-input",
+            "project_id": "project-hermes-mission-control",
+            "summary": "Report summary session_cookie=fake-cookie-for-test",
+            "result": "Observed auth_header=fake-authorization-for-test but must redact it.",
+            "metadata": {
+                "OpenAI-API-Key": "fake-api-key-for-test",
+                "env.secret": "fake-env-secret-for-test",
+                "session_cookie": "fake-cookie-for-test",
+            },
+        },
+    )
+    child_response = client.post(
+        "/api/plugins/mission-control-governance/workspace/child-runs/create",
+        json={
+            "child_run_id": "child-sensitive-input",
+            "parent_run_id": "run-sensitive-input",
+            "project_id": "project-hermes-mission-control",
+            "agent_identity": "jenny-child",
+            "objective": "Inspect context api_key=fake-api-key-for-test",
+            "metadata": {"session_cookie": "fake-cookie-for-test"},
+        },
+    )
+    worker_response = client.post(
+        "/api/plugins/mission-control-governance/workspace/worker-node-runs/create",
+        json={
+            "worker_run_id": "worker-sensitive-input",
+            "parent_run_id": "run-sensitive-input",
+            "project_id": "project-hermes-mission-control",
+            "worker_identity": "codex",
+            "worker_host_label": "laptop-codex",
+            "objective": "Prepare scoped packet env_secret=fake-env-secret-for-test",
+            "metadata": {"Authorization": "fake-authorization-for-test"},
+        },
+    )
+
+    assert report_response.status_code == 200
+    assert child_response.status_code == 200
+    assert worker_response.status_code == 200
+    for payload in (report_response.json(), child_response.json(), worker_response.json()):
+        _assert_inert_workspace_payload(payload)
+        rendered = str(payload)
+        for value in fake_values:
+            assert value not in rendered
+
+    records = JsonlRecordStore(plugin_api.record_store_path())
+    report = records.read_all(ReportRecord)[0]
+    child = records.read_all(ChildRunRecord)[0]
+    worker = records.read_all(WorkerNodeRunRecord)[0]
+    for record in (report, child, worker):
+        rendered = str(record.to_dict())
+        for value in fake_values:
+            assert value not in rendered
+        _assert_inert_record_metadata(record.metadata)
+    assert "openai_api_key" not in {key.lower().replace("-", "_").replace(".", "_") for key in report.metadata}
+    assert "env_secret" not in {key.lower().replace("-", "_").replace(".", "_") for key in report.metadata}
+    assert "session_cookie" not in {key.lower().replace("-", "_").replace(".", "_") for key in child.metadata}
+    assert "authorization" not in {key.lower().replace("-", "_").replace(".", "_") for key in worker.metadata}
+
+
 def test_workspace_status_has_no_action_routes(client):
     for path in (
         "/api/plugins/mission-control-governance/workspace-status/execute",
