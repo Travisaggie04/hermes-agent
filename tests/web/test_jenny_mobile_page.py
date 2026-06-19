@@ -34,6 +34,7 @@ def test_jenny_mobile_uses_lightweight_project_chat_endpoints() -> None:
 
     for expected in [
         'WORKSPACE_PROJECTS_URL = "/api/plugins/mission-control-governance/workspace/projects"',
+        'WORKSPACE_STATUS_URL = "/api/plugins/mission-control-governance/workspace-status"',
         'WORKSPACE_GITHUB_BRIDGE_STATUS_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/status"',
         'WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/outbox/create"',
         'WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/answer-once"',
@@ -43,7 +44,6 @@ def test_jenny_mobile_uses_lightweight_project_chat_endpoints() -> None:
         assert expected in src
 
     for forbidden in [
-        "workspace-status",
         "project-briefs",
         "challenge-reviews",
         "lane-requests",
@@ -102,7 +102,7 @@ def test_jenny_mobile_send_is_optimistic_and_foreground_only() -> None:
     assert "await refreshMessages(project.project_id)" not in send_fn
     assert "void runJennyOnce(project.project_id, requestId)" in src
     assert "await runJennyOnce(project.project_id, requestId)" not in src
-    assert "const sendDisabled = sending || loading || !composer.trim() || !bridgeSafety.safe;" in src
+    assert "const sendDisabled = sending || loading || !composer.trim() || !mobileSafety.safe;" in src
     assert 'const ANSWER_ONCE_TIMEOUT_MS = 45_000;' in src
     assert "fetchJSONWithTimeout<AnswerOnceResponse>" in src
     assert "confirm_manual_hermes_answer: true" in src
@@ -120,6 +120,7 @@ def test_jenny_mobile_bridge_controls_fail_closed_on_live_flags() -> None:
 
     for expected in [
         "function mobileBridgeSafety(status: GitHubBridgeStatus | undefined): MobileBridgeSafety",
+        "function mobileLiveFlagEnabled(value: unknown): boolean",
         'reasons.push("bridge status not loaded")',
         'status.manual_start_only !== true',
         '["dispatch_enabled", "dispatch_enabled must remain false"]',
@@ -132,19 +133,34 @@ def test_jenny_mobile_bridge_controls_fail_closed_on_live_flags() -> None:
         '["daemon_enabled", "daemon_enabled must remain false"]',
         '["discord_automation_enabled", "discord_automation_enabled must remain false"]',
         '["model_routing_enabled", "model_routing_enabled must remain false"]',
+        "if (mobileLiveFlagEnabled(status[flag])) reasons.push(reason);",
+        'return ["1", "true", "yes", "y", "on", "enabled"].includes(value.trim().toLowerCase());',
+        "function mobileWorkspaceSafety(status: MobileWorkspaceStatus | null): MobileBridgeSafety",
+        'reasons.push("workspace status not loaded")',
+        'reasons.push("hard_boundary_contract is not loaded")',
+        'hardBoundary.blocked_reasons?.[0] ?? "hard_boundary_contract is blocked"',
+        "hardBoundary.live_flag_violations",
+        'mobileExecutionLockReasons("hard_boundary_contract", hardBoundary)',
+        "operatorPacket?.execution_lock_blocked_reasons",
+        'mobileExecutionLockReasons("operator_decision_packet", operatorPacket)',
+        'mobileExecutionLockReasons("orchestration_readiness", status?.orchestration_readiness)',
+        "function combineMobileSafety(...checks: MobileBridgeSafety[]): MobileBridgeSafety",
+        "fetchJSON<MobileWorkspaceStatus>(WORKSPACE_STATUS_URL)",
         "const bridgeSafety = useMemo(() => mobileBridgeSafety(bridgeStatus), [bridgeStatus]);",
-        "const visibleRunState: RunState = bridgeSafety.safe",
+        "const workspaceSafety = useMemo(() => mobileWorkspaceSafety(workspaceStatus), [workspaceStatus]);",
+        "const mobileSafety = useMemo(() => combineMobileSafety(bridgeSafety, workspaceSafety), [bridgeSafety, workspaceSafety]);",
+        "const visibleRunState: RunState = mobileSafety.safe",
         "Manual chat blocked:",
-        "const sendDisabled = sending || loading || !composer.trim() || !bridgeSafety.safe;",
-        'disabled={replyingRequestId !== "" || sending || !bridgeSafety.safe}',
-        'bridgeSafety.safe ? "manual foreground only" : "blocked"',
+        "const sendDisabled = sending || loading || !composer.trim() || !mobileSafety.safe;",
+        'disabled={replyingRequestId !== "" || sending || !mobileSafety.safe}',
+        'mobileSafety.safe ? "manual foreground only" : "blocked"',
     ]:
         assert expected in src
 
     run_once_start = src.index("const runJennyOnce = useCallback")
     run_once_end = src.index("replyingRequestIdRef.current = requestId;", run_once_start)
     run_once_guard = src[run_once_start:run_once_end]
-    assert "if (!bridgeSafety.safe)" in run_once_guard
+    assert "if (!mobileSafety.safe)" in run_once_guard
     assert "setRunByProject" in run_once_guard
     assert "fetchJSONWithTimeout<AnswerOnceResponse>" not in run_once_guard
 

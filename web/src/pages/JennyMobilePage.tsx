@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { usePageHeader } from "@/contexts/usePageHeader";
 
 const WORKSPACE_PROJECTS_URL = "/api/plugins/mission-control-governance/workspace/projects";
+const WORKSPACE_STATUS_URL = "/api/plugins/mission-control-governance/workspace-status";
 const WORKSPACE_GITHUB_BRIDGE_STATUS_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/status";
 const WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/outbox/create";
 const WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/answer-once";
@@ -136,6 +137,31 @@ interface GitHubBridgeStatus {
   worker_dispatch_enabled?: boolean;
   would_execute?: boolean;
   worker_enabled?: boolean;
+}
+
+interface MobileExecutionLockSource {
+  dispatch_enabled?: unknown;
+  execution_enabled?: unknown;
+  execution_ready?: unknown;
+  live_operations_enabled?: unknown;
+  session_send_enabled?: unknown;
+  worker_dispatch_enabled?: unknown;
+  worker_enabled?: unknown;
+  would_dispatch?: unknown;
+  would_execute?: unknown;
+  would_session_send?: unknown;
+}
+
+interface MobileWorkspaceStatus {
+  hard_boundary_contract?: MobileExecutionLockSource & {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    live_flag_violations?: string[];
+  };
+  operator_decision_packet?: MobileExecutionLockSource & {
+    execution_lock_blocked_reasons?: string[];
+  };
+  orchestration_readiness?: MobileExecutionLockSource;
 }
 
 interface OutboxResponse {
@@ -444,9 +470,70 @@ function mobileBridgeSafety(status: GitHubBridgeStatus | undefined): MobileBridg
       ["model_routing_enabled", "model_routing_enabled must remain false"],
     ];
     for (const [flag, reason] of liveFlags) {
-      if (status[flag] === true) reasons.push(reason);
+      if (mobileLiveFlagEnabled(status[flag])) reasons.push(reason);
     }
   }
+  return { reasons, safe: reasons.length === 0 };
+}
+
+function mobileLiveFlagEnabled(value: unknown): boolean {
+  if (value === true) return true;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    return ["1", "true", "yes", "y", "on", "enabled"].includes(value.trim().toLowerCase());
+  }
+  return false;
+}
+
+function mobileExecutionLockReasons(label: string, source?: MobileExecutionLockSource | null): string[] {
+  if (!source) return [];
+  const flags: Array<[keyof MobileExecutionLockSource, string]> = [
+    ["would_execute", "would_execute must remain false"],
+    ["would_dispatch", "would_dispatch must remain false"],
+    ["would_session_send", "would_session_send must remain false"],
+    ["dispatch_enabled", "dispatch_enabled must remain false"],
+    ["execution_enabled", "execution_enabled must remain false"],
+    ["execution_ready", "execution_ready must remain false"],
+    ["live_operations_enabled", "live_operations_enabled must remain false"],
+    ["session_send_enabled", "session_send_enabled must remain false"],
+    ["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"],
+    ["worker_enabled", "worker_enabled must remain false"],
+  ];
+  return flags
+    .filter(([flag]) => mobileLiveFlagEnabled(source[flag]))
+    .map(([, reason]) => `${label}: ${reason}`);
+}
+
+function mobileWorkspaceSafety(status: MobileWorkspaceStatus | null): MobileBridgeSafety {
+  const reasons: string[] = [];
+  if (!status) {
+    reasons.push("workspace status not loaded");
+  }
+
+  const hardBoundary = status?.hard_boundary_contract;
+  if (!hardBoundary) {
+    reasons.push("hard_boundary_contract is not loaded");
+  } else {
+    if (hardBoundary.blocked === true) {
+      reasons.push(hardBoundary.blocked_reasons?.[0] ?? "hard_boundary_contract is blocked");
+    }
+    for (const reason of hardBoundary.live_flag_violations ?? []) {
+      reasons.push(reason);
+    }
+    reasons.push(...mobileExecutionLockReasons("hard_boundary_contract", hardBoundary));
+  }
+
+  const operatorPacket = status?.operator_decision_packet;
+  reasons.push(...(operatorPacket?.execution_lock_blocked_reasons ?? []));
+  reasons.push(...mobileExecutionLockReasons("operator_decision_packet", operatorPacket));
+  reasons.push(...mobileExecutionLockReasons("orchestration_readiness", status?.orchestration_readiness));
+
+  const uniqueReasons = [...new Set(reasons)];
+  return { reasons: uniqueReasons, safe: uniqueReasons.length === 0 };
+}
+
+function combineMobileSafety(...checks: MobileBridgeSafety[]): MobileBridgeSafety {
+  const reasons = [...new Set(checks.flatMap((check) => check.reasons))];
   return { reasons, safe: reasons.length === 0 };
 }
 
@@ -587,6 +674,7 @@ export default function JennyMobilePage() {
   });
   const [messagesByProject, setMessagesByProject] = useState<Record<string, ChatMessage[]>>({});
   const [statusByProject, setStatusByProject] = useState<Record<string, GitHubBridgeStatus>>({});
+  const [workspaceStatus, setWorkspaceStatus] = useState<MobileWorkspaceStatus | null>(null);
   const [runByProject, setRunByProject] = useState<Record<string, RunState>>({});
   const [composer, setComposer] = useState("");
   const [loading, setLoading] = useState(true);
@@ -636,15 +724,17 @@ export default function JennyMobilePage() {
     let cancelled = false;
     async function loadChrome() {
       try {
-        const [projectsPayload, info, options] = await Promise.all([
+        const [projectsPayload, info, options, workspace] = await Promise.all([
           fetchJSON<{ projects?: Array<WrappedRecord<MobileProject> | MobileProject> }>(`${WORKSPACE_PROJECTS_URL}?limit=25`),
           fetchJSON<ModelInfoResponse>(MODEL_INFO_URL),
           fetchJSON<ModelOptionsResponse>(MODEL_OPTIONS_URL),
+          fetchJSON<MobileWorkspaceStatus>(WORKSPACE_STATUS_URL),
         ]);
         if (cancelled) return;
         setProjects(canonicalProjects(unwrapRecords(projectsPayload.projects)));
         setModelInfo(info);
         setModelOptions(options);
+        setWorkspaceStatus(workspace);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err));
@@ -666,10 +756,12 @@ export default function JennyMobilePage() {
   const bridgeStatus = statusByProject[selectedProject.project_id];
   const runState = runByProject[selectedProject.project_id] ?? statusFromBridge(bridgeStatus);
   const bridgeSafety = useMemo(() => mobileBridgeSafety(bridgeStatus), [bridgeStatus]);
-  const visibleRunState: RunState = bridgeSafety.safe
+  const workspaceSafety = useMemo(() => mobileWorkspaceSafety(workspaceStatus), [workspaceStatus]);
+  const mobileSafety = useMemo(() => combineMobileSafety(bridgeSafety, workspaceSafety), [bridgeSafety, workspaceSafety]);
+  const visibleRunState: RunState = mobileSafety.safe
     ? runState
     : {
-        detail: `Manual chat blocked: ${bridgeSafety.reasons[0] ?? "bridge safety is not confirmed"}`,
+        detail: `Manual chat blocked: ${mobileSafety.reasons[0] ?? "backend safety is not confirmed"}`,
         status: "failed",
       };
   const modelChoices = useMemo(() => buildModelChoices(modelInfo, modelOptions), [modelInfo, modelOptions]);
@@ -677,14 +769,18 @@ export default function JennyMobilePage() {
   const selectedModel = modelChoiceFromKey(currentModelChoice);
   const statusRecords = unwrapRecords(bridgeStatus?.status_records).slice(-5).reverse();
   const latestPendingId = latestPendingRequestId(messages);
-  const sendDisabled = sending || loading || !composer.trim() || !bridgeSafety.safe;
+  const sendDisabled = sending || loading || !composer.trim() || !mobileSafety.safe;
 
   const refreshMessages = useCallback(async (projectId: string) => {
-    const status = await fetchJSON<GitHubBridgeStatus>(
-      `${WORKSPACE_GITHUB_BRIDGE_STATUS_URL}?project_id=${encodeURIComponent(projectId)}&limit=80`,
-    );
+    const [status, workspace] = await Promise.all([
+      fetchJSON<GitHubBridgeStatus>(
+        `${WORKSPACE_GITHUB_BRIDGE_STATUS_URL}?project_id=${encodeURIComponent(projectId)}&limit=80`,
+      ),
+      fetchJSON<MobileWorkspaceStatus>(WORKSPACE_STATUS_URL),
+    ]);
     const incoming = messagesFromStatus(status);
     setStatusByProject((prev) => ({ ...prev, [projectId]: status }));
+    setWorkspaceStatus(workspace);
     setMessagesByProject((prev) => ({
       ...prev,
       [projectId]: mergeMessages(prev[projectId] ?? [], incoming),
@@ -732,11 +828,11 @@ export default function JennyMobilePage() {
 
   const runJennyOnce = useCallback(async (projectId: string, requestId: string) => {
     if (!requestId || replyingRequestIdRef.current) return;
-    if (!bridgeSafety.safe) {
+    if (!mobileSafety.safe) {
       setRunByProject((prev) => ({
         ...prev,
         [projectId]: {
-          detail: `Manual chat blocked: ${bridgeSafety.reasons[0] ?? "bridge safety is not confirmed"}`,
+          detail: `Manual chat blocked: ${mobileSafety.reasons[0] ?? "backend safety is not confirmed"}`,
           requestId,
           status: "failed",
         },
@@ -799,7 +895,7 @@ export default function JennyMobilePage() {
       replyingRequestIdRef.current = "";
       setReplyingRequestId("");
     }
-  }, [appendMessage, bridgeSafety.reasons, bridgeSafety.safe, refreshMessages, updateMessageStatus]);
+  }, [appendMessage, mobileSafety.reasons, mobileSafety.safe, refreshMessages, updateMessageStatus]);
 
   async function sendMessage() {
     const text = composer.trim();
@@ -955,7 +1051,7 @@ export default function JennyMobilePage() {
                       <button
                         className="rounded-full bg-black/15 px-2 py-0.5 text-[0.7rem] font-semibold text-zinc-950 disabled:opacity-50"
                         type="button"
-                        disabled={replyingRequestId !== "" || sending || !bridgeSafety.safe}
+                        disabled={replyingRequestId !== "" || sending || !mobileSafety.safe}
                         onClick={() => void runJennyOnce(selectedProject.project_id, message.requestId ?? "")}
                       >
                         {message.status === "failed" ? "Retry" : "Get reply"}
@@ -1102,17 +1198,17 @@ export default function JennyMobilePage() {
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-zinc-400">Safety</dt>
-                  <dd className={cn("text-right", bridgeSafety.safe ? "text-emerald-300" : "text-red-300")}>
-                    {bridgeSafety.safe ? "manual foreground only" : "blocked"}
+                  <dd className={cn("text-right", mobileSafety.safe ? "text-emerald-300" : "text-red-300")}>
+                    {mobileSafety.safe ? "manual foreground only" : "blocked"}
                   </dd>
                 </div>
               </dl>
 
-              {!bridgeSafety.safe ? (
+              {!mobileSafety.safe ? (
                 <div className="mt-3 rounded-lg border border-red-400/30 bg-red-950/40 px-3 py-2 text-sm text-red-100">
                   <p className="font-medium">Manual chat blocked</p>
                   <ul className="mt-1 list-disc space-y-1 pl-4">
-                    {bridgeSafety.reasons.map((reason) => (
+                    {mobileSafety.reasons.map((reason) => (
                       <li key={reason}>{reason}</li>
                     ))}
                   </ul>

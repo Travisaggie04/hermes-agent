@@ -32,7 +32,11 @@ Jenny packet as permission to bypass Codex safety checks.
   reply, but it must fail closed and disable send/retry controls unless the
   GitHub bridge status confirms manual-only mode with `would_execute`,
   dispatch, execution, session-send, worker-dispatch, worker, timer, daemon,
-  Discord automation, and model-routing flags off.
+  Discord automation, and model-routing flags off. It also loads
+  `/workspace-status` and keeps those controls disabled if the backend
+  `hard_boundary_contract` is missing or blocked, or if hard-boundary,
+  operator-packet, or readiness lock fields expose any truthy execution,
+  dispatch, session-send, worker-dispatch, worker, or live-operation flag.
 - `/mission-control-compact` is the old compact Mission Control route.
   Its compact chat controls follow the same manual-only bridge rule; the
   manual report/challenge/lane draft buttons are separate record actions and
@@ -511,7 +515,9 @@ After each code-side change:
    and report sanitized live flag attempts as hard-boundary blockers.
    Phone and compact routes must also fail closed on `would_execute`,
    dispatch, execution, session-send, worker-dispatch, worker, timer, daemon,
-   Discord automation, and model-routing flags.
+   Discord automation, and model-routing flags. The phone route must also fail
+   closed when `/workspace-status` does not provide a safe hard-boundary
+   contract or reports operator/readiness execution lock flags.
    Desktop and compact Mission Control must also surface true nested execution
    locks from the execution packet body, worker-node contract, and operator
    decision packet `execution_lock_blocked_reasons` rollup.
