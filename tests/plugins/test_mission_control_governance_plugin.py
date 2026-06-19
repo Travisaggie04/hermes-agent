@@ -1354,8 +1354,40 @@ def test_control_plane_validation_rejects_invalid_statuses_and_execution_modes(c
 def test_control_plane_backend_does_not_wire_session_send_or_dispatch():
     source = API_PATH.read_text(encoding="utf-8")
     control_plane_source = source[source.index('@router.get("/workspace/approvals")') : source.index('@router.get("/records")')]
-    forbidden = ["session_send", "session-send", "dispatch_task", "send_to_jenny_enabled\": True", "dispatch_enabled\": True"]
+    forbidden = [
+        "session_send",
+        "session-send",
+        "dispatch_task",
+        "send_to_jenny_enabled\": True",
+        "dispatch_enabled\": True",
+    ]
+    forbidden_action_routes = [
+        '@router.post("/workspace-status/execute")',
+        '@router.post("/workspace-status/approve")',
+        '@router.post("/workspace-status/deploy")',
+        '@router.post("/workspace-status/restart")',
+        '@router.post("/workspace-status/runtime-switch")',
+        '@router.post("/workspace-status/accepted-baseline/append")',
+        '@router.post("/workspace-status/state-db/mutate")',
+        '@router.post("/workspace-status/config/mutate")',
+        '@router.post("/workspace-status/records/mutate")',
+        '@router.post("/workspace-status/dispatch")',
+        '@router.post("/workspace-status/session-send")',
+        '@router.post("/workspace-status/worker-dispatch")',
+        '@router.post("/workspace-status/worker/activate")',
+        '@router.post("/workspace-status/timer/activate")',
+        '@router.post("/workspace-status/queue/activate")',
+        '@router.post("/workspace-status/model-routing")',
+        '@router.post("/workspace-status/model-routing/activate")',
+        '@router.post("/workspace-status/waha")',
+        '@router.post("/workspace-status/waha/activate")',
+        '@router.post("/workspace-status/social")',
+        '@router.post("/workspace-status/social/post")',
+        '@router.post("/workspace-status/payment")',
+        '@router.post("/workspace-status/payment/charge")',
+    ]
     assert not any(fragment in control_plane_source for fragment in forbidden)
+    assert not any(fragment in source for fragment in forbidden_action_routes)
 
 
 def test_session_project_link_record_serializes_deserializes():
@@ -5663,13 +5695,47 @@ def test_control_plane_record_create_redacts_secret_like_text_and_drops_metadata
 
 
 def test_workspace_status_has_no_action_routes(client):
-    for path in (
+    forbidden_paths = (
         "/api/plugins/mission-control-governance/workspace-status/execute",
         "/api/plugins/mission-control-governance/workspace-status/approve",
         "/api/plugins/mission-control-governance/workspace-status/deploy",
+        "/api/plugins/mission-control-governance/workspace-status/restart",
+        "/api/plugins/mission-control-governance/workspace-status/runtime-switch",
+        "/api/plugins/mission-control-governance/workspace-status/accepted-baseline/append",
+        "/api/plugins/mission-control-governance/workspace-status/state-db/mutate",
+        "/api/plugins/mission-control-governance/workspace-status/config/mutate",
+        "/api/plugins/mission-control-governance/workspace-status/records/mutate",
+        "/api/plugins/mission-control-governance/workspace-status/dispatch",
+        "/api/plugins/mission-control-governance/workspace-status/session-send",
+        "/api/plugins/mission-control-governance/workspace-status/worker-dispatch",
+        "/api/plugins/mission-control-governance/workspace-status/worker/activate",
+        "/api/plugins/mission-control-governance/workspace-status/timer/activate",
+        "/api/plugins/mission-control-governance/workspace-status/queue/activate",
+        "/api/plugins/mission-control-governance/workspace-status/waha/activate",
+        "/api/plugins/mission-control-governance/workspace-status/social/post",
+        "/api/plugins/mission-control-governance/workspace-status/payment/charge",
+        "/api/plugins/mission-control-governance/workspace-status/model-routing/activate",
+    )
+    for path in forbidden_paths:
+        for method in ("POST", "PUT", "PATCH", "DELETE"):
+            response = client.request(method, path, json={})
+            assert response.status_code == 404, f"{method} {path} should not be wired"
+
+    source = API_PATH.read_text(encoding="utf-8")
+    for forbidden_suffix in (
+        "/workspace-status/accepted-baseline/append",
+        "/workspace-status/state-db/mutate",
+        "/workspace-status/config/mutate",
+        "/workspace-status/records/mutate",
+        "/workspace-status/worker/activate",
+        "/workspace-status/timer/activate",
+        "/workspace-status/queue/activate",
+        "/workspace-status/waha/activate",
+        "/workspace-status/social/post",
+        "/workspace-status/payment/charge",
+        "/workspace-status/model-routing/activate",
     ):
-        response = client.post(path, json={})
-        assert response.status_code == 404
+        assert forbidden_suffix not in source
 
 
 def test_workspace_status_get_includes_latest_handoff_record_without_mutation(plugin_api, client):

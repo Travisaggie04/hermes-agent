@@ -514,6 +514,11 @@ After each code-side change:
    `hard_boundary_contract`, `next_safe_actions`, `orchestration_readiness`,
    instruction previews, and `operator_decision_packet`, keep `stored: false`,
    and report sanitized live flag attempts as hard-boundary blockers.
+   The governance plugin must not expose unsafe write routes for
+   `/workspace-status/execute`, approval, deploy, restart, runtime switch,
+   accepted-baseline append, live record/state/config mutation, dispatch,
+   session-send, worker/timer/queue activation, Waha, social, payment, or
+   model-routing activation.
    Phone and compact routes must also fail closed on `would_execute`,
    dispatch, execution, session-send, worker-dispatch, worker, timer, daemon,
    Discord automation, and model-routing flags. The phone route must also fail
