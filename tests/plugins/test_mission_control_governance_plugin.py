@@ -97,13 +97,16 @@ def test_workspace_project_api_creates_and_lists_append_only_records(plugin_api,
     assert payload["manual_copy_only"] is True
     assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
+    _assert_inert_workspace_payload(payload)
     assert payload["stored"] is True
     assert payload["record_type"] == "ProjectRecord"
     assert payload["project"]["name"] == "Hermes / Mission Control"
+    _assert_inert_record_metadata(payload["project"]["metadata"])
 
     records = JsonlRecordStore(plugin_api.record_store_path()).read_all(ProjectRecord)
     assert len(records) == 1
     assert records[0].name == "Hermes / Mission Control"
+    _assert_inert_record_metadata(records[0].metadata)
 
     listed = client.get("/api/plugins/mission-control-governance/workspace/projects")
     assert listed.status_code == 200
@@ -118,6 +121,7 @@ def test_workspace_project_template_seed_creates_defaults_and_skips_duplicates(p
     assert template_payload["stored"] is False
     assert template_payload["send_to_jenny_enabled"] is False
     assert template_payload["dispatch_enabled"] is False
+    _assert_inert_workspace_payload(template_payload)
     assert template_payload["count"] == 5
     assert {item["name"] for item in template_payload["templates"]} == {
         "Hermes / Mission Control",
@@ -128,6 +132,8 @@ def test_workspace_project_template_seed_creates_defaults_and_skips_duplicates(p
     }
     assert all(item["exists"] is False for item in template_payload["templates"])
     assert all(item["default_guards"] for item in template_payload["templates"])
+    for item in template_payload["templates"]:
+        _assert_inert_workspace_payload(item)
 
     seeded = client.post("/api/plugins/mission-control-governance/workspace/projects/seed-defaults", json={})
     assert seeded.status_code == 200
@@ -137,6 +143,7 @@ def test_workspace_project_template_seed_creates_defaults_and_skips_duplicates(p
     assert payload["manual_copy_only"] is True
     assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
+    _assert_inert_workspace_payload(payload)
     assert payload["stored"] is True
     assert payload["created_count"] == 5
     assert payload["skipped_count"] == 0
@@ -156,6 +163,8 @@ def test_workspace_project_template_seed_creates_defaults_and_skips_duplicates(p
     assert all(project.metadata.get("default_guards") for project in projects)
     assert all(project.metadata.get("send_to_jenny_enabled") is False for project in projects)
     assert all(project.metadata.get("dispatch_enabled") is False for project in projects)
+    for project in projects:
+        _assert_inert_record_metadata(project.metadata)
     hermes_project = next(project for project in projects if project.project_id == "project-hermes-mission-control")
     assert "Jenny OS native chat" in hermes_project.current_goal
     assert "Make Mission Control the obvious operating surface" not in hermes_project.current_goal
@@ -204,6 +213,7 @@ def test_workspace_project_brief_api_creates_lists_and_stays_inert(plugin_api, c
     assert payload["manual_copy_only"] is True
     assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
+    _assert_inert_workspace_payload(payload)
     assert payload["stored"] is True
     assert payload["record_type"] == "ProjectBriefRecord"
     assert payload["project_brief"]["project_id"] == "project-hermes-mission-control"
@@ -212,6 +222,7 @@ def test_workspace_project_brief_api_creates_lists_and_stays_inert(plugin_api, c
     assert len(records) == 1
     assert records[0].status == "active"
     assert records[0].forbidden_actions == ("dispatch", "session-send", "runtime switch")
+    _assert_inert_record_metadata(records[0].metadata)
 
     listed = client.get(
         "/api/plugins/mission-control-governance/workspace/project-briefs?project_id=project-hermes-mission-control"
@@ -248,6 +259,7 @@ def test_workspace_challenge_review_api_creates_lists_and_challenges_bad_directi
     assert payload["manual_copy_only"] is True
     assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
+    _assert_inert_workspace_payload(payload)
     assert payload["stored"] is True
     assert payload["record_type"] == "ChallengeReviewRecord"
     assert payload["challenge_review"]["decision_state"] == "wrong_approach_likely"
@@ -260,6 +272,7 @@ def test_workspace_challenge_review_api_creates_lists_and_challenges_bad_directi
     assert records[0].concerns == ("automation before observability", "public posting needs approval")
     assert records[0].challenge_categories == ("wrong_approach", "protected_surface")
     assert records[0].blocking_verdicts == ("blocks_lane_draft", "requires_travis_approval")
+    _assert_inert_record_metadata(records[0].metadata)
 
     listed = client.get(
         "/api/plugins/mission-control-governance/workspace/challenge-reviews?project_id=project-shorts-video"
@@ -325,15 +338,18 @@ def test_workspace_lane_request_api_creates_lists_and_stays_inert(plugin_api, cl
     assert payload["manual_copy_only"] is True
     assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
+    _assert_inert_workspace_payload(payload)
     assert payload["stored"] is True
     assert payload["record_type"] == "LaneRequestRecord"
     assert payload["lane_request"]["status"] == "draft"
     assert payload["lane_request"]["metadata"]["dispatch_enabled"] is False
+    _assert_inert_record_metadata(payload["lane_request"]["metadata"])
 
     records = JsonlRecordStore(plugin_api.record_store_path()).read_all(LaneRequestRecord)
     assert len(records) == 1
     assert records[0].title == "Read-only status refresh"
     assert records[0].forbidden_actions == ("dispatch", "execute", "queue mutation")
+    _assert_inert_record_metadata(records[0].metadata)
 
     listed = client.get("/api/plugins/mission-control-governance/workspace/lane-requests?project_id=project-hermes")
     assert listed.status_code == 200
@@ -368,17 +384,20 @@ def test_workspace_jenny_report_api_creates_lists_and_stays_inert(plugin_api, cl
     assert payload["manual_copy_only"] is True
     assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
+    _assert_inert_workspace_payload(payload)
     assert payload["stored"] is True
     assert payload["record_type"] == "JennyReportRecord"
     assert payload["report"]["project_id"] == "project-hermes"
     assert payload["report"]["lane_request_id"] == "lane-request-1"
     assert payload["report"]["metadata"]["dispatch_enabled"] is False
     assert payload["report"]["metadata"]["artifact_links"] == ["reports/hermes/status.md"]
+    _assert_inert_record_metadata(payload["report"]["metadata"])
 
     reports = JsonlRecordStore(plugin_api.record_store_path()).read_all(JennyReportRecord)
     assert len(reports) == 1
     assert reports[0].summary == "Jenny completed the read-only status refresh."
     assert reports[0].changed_files == ("mission_control/records/models.py",)
+    _assert_inert_record_metadata(reports[0].metadata)
 
     listed = client.get("/api/plugins/mission-control-governance/workspace/reports?project_id=project-hermes&lane_request_id=lane-request-1")
     assert listed.status_code == 200
@@ -1423,10 +1442,12 @@ def test_workspace_session_project_link_api_and_projection_rules(plugin_api, cli
     assert payload["manual_copy_only"] is True
     assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
+    _assert_inert_workspace_payload(payload)
     assert payload["stored"] is True
     assert payload["record_type"] == "SessionProjectLinkRecord"
     assert payload["session_project_link"]["durable_session_id"] == "session-root"
     assert payload["session_project_link"]["metadata"]["auto_inferred"] is False
+    _assert_inert_record_metadata(payload["session_project_link"]["metadata"])
 
     links = client.get("/api/plugins/mission-control-governance/workspace/session-project-links")
     assert links.status_code == 200
@@ -1478,6 +1499,7 @@ def test_session_project_link_accepts_legacy_desktop_native_method_but_rejects_u
     assert record["link_method"] == "manual"
     assert record["metadata"]["normalized_link_method_from"] == "desktop-native-chat"
     assert record["metadata"]["dispatch_enabled"] is False
+    _assert_inert_record_metadata(record["metadata"])
 
     invalid = client.post(
         "/api/plugins/mission-control-governance/workspace/session-project-links/create",
@@ -5411,15 +5433,18 @@ def test_child_and_worker_node_run_records_stay_inert(plugin_api, client):
 
     assert child_response.status_code == 200
     child_payload = child_response.json()
+    _assert_inert_workspace_payload(child_payload)
     assert child_payload["stored"] is True
     assert child_payload["dispatch_enabled"] is False
     assert child_payload["session_send_enabled"] is False
     assert child_payload["worker_dispatch_enabled"] is False
     assert child_payload["child_run"]["metadata"]["dispatch_enabled"] is False
     assert child_payload["child_run"]["metadata"]["worker_dispatch_enabled"] is False
+    _assert_inert_record_metadata(child_payload["child_run"]["metadata"])
 
     assert worker_response.status_code == 200
     worker_payload = worker_response.json()
+    _assert_inert_workspace_payload(worker_payload)
     assert worker_payload["stored"] is True
     assert worker_payload["dispatch_enabled"] is False
     assert worker_payload["session_send_enabled"] is False
@@ -5427,6 +5452,7 @@ def test_child_and_worker_node_run_records_stay_inert(plugin_api, client):
     assert worker_payload["worker_node_run"]["worker_host_label"] == "laptop-codex"
     assert worker_payload["worker_node_run"]["worker_dispatch_enabled"] is False
     assert worker_payload["worker_node_run"]["metadata"]["worker_dispatch_enabled"] is False
+    _assert_inert_record_metadata(worker_payload["worker_node_run"]["metadata"])
 
     child_runs = client.get("/api/plugins/mission-control-governance/workspace/child-runs")
     worker_runs = client.get("/api/plugins/mission-control-governance/workspace/worker-node-runs")
@@ -5438,8 +5464,12 @@ def test_child_and_worker_node_run_records_stay_inert(plugin_api, client):
     assert worker_runs.json()["worker_node_runs"][0]["record_type"] == "WorkerNodeRunRecord"
 
     records = JsonlRecordStore(plugin_api.record_store_path())
-    assert len(records.read_all(ChildRunRecord)) == 1
-    assert len(records.read_all(WorkerNodeRunRecord)) == 1
+    stored_child_runs = records.read_all(ChildRunRecord)
+    stored_worker_runs = records.read_all(WorkerNodeRunRecord)
+    assert len(stored_child_runs) == 1
+    assert len(stored_worker_runs) == 1
+    _assert_inert_record_metadata(stored_child_runs[0].metadata)
+    _assert_inert_record_metadata(stored_worker_runs[0].metadata)
 
 
 def test_workspace_status_has_no_action_routes(client):

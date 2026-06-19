@@ -156,6 +156,12 @@ CONTROL_PLANE_INERT_FLAGS = {
     "session_send_enabled": False,
     "worker_dispatch_enabled": False,
 }
+
+
+def _control_plane_metadata(source: str, **extra: Any) -> dict[str, Any]:
+    return {**CONTROL_PLANE_INERT_FLAGS, "source": source, **extra}
+
+
 APPROVAL_STATUSES = {"proposed", "approved", "rejected", "expired", "consumed", "cancelled"}
 RUN_STATUSES = {"requested", "preflight_passed", "running", "stopping", "stopped", "completed", "failed", "cancelled", "blocked"}
 REPORT_STATUSES = {"received", "needs_review", "accepted", "rejected", "superseded"}
@@ -1025,13 +1031,12 @@ def _project_template_payload(template: dict[str, str], existing_projects: tuple
     ids = {project.project_id for project in existing_projects}
     exists = slug in names or template["project_id"] in ids
     return {
+        **CONTROL_PLANE_INERT_FLAGS,
         **template,
+        "source": "mission_control_project_template_catalog_v1",
         "canonical_slug": slug,
         "exists": exists,
         "default_guards": template["default_guards"],
-        "send_to_jenny_enabled": False,
-        "dispatch_enabled": False,
-        "manual_copy_only": True,
     }
 
 
@@ -1048,14 +1053,11 @@ def _project_record_from_template(template: dict[str, str]) -> ProjectRecord:
         profile=template["profile"],
         created_at=now,
         updated_at=now,
-        metadata={
-            "source": "mission_control_real_project_onboarding_v1",
-            "canonical_slug": template["slug"],
-            "default_guards": template["default_guards"],
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-        },
+        metadata=_control_plane_metadata(
+            "mission_control_real_project_onboarding_v1",
+            canonical_slug=template["slug"],
+            default_guards=template["default_guards"],
+        ),
     )
 
 
@@ -1270,13 +1272,10 @@ def _build_session_project_link_record(payload: dict[str, Any]) -> SessionProjec
         _workspace_text(payload.get("link_method"), max_chars=40) or "manual"
     )
     now = _utc_now()
-    metadata = {
-        "source": "mission_control_session_project_link_backend_v1",
-        "manual_copy_only": True,
-        "send_to_jenny_enabled": False,
-        "dispatch_enabled": False,
-        "auto_inferred": False,
-    }
+    metadata = _control_plane_metadata(
+        "mission_control_session_project_link_backend_v1",
+        auto_inferred=False,
+    )
     if normalized_from:
         metadata["normalized_link_method_from"] = normalized_from
     return SessionProjectLinkRecord(
@@ -1709,7 +1708,7 @@ def _build_project_record(payload: dict[str, Any]) -> ProjectRecord:
         profile=_workspace_text(payload.get("profile"), max_chars=80),
         created_at=now,
         updated_at=now,
-        metadata={"source": "mission_control_project_workspace_pr_a"},
+        metadata=_control_plane_metadata("mission_control_project_workspace_pr_a"),
     )
 
 
@@ -1741,13 +1740,10 @@ def _build_project_brief_record(payload: dict[str, Any]) -> ProjectBriefRecord:
         status=status,
         created_at=now,
         updated_at=now,
-        metadata={
-            "source": "mission_control_project_intake_v1",
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-            "challenge_gate_required": True,
-        },
+        metadata=_control_plane_metadata(
+            "mission_control_project_intake_v1",
+            challenge_gate_required=True,
+        ),
     )
 
 
@@ -1790,15 +1786,12 @@ def _build_challenge_review_record(payload: dict[str, Any]) -> ChallengeReviewRe
         status=status,
         created_at=now,
         reviewed_by=_workspace_text(payload.get("reviewed_by"), max_chars=80),
-        metadata={
-            "source": "mission_control_challenge_gate_v1",
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-            "can_start_lane": decision_state == "clear_and_safe",
-            "challenge_category_options": sorted(CHALLENGE_REVIEW_CATEGORIES),
-            "blocking_verdict_options": sorted(CHALLENGE_BLOCKING_VERDICTS),
-        },
+        metadata=_control_plane_metadata(
+            "mission_control_challenge_gate_v1",
+            can_start_lane=decision_state == "clear_and_safe",
+            challenge_category_options=sorted(CHALLENGE_REVIEW_CATEGORIES),
+            blocking_verdict_options=sorted(CHALLENGE_BLOCKING_VERDICTS),
+        ),
     )
 
 
@@ -1826,12 +1819,7 @@ def _build_lane_request_record(payload: dict[str, Any]) -> LaneRequestRecord:
         status="draft",
         created_at=now,
         updated_at=now,
-        metadata={
-            "source": "mission_control_project_workspace_pr_a",
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-        },
+        metadata=_control_plane_metadata("mission_control_project_workspace_pr_a"),
     )
 
 
@@ -1855,13 +1843,10 @@ def _build_jenny_report_record(payload: dict[str, Any]) -> JennyReportRecord:
         risks=_workspace_list(payload.get("risks")),
         next_recommended_lane=_workspace_text(payload.get("next_recommended_lane")),
         created_at=now,
-        metadata={
-            "source": "mission_control_manual_jenny_report_inbox_pr_b",
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-            "artifact_links": _workspace_list(payload.get("artifact_links")),
-        },
+        metadata=_control_plane_metadata(
+            "mission_control_manual_jenny_report_inbox_pr_b",
+            artifact_links=_workspace_list(payload.get("artifact_links")),
+        ),
     )
 
 
@@ -2058,13 +2043,10 @@ def _build_approval_record(payload: dict[str, Any]) -> ApprovalRecord:
         baseline_head=_workspace_text(payload.get("baseline_head"), max_chars=80),
         packet_hash=_workspace_text(payload.get("packet_hash"), max_chars=80),
         scope_fingerprint=_workspace_text(payload.get("scope_fingerprint"), max_chars=120),
-        metadata={
-            "source": "mission_control_control_plane_approval_backend_v1",
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-            "dangerous_action_display_only": action_class in DANGEROUS_APPROVAL_ACTION_CLASSES,
-        },
+        metadata=_control_plane_metadata(
+            "mission_control_control_plane_approval_backend_v1",
+            dangerous_action_display_only=action_class in DANGEROUS_APPROVAL_ACTION_CLASSES,
+        ),
     )
 
 
@@ -2105,12 +2087,7 @@ def _build_run_record(payload: dict[str, Any]) -> RunRecord:
         safety_gate_reasons=_workspace_list(payload.get("safety_gate_reasons")),
         report_ids=_workspace_list(payload.get("report_ids")),
         result_record_ids=_workspace_list(payload.get("result_record_ids")),
-        metadata={
-            "source": "mission_control_control_plane_run_backend_v1",
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-        },
+        metadata=_control_plane_metadata("mission_control_control_plane_run_backend_v1"),
     )
 
 
@@ -2146,12 +2123,7 @@ def _build_report_record(payload: dict[str, Any]) -> ReportRecord:
         reviewed_at=_workspace_text(payload.get("reviewed_at"), max_chars=80),
         reviewed_by=_workspace_text(payload.get("reviewed_by"), max_chars=120),
         redaction_status=_workspace_text(payload.get("redaction_status"), max_chars=120) or "operator_supplied_redacted",
-        metadata={
-            "source": "mission_control_control_plane_report_backend_v1",
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-        },
+        metadata=_control_plane_metadata("mission_control_control_plane_report_backend_v1"),
     )
 
 
@@ -2178,17 +2150,7 @@ def _build_child_run_record(payload: dict[str, Any]) -> ChildRunRecord:
         updated_at=_workspace_text(payload.get("updated_at"), max_chars=80),
         stopped_at=_workspace_text(payload.get("stopped_at"), max_chars=80),
         stop_reason=_workspace_text(payload.get("stop_reason"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
-        metadata={
-            "source": "mission_control_child_run_tracking_v1",
-            "display_only": True,
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-            "session_send_enabled": False,
-            "worker_dispatch_enabled": False,
-            "execution_enabled": False,
-            "trusted_for_execution": False,
-        },
+        metadata=_control_plane_metadata("mission_control_child_run_tracking_v1"),
     )
 
 
@@ -2220,17 +2182,7 @@ def _build_worker_node_run_record(payload: dict[str, Any]) -> WorkerNodeRunRecor
         stopped_at=_workspace_text(payload.get("stopped_at"), max_chars=80),
         stop_reason=_workspace_text(payload.get("stop_reason"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
         worker_dispatch_enabled=False,
-        metadata={
-            "source": "mission_control_worker_node_tracking_v1",
-            "display_only": True,
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-            "session_send_enabled": False,
-            "worker_dispatch_enabled": False,
-            "execution_enabled": False,
-            "trusted_for_execution": False,
-        },
+        metadata=_control_plane_metadata("mission_control_worker_node_tracking_v1"),
     )
 
 
