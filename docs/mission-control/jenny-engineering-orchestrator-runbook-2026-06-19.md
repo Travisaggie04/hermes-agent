@@ -331,7 +331,8 @@ not start delegation, send a session, mutate records, or enable dispatch.
 - Next safe action: the highest-priority manual review or preview-preparation
   step; it does not enable execution.
 - Operator decision packet: a plain-language packet for Travis showing state,
-  next instruction, top report review, blockers, and hard locks.
+  whether approval is required, next instruction, top report review, blockers,
+  and hard locks.
 - Orchestration readiness: blocked or preview-ready state for supervised
   read-only autonomy, scoped PR creation, and laptop Codex worker-node.
 - Worker instruction preview: a manual Codex handoff prompt with objective,
