@@ -1387,7 +1387,7 @@ function normalizedBridgeError(bridgeStatus: JennyBridgePollerStatus, githubBrid
   return hasGitHubBridgeSignal(githubBridgeStatus) ? "" : legacyError;
 }
 
-function compactGitHubBridgeSafety(status: GitHubBridgeStatus | undefined): CompactBridgeSafety {
+function compactGitHubBridgeSafety(status: GitHubBridgeStatus | undefined, workspaceStatus?: WorkspaceStatus): CompactBridgeSafety {
   const reasons: string[] = [];
   if (!status) {
     reasons.push("GitHub bridge status not loaded");
@@ -1407,6 +1407,31 @@ function compactGitHubBridgeSafety(status: GitHubBridgeStatus | undefined): Comp
     ];
     for (const [flag, reason] of liveFlags) {
       if (compactLiveFlagEnabled(status[flag])) reasons.push(reason);
+    }
+  }
+  const hardBoundary = workspaceStatus?.hard_boundary_contract;
+  if (!hardBoundary) {
+    reasons.push("hard_boundary_contract is not loaded");
+  } else {
+    if (hardBoundary.blocked === true) {
+      reasons.push(hardBoundary.blocked_reasons?.[0] ?? "hard_boundary_contract is blocked");
+    }
+    for (const reason of hardBoundary.live_flag_violations ?? []) {
+      reasons.push(reason);
+    }
+    const hardBoundaryFlags: Array<[keyof NonNullable<WorkspaceStatus["hard_boundary_contract"]>, string]> = [
+      ["would_execute", "hard_boundary_contract would_execute must remain false"],
+      ["would_dispatch", "hard_boundary_contract would_dispatch must remain false"],
+      ["would_session_send", "hard_boundary_contract would_session_send must remain false"],
+      ["execution_enabled", "hard_boundary_contract execution_enabled must remain false"],
+      ["dispatch_enabled", "hard_boundary_contract dispatch_enabled must remain false"],
+      ["session_send_enabled", "hard_boundary_contract session_send_enabled must remain false"],
+      ["worker_dispatch_enabled", "hard_boundary_contract worker_dispatch_enabled must remain false"],
+      ["execution_ready", "hard_boundary_contract execution_ready must remain false"],
+      ["live_operations_enabled", "hard_boundary_contract live_operations_enabled must remain false"],
+    ];
+    for (const [flag, reason] of hardBoundaryFlags) {
+      if (compactLiveFlagEnabled(hardBoundary[flag])) reasons.push(reason);
     }
   }
   return { reasons, safe: reasons.length === 0 };
@@ -2369,7 +2394,7 @@ export default function MissionControlCompactPage() {
       setRoomMessage("Write one bounded request before queuing a Jenny bridge message.");
       return;
     }
-    const bridgeSafety = compactGitHubBridgeSafety(snapshot?.githubBridgeStatus);
+    const bridgeSafety = compactGitHubBridgeSafety(snapshot?.githubBridgeStatus, snapshot?.workspaceStatus);
     if (!bridgeSafety.safe) {
       setRoomMessage(compactBridgeBlockedMessage(bridgeSafety));
       return;
@@ -2413,7 +2438,7 @@ export default function MissionControlCompactPage() {
   }
 
   async function runJennyOnce(projectView: ProjectViewModel, requestId?: string) {
-    const bridgeSafety = compactGitHubBridgeSafety(snapshot?.githubBridgeStatus);
+    const bridgeSafety = compactGitHubBridgeSafety(snapshot?.githubBridgeStatus, snapshot?.workspaceStatus);
     if (!bridgeSafety.safe) {
       setRoomMessage(compactBridgeBlockedMessage(bridgeSafety));
       return;
@@ -2527,6 +2552,11 @@ export default function MissionControlCompactPage() {
   }
 
   async function queueHermesUpdateLane(projectView: ProjectViewModel) {
+    const bridgeSafety = compactGitHubBridgeSafety(snapshot?.githubBridgeStatus, snapshot?.workspaceStatus);
+    if (!bridgeSafety.safe) {
+      setRoomMessage(compactBridgeBlockedMessage(bridgeSafety));
+      return;
+    }
     setRoomBusy(true);
     setRoomMessage("");
     setProjectRequest(HERMES_UPDATE_LANE_REQUEST);
@@ -2553,6 +2583,11 @@ export default function MissionControlCompactPage() {
   }
 
   async function queueHermesStorageCleanupLane(projectView: ProjectViewModel) {
+    const bridgeSafety = compactGitHubBridgeSafety(snapshot?.githubBridgeStatus, snapshot?.workspaceStatus);
+    if (!bridgeSafety.safe) {
+      setRoomMessage(compactBridgeBlockedMessage(bridgeSafety));
+      return;
+    }
     setRoomBusy(true);
     setRoomMessage("");
     setProjectRequest(HERMES_STORAGE_CLEANUP_LANE_REQUEST);
@@ -2793,6 +2828,7 @@ export default function MissionControlCompactPage() {
               runEffort={selectedEffort}
               runSettingsLabel={compactRunSettingsLabel(compactRunSettings)}
               selectedProjectView={selectedProjectView}
+              workspaceStatus={snapshot?.workspaceStatus ?? {}}
             />
           </div>
           <div className="sr-only order-2 min-w-0 max-w-full overflow-hidden">
@@ -3074,6 +3110,7 @@ function CompactProjectRoom({
   runEffort,
   runSettingsLabel,
   selectedProjectView,
+  workspaceStatus,
 }: {
   busy: boolean;
   bridgeRequests: JennyBridgeRequestRecord[];
@@ -3110,6 +3147,7 @@ function CompactProjectRoom({
   runEffort: string;
   runSettingsLabel: string;
   selectedProjectView: ProjectViewModel;
+  workspaceStatus: WorkspaceStatus;
 }) {
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const sessions = selectedProjectView.projectState?.recent_sessions ?? [];
@@ -3150,7 +3188,7 @@ function CompactProjectRoom({
   const sendButtonLabel = jennySendButtonLabel();
   const latestReviewByResponseId = latestReplyReviewByResponseId(replyReviews);
   const bridgeError = normalizedBridgeError(bridgeStatus, githubBridgeStatus);
-  const githubBridgeSafety = compactGitHubBridgeSafety(githubBridgeStatus);
+  const githubBridgeSafety = compactGitHubBridgeSafety(githubBridgeStatus, workspaceStatus);
   const bridgeActionDisabled = busy || paused || !githubBridgeSafety.safe;
   const hasRunnablePendingMessage = Boolean(projectedVisiblePending ?? latestPending);
   const canRunForegroundReply = !paused && githubBridgeSafety.safe && (hasRunnablePendingMessage || pendingCount > 0);
@@ -3777,12 +3815,12 @@ function CompactProjectRoom({
               </p>
               <div className="mt-2 grid min-w-0 gap-2 sm:flex sm:flex-wrap">
                 {onQueueHermesUpdate ? (
-                  <button className="w-full rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300 sm:w-auto" disabled={busy} onClick={onQueueHermesUpdate} type="button">
+                  <button className="w-full rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300 sm:w-auto" disabled={busy || !githubBridgeSafety.safe} onClick={onQueueHermesUpdate} type="button">
                     Start Hermes update lane
                   </button>
                 ) : null}
                 {onQueueStorageCleanup ? (
-                  <button className="w-full rounded-xl border border-sky-500/40 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/10 disabled:opacity-60 dark:text-sky-300 sm:w-auto" disabled={busy} onClick={onQueueStorageCleanup} type="button">
+                  <button className="w-full rounded-xl border border-sky-500/40 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/10 disabled:opacity-60 dark:text-sky-300 sm:w-auto" disabled={busy || !githubBridgeSafety.safe} onClick={onQueueStorageCleanup} type="button">
                     Start storage cleanup lane
                   </button>
                 ) : null}

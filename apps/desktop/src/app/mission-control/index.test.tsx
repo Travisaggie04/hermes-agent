@@ -3032,11 +3032,14 @@ describe('MissionControlView', () => {
       '[\'daemon_enabled\', \'daemon_enabled must remain false\']',
       '[\'discord_automation_enabled\', \'discord_automation_enabled must remain false\']',
       '[\'model_routing_enabled\', \'model_routing_enabled must remain false\']',
+      'hard_boundary_contract is not loaded',
+      'hard_boundary_contract execution_ready must remain false',
+      'hard_boundary_contract live_operations_enabled must remain false',
       'function liveFlagEnabled(value: unknown): boolean',
       'if (liveFlagEnabled(status[flag]))',
       '.filter(([flag]) => liveFlagEnabled(source[flag]))',
       'function missionControlBridgeBlockedMessage(safety: MissionControlBridgeSafety): string',
-      'const githubBridgeSafety = missionControlGitHubBridgeSafety(githubBridgeStatus)',
+      'const githubBridgeSafety = missionControlGitHubBridgeSafety(githubBridgeStatus, workspaceStatus)',
       'const bridgeActionDisabled = saving || paused || !githubBridgeSafety.safe',
       'disabled={bridgeActionDisabled}',
       'Manual Jenny bridge blocked:'
@@ -3050,7 +3053,7 @@ describe('MissionControlView', () => {
     const cleanupLane = text.slice(text.indexOf('async function queueHermesStorageCleanupLane'), text.indexOf('async function saveChallengeDraft'))
 
     for (const block of [queue, runOnce, updateLane, cleanupLane]) {
-      expect(block).toContain('const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus)')
+      expect(block).toContain('const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus, snapshot.workspaceStatus)')
       expect(block).toContain('if (!bridgeSafety.safe)')
       expect(block).toContain('setProjectRoomMessage(missionControlBridgeBlockedMessage(bridgeSafety))')
     }

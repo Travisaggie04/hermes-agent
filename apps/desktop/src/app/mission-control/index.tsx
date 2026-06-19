@@ -929,7 +929,8 @@ function normalizedBridgeError(
 }
 
 function missionControlGitHubBridgeSafety(
-  status: MissionControlGitHubBridgeStatusResponse | undefined
+  status: MissionControlGitHubBridgeStatusResponse | undefined,
+  workspaceStatus?: MissionControlWorkspaceStatus
 ): MissionControlBridgeSafety {
   const reasons: string[] = []
   if (!status) {
@@ -952,6 +953,33 @@ function missionControlGitHubBridgeSafety(
     ]
     for (const [flag, reason] of liveFlags) {
       if (liveFlagEnabled(status[flag])) {
+        reasons.push(reason)
+      }
+    }
+  }
+  const hardBoundary = workspaceStatus?.hard_boundary_contract
+  if (!hardBoundary) {
+    reasons.push('hard_boundary_contract is not loaded')
+  } else {
+    if (hardBoundary.blocked === true) {
+      reasons.push(hardBoundary.blocked_reasons?.[0] ?? 'hard_boundary_contract is blocked')
+    }
+    for (const reason of hardBoundary.live_flag_violations ?? []) {
+      reasons.push(reason)
+    }
+    const hardBoundaryFlags: Array<[keyof NonNullable<MissionControlWorkspaceStatus['hard_boundary_contract']>, string]> = [
+      ['would_execute', 'hard_boundary_contract would_execute must remain false'],
+      ['would_dispatch', 'hard_boundary_contract would_dispatch must remain false'],
+      ['would_session_send', 'hard_boundary_contract would_session_send must remain false'],
+      ['execution_enabled', 'hard_boundary_contract execution_enabled must remain false'],
+      ['dispatch_enabled', 'hard_boundary_contract dispatch_enabled must remain false'],
+      ['session_send_enabled', 'hard_boundary_contract session_send_enabled must remain false'],
+      ['worker_dispatch_enabled', 'hard_boundary_contract worker_dispatch_enabled must remain false'],
+      ['execution_ready', 'hard_boundary_contract execution_ready must remain false'],
+      ['live_operations_enabled', 'hard_boundary_contract live_operations_enabled must remain false']
+    ]
+    for (const [flag, reason] of hardBoundaryFlags) {
+      if (liveFlagEnabled(hardBoundary[flag])) {
         reasons.push(reason)
       }
     }
@@ -2703,7 +2731,7 @@ export function MissionControlView() {
       return
     }
 
-    const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus)
+    const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus, snapshot.workspaceStatus)
     if (!bridgeSafety.safe) {
       setProjectRoomMessage(missionControlBridgeBlockedMessage(bridgeSafety))
 
@@ -2745,7 +2773,7 @@ export function MissionControlView() {
   }
 
   async function runJennyOnce(project: MissionControlProjectRecord, requestId?: string) {
-    const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus)
+    const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus, snapshot.workspaceStatus)
     if (!bridgeSafety.safe) {
       setProjectRoomMessage(missionControlBridgeBlockedMessage(bridgeSafety))
 
@@ -2840,7 +2868,7 @@ export function MissionControlView() {
   }
 
   async function queueHermesUpdateLane(project: MissionControlProjectRecord) {
-    const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus)
+    const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus, snapshot.workspaceStatus)
     if (!bridgeSafety.safe) {
       setProjectRoomMessage(missionControlBridgeBlockedMessage(bridgeSafety))
 
@@ -2870,7 +2898,7 @@ export function MissionControlView() {
   }
 
   async function queueHermesStorageCleanupLane(project: MissionControlProjectRecord) {
-    const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus)
+    const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus, snapshot.workspaceStatus)
     if (!bridgeSafety.safe) {
       setProjectRoomMessage(missionControlBridgeBlockedMessage(bridgeSafety))
 
@@ -3177,6 +3205,7 @@ export function MissionControlView() {
               saving={projectRoomSaving}
               sessionGroup={sessionGroupForProject(selectedProject, snapshot.projectSessionGroups)}
               state={stateForProject(selectedProject, snapshot.projectStates)}
+              workspaceStatus={snapshot.workspaceStatus}
             />
           </div>
         </div>
@@ -3496,7 +3525,8 @@ function ProjectRoomsWorkspace({
   review,
   saving,
   sessionGroup,
-  state
+  state,
+  workspaceStatus
 }: {
   brief: MissionControlProjectBriefRecord | null
   bridgeRequests: MissionControlJennyBridgeRequestRecord[]
@@ -3530,6 +3560,7 @@ function ProjectRoomsWorkspace({
   saving: boolean
   sessionGroup: MissionControlProjectSessionGroup | null
   state: MissionControlProjectState | null
+  workspaceStatus: MissionControlWorkspaceStatus
 }) {
   const chatEndRef = useRef<HTMLDivElement | null>(null)
   const readiness = projectReadinessLabel(brief, review)
@@ -3569,7 +3600,7 @@ function ProjectRoomsWorkspace({
   const sendButtonLabel = jennySendButtonLabel(requestIntake)
   const latestReviewByResponseId = latestReplyReviewByResponseId(replyReviews)
   const bridgeError = normalizedBridgeError(bridgeStatus, githubBridgeStatus)
-  const githubBridgeSafety = missionControlGitHubBridgeSafety(githubBridgeStatus)
+  const githubBridgeSafety = missionControlGitHubBridgeSafety(githubBridgeStatus, workspaceStatus)
   const bridgeActionDisabled = saving || paused || !githubBridgeSafety.safe
   const hasRunnablePendingMessage = Boolean(projectedVisiblePending ?? latestPending)
   const statusRecords = unwrapRecords(githubBridgeStatus.status_records)

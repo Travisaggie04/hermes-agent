@@ -695,10 +695,13 @@ def test_compact_chat_bridge_controls_fail_closed_on_live_flags() -> None:
     src = page_source()
     send_fn = function_source(src, "queueJennyBridgeMessage")
     run_once_fn = function_source(src, "runJennyOnce")
+    update_lane_fn = function_source(src, "queueHermesUpdateLane")
+    cleanup_lane_fn = function_source(src, "queueHermesStorageCleanupLane")
 
     for expected in [
-        "function compactGitHubBridgeSafety(status: GitHubBridgeStatus | undefined): CompactBridgeSafety",
+        "function compactGitHubBridgeSafety(status: GitHubBridgeStatus | undefined, workspaceStatus?: WorkspaceStatus): CompactBridgeSafety",
         'reasons.push("GitHub bridge status not loaded")',
+        'reasons.push("hard_boundary_contract is not loaded")',
         'status.manual_start_only !== true',
         '["dispatch_enabled", "dispatch_enabled must remain false"]',
         '["execution_enabled", "execution_enabled must remain false"]',
@@ -710,27 +713,33 @@ def test_compact_chat_bridge_controls_fail_closed_on_live_flags() -> None:
         '["daemon_enabled", "daemon_enabled must remain false"]',
         '["discord_automation_enabled", "discord_automation_enabled must remain false"]',
         '["model_routing_enabled", "model_routing_enabled must remain false"]',
+        '["execution_ready", "hard_boundary_contract execution_ready must remain false"]',
+        '["live_operations_enabled", "hard_boundary_contract live_operations_enabled must remain false"]',
         "function compactLiveFlagEnabled(value: unknown): boolean",
         "if (compactLiveFlagEnabled(status[flag])) reasons.push(reason);",
+        "if (compactLiveFlagEnabled(hardBoundary[flag])) reasons.push(reason);",
         ".filter(([flag]) => compactLiveFlagEnabled(source[flag]))",
         "function compactBridgeBlockedMessage(safety: CompactBridgeSafety): string",
-        "const githubBridgeSafety = compactGitHubBridgeSafety(githubBridgeStatus);",
+        "const githubBridgeSafety = compactGitHubBridgeSafety(githubBridgeStatus, workspaceStatus);",
         "const bridgeActionDisabled = busy || paused || !githubBridgeSafety.safe;",
         "const canRunForegroundReply = !paused && githubBridgeSafety.safe &&",
         "disabled={bridgeActionDisabled}",
+        "disabled={busy || !githubBridgeSafety.safe}",
         'CompactField label="GitHub safety"',
         "Manual Jenny bridge blocked:",
     ]:
         assert expected in src
 
-    for function in [send_fn, run_once_fn]:
-        safety_index = function.index("const bridgeSafety = compactGitHubBridgeSafety(snapshot?.githubBridgeStatus);")
+    for function in [send_fn, run_once_fn, update_lane_fn, cleanup_lane_fn]:
+        safety_index = function.index("const bridgeSafety = compactGitHubBridgeSafety(snapshot?.githubBridgeStatus, snapshot?.workspaceStatus);")
         block_index = function.index("if (!bridgeSafety.safe)")
         assert safety_index < block_index
         assert "setRoomMessage(compactBridgeBlockedMessage(bridgeSafety));" in function
 
     assert send_fn.index("if (!bridgeSafety.safe)") < send_fn.index("WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL")
     assert run_once_fn.index("if (!bridgeSafety.safe)") < run_once_fn.index("WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL")
+    assert update_lane_fn.index("if (!bridgeSafety.safe)") < update_lane_fn.index("WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL")
+    assert cleanup_lane_fn.index("if (!bridgeSafety.safe)") < cleanup_lane_fn.index("WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL")
 
 
 def test_compact_health_dashboard_fails_closed_on_execution_locks() -> None:
