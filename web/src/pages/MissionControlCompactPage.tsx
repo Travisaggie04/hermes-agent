@@ -546,6 +546,38 @@ function projectRequestPreview(value: string, maxChars: number): string {
   return compactText(candidate, maxChars);
 }
 
+function ownerVisibleJennyReply(value: string): string {
+  const normalized = value.replace(/\r\n/g, "\n").trim();
+  const lower = normalized.toLowerCase();
+  const technicalJennyReply = [
+    "session_id:",
+    "preflight",
+    "safety confirmation",
+    "no live github/ci/runtime check",
+    "stale-runtime confusion",
+    "i treated this as a read-only",
+    "i did not deploy",
+    "do not deploy",
+    "do not resume tool",
+  ].some(marker => lower.includes(marker));
+
+  if (!technicalJennyReply) {
+    return value;
+  }
+
+  const recommendationMatch = normalized.match(
+    /(?:^|\n)\s*recommendation\s*\n([\s\S]*?)(?=\n\s*(?:risks?|safety confirmation|validation|evidence|blockers?|approval|$))/i,
+  );
+  const candidate = recommendationMatch?.[1] ?? "";
+  const cleanedRecommendation = compactText(candidate.replace(/^\s*[-*]\s*/gm, "").replace(/\n+/g, " "), 220);
+
+  if (cleanedRecommendation) {
+    return `Jenny replied with a guarded status update. Recommendation: ${cleanedRecommendation}`;
+  }
+
+  return "Jenny replied with a guarded status update. Open Review reply for evidence, risks, and safety details.";
+}
+
 function chatRequestText(value: string): string {
   return projectRequestPreview(value, 1200);
 }
@@ -3096,7 +3128,7 @@ function CompactProjectRoom({
                     )}
                     data-testid={chat.speaker === "Jenny" ? "compact-jenny-reply-body" : undefined}
                   >
-                    {chat.speaker === "You" ? chat.displayBody ?? projectRequestPreview(chat.body, 750) : chat.body}
+                    {chat.speaker === "You" ? chat.displayBody ?? projectRequestPreview(chat.body, 750) : ownerVisibleJennyReply(chat.body)}
                   </p>
                   {chat.speaker === "Jenny" ? (
                     <details className="mt-2 min-w-0 overflow-visible border-t border-[#f3ebda]/10 pt-2 text-[0.68rem]">
@@ -3119,6 +3151,9 @@ function CompactProjectRoom({
                             </span>
                           ) : null}
                         </div>
+                        <pre className="max-h-48 min-w-0 max-w-full overflow-auto whitespace-pre-wrap rounded-md border border-[#f3ebda]/10 bg-[#0e0b12]/80 p-2 font-mono text-[0.68rem] leading-snug text-[#a59783] [overflow-wrap:anywhere] [word-break:break-word]" data-testid="compact-jenny-raw-reply">
+                          {chat.body}
+                        </pre>
                         {showLatestReplyActions ? (
                           <div className="flex min-w-0 flex-wrap gap-1.5" aria-label="Review latest Jenny reply">
                             <button
