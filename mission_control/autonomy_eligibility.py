@@ -373,13 +373,15 @@ def build_execution_packet_preview(observed_state: dict[str, Any] | None = None)
 
     state = dict(observed_state or {})
     mode = _safe_text(state.get("mode") or state.get("execution_mode"))
-    if mode not in {"read_only", "scoped_pr"}:
+    if mode not in {"read_only", "scoped_pr", "worker_node"}:
         mode = "blocked"
     eligibility = (
         evaluate_read_only_autonomy_eligibility(state)
         if mode == "read_only"
         else evaluate_scoped_pr_lane_eligibility(state)
         if mode == "scoped_pr"
+        else _evaluate_worker_node_packet_preview(state)
+        if mode == "worker_node"
         else {
             "eligible": False,
             "blocked_reasons": ["execution mode is not recognized"],
@@ -398,6 +400,7 @@ def build_execution_packet_preview(observed_state: dict[str, Any] | None = None)
         "scope": _explicit_scope(_section(state, "approval"), _section(state, "lane")),
         "report_contract": _section(state, "report_contract"),
         "child_run_contract": _section(state, "child_run_contract"),
+        "worker_node_contract": _worker_node_contract(state),
     }
     return {
         "eligible": bool(eligibility.get("eligible")),
@@ -409,6 +412,88 @@ def build_execution_packet_preview(observed_state: dict[str, Any] | None = None)
         "would_session_send": False,
         "stored": False,
         "dry_run_only": True,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+    }
+
+
+def _evaluate_worker_node_packet_preview(state: dict[str, Any]) -> dict[str, Any]:
+    worker_node = _section(state, "worker_node")
+    report_contract = _section(state, "report_contract")
+    lane = _section(state, "lane")
+    run = _section(state, "run")
+    requested_mode = _safe_text(
+        worker_node.get("lane_mode")
+        or worker_node.get("mode")
+        or state.get("worker_node_mode")
+        or state.get("worker_mode")
+        or lane.get("lane_type")
+        or lane.get("mode")
+        or run.get("lane_type")
+    )
+    if requested_mode in {"pr_creation", "scoped_pr"}:
+        base = evaluate_scoped_pr_lane_eligibility(state)
+    elif requested_mode in _READ_ONLY_LANE_TYPES or requested_mode.startswith("read_only"):
+        base = evaluate_read_only_autonomy_eligibility(state)
+    else:
+        base = {
+            "eligible": False,
+            "blocked_reasons": ["worker-node packet requires read_only or scoped_pr lane mode"],
+            "warnings": [],
+        }
+
+    blocked = list(base.get("blocked_reasons") or ())
+    warnings = list(base.get("warnings") or ())
+    if _safe_bool(worker_node.get("worker_dispatch_enabled")) or _safe_bool(state.get("worker_dispatch_enabled")):
+        _add(blocked, "worker dispatch must stay disabled")
+    if _safe_bool(worker_node.get("execution_enabled")) or _safe_bool(state.get("execution_enabled")):
+        _add(blocked, "worker execution must stay disabled")
+    if _safe_bool(worker_node.get("session_send_enabled")) or _safe_bool(state.get("session_send_enabled")):
+        _add(blocked, "session sending must stay disabled")
+    if _safe_bool(report_contract.get("required")) is not True:
+        _add(blocked, "worker-node report contract is required")
+    if _safe_bool(report_contract.get("review_required")) is not True:
+        _add(blocked, "worker-node report review is required")
+    if not _safe_text(worker_node.get("objective") or run.get("objective") or lane.get("objective")):
+        _add(blocked, "worker-node objective is required")
+    if not _safe_text(worker_node.get("parent_run_id") or run.get("run_id")):
+        _add(blocked, "worker-node parent run is required")
+
+    _add(warnings, "worker-node packet is a manual handoff preview; no worker dispatch is enabled")
+    return {
+        "eligible": not blocked,
+        "blocked_reasons": blocked,
+        "warnings": warnings,
+        "would_execute": False,
+        "would_dispatch": False,
+        "would_session_send": False,
+        "stored": False,
+        "dry_run_only": True,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+    }
+
+
+def _worker_node_contract(state: dict[str, Any]) -> dict[str, Any]:
+    worker_node = _section(state, "worker_node")
+    run = _section(state, "run")
+    lane = _section(state, "lane")
+    return {
+        "worker_identity": _safe_text(worker_node.get("worker_identity")) or "codex",
+        "worker_host_label": _safe_text(worker_node.get("worker_host_label")) or "laptop-codex",
+        "worker_kind": _safe_text(worker_node.get("worker_kind")) or "laptop_codex",
+        "parent_run_id": _safe_text(worker_node.get("parent_run_id") or run.get("run_id")),
+        "assigned_packet_id": _safe_text(worker_node.get("assigned_packet_id")),
+        "assigned_packet_summary": _safe_text(worker_node.get("assigned_packet_summary"), max_chars=800),
+        "objective": _safe_text(worker_node.get("objective") or run.get("objective") or lane.get("objective"), max_chars=800),
+        "report_contract_status": _safe_text(worker_node.get("report_contract_status") or "required"),
+        "report_review_status": _safe_text(worker_node.get("report_review_status") or "required"),
+        "manual_handoff_only": True,
+        "trusted_for_execution": False,
         "execution_enabled": False,
         "dispatch_enabled": False,
         "session_send_enabled": False,

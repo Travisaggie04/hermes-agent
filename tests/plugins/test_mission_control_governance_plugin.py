@@ -5085,6 +5085,23 @@ def test_scoped_pr_and_execution_packet_previews_are_inert_and_store_nothing(plu
         "/api/plugins/mission-control-governance/workspace/execution-packet/preview",
         json=payload,
     )
+    worker_packet = client.post(
+        "/api/plugins/mission-control-governance/workspace/execution-packet/preview",
+        json={
+            **payload,
+            "mode": "worker_node",
+            "run": {
+                **payload["run"],
+                "objective": "Prepare a bounded scoped PR packet.",
+            },
+            "worker_node": {
+                "parent_run_id": "run-pr-1",
+                "worker_identity": "codex",
+                "worker_host_label": "laptop-codex",
+                "worker_kind": "laptop_codex",
+            },
+        },
+    )
 
     assert scoped.status_code == 200
     scoped_payload = scoped.json()
@@ -5106,6 +5123,18 @@ def test_scoped_pr_and_execution_packet_previews_are_inert_and_store_nothing(plu
     assert packet_payload["would_dispatch"] is False
     assert packet_payload["would_session_send"] is False
     assert packet_payload["worker_dispatch_enabled"] is False
+
+    assert worker_packet.status_code == 200
+    worker_packet_payload = worker_packet.json()
+    assert worker_packet_payload["stored"] is False
+    assert worker_packet_payload["eligible"] is True
+    assert worker_packet_payload["packet"]["mode"] == "worker_node"
+    assert worker_packet_payload["packet"]["worker_node_contract"]["worker_host_label"] == "laptop-codex"
+    assert worker_packet_payload["packet"]["worker_node_contract"]["manual_handoff_only"] is True
+    assert worker_packet_payload["would_execute"] is False
+    assert worker_packet_payload["would_dispatch"] is False
+    assert worker_packet_payload["would_session_send"] is False
+    assert worker_packet_payload["worker_dispatch_enabled"] is False
     assert plugin_api.record_store_path().exists() is False
 
 

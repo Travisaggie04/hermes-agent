@@ -361,6 +361,66 @@ def test_execution_packet_preview_is_never_an_execution_path():
     assert result["worker_dispatch_enabled"] is False
 
 
+def test_worker_node_execution_packet_preview_wraps_scoped_pr_without_dispatch():
+    result = build_execution_packet_preview(
+        _eligible_pr_preview_payload(
+            mode="worker_node",
+            run={
+                "run_id": "run-pr-1",
+                "project_id": "project-hermes-mission-control",
+                "approval_id": "approval-pr-1",
+                "lane_type": "pr_creation",
+                "status": "requested",
+                "dispatch_state": False,
+                "objective": "Prepare a bounded scoped PR.",
+                "forbidden_actions": _forbidden_actions(),
+            },
+            worker_node={
+                "parent_run_id": "run-pr-1",
+                "worker_identity": "codex",
+                "worker_host_label": "laptop-codex",
+                "worker_kind": "laptop_codex",
+            },
+        )
+    )
+
+    assert result["eligible"] is True
+    assert result["packet"]["mode"] == "worker_node"
+    assert result["packet"]["worker_node_contract"]["worker_identity"] == "codex"
+    assert result["packet"]["worker_node_contract"]["worker_host_label"] == "laptop-codex"
+    assert result["packet"]["worker_node_contract"]["parent_run_id"] == "run-pr-1"
+    assert result["packet"]["worker_node_contract"]["manual_handoff_only"] is True
+    assert result["packet"]["worker_node_contract"]["worker_dispatch_enabled"] is False
+    assert result["would_execute"] is False
+    assert result["would_dispatch"] is False
+    assert result["would_session_send"] is False
+    assert result["execution_enabled"] is False
+    assert result["dispatch_enabled"] is False
+    assert result["session_send_enabled"] is False
+    assert result["worker_dispatch_enabled"] is False
+
+
+def test_worker_node_execution_packet_blocks_dispatch_and_missing_report_review():
+    result = build_execution_packet_preview(
+        _eligible_pr_preview_payload(
+            mode="worker_node",
+            report_contract={"required": True, "tests_required": True, "review_required": False},
+            worker_node={
+                "parent_run_id": "run-pr-1",
+                "objective": "Prepare a bounded scoped PR.",
+                "worker_dispatch_enabled": True,
+                "execution_enabled": True,
+            },
+        )
+    )
+
+    assert result["eligible"] is False
+    assert "worker dispatch must stay disabled" in result["blocked_reasons"]
+    assert "worker execution must stay disabled" in result["blocked_reasons"]
+    assert "worker-node report review is required" in result["blocked_reasons"]
+    assert result["worker_dispatch_enabled"] is False
+
+
 def test_workspace_status_surfaces_provenance_and_blocks_when_gateway_untrusted():
     status = build_workspace_status(
         {
