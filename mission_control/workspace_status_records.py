@@ -2394,7 +2394,7 @@ def _eligibility_readiness(
     disabled_flag_names: tuple[str, ...],
 ) -> dict[str, Any]:
     blocked_reasons = _text_list(payload.get("blocked_reasons"))
-    enabled_flags = [flag for flag in disabled_flag_names if payload.get(flag) is True]
+    enabled_flags = [flag for flag in disabled_flag_names if _flag_enabled(payload.get(flag))]
     blocked_reasons.extend(f"{flag} must remain disabled" for flag in enabled_flags)
     if payload.get("eligible") is not True and not blocked_reasons:
         blocked_reasons.append(default_blocked_reason)
@@ -3210,9 +3210,19 @@ def _enabled_live_flag_names(*payloads: Any) -> list[str]:
     mapped_payloads = [_mapping(payload) for payload in payloads]
     enabled: list[str] = []
     for flag in LIVE_EXECUTION_FLAG_NAMES:
-        if any(payload.get(flag) is True for payload in mapped_payloads):
+        if any(_flag_enabled(payload.get(flag)) for payload in mapped_payloads):
             enabled.append(flag)
     return enabled
+
+
+def _flag_enabled(value: Any) -> bool:
+    if value is True:
+        return True
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on", "enabled"}
+    return False
 
 
 def _execution_lock_blockers(*labeled_payloads: tuple[str, Any]) -> list[str]:

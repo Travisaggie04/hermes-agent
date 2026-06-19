@@ -226,6 +226,17 @@ def test_dirty_runtime_blocks_autonomy():
     assert "dashboard runtime has dirty or untracked files" in result["autonomy_blocked_reasons"]
 
 
+def test_runtime_provenance_blocks_stringy_dispatch_flags():
+    result = evaluate_runtime_provenance(_clean_runtime_state(dispatch_in_gateway="true"))
+
+    assert result["autonomy_blocked"] is True
+    assert "dispatch is enabled" in result["autonomy_blocked_reasons"]
+    assert result["would_execute"] is False
+    assert result["dispatch_enabled"] is False
+    assert result["session_send_enabled"] is False
+    assert result["worker_dispatch_enabled"] is False
+
+
 def test_broken_gateway_git_metadata_blocks_autonomy():
     result = evaluate_runtime_provenance(
         _clean_runtime_state(
@@ -661,6 +672,7 @@ def test_execution_mode_classification_blocks_protected_modes_and_enabled_flags(
         {"mode": "worker_node", "worker_node": {"worker_dispatch_enabled": True}},
         {"mode": "read_only", "action_class": "model_routing"},
         {"mode": "implementation", "action_class": "implementation"},
+        {"mode": "read_only", "execution_enabled": "yes", "dispatch_enabled": "1"},
     ]
 
     for payload in cases:
@@ -815,6 +827,69 @@ def test_execution_packet_preview_rejects_requested_live_action_flags():
         assert result["dispatch_enabled"] is False
         assert result["session_send_enabled"] is False
         assert result["worker_dispatch_enabled"] is False
+
+
+def test_execution_packet_preview_rejects_stringy_live_action_flags():
+    result = build_execution_packet_preview(
+        _eligible_pr_preview_payload(
+            mode="scoped_pr",
+            dispatch_enabled="true",
+            execution_enabled="yes",
+            session_send_enabled="on",
+            worker_dispatch_enabled=1,
+            would_dispatch="1",
+            would_execute="enabled",
+            would_session_send="y",
+            merge_allowed="true",
+            deploy_allowed="yes",
+            runtime_switch_allowed="on",
+            capabilities={"merge": "true", "worker_dispatch_enabled": "enabled"},
+        )
+    )
+
+    _assert_inert_preview(result)
+    _assert_inert_preview(result["packet"])
+    assert result["eligible"] is False
+    assert "would_execute must remain false in previews" in result["blocked_reasons"]
+    assert "would_dispatch must remain false in previews" in result["blocked_reasons"]
+    assert "would_session_send must remain false in previews" in result["blocked_reasons"]
+    assert "execution_enabled must remain false" in result["blocked_reasons"]
+    assert "dispatch_enabled must remain false" in result["blocked_reasons"]
+    assert "session_send_enabled must remain false" in result["blocked_reasons"]
+    assert "worker_dispatch_enabled must remain false" in result["blocked_reasons"]
+    assert "merge is not allowed in scoped PR lanes" in result["blocked_reasons"]
+    assert "deploy is not allowed in scoped PR lanes" in result["blocked_reasons"]
+    assert "runtime switch is not allowed in scoped PR lanes" in result["blocked_reasons"]
+    assert "capability merge must be disabled" in result["blocked_reasons"]
+    assert "capability worker_dispatch_enabled must be disabled" in result["blocked_reasons"]
+    assert result["would_execute"] is False
+    assert result["would_dispatch"] is False
+    assert result["would_session_send"] is False
+    assert result["execution_enabled"] is False
+    assert result["dispatch_enabled"] is False
+    assert result["session_send_enabled"] is False
+    assert result["worker_dispatch_enabled"] is False
+
+
+def test_permission_classifiers_treat_stringy_live_flags_as_unsafe():
+    bridge = classify_bridge_permissions({"read_only_safe": True, "would_execute": "true"})
+    permissions = classify_control_path_permissions(
+        {
+            "path_id": "shell-path",
+            "read_only_safe": True,
+            "capabilities": {"shell": "yes"},
+        }
+    )
+
+    assert bridge["permission_classification"] == "write_capable_not_safe_for_autonomy"
+    assert any("would_execute must remain false" in reason for reason in bridge["reasons"])
+    assert permissions["permission_classification"] == "write_capable_not_safe_for_autonomy"
+    assert permissions["write_capable_path_ids"] == ["shell-path"]
+    assert "shell-path: path exposes write or execution capabilities: shell" in permissions["blocked_reasons"]
+    assert permissions["would_execute"] is False
+    assert permissions["dispatch_enabled"] is False
+    assert permissions["session_send_enabled"] is False
+    assert permissions["worker_dispatch_enabled"] is False
 
 
 def test_worker_node_execution_packet_preview_wraps_scoped_pr_without_dispatch():

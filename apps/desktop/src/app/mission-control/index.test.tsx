@@ -2635,6 +2635,27 @@ describe('MissionControlView', () => {
     expect(screen.getByText('mismatch 2 / queue 2 / ingestion 0 / completion 0 / stop 0')).toBeTruthy()
   })
 
+  it('treats stringy live flags as execution lock blockers in the Desktop summary', async () => {
+    const { summarizeWorkspaceStatus } = await import('./index')
+    const status = JSON.parse(JSON.stringify(await getMissionControlWorkspaceStatus()))
+
+    status.execution_packet_preview.would_dispatch = 'true'
+    status.execution_packet_preview.packet.session_send_enabled = 'yes'
+    status.execution_packet_preview.packet.worker_node_contract.worker_dispatch_enabled = 1
+    status.next_safe_actions.execution_enabled = 'enabled'
+    status.operator_decision_packet.would_session_send = 'on'
+
+    const summary = summarizeWorkspaceStatus(status)
+
+    expect(summary.executionPacketLockReasons).toEqual([
+      'execution packet: would_dispatch must remain false',
+      'execution packet body: session_send_enabled must remain false',
+      'worker contract: worker_dispatch_enabled must remain false'
+    ])
+    expect(summary.projectionExecutionLockReasons).toContain('next safe actions: execution_enabled must remain false')
+    expect(summary.projectionExecutionLockReasons).toContain('operator decision: would_session_send must remain false')
+  })
+
   it('restores Jenny working status from bridge audit records after refresh', async () => {
     getMissionControlGitHubBridgeStatus.mockResolvedValue({
       count: 1,
@@ -2973,6 +2994,9 @@ describe('MissionControlView', () => {
       '[\'daemon_enabled\', \'daemon_enabled must remain false\']',
       '[\'discord_automation_enabled\', \'discord_automation_enabled must remain false\']',
       '[\'model_routing_enabled\', \'model_routing_enabled must remain false\']',
+      'function liveFlagEnabled(value: unknown): boolean',
+      'if (liveFlagEnabled(status[flag]))',
+      '.filter(([flag]) => liveFlagEnabled(source[flag]))',
       'function missionControlBridgeBlockedMessage(safety: MissionControlBridgeSafety): string',
       'const githubBridgeSafety = missionControlGitHubBridgeSafety(githubBridgeStatus)',
       'const bridgeActionDisabled = saving || paused || !githubBridgeSafety.safe',

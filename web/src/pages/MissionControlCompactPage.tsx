@@ -1390,7 +1390,7 @@ function compactGitHubBridgeSafety(status: GitHubBridgeStatus | undefined): Comp
       ["model_routing_enabled", "model_routing_enabled must remain false"],
     ];
     for (const [flag, reason] of liveFlags) {
-      if (status[flag] === true) reasons.push(reason);
+      if (compactLiveFlagEnabled(status[flag])) reasons.push(reason);
     }
   }
   return { reasons, safe: reasons.length === 0 };
@@ -4018,8 +4018,17 @@ const COMPACT_EXECUTION_LOCK_FLAGS: Array<[keyof CompactExecutionLockSource, str
 function compactExecutionLockReasons(label: string, source?: CompactExecutionLockSource | null): string[] {
   if (!source) return [];
   return COMPACT_EXECUTION_LOCK_FLAGS
-    .filter(([flag]) => source[flag] === true)
+    .filter(([flag]) => compactLiveFlagEnabled(source[flag]))
     .map(([, reason]) => `${label}: ${reason}`);
+}
+
+function compactLiveFlagEnabled(value: unknown): boolean {
+  if (value === true) return true;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    return ["1", "true", "yes", "y", "on", "enabled"].includes(value.trim().toLowerCase());
+  }
+  return false;
 }
 
 function CompactHermesHealthDashboard({
@@ -4071,7 +4080,7 @@ function CompactHermesHealthDashboard({
     bridgeError ? `Jenny bridge error: ${bridgeError}` : "",
     guard !== "pass" ? `Runtime guard is ${guard}` : "",
     dispatch !== false ? "Dispatch safety is not confirmed off" : "",
-    status.safety?.model_routing_enabled === true ? "Model routing safety is not confirmed off" : "",
+    compactLiveFlagEnabled(status.safety?.model_routing_enabled) ? "Model routing safety is not confirmed off" : "",
     activeLaneCount > 1 ? `${activeLaneCount} active lanes recorded` : "",
     status.deployment_gap?.dashboard_deploy_needed ? "Phone/web dashboard needs a dashboard-only update" : "",
     staleWarnings.length ? `Stale context: ${staleWarnings.join(", ")}` : "",
@@ -4099,7 +4108,7 @@ function CompactHermesHealthDashboard({
   ].filter(Boolean);
   const overallTone: CompactHealthTone = issues.length ? "warn" : "good";
   const bridgeTone: CompactHealthTone = bridgeError ? "bad" : bridgePending ? "warn" : "good";
-  const safetyOk = guard === "pass" && dispatch === false && status.safety?.model_routing_enabled !== true && activeLaneCount <= 1 && staleWarnings.length === 0;
+  const safetyOk = guard === "pass" && dispatch === false && !compactLiveFlagEnabled(status.safety?.model_routing_enabled) && activeLaneCount <= 1 && staleWarnings.length === 0;
   const executionPreviewTone: CompactHealthTone = [
     ...executionModeLockReasons,
     ...executionPacketLockReasons,
@@ -4191,7 +4200,7 @@ function CompactHermesHealthDashboard({
           value={status.deployment_gap?.dashboard_deploy_needed ? "Update waiting" : "Current"}
         />
         <CompactHealthTile
-          detail={`Guard=${guard}; dispatch=${dispatch === false ? "false" : "unknown"}; model routing=${status.safety?.model_routing_enabled === true ? "enabled" : "disabled"}; active lanes=${activeLaneCount}.`}
+          detail={`Guard=${guard}; dispatch=${dispatch === false ? "false" : "unknown"}; model routing=${compactLiveFlagEnabled(status.safety?.model_routing_enabled) ? "enabled" : "disabled"}; active lanes=${activeLaneCount}.`}
           label="Safety locks"
           tone={safetyOk ? "good" : "warn"}
           value={safetyOk ? "Holding" : "Check"}

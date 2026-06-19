@@ -20,7 +20,20 @@ export function asyncAgentLiveSafetyReason(status?: MissionControlAsyncAgentStat
     return ''
   }
 
-  return ASYNC_AGENT_LIVE_FLAGS.some(flag => status[flag] === true)
+  return ASYNC_AGENT_LIVE_FLAGS.some(flag => liveFlagEnabled(status[flag]))
     ? 'live async-agent controls are not confirmed off'
     : ''
+}
+
+function liveFlagEnabled(value: unknown): boolean {
+  if (value === true) {
+    return true
+  }
+  if (typeof value === 'number') {
+    return value !== 0
+  }
+  if (typeof value === 'string') {
+    return ['1', 'true', 'yes', 'y', 'on', 'enabled'].includes(value.trim().toLowerCase())
+  }
+  return false
 }

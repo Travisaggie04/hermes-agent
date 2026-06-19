@@ -710,6 +710,9 @@ def test_compact_chat_bridge_controls_fail_closed_on_live_flags() -> None:
         '["daemon_enabled", "daemon_enabled must remain false"]',
         '["discord_automation_enabled", "discord_automation_enabled must remain false"]',
         '["model_routing_enabled", "model_routing_enabled must remain false"]',
+        "function compactLiveFlagEnabled(value: unknown): boolean",
+        "if (compactLiveFlagEnabled(status[flag])) reasons.push(reason);",
+        ".filter(([flag]) => compactLiveFlagEnabled(source[flag]))",
         "function compactBridgeBlockedMessage(safety: CompactBridgeSafety): string",
         "const githubBridgeSafety = compactGitHubBridgeSafety(githubBridgeStatus);",
         "const bridgeActionDisabled = busy || paused || !githubBridgeSafety.safe;",
@@ -765,7 +768,7 @@ def test_compact_health_dashboard_fails_closed_on_execution_locks() -> None:
         "Execution preview",
         "Worker handoff",
         "Execution preview remains display-only; dispatch, session send, and worker activation stay disabled.",
-        "status.safety?.model_routing_enabled === true ? \"Model routing safety is not confirmed off\"",
+        "compactLiveFlagEnabled(status.safety?.model_routing_enabled) ? \"Model routing safety is not confirmed off\"",
         "executionPreviewTone",
         "workerInstructionTone",
         "operatorLockReasons.length",
@@ -773,7 +776,7 @@ def test_compact_health_dashboard_fails_closed_on_execution_locks() -> None:
         "workerLockReasons.length",
         "ingestionLockReasons.length",
         "completionLockReasons.length",
-        'model routing=${status.safety?.model_routing_enabled === true ? "enabled" : "disabled"}',
+        'model routing=${compactLiveFlagEnabled(status.safety?.model_routing_enabled) ? "enabled" : "disabled"}',
     ]:
         assert expected in src
 

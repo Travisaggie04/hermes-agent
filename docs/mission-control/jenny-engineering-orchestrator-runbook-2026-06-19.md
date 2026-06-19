@@ -58,6 +58,9 @@ Jenny packet as permission to bypass Codex safety checks.
   The projection execution locks row is a broader sweep across lifecycle,
   report, readiness, worker, child, and next-safe-action projections; it should
   read `none`.
+  These lock checks treat API-shaped truthy values such as `"true"`, `"yes"`,
+  `"on"`, and `1` as unsafe enabled flags. Positive safety proofs still require
+  real backend evidence; stringy inputs do not make a lane execution-ready.
 - Jenny and GitHub bridge status payloads explicitly report session-send and
   worker-dispatch as disabled, so control surfaces can fail closed on those
   backend flags instead of guessing.
@@ -423,7 +426,8 @@ next delegation instruction.
 - Projection execution locks: a broad Desktop rollup of accidental execution,
   dispatch, session-send, worker-dispatch, `would_dispatch`, or
   `would_session_send` flags across status projections. `none` is the expected
-  safe value.
+  safe value. Truthy strings or numbers count as unsafe here because Mission
+  Control should fail closed on loose API payloads.
 - Orchestration readiness: blocked or preview-ready state for supervised
   read-only autonomy, scoped PR creation, and laptop Codex worker-node.
 - Worker instruction preview: a manual Codex handoff prompt with objective,

@@ -472,7 +472,7 @@ def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) ->
         _add(reasons, "rollback runtime HEAD is stale relative to source HEAD")
         _add(blocked_reasons, "rollback runtime is stale relative to source HEAD")
 
-    if state.get("dispatch_state") is True or state.get("dispatch_in_gateway") is True:
+    if _flag_enabled(state.get("dispatch_state")) or _flag_enabled(state.get("dispatch_in_gateway")):
         _add(blocked_reasons, "dispatch is enabled")
     if _safe_int(state.get("active_lane_count")) > _safe_int(state.get("max_active_lane"), default=1):
         _add(blocked_reasons, "active lane count exceeds configured maximum")
@@ -519,7 +519,7 @@ def classify_bridge_permissions(bridge_state: dict[str, Any] | None = None) -> d
     disabled_flag_reasons = [
         reason
         for key, reason in _BRIDGE_DISABLED_FLAG_REASONS.items()
-        if _safe_bool(state.get(key))
+        if _flag_enabled(state.get(key))
     ]
 
     if disabled_flag_reasons:
@@ -530,7 +530,7 @@ def classify_bridge_permissions(bridge_state: dict[str, Any] | None = None) -> d
         )
 
     if any(
-        _safe_bool(state.get(key))
+        _flag_enabled(state.get(key))
         for key in (
             "execution_enabled",
             "send_to_jenny_enabled",
@@ -685,13 +685,13 @@ def classify_execution_mode(observed_state: dict[str, Any] | None = None) -> dic
     if action_class in {"implementation", "deploy", "runtime_switch", "payment", "waha", "social_post", "model_routing", "queue_mutation", "worker_timer_enablement"}:
         mode_family = "higher_risk_blocked"
         _add(blocked_reasons, f"action_class {action_class} is not eligible for autonomous execution")
-    if _safe_bool(state.get("execution_enabled")) or _safe_bool(run.get("execution_enabled")):
+    if _flag_enabled(state.get("execution_enabled")) or _flag_enabled(run.get("execution_enabled")):
         _add(blocked_reasons, "execution_enabled must remain false")
-    if _safe_bool(state.get("dispatch_enabled")) or _safe_bool(run.get("dispatch_enabled")):
+    if _flag_enabled(state.get("dispatch_enabled")) or _flag_enabled(run.get("dispatch_enabled")):
         _add(blocked_reasons, "dispatch_enabled must remain false")
-    if _safe_bool(state.get("session_send_enabled")) or _safe_bool(run.get("session_send_enabled")):
+    if _flag_enabled(state.get("session_send_enabled")) or _flag_enabled(run.get("session_send_enabled")):
         _add(blocked_reasons, "session_send_enabled must remain false")
-    if _safe_bool(state.get("worker_dispatch_enabled")) or _safe_bool(worker_node.get("worker_dispatch_enabled")):
+    if _flag_enabled(state.get("worker_dispatch_enabled")) or _flag_enabled(worker_node.get("worker_dispatch_enabled")):
         _add(blocked_reasons, "worker_dispatch_enabled must remain false")
 
     preview_ready = mode_family in {"read_only_preview", "scoped_pr_preview", "worker_node_preview"} and not blocked_reasons
@@ -821,11 +821,11 @@ def evaluate_scoped_pr_lane_eligibility(observed_state: dict[str, Any] | None = 
         _add(blocked, "scoped PR lane requires at most one active mutation lane")
     if active_mutation_lane_count == 1 and _safe_text(run.get("lane_type")) != "pr_creation":
         _add(blocked, "the only active mutation lane must be this scoped PR lane")
-    if _safe_bool(state.get("merge_allowed")) or _safe_bool(lane.get("merge_allowed")):
+    if _flag_enabled(state.get("merge_allowed")) or _flag_enabled(lane.get("merge_allowed")):
         _add(blocked, "merge is not allowed in scoped PR lanes")
-    if _safe_bool(state.get("deploy_allowed")) or _safe_bool(lane.get("deploy_allowed")):
+    if _flag_enabled(state.get("deploy_allowed")) or _flag_enabled(lane.get("deploy_allowed")):
         _add(blocked, "deploy is not allowed in scoped PR lanes")
-    if _safe_bool(state.get("runtime_switch_allowed")) or _safe_bool(lane.get("runtime_switch_allowed")):
+    if _flag_enabled(state.get("runtime_switch_allowed")) or _flag_enabled(lane.get("runtime_switch_allowed")):
         _add(blocked, "runtime switch is not allowed in scoped PR lanes")
     if _safe_bool(report_contract.get("required")) is not True:
         _add(blocked, "report/result contract is required")
@@ -956,11 +956,11 @@ def _evaluate_worker_node_packet_preview(state: dict[str, Any]) -> dict[str, Any
 
     blocked = list(base.get("blocked_reasons") or ())
     warnings = list(base.get("warnings") or ())
-    if _safe_bool(worker_node.get("worker_dispatch_enabled")) or _safe_bool(state.get("worker_dispatch_enabled")):
+    if _flag_enabled(worker_node.get("worker_dispatch_enabled")) or _flag_enabled(state.get("worker_dispatch_enabled")):
         _add(blocked, "worker dispatch must stay disabled")
-    if _safe_bool(worker_node.get("execution_enabled")) or _safe_bool(state.get("execution_enabled")):
+    if _flag_enabled(worker_node.get("execution_enabled")) or _flag_enabled(state.get("execution_enabled")):
         _add(blocked, "worker execution must stay disabled")
-    if _safe_bool(worker_node.get("session_send_enabled")) or _safe_bool(state.get("session_send_enabled")):
+    if _flag_enabled(worker_node.get("session_send_enabled")) or _flag_enabled(state.get("session_send_enabled")):
         _add(blocked, "session sending must stay disabled")
     _check_preview_disabled_flags(
         blocked,
@@ -1061,7 +1061,7 @@ def _execution_protected_markers(
             if pattern in term:
                 _add(markers, marker)
     for key in _PROTECTED_CAPABILITY_KEYS:
-        if _safe_bool(state.get(key)) or _safe_bool(lane.get(key)) or _safe_bool(run.get(key)) or _safe_bool(capabilities.get(key)):
+        if _flag_enabled(state.get(key)) or _flag_enabled(lane.get(key)) or _flag_enabled(run.get(key)) or _flag_enabled(capabilities.get(key)):
             _add(markers, _permission_marker_label(key))
     for key in ("allowed_actions", "requested_actions", "tools", "tool_names"):
         for item in _as_list(state.get(key)) + _as_list(lane.get(key)) + _as_list(run.get(key)):
@@ -1170,7 +1170,7 @@ def _write_capability_markers(path: dict[str, Any]) -> list[str]:
     markers: list[str] = []
     capability_dict = _section(path, "capabilities")
     for key in _PATH_WRITE_CAPABILITY_KEYS:
-        if _safe_bool(path.get(key)) or _safe_bool(capability_dict.get(key)):
+        if _flag_enabled(path.get(key)) or _flag_enabled(capability_dict.get(key)):
             _add(markers, _permission_marker_label(key))
     for toolset in _path_toolset_texts(path):
         if toolset in _PATH_WRITE_TOOLSET_NAMES:
@@ -1202,7 +1202,7 @@ def _path_tool_texts(path: dict[str, Any]) -> list[str]:
                 texts.append(text)
     capabilities = path.get("capabilities")
     if isinstance(capabilities, dict):
-        texts.extend(str(key) for key, value in capabilities.items() if value is True)
+        texts.extend(str(key) for key, value in capabilities.items() if _flag_enabled(value))
     return texts
 
 
@@ -1221,9 +1221,9 @@ def _capability_inheritance_unknown(path: dict[str, Any]) -> bool:
     inheritance = _safe_text(path.get("capability_inheritance")).lower()
     if inheritance in {"unknown", "parent", "inherits_parent", "unbounded"}:
         return True
-    if _safe_bool(path.get("unknown_capabilities")):
+    if _flag_enabled(path.get("unknown_capabilities")):
         return True
-    if _safe_bool(path.get("inherits_parent_capabilities")) and not _safe_bool(path.get("inherited_capabilities_read_only")):
+    if _flag_enabled(path.get("inherits_parent_capabilities")) and not _safe_bool(path.get("inherited_capabilities_read_only")):
         return True
     return False
 
@@ -1286,7 +1286,7 @@ def _check_run(run: dict[str, Any], approval: dict[str, Any], blocked: list[str]
         _add(blocked, "run status must be an active pre-execution/read-only state")
     if _safe_text(run.get("approval_id")) != _safe_text(approval.get("approval_id")):
         _add(blocked, "run approval_id must match the exact ApprovalRecord")
-    if _safe_text(run.get("dispatch_state")) == "true" or run.get("dispatch_state") is True:
+    if _flag_enabled(run.get("dispatch_state")):
         _add(blocked, "run dispatch_state must be false")
 
 
@@ -1300,7 +1300,7 @@ def _check_pr_run(run: dict[str, Any], approval: dict[str, Any], blocked: list[s
         _add(blocked, "run approval_id must match the exact ApprovalRecord")
     if _safe_text(run.get("lane_type")) != "pr_creation":
         _add(blocked, "run lane_type must be pr_creation")
-    if _safe_text(run.get("dispatch_state")) == "true" or run.get("dispatch_state") is True:
+    if _flag_enabled(run.get("dispatch_state")):
         _add(blocked, "run dispatch_state must be false")
 
 
@@ -1349,13 +1349,13 @@ def _check_pr_forbidden_actions(run: dict[str, Any], lane: dict[str, Any], block
 
 def _check_capabilities(capabilities: dict[str, Any], blocked: list[str]) -> None:
     for key in _CAPABILITY_KEYS:
-        if _safe_bool(capabilities.get(key)):
+        if _flag_enabled(capabilities.get(key)):
             _add(blocked, f"capability {key} must be disabled")
 
 
 def _check_pr_capabilities(capabilities: dict[str, Any], blocked: list[str]) -> None:
     for key in _PR_BLOCKED_CAPABILITY_KEYS:
-        if _safe_bool(capabilities.get(key)):
+        if _flag_enabled(capabilities.get(key)):
             _add(blocked, f"capability {key} must be disabled")
 
 
@@ -1366,7 +1366,7 @@ def _check_preview_disabled_flags(
 ) -> None:
     flag_keys = keys or tuple(_PREVIEW_DISABLED_FLAG_REASONS)
     for key in flag_keys:
-        if any(_safe_bool(section.get(key)) for section in sections if isinstance(section, dict)):
+        if any(_flag_enabled(section.get(key)) for section in sections if isinstance(section, dict)):
             _add(blocked, _PREVIEW_DISABLED_FLAG_REASONS[key])
 
 
@@ -1483,6 +1483,18 @@ def _safe_text(value: Any, *, max_chars: int = 240) -> str:
 
 def _safe_bool(value: Any) -> bool:
     return value is True
+
+
+def _flag_enabled(value: Any) -> bool:
+    """Fail closed on API-shaped truthy values for dangerous live-action flags."""
+
+    if value is True:
+        return True
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on", "enabled"}
+    return False
 
 
 def _safe_int(value: Any, *, default: int = 0) -> int:

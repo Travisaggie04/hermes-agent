@@ -38,4 +38,13 @@ describe('asyncAgentLiveSafetyReason', () => {
       expect(asyncAgentLiveSafetyReason({ [flag]: true })).toBe('live async-agent controls are not confirmed off')
     }
   })
+
+  it('blocks stringy truthy live async-agent flags from API-shaped payloads', () => {
+    expect(asyncAgentLiveSafetyReason({ dispatch_enabled: 'true' } as never)).toBe(
+      'live async-agent controls are not confirmed off'
+    )
+    expect(asyncAgentLiveSafetyReason({ worker_dispatch_enabled: 1 } as never)).toBe(
+      'live async-agent controls are not confirmed off'
+    )
+  })
 })

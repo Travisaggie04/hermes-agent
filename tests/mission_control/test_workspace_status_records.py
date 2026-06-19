@@ -461,7 +461,7 @@ def test_orchestration_readiness_and_instruction_previews_block_would_execute_fl
             "dispatch_enabled": False,
             "session_send_enabled": False,
             "worker_dispatch_enabled": False,
-            "merge_enabled": False,
+            "merge_enabled": "true",
             "deploy_enabled": False,
             "runtime_switch_enabled": False,
         },
@@ -514,7 +514,13 @@ def test_orchestration_readiness_and_instruction_previews_block_would_execute_fl
         },
     }
 
-    readiness = _orchestration_readiness_payload(status)["laptop_codex_worker_node"]
+    readiness_projection = _orchestration_readiness_payload(status)
+    scoped_pr_readiness = readiness_projection["scoped_pr_creation"]
+    assert scoped_pr_readiness["state"] == "blocked"
+    assert scoped_pr_readiness["preview_ready"] is False
+    assert "merge_enabled must remain disabled" in scoped_pr_readiness["blocked_reasons"]
+
+    readiness = readiness_projection["laptop_codex_worker_node"]
     assert readiness["state"] == "blocked"
     assert readiness["preview_ready"] is False
     assert "would_execute must remain disabled" in readiness["blocked_reasons"]
@@ -682,13 +688,13 @@ def test_operator_decision_packet_rolls_up_nested_execution_locks():
             "execution_mode_classification": {"mode_family": "worker_node_preview", "blocked_reasons": []},
             "execution_packet_preview": {
                 "eligible": True,
-                "would_dispatch": True,
+                "would_dispatch": "true",
                 "packet": {
                     "mode": "worker_node",
-                    "session_send_enabled": True,
+                    "session_send_enabled": "yes",
                     "worker_node_contract": {
-                        "would_session_send": True,
-                        "worker_dispatch_enabled": True,
+                        "would_session_send": "on",
+                        "worker_dispatch_enabled": 1,
                     },
                 },
             },

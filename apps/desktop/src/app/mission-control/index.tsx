@@ -188,6 +188,19 @@ function allFalse(values: unknown[]): boolean {
   return values.every(value => value === false)
 }
 
+function liveFlagEnabled(value: unknown): boolean {
+  if (value === true) {
+    return true
+  }
+  if (typeof value === 'number') {
+    return value !== 0
+  }
+  if (typeof value === 'string') {
+    return ['1', 'true', 'yes', 'y', 'on', 'enabled'].includes(value.trim().toLowerCase())
+  }
+  return false
+}
+
 function formatBytes(value: unknown): string {
   const bytes = typeof value === 'number' && Number.isFinite(value) ? value : 0
   if (bytes < 1024) {
@@ -938,7 +951,7 @@ function missionControlGitHubBridgeSafety(
       ['model_routing_enabled', 'model_routing_enabled must remain false']
     ]
     for (const [flag, reason] of liveFlags) {
-      if (status[flag] === true) {
+      if (liveFlagEnabled(status[flag])) {
         reasons.push(reason)
       }
     }
@@ -1362,7 +1375,7 @@ function executionLockReasons(label: string, source?: ExecutionLockSource | null
   }
 
   return EXECUTION_LOCK_FLAGS
-    .filter(([flag]) => source[flag] === true)
+    .filter(([flag]) => liveFlagEnabled(source[flag]))
     .map(([, reason]) => `${label}: ${reason}`)
 }
 
