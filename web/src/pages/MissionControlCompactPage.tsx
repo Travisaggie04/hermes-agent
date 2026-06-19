@@ -341,6 +341,27 @@ interface ProjectSessionRecord {
 interface WorkspaceStatus {
   accepted_baseline?: { head?: string; runtime_path?: string };
   deployment_gap?: { accepted_live_head?: string; dashboard_deploy_needed?: boolean; deployed_head?: string; latest_merged_pr?: string; state?: string };
+  execution_mode_classification?: CompactExecutionLockSource & {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    mode_family?: string;
+    preview_ready?: boolean;
+    warnings?: string[];
+  };
+  execution_packet_preview?: CompactExecutionLockSource & {
+    blocked_reasons?: string[];
+    eligible?: boolean;
+    packet?: CompactExecutionLockSource & {
+      mode?: string;
+      worker_node_contract?: CompactExecutionLockSource & {
+        codex_safety_hardness_required?: boolean;
+        manual_handoff_only?: boolean;
+        worker_host_label?: string;
+        worker_identity?: string;
+      };
+    };
+    warnings?: string[];
+  };
   lane?: { active_lane_count?: number };
   next_safe_actions?: {
     action_count?: number;
@@ -428,6 +449,14 @@ interface WorkspaceStatus {
     worker_enabled?: boolean;
     worker_host_label?: string;
     worker_run_id?: string;
+  };
+  worker_node_instruction_preview?: CompactExecutionLockSource & {
+    available?: boolean;
+    blocked_reasons?: string[];
+    manual_handoff_only?: boolean;
+    manual_handoff_prompt?: string;
+    ready_for_handoff?: boolean;
+    worker_host_label?: string;
   };
 }
 
@@ -3960,13 +3989,17 @@ type CompactExecutionLockSource = {
   execution_enabled?: boolean;
   execution_ready?: boolean;
   session_send_enabled?: boolean;
+  would_dispatch?: boolean;
   would_execute?: boolean;
+  would_session_send?: boolean;
   worker_dispatch_enabled?: boolean;
   worker_enabled?: boolean;
 };
 
 const COMPACT_EXECUTION_LOCK_FLAGS: Array<[keyof CompactExecutionLockSource, string]> = [
   ["would_execute", "would_execute must remain false"],
+  ["would_dispatch", "would_dispatch must remain false"],
+  ["would_session_send", "would_session_send must remain false"],
   ["dispatch_enabled", "dispatch_enabled must remain false"],
   ["execution_enabled", "execution_enabled must remain false"],
   ["execution_ready", "execution_ready must remain false"],
@@ -4002,8 +4035,11 @@ function CompactHermesHealthDashboard({
   const memoryErrors = snapshot.memoryStorage.errors ?? [];
   const reportCount = activeProjectViews.filter(projectView => projectView.projectState?.has_real_report || projectView.report).length;
   const deployedHead = status.deployment_gap?.deployed_head ?? status.accepted_baseline?.head ?? "unknown";
+  const executionMode = status.execution_mode_classification;
+  const executionPacket = status.execution_packet_preview;
   const operatorPacket = status.operator_decision_packet;
   const readiness = status.orchestration_readiness;
+  const workerInstruction = status.worker_node_instruction_preview;
   const workerPresence = status.worker_node_presence;
   const resultIngestion = status.result_ingestion_contract;
   const reportCompletion = status.report_completion_path;
@@ -4013,8 +4049,13 @@ function CompactHermesHealthDashboard({
   const workerPresenceState = workerPresence?.presence_state ?? "unknown";
   const readinessStates = readiness?.states;
   const nextSafeActionLockReasons = compactExecutionLockReasons("Safe next actions", nextSafeActions);
+  const executionModeLockReasons = compactExecutionLockReasons("Execution mode", executionMode);
+  const executionPacketLockReasons = compactExecutionLockReasons("Execution packet", executionPacket);
+  const executionPacketBodyLockReasons = compactExecutionLockReasons("Execution packet body", executionPacket?.packet);
+  const workerContractLockReasons = compactExecutionLockReasons("Worker contract", executionPacket?.packet?.worker_node_contract);
   const operatorLockReasons = compactExecutionLockReasons("Operator decision", operatorPacket);
   const readinessLockReasons = compactExecutionLockReasons("Preview readiness", readiness);
+  const workerInstructionLockReasons = compactExecutionLockReasons("Worker handoff", workerInstruction);
   const workerLockReasons = compactExecutionLockReasons("Worker node", workerPresence);
   const ingestionLockReasons = compactExecutionLockReasons("Result ingestion", resultIngestion);
   const completionLockReasons = compactExecutionLockReasons("Report completion", reportCompletion);
@@ -4028,13 +4069,21 @@ function CompactHermesHealthDashboard({
     staleWarnings.length ? `Stale context: ${staleWarnings.join(", ")}` : "",
     memoryErrors.length ? `${memoryErrors.length} memory storage warning${memoryErrors.length === 1 ? "" : "s"}` : "",
     ...nextSafeActionLockReasons,
+    ...executionModeLockReasons,
+    ...executionPacketLockReasons,
+    ...executionPacketBodyLockReasons,
+    ...workerContractLockReasons,
     ...operatorLockReasons,
     ...readinessLockReasons,
+    ...workerInstructionLockReasons,
     ...workerLockReasons,
     ...ingestionLockReasons,
     ...completionLockReasons,
     operatorPacket?.blocked ? firstReason(operatorPacket.blocked_reasons, "Operator decision packet is blocked") : "",
+    executionMode?.blocked ? firstReason(executionMode.blocked_reasons, "Execution mode preview is blocked") : "",
+    executionPacket?.blocked_reasons?.length ? firstReason(executionPacket.blocked_reasons, "Execution packet preview is blocked") : "",
     readiness?.blocked_reasons?.length ? firstReason(readiness.blocked_reasons, "Orchestration readiness is blocked") : "",
+    workerInstruction?.blocked_reasons?.length ? firstReason(workerInstruction.blocked_reasons, "Worker handoff preview is blocked") : "",
     workerPresence?.blocked ? firstReason(workerPresence.blocked_reasons, "Laptop Codex worker-node presence is blocked") : "",
     resultIngestionBlocked ? firstReason(resultIngestion?.blocked_reasons, "Result ingestion needs review") : "",
     reportCompletionBlocked ? firstReason(reportCompletion?.blocked_reasons, "Report completion path needs review") : "",
@@ -4042,6 +4091,16 @@ function CompactHermesHealthDashboard({
   const overallTone: CompactHealthTone = issues.length ? "warn" : "good";
   const bridgeTone: CompactHealthTone = bridgeError ? "bad" : bridgePending ? "warn" : "good";
   const safetyOk = guard === "pass" && dispatch === false && status.safety?.model_routing_enabled !== true && activeLaneCount <= 1 && staleWarnings.length === 0;
+  const executionPreviewTone: CompactHealthTone = [
+    ...executionModeLockReasons,
+    ...executionPacketLockReasons,
+    ...executionPacketBodyLockReasons,
+    ...workerContractLockReasons,
+  ].length
+    ? "bad"
+    : executionMode?.blocked || executionPacket?.eligible === false || executionPacket?.blocked_reasons?.length
+      ? "warn"
+      : "good";
   const operatorTone: CompactHealthTone = operatorLockReasons.length
     ? "bad"
     : operatorPacket?.blocked || operatorPacket?.jenny_review_required
@@ -4050,6 +4109,11 @@ function CompactHermesHealthDashboard({
   const readinessTone: CompactHealthTone = readinessLockReasons.length
     ? "bad"
     : readiness?.blocked_reasons?.length
+      ? "warn"
+      : "good";
+  const workerInstructionTone: CompactHealthTone = workerInstructionLockReasons.length
+    ? "bad"
+    : workerInstruction?.blocked_reasons?.length || workerInstruction?.ready_for_handoff !== true
       ? "warn"
       : "good";
   const workerTone: CompactHealthTone = workerLockReasons.length
@@ -4068,6 +4132,23 @@ function CompactHermesHealthDashboard({
       ? "warn"
       : "good";
   const maxMountPercent = Math.max(0, ...(snapshot.memoryStorage.profiles ?? []).map(profile => profile.mount?.percent_used ?? 0));
+  const executionPreviewDetail = compactText([
+    ...executionModeLockReasons,
+    ...executionPacketLockReasons,
+    ...executionPacketBodyLockReasons,
+    ...workerContractLockReasons,
+    firstReason(executionMode?.blocked_reasons, ""),
+    firstReason(executionPacket?.blocked_reasons, ""),
+    ...(executionPacket?.warnings ?? []),
+    ...(executionMode?.warnings ?? []),
+    "Execution preview remains display-only; dispatch, session send, and worker activation stay disabled.",
+  ].find(Boolean) ?? "Execution preview remains display-only.", 260);
+  const workerInstructionDetail = compactText([
+    ...workerInstructionLockReasons,
+    firstReason(workerInstruction?.blocked_reasons, ""),
+    workerInstruction?.manual_handoff_prompt,
+    "No worker-node instruction preview recorded.",
+  ].find(Boolean) ?? "No worker-node instruction preview recorded.", 260);
 
   return (
     <section className="max-w-full overflow-hidden rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-3" aria-label="Hermes health dashboard">
@@ -4115,6 +4196,18 @@ function CompactHermesHealthDashboard({
           label="Preview readiness"
           tone={readinessTone}
           value={`read-only ${compactStateLabel(readinessStates?.supervised_read_only_autonomy)} / worker ${compactStateLabel(readinessStates?.laptop_codex_worker_node)}`}
+        />
+        <CompactHealthTile
+          detail={executionPreviewDetail}
+          label="Execution preview"
+          tone={executionPreviewTone}
+          value={`${compactStateLabel(executionMode?.mode_family)} / packet ${compactStateLabel(executionPacket?.packet?.mode)} / execute ${executionPacket?.execution_enabled ? "yes" : "no"}`}
+        />
+        <CompactHealthTile
+          detail={workerInstructionDetail}
+          label="Worker handoff"
+          tone={workerInstructionTone}
+          value={`available ${workerInstruction?.available ? "yes" : "no"} / handoff ${workerInstruction?.ready_for_handoff ? "yes" : "no"} / manual ${workerInstruction?.manual_handoff_only === false ? "no" : "yes"}`}
         />
         <CompactHealthTile
           detail={workerPresence?.blocked_reasons?.length ? firstReason(workerPresence.blocked_reasons, "Worker-node presence needs review.") : `${workerPresence?.worker_host_label ?? "laptop Codex"} ${workerPresence?.online ? "is online" : "is not confirmed online"}.`}
