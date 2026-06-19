@@ -247,6 +247,8 @@ does not contact the laptop, start a worker, or enable execution. It also
 blocks the next worker instruction when the linked worker report is missing,
 still needs Jenny review, or the worker record carries a failure reason. Jenny
 must review the report before issuing another worker packet.
+Mission Control distinguishes "preview available" from "handoff ready" so a
+visible worker packet is not mistaken for permission to send it.
 
 The execution mode classification is the early "what kind of work is this?"
 row. It only classifies the requested lane as read-only preview, scoped PR

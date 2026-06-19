@@ -291,6 +291,7 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
     assert instruction["dry_run_only"] is True
     assert instruction["manual_handoff_only"] is True
     assert instruction["available"] is True
+    assert instruction["ready_for_handoff"] is False
     assert instruction["blocked"] is True
     assert instruction["worker_run_id"] == "worker-run-1"
     assert instruction["worker_identity"] == "codex"
@@ -306,6 +307,7 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
     ]
     assert "worker node offline" in instruction["blocked_reasons"]
     assert "Manual handoff only" in instruction["manual_handoff_prompt"]
+    assert "Handoff readiness: blocked until worker-node blockers are cleared." in instruction["manual_handoff_prompt"]
     assert "Worker safety hardness:" in instruction["manual_handoff_prompt"]
     assert "Codex must independently enforce repo/worktree" in instruction["manual_handoff_prompt"]
     assert "Report contract:" in instruction["manual_handoff_prompt"]
@@ -362,6 +364,12 @@ def test_record_sourced_workspace_status_projects_worker_node_presence(tmp_path)
     assert readiness["online"] is True
     assert readiness["presence_state"] == "online"
     assert readiness["execution_ready"] is False
+
+    instruction = status["worker_node_instruction_preview"]
+    assert instruction["available"] is True
+    assert instruction["ready_for_handoff"] is True
+    assert instruction["blocked"] is False
+    assert "Handoff readiness: ready for manual review copy." in instruction["manual_handoff_prompt"]
 
 
 def test_record_sourced_workspace_status_blocks_worker_node_when_presence_unknown(tmp_path):
@@ -723,6 +731,8 @@ def test_record_sourced_workspace_status_projects_report_review_queue(tmp_path):
     assert operator_packet["approval_required"] is True
     assert operator_packet["jenny_review_required"] is True
     assert operator_packet["state"] == "report_review_required"
+    assert operator_packet["worker_instruction_available"] is True
+    assert operator_packet["worker_instruction_ready_for_handoff"] is False
     assert operator_packet["report_review_queue_count"] == 3
     assert operator_packet["top_report_review_item_id"] == "report:report-worker"
     assert operator_packet["top_report_review_label"] == "Laptop Codex reported scoped PR evidence."
@@ -730,6 +740,7 @@ def test_record_sourced_workspace_status_projects_report_review_queue(tmp_path):
         "Jenny reviews Laptop Codex reported scoped PR evidence. before issuing another worker instruction."
     )
     assert "Approval required: yes." in operator_packet["plain_language_summary"]
+    assert "Worker instruction: preview available but blocked; laptop Codex dispatch remains disabled." in operator_packet["plain_language_summary"]
     assert "Top report review: Laptop Codex reported scoped PR evidence." in operator_packet["plain_language_summary"]
     assert "worker activation" in operator_packet["plain_language_summary"]
     assert "report_id report-worker still needs Jenny review" in operator_packet["blocked_reasons"]

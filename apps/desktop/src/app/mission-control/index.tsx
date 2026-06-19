@@ -1543,6 +1543,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     workerInstructionExecutionEnabled: workerInstruction?.execution_enabled,
     workerInstructionManualHandoffOnly: workerInstruction?.manual_handoff_only,
     workerInstructionPrompt: workerInstruction?.manual_handoff_prompt ?? 'No worker-node instruction preview recorded.',
+    workerInstructionReadyForHandoff: workerInstruction?.ready_for_handoff,
     workerInstructionWorkerDispatchEnabled: workerInstruction?.worker_dispatch_enabled,
     workerLatestObjective: projectionRecordText(workerRecord, 'objective'),
     workerLatestStatus: projectionRecordText(workerRecord, 'status') || 'none',
@@ -4325,7 +4326,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="laptop Codex worker-node" tone={workerLockTone} value={`${status.workerHostLabel} / ${labelText(status.workerLatestStatus)}`} />
       <StatusItem className="md:col-span-2" label="worker-node objective" value={status.workerLatestObjective || `${status.workerIdentity} has no assigned objective recorded`} />
       <StatusItem label="worker-node report" tone={status.workerReportId && status.workerReportReviewStatus !== 'needs_review' ? 'good' : 'warn'} value={`${status.workerReportContractStatus} / ${labelText(status.workerReportLinkStatus)} / ${labelText(status.workerReportReviewStatus)}${status.workerReportId ? ` / ${status.workerReportId}` : ''}`} />
-      <StatusItem label="worker instruction preview" tone={workerInstructionTone} value={`available ${yesNo(status.workerInstructionAvailable)} / manual handoff ${yesNo(status.workerInstructionManualHandoffOnly)}`} />
+      <StatusItem label="worker instruction preview" tone={workerInstructionTone} value={`available ${yesNo(status.workerInstructionAvailable)} / handoff ready ${yesNo(status.workerInstructionReadyForHandoff)} / manual ${yesNo(status.workerInstructionManualHandoffOnly)}`} />
       <StatusItem className="md:col-span-2" label="worker-node blockers" tone={status.workerBlockedReasons.length ? 'warn' : 'good'} value={status.workerBlockedReasons.length ? status.workerBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="worker instruction prompt" tone={workerInstructionTone} value={status.workerInstructionPrompt} />
       <StatusItem className="md:col-span-3" label="worker instruction blockers" tone={status.workerInstructionBlockedReasons.length ? 'warn' : 'good'} value={status.workerInstructionBlockedReasons.length ? status.workerInstructionBlockedReasons.join(', ') : 'none'} />

@@ -788,6 +788,7 @@ export interface MissionControlOperatorDecisionPacket {
   trusted_for_execution?: boolean
   worker_dispatch_enabled?: boolean
   worker_instruction_available?: boolean
+  worker_instruction_ready_for_handoff?: boolean
   worker_last_seen_at?: string
   worker_online?: boolean
   worker_presence_state?: string
@@ -947,6 +948,7 @@ export interface MissionControlWorkerNodeInstructionPreview {
   online?: boolean
   parent_run_id?: string
   presence_state?: string
+  ready_for_handoff?: boolean
   report_contract?: string
   report_id?: string
   report_review_status?: string

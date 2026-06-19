@@ -2405,6 +2405,8 @@ def _worker_node_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
         "Report changed files, tests/checks, result, blockers, safety confirmation, "
         "and the next suggested chunk."
     )
+    unique_blocked_reasons = _unique_reasons(blocked_reasons)
+    ready_for_handoff = bool(worker_record) and not unique_blocked_reasons
     instruction_lines = [
         f"Worker: {worker_identity} on {worker_host_label}.",
         f"Objective: {objective or 'No objective recorded.'}",
@@ -2412,6 +2414,11 @@ def _worker_node_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
         f"Forbidden actions: {_joined_or_none(effective_forbidden_actions)}.",
         f"Worker safety hardness: {' '.join(worker_safety_hardness)}",
         f"Report contract: {report_contract}",
+        (
+            "Handoff readiness: ready for manual review copy."
+            if ready_for_handoff
+            else "Handoff readiness: blocked until worker-node blockers are cleared."
+        ),
         "Manual handoff only; execution and worker dispatch remain disabled.",
     ]
     return {
@@ -2427,8 +2434,9 @@ def _worker_node_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
         "dry_run_only": True,
         "manual_handoff_only": True,
         "available": bool(worker_record),
-        "blocked": bool(blocked_reasons),
-        "blocked_reasons": _unique_reasons(blocked_reasons),
+        "ready_for_handoff": ready_for_handoff,
+        "blocked": bool(unique_blocked_reasons),
+        "blocked_reasons": unique_blocked_reasons,
         "worker_run_id": worker_run_id,
         "parent_run_id": _safe_text(worker_record.get("parent_run_id")),
         "worker_identity": worker_identity,
@@ -2646,9 +2654,12 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             f"{stop_cancel_count} item{'s' if stop_cancel_count != 1 else ''}, "
             f"blocked {str(stop_control.get('blocked') is True).lower()}."
         )
+    worker_instruction_ready = worker_instruction.get("ready_for_handoff") is True
     if worker_instruction.get("available") is True:
         summary_lines.append(
-            "Worker instruction: manual handoff only; laptop Codex dispatch remains disabled."
+            "Worker instruction: "
+            f"{'ready for manual handoff' if worker_instruction_ready else 'preview available but blocked'}; "
+            "laptop Codex dispatch remains disabled."
         )
     if child_instruction.get("available") is True:
         summary_lines.append(
@@ -2710,6 +2721,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         "top_report_review_label": report_label,
         "top_report_review_reason": report_reason,
         "worker_instruction_available": worker_instruction.get("available") is True,
+        "worker_instruction_ready_for_handoff": worker_instruction_ready,
         "child_instruction_available": child_instruction.get("available") is True,
         "summary_lines": summary_lines,
         "plain_language_summary": " ".join(summary_lines),
