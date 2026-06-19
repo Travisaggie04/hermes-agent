@@ -815,7 +815,7 @@ def _hard_boundary_contract_payload(status: dict[str, Any]) -> dict[str, Any]:
     execution_packet = _mapping(status.get("execution_packet_preview"))
     execution_packet_body = _mapping(execution_packet.get("packet"))
     worker_contract = _mapping(execution_packet_body.get("worker_node_contract"))
-    live_flag_violations = _execution_lock_blockers(
+    live_flag_payloads = (
         ("accepted baseline", status.get("accepted_baseline")),
         ("rollback baseline", status.get("rollback_baseline")),
         ("latest handoff", status.get("latest_handoff")),
@@ -838,6 +838,12 @@ def _hard_boundary_contract_payload(status: dict[str, Any]) -> dict[str, Any]:
         ("child orchestration", status.get("child_agent_orchestration")),
         ("worker orchestration", status.get("worker_node_orchestration")),
         ("worker presence", status.get("worker_node_presence")),
+    )
+    live_flag_violations = _unique_reasons(
+        [
+            *_execution_lock_blockers(*live_flag_payloads),
+            *_execution_lock_reason_blockers(*live_flag_payloads),
+        ]
     )
     blocked_reasons = live_flag_violations
     state = "live_flag_violation" if live_flag_violations else "separate_approval_required"
@@ -882,6 +888,12 @@ def _hard_boundary_contract_payload(status: dict[str, Any]) -> dict[str, Any]:
         "live_operational_reconciliation_state": "separate_approval_required",
         "plain_language_summary": summary,
     }
+
+
+def hard_boundary_contract_payload(status: dict[str, Any]) -> dict[str, Any]:
+    """Return the inert hard-boundary contract for a workspace status preview."""
+
+    return _hard_boundary_contract_payload(status)
 
 
 def _next_safe_actions_payload(status: dict[str, Any]) -> dict[str, Any]:
@@ -3391,6 +3403,36 @@ def _execution_lock_blockers(*labeled_payloads: tuple[str, Any]) -> list[str]:
     for label, payload in labeled_payloads:
         for flag in _enabled_live_flag_names(payload):
             blockers.append(f"{label} {flag} must remain disabled")
+    return _unique_reasons(blockers)
+
+
+_LIVE_EXECUTION_FLAG_REASON_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("worker_dispatch_enabled", ("worker_dispatch_enabled", "worker dispatch")),
+    ("would_execute", ("would_execute", "would execute")),
+    ("would_dispatch", ("would_dispatch", "would dispatch")),
+    ("would_session_send", ("would_session_send", "would session send", "would session-send")),
+    ("execution_enabled", ("execution_enabled", "execution enabled", "worker execution")),
+    ("dispatch_enabled", ("dispatch_enabled", "dispatch enabled")),
+    ("session_send_enabled", ("session_send_enabled", "session send", "session-send", "session sending")),
+)
+_LIVE_EXECUTION_DISABLED_REASON_PHRASES = (
+    "must remain false",
+    "must remain disabled",
+    "must stay disabled",
+)
+
+
+def _execution_lock_reason_blockers(*labeled_payloads: tuple[str, Any]) -> list[str]:
+    blockers: list[str] = []
+    for label, payload in labeled_payloads:
+        for reason in _text_list(_mapping(payload).get("blocked_reasons")):
+            lowered = reason.lower()
+            if not any(phrase in lowered for phrase in _LIVE_EXECUTION_DISABLED_REASON_PHRASES):
+                continue
+            for flag, markers in _LIVE_EXECUTION_FLAG_REASON_MARKERS:
+                if any(marker in lowered for marker in markers):
+                    blockers.append(f"{label} {flag} must remain disabled")
+                    break
     return _unique_reasons(blockers)
 
 

@@ -5023,9 +5023,79 @@ def test_workspace_status_preview_is_caller_supplied_and_stores_nothing(plugin_a
     assert "baseline_mismatch" in warnings
     assert "active_lane_count_exceeds_max" in warnings
     assert "dispatch_not_false" in warnings
+    hard_boundary = payload["hard_boundary_contract"]
+    assert hard_boundary["source"] == "mission_control_hard_boundary_contract_v1"
+    assert hard_boundary["display_only"] is True
+    assert hard_boundary["trusted_for_execution"] is False
+    assert hard_boundary["execution_enabled"] is False
+    assert hard_boundary["dispatch_enabled"] is False
+    assert hard_boundary["session_send_enabled"] is False
+    assert hard_boundary["worker_dispatch_enabled"] is False
+    assert hard_boundary["live_operations_goal"] is False
+    assert hard_boundary["live_operations_enabled"] is False
+    assert hard_boundary["separate_approval_required"] is True
+    assert "live deploy" in hard_boundary["forbidden_actions"]
+    assert "PR merge" in hard_boundary["separate_approval_actions"]
     rendered = str(payload).lower()
     assert "must not be stored or exposed" not in rendered
     assert "secret-token-value" not in rendered
+    assert plugin_api.record_store_path().exists() is False
+
+
+def test_workspace_status_preview_hard_boundary_blocks_live_flag_attempts(plugin_api, client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace-status/preview",
+        json={
+            "execution_packet_preview": {
+                "mode": "worker_node",
+                "would_dispatch": "true",
+                "worker_dispatch_enabled": "true",
+                "worker_node": {
+                    "worker_dispatch_enabled": "true",
+                    "presence_status": "online",
+                    "objective": "Inspect Mission Control report status.",
+                    "parent_run_id": "run-worker-preview",
+                },
+                "run": {
+                    "run_id": "run-worker-preview",
+                    "lane_type": "read_only_lane",
+                    "objective": "Inspect Mission Control report status.",
+                },
+                "lane": {
+                    "lane_type": "read_only_lane",
+                    "objective": "Inspect Mission Control report status.",
+                },
+                "report_contract": {
+                    "required": True,
+                    "tests_required": True,
+                    "review_required": True,
+                },
+            },
+            "control_plane_lifecycle": {"active_mutation_lane_count": 0},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stored"] is False
+    assert payload["source"] == "caller_supplied_workspace_status_preview"
+    packet = payload["execution_packet_preview"]
+    assert packet["would_dispatch"] is False
+    assert packet["worker_dispatch_enabled"] is False
+    assert packet["packet"]["worker_node_contract"]["worker_dispatch_enabled"] is False
+    assert "would_dispatch must remain false in previews" in packet["blocked_reasons"]
+    assert "worker dispatch must stay disabled" in packet["blocked_reasons"]
+    hard_boundary = payload["hard_boundary_contract"]
+    assert hard_boundary["state"] == "live_flag_violation"
+    assert hard_boundary["blocked"] is True
+    assert hard_boundary["live_flag_violations"] == [
+        "execution packet would_dispatch must remain disabled",
+        "execution packet worker_dispatch_enabled must remain disabled",
+    ]
+    assert hard_boundary["execution_enabled"] is False
+    assert hard_boundary["dispatch_enabled"] is False
+    assert hard_boundary["session_send_enabled"] is False
+    assert hard_boundary["worker_dispatch_enabled"] is False
     assert plugin_api.record_store_path().exists() is False
 
 

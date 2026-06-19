@@ -11,11 +11,11 @@ from mission_control.records import (
 )
 from mission_control.workspace_status_records import (
     _child_agent_instruction_preview,
-    _hard_boundary_contract_payload,
     _operator_decision_packet_payload,
     _orchestration_readiness_payload,
     _worker_node_instruction_preview,
     build_workspace_status_from_records,
+    hard_boundary_contract_payload,
 )
 
 
@@ -86,7 +86,7 @@ def test_record_sourced_workspace_status_uses_latest_baseline_and_idle_when_no_r
 
 
 def test_hard_boundary_contract_blocks_truthy_live_flags():
-    hard_boundary = _hard_boundary_contract_payload(
+    hard_boundary = hard_boundary_contract_payload(
         {
             "execution_packet_preview": {
                 "would_dispatch": "true",
@@ -115,6 +115,30 @@ def test_hard_boundary_contract_blocks_truthy_live_flags():
     assert hard_boundary["blocked_reasons"] == hard_boundary["live_flag_violations"]
     assert hard_boundary["live_flag_violation_count"] == 5
     assert "Hard boundary violation" in hard_boundary["plain_language_summary"]
+
+
+def test_hard_boundary_contract_blocks_sanitized_live_flag_reasons():
+    hard_boundary = hard_boundary_contract_payload(
+        {
+            "execution_packet_preview": {
+                "would_dispatch": False,
+                "worker_dispatch_enabled": False,
+                "blocked_reasons": [
+                    "would_dispatch must remain false in previews",
+                    "worker dispatch must stay disabled",
+                ],
+            }
+        }
+    )
+
+    _assert_inert_projection(hard_boundary)
+    assert hard_boundary["state"] == "live_flag_violation"
+    assert hard_boundary["blocked"] is True
+    assert hard_boundary["live_flag_violations"] == [
+        "execution packet would_dispatch must remain disabled",
+        "execution packet worker_dispatch_enabled must remain disabled",
+    ]
+    assert hard_boundary["blocked_reasons"] == hard_boundary["live_flag_violations"]
 
 
 def test_orchestration_readiness_honors_hard_boundary_violations():
