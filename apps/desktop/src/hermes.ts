@@ -1475,8 +1475,60 @@ export interface MissionControlJennyBridgeResponseCreateResponse {
   stored?: boolean
 }
 
+export interface MissionControlWorkspaceBaseline {
+  clean?: boolean
+  head?: string
+  runtime_path?: string
+  status?: string
+  would_execute?: boolean
+}
+
+export interface MissionControlWorkspaceAcceptedBaselineRecord extends MissionControlWorkspaceBaseline {
+  active_kanban?: number
+  baseline_id?: string
+  dispatch_in_gateway?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  enforces_runtime?: boolean
+  issue?: string
+  max_active_lane?: number
+  present?: boolean
+  recorded_at?: string
+  rollback_head?: string
+  rollback_runtime_path?: string
+  source?: string
+}
+
+export interface MissionControlWorkspaceHandoff {
+  accepted_head?: string
+  accepted_runtime_path?: string
+  active_lane?: string
+  active_lane_count?: number
+  created_at?: string
+  display_only?: boolean
+  dispatch_in_gateway?: boolean
+  dry_run_only?: boolean
+  enforces_runtime?: boolean
+  handoff_id?: string
+  lane_mode?: string
+  last_result?: string
+  max_active_lane?: number
+  next_action?: string
+  present?: boolean
+  rollback_head?: string
+  rollback_runtime_path?: string
+  source?: string
+  status?: string
+  target_head?: string
+  target_id?: string
+  target_type?: string
+  warnings?: string[]
+  would_execute?: boolean
+}
+
 export interface MissionControlWorkspaceStatus {
-  accepted_baseline?: { head?: string; runtime_path?: string }
+  accepted_baseline?: MissionControlWorkspaceBaseline
+  accepted_baseline_record?: MissionControlWorkspaceAcceptedBaselineRecord
   approval_lifecycle?: MissionControlApprovalLifecycle
   child_agent_instruction_preview?: MissionControlChildAgentInstructionPreview
   child_agent_orchestration?: MissionControlOrchestrationProjection<MissionControlChildRunRecord>
@@ -1492,6 +1544,7 @@ export interface MissionControlWorkspaceStatus {
   execution_mode_classification?: MissionControlExecutionModeClassification
   execution_packet_preview?: MissionControlExecutionPacketPreview
   lane?: { active_lane_count?: number; max_active_lane?: number }
+  latest_handoff?: MissionControlWorkspaceHandoff
   next_safe_actions?: MissionControlNextSafeActions
   operator_decision_packet?: MissionControlOperatorDecisionPacket
   orchestration_readiness?: MissionControlOrchestrationReadiness
@@ -1541,6 +1594,7 @@ export interface MissionControlWorkspaceStatus {
     warnings?: string[]
   }
   runtime_worktree_guard?: { decision_state?: string; reason?: string }
+  rollback_baseline?: MissionControlWorkspaceBaseline
   safety?: { dispatch_in_gateway?: boolean; send_to_jenny_enabled?: boolean }
   stale_context?: { warnings?: string[] }
   report_lifecycle?: MissionControlReportLifecycle

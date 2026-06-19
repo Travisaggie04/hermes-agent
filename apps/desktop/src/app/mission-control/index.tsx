@@ -1408,6 +1408,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     approvalRejectedCount: approvalLifecycle?.rejected_or_cancelled_approval_ids?.length ?? 0,
     approvalRunMissingIdCount: approvalLifecycle?.runs_missing_approval_id?.length ?? 0,
     approvalUnavailableRunCount,
+    acceptedBaselineWouldExecute: status.accepted_baseline?.would_execute,
     autonomyBlockedReasons: autonomyEligibility?.blocked_reasons ?? [],
     autonomyEligible: autonomyEligibility?.eligible,
     bridgePermission: autonomyEligibility?.bridge_permissions?.permission_classification ?? 'unknown',
@@ -1457,6 +1458,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     guard: status.runtime_worktree_guard?.decision_state ?? 'unknown',
     head: status.deployment_gap?.accepted_live_head ?? status.accepted_baseline?.head ?? 'unknown',
     latestMergedPr: status.deployment_gap?.latest_merged_pr ?? '',
+    latestHandoffWouldExecute: status.latest_handoff?.would_execute,
     nextSafeActionCount: nextSafeActions?.action_count ?? nextSafeActions?.actions?.length ?? 0,
     nextSafeActionDispatchEnabled: nextSafeActions?.dispatch_enabled,
     nextSafeActionDisplayOnly: nextSafeActions?.display_only,
@@ -1631,6 +1633,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     runTerminalCount: runLifecycle?.terminal_run_ids?.length ?? 0,
     runTerminalMissingLinkedCount,
     runTerminalMissingReportCount: runLifecycle?.terminal_runs_missing_report?.length ?? 0,
+    rollbackBaselineWouldExecute: status.rollback_baseline?.would_execute,
     scopedPrBlockedReasons: scopedPrEligibility?.blocked_reasons ?? [],
     scopedPrBridgePermission: scopedPrEligibility?.bridge_permissions?.permission_classification ?? 'unknown',
     scopedPrEligible: scopedPrEligibility?.eligible,
@@ -4458,6 +4461,12 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
     reportId: status.workerReportId,
     reviewStatus: status.workerReportReviewStatus
   })}`
+  const baselineExecutionLockTone =
+    status.acceptedBaselineWouldExecute === true ||
+    status.rollbackBaselineWouldExecute === true ||
+    status.latestHandoffWouldExecute === true
+      ? 'warn'
+      : 'good'
 
   return (
     <div className="grid gap-3 rounded-xl border border-border/70 bg-background/40 p-4 md:grid-cols-3">
@@ -4498,6 +4507,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="stop/cancel control" tone={stopControlTone} value={`items ${status.stopControlCount} / stopping ${status.stopControlActiveCount} / terminal ${status.stopControlTerminalCount} / mismatch ${status.stopControlLinkMismatchCount}`} />
       <StatusItem className="md:col-span-2" label="top report review" tone={reportReviewQueueTone} value={status.reportReviewQueuePrimaryLabel} />
       <StatusItem className="md:col-span-2" label="accepted runtime" value={status.runtime} />
+      <StatusItem label="baseline execute lock" tone={baselineExecutionLockTone} value={`accepted ${yesNo(status.acceptedBaselineWouldExecute)} / rollback ${yesNo(status.rollbackBaselineWouldExecute)} / handoff ${yesNo(status.latestHandoffWouldExecute)}`} />
       <StatusItem label="accepted-live head" value={status.head.slice(0, 12)} />
       <StatusItem
         label="default branch head"

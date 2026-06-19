@@ -85,7 +85,8 @@ beforeEach(() => {
   getMissionControlWorkspaceStatus.mockResolvedValue({
     accepted_baseline: {
       head: '9f8863c0bf28dc0b7da702480b9b3337b983e7e8',
-      runtime_path: '/home/jenny/.hermes/hermes-runtime-project-seed-9f8863c'
+      runtime_path: '/home/jenny/.hermes/hermes-runtime-project-seed-9f8863c',
+      would_execute: false
     },
     approval_lifecycle: {
       append_only_projection: true,
@@ -255,6 +256,11 @@ beforeEach(() => {
       would_session_send: false
     },
     lane: { active_lane_count: 0 },
+    latest_handoff: {
+      handoff_id: 'handoff-1',
+      present: true,
+      would_execute: false
+    },
     next_safe_actions: {
       action_count: 1,
       actions: [
@@ -531,6 +537,11 @@ beforeEach(() => {
       source_head: '0f87620038d220eb016612ba0b466c2407663743',
       status: 'BLOCKED_UNSAFE_FOR_AUTONOMY',
       statuses: ['BROKEN_GIT_METADATA', 'GATEWAY_UNTRUSTED']
+    },
+    rollback_baseline: {
+      head: 'cb42bbc1ed372576079ce8162e6c66fe11872fa4',
+      runtime_path: '/home/jenny/.hermes/hermes-runtime-evidencehash-cb42bbc',
+      would_execute: false
     },
     runtime_worktree_guard: { decision_state: 'pass' },
     report_lifecycle: {
@@ -1873,6 +1884,8 @@ describe('MissionControlView', () => {
     expect(screen.getByText('items 1 / stopping 0 / terminal 1 / mismatch 0')).toBeTruthy()
     expect(screen.getByText('top report review')).toBeTruthy()
     expect(screen.getByText('Laptop Codex reported scoped PR evidence.')).toBeTruthy()
+    expect(screen.getByText('baseline execute lock')).toBeTruthy()
+    expect(screen.getByText('accepted no / rollback no / handoff no')).toBeTruthy()
     expect(screen.getByText('report review blockers')).toBeTruthy()
     expect(screen.getByText('report_id report-worker has multiple append-only records, report_id report-worker attempts to overwrite append-only report fields: status, run_id run-parent-1 has no linked report, report_id report-worker still needs review')).toBeTruthy()
     expect(screen.getByText('report contract blockers')).toBeTruthy()
