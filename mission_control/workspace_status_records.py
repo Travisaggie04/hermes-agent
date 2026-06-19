@@ -2458,6 +2458,16 @@ def _orchestration_readiness_payload(status: dict[str, Any]) -> dict[str, Any]:
         _mapping(status.get("worker_node_orchestration")),
         _mapping(status.get("worker_node_presence")),
     )
+    hard_boundary = _mapping(status.get("hard_boundary_contract"))
+    hard_boundary_reasons = _unique_reasons(
+        [
+            *_text_list(hard_boundary.get("blocked_reasons")),
+            *_text_list(hard_boundary.get("live_flag_violations")),
+        ]
+    )
+    read_only = _readiness_with_extra_blockers(read_only, hard_boundary_reasons)
+    scoped_pr = _readiness_with_extra_blockers(scoped_pr, hard_boundary_reasons)
+    worker_node = _readiness_with_extra_blockers(worker_node, hard_boundary_reasons)
     states = {
         "supervised_read_only_autonomy": read_only["state"],
         "scoped_pr_creation": scoped_pr["state"],
@@ -2502,6 +2512,19 @@ def _orchestration_readiness_payload(status: dict[str, Any]) -> dict[str, Any]:
         "next_safe_action_id": _safe_text(next_safe_actions.get("primary_action_id")),
         "next_safe_action_label": next_safe_action_label,
         "execution_ready": False,
+    }
+
+
+def _readiness_with_extra_blockers(payload: dict[str, Any], blockers: list[str]) -> dict[str, Any]:
+    if not blockers:
+        return payload
+    blocked_reasons = _unique_reasons([*_text_list(payload.get("blocked_reasons")), *blockers])
+    return {
+        **payload,
+        "state": "blocked",
+        "preview_ready": False,
+        "execution_ready": False,
+        "blocked_reasons": blocked_reasons,
     }
 
 

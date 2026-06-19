@@ -117,6 +117,83 @@ def test_hard_boundary_contract_blocks_truthy_live_flags():
     assert "Hard boundary violation" in hard_boundary["plain_language_summary"]
 
 
+def test_orchestration_readiness_honors_hard_boundary_violations():
+    status = {
+        "read_only_autonomy_eligibility": {
+            "eligible": True,
+            "would_execute": False,
+            "execution_enabled": False,
+            "dispatch_enabled": False,
+            "session_send_enabled": False,
+            "worker_dispatch_enabled": False,
+        },
+        "scoped_pr_lane_eligibility": {
+            "eligible": True,
+            "would_execute": False,
+            "would_commit": False,
+            "would_create_pr": False,
+            "execution_enabled": False,
+            "dispatch_enabled": False,
+            "session_send_enabled": False,
+            "worker_dispatch_enabled": False,
+            "merge_enabled": False,
+            "deploy_enabled": False,
+            "runtime_switch_enabled": False,
+        },
+        "worker_node_presence": {
+            "online": True,
+            "presence_state": "online",
+            "would_execute": False,
+            "execution_enabled": False,
+            "dispatch_enabled": False,
+            "session_send_enabled": False,
+            "worker_dispatch_enabled": False,
+        },
+        "worker_node_orchestration": {
+            "active_count": 1,
+            "latest_by_id": {
+                "worker-run-safe": {
+                    "worker_run_id": "worker-run-safe",
+                    "parent_run_id": "run-parent",
+                    "worker_identity": "codex",
+                    "worker_host_label": "laptop-codex",
+                    "objective": "Prepare scoped evidence.",
+                    "report_review_status": "accepted",
+                    "would_execute": False,
+                }
+            },
+            "active_runs": [],
+            "blocked_reasons": [],
+        },
+        "hard_boundary_contract": {
+            "blocked": True,
+            "blocked_reasons": ["execution packet would_dispatch must remain disabled"],
+            "live_flag_violations": ["execution packet would_dispatch must remain disabled"],
+        },
+        "next_safe_actions": {"primary_action_label": "Review hard-boundary contract"},
+    }
+
+    readiness = _orchestration_readiness_payload(status)
+
+    assert readiness["states"] == {
+        "supervised_read_only_autonomy": "blocked",
+        "scoped_pr_creation": "blocked",
+        "laptop_codex_worker_node": "blocked",
+    }
+    assert readiness["supervised_read_only_autonomy"]["preview_ready"] is False
+    assert readiness["scoped_pr_creation"]["preview_ready"] is False
+    assert readiness["laptop_codex_worker_node"]["preview_ready"] is False
+    assert (
+        "execution packet would_dispatch must remain disabled"
+        in readiness["blocked_reasons"]
+    )
+    assert (
+        "execution packet would_dispatch must remain disabled"
+        in readiness["laptop_codex_worker_node"]["blocked_reasons"]
+    )
+    assert "Review hard-boundary contract" in readiness["plain_language_summary"]
+
+
 def test_record_sourced_workspace_status_projects_real_active_runs_and_approvals(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"
     store = JsonlRecordStore(records_path)
