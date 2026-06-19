@@ -68,6 +68,18 @@ function friendlyBridgeError(message: string): string {
   return 'Jenny had trouble finishing that message. Retry once, or open details.'
 }
 
+function nativeJennyLiveFlagEnabled(value: unknown): boolean {
+  if (value === true || value === 1) {
+    return true
+  }
+
+  if (typeof value === 'string') {
+    return ['1', 'enabled', 'on', 'true', 'yes'].includes(value.trim().toLowerCase())
+  }
+
+  return false
+}
+
 function nativeJennySafetyBlockedReason(status: MissionControlGitHubBridgeStatusResponse | null | undefined): string {
   if (!status) {
     return ''
@@ -90,7 +102,7 @@ function nativeJennySafetyBlockedReason(status: MissionControlGitHubBridgeStatus
     'model_routing_enabled'
   ]
 
-  return liveFlags.some(flag => status[flag] === true) ? 'live automation controls are not confirmed off' : ''
+  return liveFlags.some(flag => nativeJennyLiveFlagEnabled(status[flag])) ? 'live automation controls are not confirmed off' : ''
 }
 
 export function nativeJennyStatus({

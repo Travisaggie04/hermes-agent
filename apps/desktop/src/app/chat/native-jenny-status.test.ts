@@ -87,6 +87,27 @@ describe('nativeJennyStatus', () => {
     expectCleanVisibleStatus(status)
   })
 
+  it('treats malformed truthy bridge automation flags as unsafe', () => {
+    const status = nativeJennyStatus({
+      bridgeStatus: {
+        manual_start_only: true,
+        pending_count: 0,
+        visible_pending_count: 0,
+        worker_dispatch_enabled: 1 as unknown as boolean
+      },
+      gatewayOpen: true,
+      projectId: 'project-hermes'
+    })
+
+    expect(status).toMatchObject({
+      detail: 'Jenny project safety check needs attention because live automation controls are not confirmed off. Normal chat can continue, but project automation must stay off until reviewed.',
+      label: 'Jenny safety check',
+      summary: 'Review safety check',
+      tone: 'warn'
+    })
+    expectCleanVisibleStatus(status)
+  })
+
   it('summarizes bridge record errors as Jenny attention without raw backend wording', () => {
     const status = nativeJennyStatus({
       gatewayOpen: true,
