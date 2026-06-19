@@ -414,13 +414,16 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
         "data-testid=\"compact-chat-scroll\"",
         "data-testid={chat.speaker === \"Jenny\" ? \"compact-jenny-reply-body\" : undefined}",
         "max-h-28 min-h-11",
+        "order-1 z-10",
+        "order-3 mt-2",
         "[overflow-wrap:anywhere]",
         "[word-break:break-word]",
         "min-w-0 max-w-full",
         "w-full max-w-full rounded-lg border px-3 py-2 text-sm",
         "sm:w-fit sm:max-w-[88%]",
         "max-w-full whitespace-pre-wrap break-words",
-        "overflow-visible sm:max-h-[min(52dvh,32rem)] sm:touch-pan-y sm:overflow-y-auto sm:overscroll-contain",
+        "max-h-[min(42dvh,24rem)] touch-pan-y overflow-y-auto overscroll-contain",
+        "sm:max-h-[min(52dvh,32rem)]",
         "chat.speaker === \"Jenny\"",
         ": \"overflow-visible\"",
         "max-w-full overflow-hidden",
@@ -478,6 +481,8 @@ def test_compact_mobile_transcript_uses_page_scroll_not_trapped_panel() -> None:
     assert "sm:overflow-hidden" in main_src
     assert "overflow-visible" in room_src
     assert "sm:overflow-hidden" in room_src
+    assert "order-3" in transcript_src
+    assert "sm:order-none" in transcript_src
     assert "flex-none" in transcript_src
     assert "overflow-visible overflow-x-hidden" in transcript_src
     assert "sm:overflow-y-auto" in transcript_src
@@ -485,8 +490,20 @@ def test_compact_mobile_transcript_uses_page_scroll_not_trapped_panel() -> None:
     assert "sm:content-end" in transcript_src
     assert "pb-4" in transcript_src
     assert "pb-[calc(env(safe-area-inset-bottom)+10rem)]" not in transcript_src
+    assert "order-1" in composer_src
+    assert "sm:order-none" in composer_src
     assert "mb-[max(env(safe-area-inset-bottom),1rem)]" in composer_src
     assert "sticky bottom-0" not in composer_src
+
+
+def test_compact_mobile_does_not_autoscroll_into_old_reply_on_load() -> None:
+    src = page_source()
+    effect_start = src.index("if (typeof window !== \"undefined\" && !window.matchMedia(\"(min-width: 640px)\").matches)")
+    effect_end = src.index("const operatorGuidance", effect_start)
+    effect_src = src[effect_start:effect_end]
+
+    assert "return;" in effect_src
+    assert "chatEndRef.current?.scrollIntoView?.({ block: \"end\" })" in effect_src
 
 
 def test_compact_project_chat_keeps_primary_flow_chat_first() -> None:
@@ -498,8 +515,10 @@ def test_compact_project_chat_keeps_primary_flow_chat_first() -> None:
     assert 'className="sr-only"' in transcript_src
     assert 'Conversation' in transcript_src
     assert "rounded-md border border-[#f3ebda]/10 bg-[#120d17] p-2" not in transcript_src
-    composer_section_start = room.rindex('className="z-10 mt-2 mb-[max(env(safe-area-inset-bottom),1rem)] min-w-0 max-w-full shrink-0', 0, composer_start)
+    composer_section_start = room.rindex('className="order-1 z-10 mt-2 mb-[max(env(safe-area-inset-bottom),1rem)] min-w-0 max-w-full shrink-0', 0, composer_start)
     composer_src = room[composer_section_start:composer_start + 500]
+    assert "order-1" in composer_src
+    assert "sm:order-none" in composer_src
     assert "shrink-0" in composer_src
     assert "rounded-[1.5rem]" in composer_src
     assert "sticky bottom-0" not in composer_src
