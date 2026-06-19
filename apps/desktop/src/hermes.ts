@@ -1279,6 +1279,7 @@ export interface MissionControlJennyBridgePollerStatusResponse {
   status_records?: Array<MissionControlRecordEnvelope<MissionControlJennyBridgePollerStatusRecord>>
   stored?: boolean
   timer_enabled?: boolean
+  worker_dispatch_enabled?: boolean
   worker_enabled?: boolean
 }
 

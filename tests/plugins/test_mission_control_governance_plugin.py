@@ -585,6 +585,7 @@ def test_workspace_jenny_bridge_poller_status_is_read_only(plugin_api, client):
                 "manual_start_only": True,
                 "dispatch_enabled": False,
                 "session_send_enabled": False,
+                "worker_dispatch_enabled": False,
                 "worker_enabled": False,
                 "timer_enabled": False,
             },
@@ -602,6 +603,7 @@ def test_workspace_jenny_bridge_poller_status_is_read_only(plugin_api, client):
     assert payload["dispatch_enabled"] is False
     assert payload["send_to_jenny_enabled"] is False
     assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
     assert payload["worker_enabled"] is False
     assert payload["timer_enabled"] is False
     assert payload["pending_count"] == 1
@@ -679,6 +681,7 @@ def test_workspace_github_bridge_status_is_read_only_and_manual_only(plugin_api,
     assert payload["manual_start_only"] is True
     assert payload["dispatch_enabled"] is False
     assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
     assert payload["worker_enabled"] is False
     assert payload["timer_enabled"] is False
     assert payload["daemon_enabled"] is False
@@ -904,6 +907,7 @@ def test_workspace_github_bridge_outbox_create_posts_one_mailbox_message(plugin_
     assert payload["dispatch_enabled"] is False
     assert payload["session_send_enabled"] is False
     assert payload["execution_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
     assert payload["worker_enabled"] is False
     assert payload["timer_enabled"] is False
     assert payload["daemon_enabled"] is False
@@ -955,6 +959,7 @@ def test_workspace_github_bridge_answer_once_runs_single_manual_answer(plugin_ap
             "dispatch_enabled": False,
             "session_send_enabled": False,
             "execution_enabled": False,
+            "worker_dispatch_enabled": False,
             "worker_enabled": False,
             "timer_enabled": False,
             "answered": True,
@@ -998,6 +1003,7 @@ def test_workspace_github_bridge_answer_once_runs_single_manual_answer(plugin_ap
     assert payload["dispatch_enabled"] is False
     assert payload["session_send_enabled"] is False
     assert payload["execution_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
     assert payload["worker_enabled"] is False
     assert payload["timer_enabled"] is False
     assert payload["daemon_enabled"] is False

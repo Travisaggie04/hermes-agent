@@ -28,6 +28,7 @@ INERT_STATUS_METADATA = {
     "dispatch_enabled": False,
     "session_send_enabled": False,
     "execution_enabled": False,
+    "worker_dispatch_enabled": False,
     "worker_enabled": False,
     "timer_enabled": False,
 }
@@ -142,6 +143,7 @@ def relay_status(path: Path | None = None, *, limit: int = DEFAULT_LIMIT) -> dic
         "dispatch_enabled": False,
         "session_send_enabled": False,
         "execution_enabled": False,
+        "worker_dispatch_enabled": False,
         "worker_enabled": False,
         "timer_enabled": False,
         "pending_count": len(pending),
