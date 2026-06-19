@@ -498,7 +498,9 @@ beforeEach(() => {
     runtime_provenance: {
       autonomy_blocked: true,
       autonomy_blocked_reasons: ['gateway git metadata is broken'],
+      default_branch_head: 'c06898098b865b5a8f48535c08ad9de5459211e4',
       primary_status: 'GATEWAY_UNTRUSTED',
+      source_head: '0f87620038d220eb016612ba0b466c2407663743',
       status: 'BLOCKED_UNSAFE_FOR_AUTONOMY',
       statuses: ['BROKEN_GIT_METADATA', 'GATEWAY_UNTRUSTED']
     },
@@ -1875,6 +1877,8 @@ describe('MissionControlView', () => {
     expect(screen.getByText(/Desktop can be current while phone\/web waits for a safe dashboard-only update/)).toBeTruthy()
     expect(screen.getByText('accepted-live head')).toBeTruthy()
     expect(screen.getByText('0f87620038d2')).toBeTruthy()
+    expect(screen.getByText('default branch head')).toBeTruthy()
+    expect(screen.getByText('c06898098b86')).toBeTruthy()
     expect(screen.getByText('deployed head')).toBeTruthy()
     expect(screen.getByText('9f8863c0bf28')).toBeTruthy()
     expect(screen.getByText('desktop app install')).toBeTruthy()

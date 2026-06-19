@@ -40,6 +40,8 @@ state, and dispatch state are safe enough for autonomy?
 Important statuses:
 
 - `CLEAN_AND_ALIGNED`: the only clean state for autonomy previews.
+- `SOURCE_DEFAULT_DRIFT`: source HEAD and the default branch HEAD do not match,
+  so Jenny cannot prove it is reviewing the current default source truth.
 - `SOURCE_CURRENT_BUT_BASELINE_STALE`: source moved after the accepted runtime.
   If Mission Control sees merged PRs after the accepted baseline, it names
   those PRs as explicit provenance blockers until a new accepted baseline is
@@ -59,6 +61,8 @@ stays blocked or preview-only.
 
 - A stale `AcceptedBaselineRecord` means the accepted runtime does not prove the
   current source is safe.
+- Source/default HEAD drift means Mission Control cannot prove the source truth
+  came from the current default branch.
 - Broken gateway git metadata means Mission Control cannot prove what code the
   gateway is serving.
 - Dirty runtime files mean a live runtime has unreviewed changes that did not

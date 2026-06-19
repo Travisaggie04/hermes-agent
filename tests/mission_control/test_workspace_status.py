@@ -502,6 +502,37 @@ def test_workspace_status_surfaces_merged_prs_after_accepted_baseline_in_provena
     assert "latest merged PR #396 is after the accepted baseline" in warnings
 
 
+def test_workspace_status_surfaces_source_default_head_drift_in_provenance():
+    accepted_head = "8c560c739606564aeeb4db464fe1989cb67a40b6"
+    default_head = "d11681f81c7cd16a99c53649f157040b2d10a89f"
+    status = build_workspace_status(
+        _baseline_payload(
+            accepted_baseline_record=_accepted_baseline_record_payload(rollback_head=accepted_head),
+            source_control={
+                "accepted_live_head": accepted_head,
+                "default_branch_head": default_head,
+            },
+            dashboard_runtime={
+                "path": "/home/jenny/.hermes/hermes-runtime-handoff-8c560c7",
+                "head": accepted_head,
+            },
+            gateway_runtime={
+                "path": "/home/jenny/.hermes/hermes-runtime-handoff-8c560c7",
+                "head": accepted_head,
+            },
+        )
+    )
+
+    provenance = status["runtime_provenance"]
+    warnings = set(status["stale_context"]["warnings"])
+    assert status["source_control"]["default_branch_head"] == default_head
+    assert provenance["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
+    assert provenance["primary_status"] == "SOURCE_DEFAULT_DRIFT"
+    assert provenance["default_branch_head"] == default_head
+    assert "SOURCE_DEFAULT_DRIFT" in provenance["statuses"]
+    assert "source HEAD does not match default branch HEAD" in provenance["autonomy_blocked_reasons"]
+    assert "SOURCE_DEFAULT_DRIFT" in warnings
+    assert "source HEAD does not match default branch HEAD" in warnings
 
 
 def test_workspace_status_record_source_defaults_lane_to_idle_and_matching_baseline():

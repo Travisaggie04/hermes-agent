@@ -20,6 +20,7 @@ _STATUS_PRIORITY = (
     "GATEWAY_UNTRUSTED",
     "MISSING_RUNTIME_PATH",
     "DIRTY_RUNTIME",
+    "SOURCE_DEFAULT_DRIFT",
     "DASHBOARD_GATEWAY_DRIFT",
     "SOURCE_CURRENT_BUT_BASELINE_STALE",
     "ROLLBACK_STALE",
@@ -337,6 +338,7 @@ def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) ->
     dashboard_head = _safe_text(dashboard.get("head"))
     gateway_head = _safe_text(gateway.get("head"))
     rollback_head = _safe_text(rollback.get("head"))
+    default_branch_head = _safe_text(source.get("default_branch_head") or state.get("default_branch_head"))
     latest_merged_pr = _safe_text(source.get("latest_merged_pr") or state.get("latest_merged_pr"))
     merged_prs_after_baseline = [
         _safe_text(item, max_chars=80)
@@ -374,6 +376,9 @@ def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) ->
 
     if not source_head:
         _add(blocked_reasons, "source HEAD is missing")
+    if source_head and default_branch_head and source_head != default_branch_head:
+        _add(statuses, "SOURCE_DEFAULT_DRIFT")
+        _add(blocked_reasons, "source HEAD does not match default branch HEAD")
     if not baseline_head:
         _add(blocked_reasons, "accepted baseline HEAD is missing")
     if source_head and baseline_head and source_head != baseline_head:
@@ -423,6 +428,7 @@ def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) ->
         "dashboard_head": dashboard_head,
         "gateway_head": gateway_head,
         "rollback_head": rollback_head,
+        "default_branch_head": default_branch_head,
         "latest_merged_pr": latest_merged_pr,
         "merged_prs_after_accepted_baseline": merged_prs_after_baseline,
         "runtimes": runtimes,

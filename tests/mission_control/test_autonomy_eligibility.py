@@ -162,6 +162,18 @@ def test_stale_accepted_baseline_blocks_autonomy():
     assert "accepted baseline HEAD does not match source HEAD" in result["autonomy_blocked_reasons"]
 
 
+def test_source_default_branch_drift_blocks_autonomy():
+    result = evaluate_runtime_provenance(
+        _clean_runtime_state(source={"head": HEAD, "default_branch_head": OLD_HEAD})
+    )
+
+    assert result["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
+    assert result["primary_status"] == "SOURCE_DEFAULT_DRIFT"
+    assert "SOURCE_DEFAULT_DRIFT" in result["statuses"]
+    assert result["default_branch_head"] == OLD_HEAD
+    assert "source HEAD does not match default branch HEAD" in result["autonomy_blocked_reasons"]
+
+
 def test_merged_prs_after_accepted_baseline_are_explicit_provenance_blockers():
     result = evaluate_runtime_provenance(
         _clean_runtime_state(

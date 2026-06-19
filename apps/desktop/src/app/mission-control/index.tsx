@@ -1330,6 +1330,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     childInstructionWorkerDispatchEnabled: childInstruction?.worker_dispatch_enabled,
     deploymentGapState: status.deployment_gap?.state ?? 'unknown',
     deploymentNeeded: status.deployment_gap?.dashboard_deploy_needed ?? false,
+    defaultBranchHead: runtimeProvenance?.default_branch_head ?? 'unknown',
     deployedHead: status.deployment_gap?.deployed_head ?? status.accepted_baseline?.head ?? 'unknown',
     dispatch: status.safety?.dispatch_in_gateway,
     executionModeBlockedReasons: executionModeClassification?.blocked_reasons ?? [],
@@ -1411,6 +1412,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     provenanceBlocked: runtimeProvenance?.autonomy_blocked,
     provenanceReasons: runtimeProvenance?.autonomy_blocked_reasons ?? [],
     provenanceStatus: runtimeProvenance?.primary_status ?? runtimeProvenance?.status ?? 'unknown',
+    sourceHead: runtimeProvenance?.source_head ?? status.deployment_gap?.accepted_live_head ?? status.accepted_baseline?.head ?? 'unknown',
     runtime: status.accepted_baseline?.runtime_path ?? 'unknown',
     reportDuplicateCount: reportLifecycle?.duplicate_report_ids?.length ?? 0,
     reportLifecycleBlocked: reportLifecycle?.blocked,
@@ -4308,6 +4310,11 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-2" label="top report review" tone={reportReviewQueueTone} value={status.reportReviewQueuePrimaryLabel} />
       <StatusItem className="md:col-span-2" label="accepted runtime" value={status.runtime} />
       <StatusItem label="accepted-live head" value={status.head.slice(0, 12)} />
+      <StatusItem
+        label="default branch head"
+        tone={status.defaultBranchHead !== 'unknown' && status.sourceHead !== 'unknown' && status.defaultBranchHead !== status.sourceHead ? 'warn' : undefined}
+        value={status.defaultBranchHead.slice(0, 12)}
+      />
       <StatusItem label="deployed head" value={status.deployedHead.slice(0, 12)} />
       <StatusItem label="latest merged PR" value={status.latestMergedPr || 'unknown'} />
       <StatusItem label="child-agent status" tone={childLockTone} value={`${status.childActiveCount} active / latest ${labelText(status.childLatestStatus)}`} />
