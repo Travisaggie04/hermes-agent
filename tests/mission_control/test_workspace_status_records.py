@@ -726,6 +726,13 @@ def test_record_sourced_workspace_status_projects_report_review_queue(tmp_path):
     assert "worker activation" in operator_packet["plain_language_summary"]
     assert "report_id report-worker still needs Jenny review" in operator_packet["blocked_reasons"]
 
+    worker_instruction = status["worker_node_instruction_preview"]
+    assert worker_instruction["blocked"] is True
+    assert worker_instruction["worker_dispatch_enabled"] is False
+    assert worker_instruction["report_id"] == "report-worker"
+    assert worker_instruction["report_review_status"] == "needs_review"
+    assert "report_id report-worker still needs Jenny review" in worker_instruction["blocked_reasons"]
+
 
 def test_record_sourced_workspace_status_projects_result_ingestion_contract(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"

@@ -2360,8 +2360,22 @@ def _worker_node_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
     objective = _safe_text(worker_record.get("objective"), max_chars=800)
     if worker_record and not objective:
         blocked_reasons.append("worker-node objective is required")
+    worker_run_id = _safe_text(worker_record.get("worker_run_id"))
+    blocked_reasons.extend(_text_list(worker_projection.get("blocked_reasons")))
     blocked_reasons.extend(_text_list(worker_record.get("blocked_reasons")))
     blocked_reasons.extend(_text_list(worker_presence.get("blocked_reasons")))
+    failure_reason = _safe_text(worker_record.get("failure_reason"))
+    if failure_reason:
+        blocked_reasons.append(failure_reason)
+    report_id = _safe_text(worker_record.get("report_id"))
+    report_review_status = _safe_text(
+        worker_record.get("linked_report_review_status")
+        or worker_record.get("report_review_status")
+    )
+    if report_id and _safe_text(worker_record.get("report_link_status")) == "linked_report_missing":
+        blocked_reasons.append(f"worker_run_id {worker_run_id} links missing report_id {report_id}")
+    if report_id and report_review_status == "needs_review":
+        blocked_reasons.append(f"report_id {report_id} still needs Jenny review")
     if worker_record.get("worker_dispatch_enabled") is True:
         blocked_reasons.append("worker dispatch must stay disabled")
 
@@ -2407,7 +2421,7 @@ def _worker_node_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
         "available": bool(worker_record),
         "blocked": bool(blocked_reasons),
         "blocked_reasons": _unique_reasons(blocked_reasons),
-        "worker_run_id": _safe_text(worker_record.get("worker_run_id")),
+        "worker_run_id": worker_run_id,
         "parent_run_id": _safe_text(worker_record.get("parent_run_id")),
         "worker_identity": worker_identity,
         "worker_host_label": worker_host_label,
@@ -2423,11 +2437,8 @@ def _worker_node_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
         "allowed_actions": allowed_actions,
         "forbidden_actions": effective_forbidden_actions,
         "report_contract": report_contract,
-        "report_id": _safe_text(worker_record.get("report_id")),
-        "report_review_status": _safe_text(
-            worker_record.get("linked_report_review_status")
-            or worker_record.get("report_review_status")
-        ),
+        "report_id": report_id,
+        "report_review_status": report_review_status,
         "instruction_lines": instruction_lines,
         "manual_handoff_prompt": "\n".join(instruction_lines),
     }
