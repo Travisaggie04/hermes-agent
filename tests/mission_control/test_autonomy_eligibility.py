@@ -320,6 +320,30 @@ def test_worker_dispatch_bridge_path_is_not_read_only_safe():
     assert "bridge path is not read-only safe" in result["blocked_reasons"]
 
 
+def test_live_bridge_flags_override_read_only_safe_claim():
+    bridge_state = {
+        "read_only_safe": True,
+        "would_execute": True,
+        "model_routing_enabled": True,
+        "discord_automation_enabled": True,
+    }
+    bridge = classify_bridge_permissions(bridge_state)
+    result = evaluate_read_only_autonomy_eligibility(
+        _eligible_preview_payload(bridge=bridge_state)
+    )
+
+    assert bridge["permission_classification"] == "write_capable_not_safe_for_autonomy"
+    assert bridge["read_only_safe"] is False
+    assert bridge["would_execute"] is False
+    assert bridge["model_routing_enabled"] is False
+    assert bridge["discord_automation_enabled"] is False
+    assert any("would_execute must remain false in previews" in reason for reason in bridge["reasons"])
+    assert any("model_routing_enabled must remain false" in reason for reason in bridge["reasons"])
+    assert any("discord_automation_enabled must remain false" in reason for reason in bridge["reasons"])
+    assert result["eligible"] is False
+    assert "bridge path is not read-only safe" in result["blocked_reasons"]
+
+
 def test_send_to_jenny_bridge_path_is_not_read_only_safe():
     bridge = classify_bridge_permissions({"send_to_jenny_enabled": True})
     result = evaluate_read_only_autonomy_eligibility(

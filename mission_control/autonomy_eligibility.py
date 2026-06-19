@@ -162,6 +162,15 @@ _PREVIEW_DISABLED_FLAG_REASONS = {
     "worker_dispatch_enabled": "worker_dispatch_enabled must remain false",
 }
 
+_BRIDGE_DISABLED_FLAG_REASONS = {
+    **_PREVIEW_DISABLED_FLAG_REASONS,
+    "worker_enabled": "worker_enabled must remain false",
+    "timer_enabled": "timer_enabled must remain false",
+    "daemon_enabled": "daemon_enabled must remain false",
+    "discord_automation_enabled": "discord_automation_enabled must remain false",
+    "model_routing_enabled": "model_routing_enabled must remain false",
+}
+
 _PATH_WRITE_CAPABILITY_KEYS = (
     "write_capable",
     "write_capable_tools",
@@ -468,9 +477,18 @@ def classify_bridge_permissions(bridge_state: dict[str, Any] | None = None) -> d
 
     state = dict(bridge_state or {})
     reasons: list[str] = []
+    disabled_flag_reasons = [
+        reason
+        for key, reason in _BRIDGE_DISABLED_FLAG_REASONS.items()
+        if _safe_bool(state.get(key))
+    ]
 
-    if any(_safe_bool(state.get(key)) for key in ("dispatch_enabled", "session_send_enabled", "worker_enabled", "worker_dispatch_enabled", "timer_enabled", "daemon_enabled")):
-        return _bridge_result("write_capable_not_safe_for_autonomy", False, ["bridge can dispatch, session-send, or run background work"])
+    if disabled_flag_reasons:
+        return _bridge_result(
+            "write_capable_not_safe_for_autonomy",
+            False,
+            ["bridge live execution flags must be disabled: " + "; ".join(disabled_flag_reasons[:8])],
+        )
 
     if any(
         _safe_bool(state.get(key))
@@ -1328,11 +1346,19 @@ def _bridge_result(classification: str, read_only_safe: bool, reasons: list[str]
         "legacy_permission_classification": "write_capable" if classification == "write_capable_not_safe_for_autonomy" else classification,
         "read_only_safe": read_only_safe,
         "reasons": reasons,
+        "would_execute": False,
+        "would_dispatch": False,
+        "would_session_send": False,
         "execution_enabled": False,
         "dispatch_enabled": False,
+        "timer_enabled": False,
+        "daemon_enabled": False,
+        "discord_automation_enabled": False,
+        "model_routing_enabled": False,
         "session_send_enabled": False,
         "send_to_jenny_enabled": False,
         "worker_dispatch_enabled": False,
+        "worker_enabled": False,
     }
 
 
