@@ -213,6 +213,11 @@ parent runs, missing report IDs, stale report links, and reports tied to
 unknown run IDs remain blockers until Jenny can review or repair the append-only
 records.
 
+The child-agent instruction preview mirrors the laptop Codex worker preview for
+planned delegation. It gives Jenny a manual prompt with child-agent identity,
+objective, allowed actions, forbidden actions, and report requirements. It does
+not start delegation, send a session, mutate records, or enable dispatch.
+
 ## Mission Control Reading Guide
 
 - Runtime provenance: source and runtime trust.
@@ -239,6 +244,8 @@ records.
   allowed actions, forbidden actions, and report requirements.
 - Orchestration run graph: parent/child/worker/report lineage and any missing
   parent or report-link blockers.
+- Child instruction preview: a manual child-agent delegation prompt and report
+  contract; it does not activate delegation.
 
 If a row says blocked, Travis should read the blocker first instead of trying
 to force the action.

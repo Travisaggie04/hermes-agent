@@ -240,6 +240,7 @@ def build_workspace_status_from_records(
     )
     status["next_safe_actions"] = _next_safe_actions_payload(status)
     status["orchestration_readiness"] = _orchestration_readiness_payload(status)
+    status["child_agent_instruction_preview"] = _child_agent_instruction_preview(status)
     status["worker_node_instruction_preview"] = _worker_node_instruction_preview(status)
     return status
 
@@ -1167,6 +1168,84 @@ def _worker_node_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
             worker_record.get("linked_report_review_status")
             or worker_record.get("report_review_status")
         ),
+        "instruction_lines": instruction_lines,
+        "manual_handoff_prompt": "\n".join(instruction_lines),
+    }
+
+
+def _child_agent_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
+    child_projection = _mapping(status.get("child_agent_orchestration"))
+    child_record = _latest_projection_payload(child_projection)
+    blocked_reasons: list[str] = []
+    if not child_record:
+        blocked_reasons.append("no child-agent run is recorded")
+    objective = _safe_text(child_record.get("objective"), max_chars=800)
+    if child_record and not objective:
+        blocked_reasons.append("child-agent objective is required")
+    blocked_reasons.extend(_text_list(child_record.get("blocked_reasons")))
+    failure_reason = _safe_text(child_record.get("failure_reason"))
+    if failure_reason:
+        blocked_reasons.append(failure_reason)
+    report_review_status = _safe_text(
+        child_record.get("linked_report_review_status")
+        or child_record.get("report_review_status")
+    )
+    report_id = _safe_text(child_record.get("report_id"))
+    if report_id and report_review_status == "needs_review":
+        blocked_reasons.append(f"report_id {report_id} still needs review")
+    for flag in ("execution_enabled", "dispatch_enabled", "session_send_enabled", "worker_dispatch_enabled"):
+        if child_projection.get(flag) is True or child_record.get(flag) is True:
+            blocked_reasons.append(f"{flag} must remain disabled")
+
+    allowed_actions = _text_list(child_record.get("allowed_actions"))
+    recorded_forbidden_actions = _text_list(child_record.get("forbidden_actions"))
+    effective_forbidden_actions = _unique_reasons(
+        [
+            *recorded_forbidden_actions,
+            "no live delegation activation",
+            "no live dispatch activation",
+            "no live session sending",
+            "no worker dispatch activation",
+            "no live record/state/config mutation",
+            "no secrets inspection or output",
+        ]
+    )
+    agent_identity = _safe_text(child_record.get("agent_identity")) or "child-agent"
+    report_contract = (
+        "Report evidence, result, blockers, safety confirmation, and the next suggested review step."
+    )
+    instruction_lines = [
+        f"Child agent: {agent_identity}.",
+        f"Objective: {objective or 'No objective recorded.'}",
+        f"Allowed actions: {_joined_or_none(allowed_actions)}.",
+        f"Forbidden actions: {_joined_or_none(effective_forbidden_actions)}.",
+        f"Report contract: {report_contract}",
+        "Manual delegation preview only; execution and dispatch remain disabled.",
+    ]
+    return {
+        "source": "mission_control_child_agent_instruction_preview_v1",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "stored": False,
+        "dry_run_only": True,
+        "manual_handoff_only": True,
+        "available": bool(child_record),
+        "blocked": bool(blocked_reasons),
+        "blocked_reasons": _unique_reasons(blocked_reasons),
+        "child_run_id": _safe_text(child_record.get("child_run_id")),
+        "parent_run_id": _safe_text(child_record.get("parent_run_id")),
+        "agent_identity": agent_identity,
+        "objective": objective,
+        "allowed_actions": allowed_actions,
+        "forbidden_actions": effective_forbidden_actions,
+        "report_contract": report_contract,
+        "report_id": report_id,
+        "report_review_status": report_review_status,
         "instruction_lines": instruction_lines,
         "manual_handoff_prompt": "\n".join(instruction_lines),
     }

@@ -643,6 +643,34 @@ export interface MissionControlOrchestrationRunGraph {
   would_execute?: boolean
 }
 
+export interface MissionControlChildAgentInstructionPreview {
+  agent_identity?: string
+  allowed_actions?: string[]
+  available?: boolean
+  blocked?: boolean
+  blocked_reasons?: string[]
+  child_run_id?: string
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  forbidden_actions?: string[]
+  instruction_lines?: string[]
+  manual_handoff_only?: boolean
+  manual_handoff_prompt?: string
+  objective?: string
+  parent_run_id?: string
+  report_contract?: string
+  report_id?: string
+  report_review_status?: string
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
+}
+
 export interface MissionControlProjectSession {
   cwd?: null | string
   durable_session_id?: string
@@ -1021,6 +1049,7 @@ export interface MissionControlJennyBridgeResponseCreateResponse {
 export interface MissionControlWorkspaceStatus {
   accepted_baseline?: { head?: string; runtime_path?: string }
   approval_lifecycle?: MissionControlApprovalLifecycle
+  child_agent_instruction_preview?: MissionControlChildAgentInstructionPreview
   child_agent_orchestration?: MissionControlOrchestrationProjection<MissionControlChildRunRecord>
   control_plane_lifecycle?: {
     active_mutation_lane_count?: number

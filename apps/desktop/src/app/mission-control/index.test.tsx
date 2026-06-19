@@ -123,6 +123,40 @@ beforeEach(() => {
       trusted_for_execution: false,
       worker_dispatch_enabled: false
     },
+    child_agent_instruction_preview: {
+      agent_identity: 'jenny-child',
+      allowed_actions: ['read approved context', 'report evidence'],
+      available: true,
+      blocked: true,
+      blocked_reasons: ['report_id report-child still needs review'],
+      child_run_id: 'child-run-1',
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      forbidden_actions: ['dispatch', 'mutate records', 'no live delegation activation', 'no live session sending'],
+      instruction_lines: [
+        'Child agent: jenny-child.',
+        'Objective: Inspect bounded Mission Control context.',
+        'Allowed actions: read approved context, report evidence.',
+        'Forbidden actions: dispatch, mutate records, no live delegation activation, no live session sending.',
+        'Report contract: Report evidence, result, blockers, safety confirmation, and the next suggested review step.',
+        'Manual delegation preview only; execution and dispatch remain disabled.'
+      ],
+      manual_handoff_only: true,
+      manual_handoff_prompt: 'Child agent: jenny-child.\nObjective: Inspect bounded Mission Control context.\nAllowed actions: read approved context, report evidence.\nForbidden actions: dispatch, mutate records, no live delegation activation, no live session sending.\nReport contract: Report evidence, result, blockers, safety confirmation, and the next suggested review step.\nManual delegation preview only; execution and dispatch remain disabled.',
+      objective: 'Inspect bounded Mission Control context.',
+      parent_run_id: 'run-parent-1',
+      report_contract: 'Report evidence, result, blockers, safety confirmation, and the next suggested review step.',
+      report_id: 'report-child',
+      report_review_status: 'needs_review',
+      session_send_enabled: false,
+      source: 'mission_control_child_agent_instruction_preview_v1',
+      stored: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      would_execute: false
+    },
     control_plane_lifecycle: {
       active_mutation_lane_count: 0,
       append_only_projection: true,
@@ -1295,6 +1329,10 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Inspect bounded Mission Control context.')).toBeTruthy()
     expect(screen.getByText('child-agent report')).toBeTruthy()
     expect(screen.getByText('linked report found / needs review / report-child')).toBeTruthy()
+    expect(screen.getByText('child instruction preview')).toBeTruthy()
+    expect(screen.getAllByText('available yes / manual handoff yes').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('child instruction prompt')).toBeTruthy()
+    expect(screen.getByText(/Child agent: jenny-child/)).toBeTruthy()
     expect(screen.getByText('laptop Codex worker-node')).toBeTruthy()
     expect(screen.getByText('laptop-codex / blocked')).toBeTruthy()
     expect(screen.getByText('worker-node objective')).toBeTruthy()
@@ -1302,7 +1340,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('worker-node report')).toBeTruthy()
     expect(screen.getByText('required / linked report found / accepted / report-worker')).toBeTruthy()
     expect(screen.getByText('worker instruction preview')).toBeTruthy()
-    expect(screen.getByText('available yes / manual handoff yes')).toBeTruthy()
+    expect(screen.getAllByText('available yes / manual handoff yes').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('worker instruction prompt')).toBeTruthy()
     expect(screen.getByText(/Worker: codex on laptop-codex/)).toBeTruthy()
     expect(screen.getByText('worker instruction blockers')).toBeTruthy()
@@ -1317,7 +1355,8 @@ describe('MissionControlView', () => {
     expect(screen.getByText('run blockers')).toBeTruthy()
     expect(screen.getByText('terminal run_id run-reportless has no linked report')).toBeTruthy()
     expect(screen.getByText('child-agent blockers')).toBeTruthy()
-    expect(screen.getByText('report_id report-child still needs review')).toBeTruthy()
+    expect(screen.getAllByText('report_id report-child still needs review').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('child instruction blockers')).toBeTruthy()
     expect(screen.getByText(/Desktop can be current while phone\/web waits for a safe dashboard-only update/)).toBeTruthy()
     expect(screen.getByText('accepted-live head')).toBeTruthy()
     expect(screen.getByText('0f87620038d2')).toBeTruthy()

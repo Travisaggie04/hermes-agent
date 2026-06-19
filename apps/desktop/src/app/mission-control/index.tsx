@@ -1255,6 +1255,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
   const nextSafePrimaryAction = nextSafeActions?.primary_action
   const orchestrationReadiness = status.orchestration_readiness
   const orchestrationRunGraph = status.orchestration_run_graph
+  const childInstruction = status.child_agent_instruction_preview
   const workerInstruction = status.worker_node_instruction_preview
   const childRecord = latestProjectionRecord(status.child_agent_orchestration) as Record<string, unknown> | null
   const workerRecord = latestProjectionRecord(status.worker_node_orchestration) as Record<string, unknown> | null
@@ -1312,6 +1313,12 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     childReportId: projectionRecordText(childRecord, 'report_id'),
     childReportLinkStatus: projectionRecordText(childRecord, 'report_link_status') || 'no report id recorded',
     childReportReviewStatus: projectionRecordText(childRecord, 'linked_report_review_status') || 'not reviewed',
+    childInstructionAvailable: childInstruction?.available,
+    childInstructionBlockedReasons: childInstruction?.blocked_reasons ?? [],
+    childInstructionExecutionEnabled: childInstruction?.execution_enabled,
+    childInstructionManualHandoffOnly: childInstruction?.manual_handoff_only,
+    childInstructionPrompt: childInstruction?.manual_handoff_prompt ?? 'No child-agent instruction preview recorded.',
+    childInstructionWorkerDispatchEnabled: childInstruction?.worker_dispatch_enabled,
     deploymentGapState: status.deployment_gap?.state ?? 'unknown',
     deploymentNeeded: status.deployment_gap?.dashboard_deploy_needed ?? false,
     deployedHead: status.deployment_gap?.deployed_head ?? status.accepted_baseline?.head ?? 'unknown',
@@ -4003,6 +4010,14 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
   const scopedPrLabel = status.scopedPrEligible === true ? `preview-ready / ${status.scopedPrScopeCount} scoped path${status.scopedPrScopeCount === 1 ? '' : 's'}` : status.scopedPrEligible === false ? 'blocked / no execution' : 'unknown / no execution'
   const workerLockTone = status.workerExecutionEnabled === false && status.workerDispatchEnabled === false ? 'good' : 'warn'
   const childLockTone = status.childExecutionEnabled === false && status.childDispatchEnabled === false ? 'good' : 'warn'
+  const childInstructionTone =
+    status.childInstructionExecutionEnabled === false &&
+    status.childInstructionWorkerDispatchEnabled === false &&
+    status.childInstructionManualHandoffOnly === true
+      ? status.childInstructionBlockedReasons.length
+        ? 'warn'
+        : 'good'
+      : 'warn'
   const toolPermissionTone = status.toolPermissionClassification === 'read_only_safe' || status.toolPermissionClassification === 'manual_only' ? 'good' : 'warn'
   const approvalLifecycleTone = status.approvalLifecycleBlocked === false && status.approvalLifecycleExecutionEnabled === false ? 'good' : 'warn'
   const runLifecycleTone = status.runLifecycleBlocked === false && status.runLifecycleExecutionEnabled === false && status.runOneActiveMutationLaneRulePassed !== false ? 'good' : 'warn'
@@ -4071,6 +4086,8 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="child-agent status" tone={childLockTone} value={`${status.childActiveCount} active / latest ${labelText(status.childLatestStatus)}`} />
       <StatusItem className="md:col-span-2" label="child-agent objective" value={status.childLatestObjective || status.childLatestAgent} />
       <StatusItem label="child-agent report" tone={status.childReportId && status.childReportReviewStatus !== 'needs_review' ? 'good' : 'warn'} value={`${labelText(status.childReportLinkStatus)} / ${labelText(status.childReportReviewStatus)}${status.childReportId ? ` / ${status.childReportId}` : ''}`} />
+      <StatusItem label="child instruction preview" tone={childInstructionTone} value={`available ${yesNo(status.childInstructionAvailable)} / manual handoff ${yesNo(status.childInstructionManualHandoffOnly)}`} />
+      <StatusItem className="md:col-span-2" label="child instruction prompt" tone={childInstructionTone} value={status.childInstructionPrompt} />
       <StatusItem label="laptop Codex worker-node" tone={workerLockTone} value={`${status.workerHostLabel} / ${labelText(status.workerLatestStatus)}`} />
       <StatusItem className="md:col-span-2" label="worker-node objective" value={status.workerLatestObjective || `${status.workerIdentity} has no assigned objective recorded`} />
       <StatusItem label="worker-node report" tone={status.workerReportId && status.workerReportReviewStatus !== 'needs_review' ? 'good' : 'warn'} value={`${status.workerReportContractStatus} / ${labelText(status.workerReportLinkStatus)} / ${labelText(status.workerReportReviewStatus)}${status.workerReportId ? ` / ${status.workerReportId}` : ''}`} />
@@ -4089,6 +4106,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-3" label="write-capable tool paths" tone={status.toolPermissionWritePaths.length ? 'warn' : 'good'} value={status.toolPermissionWritePaths.length ? status.toolPermissionWritePaths.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="scoped PR blockers" tone={status.scopedPrBlockedReasons.length ? 'warn' : 'good'} value={status.scopedPrBlockedReasons.length ? status.scopedPrBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="child-agent blockers" tone={status.childBlockedReasons.length ? 'warn' : 'good'} value={status.childBlockedReasons.length ? status.childBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="child instruction blockers" tone={status.childInstructionBlockedReasons.length ? 'warn' : 'good'} value={status.childInstructionBlockedReasons.length ? status.childInstructionBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="stale warnings" tone={status.staleWarnings.length ? 'warn' : 'good'} value={status.staleWarnings.length ? status.staleWarnings.join(', ') : 'none'} />
     </div>
   )

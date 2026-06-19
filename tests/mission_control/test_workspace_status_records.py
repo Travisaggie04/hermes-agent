@@ -150,6 +150,8 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
             agent_identity="jenny-child",
             status="running",
             objective="Inspect a bounded context packet.",
+            allowed_actions=("read approved context", "report evidence"),
+            forbidden_actions=("dispatch", "mutate records"),
             report_id="report-child",
         )
     )
@@ -233,6 +235,29 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
     assert {"child-run-1", "worker-run-1", "report-child", "report-worker"} <= node_ids
     assert "child_run_id child-run-1 references missing parent run_id run-parent" in graph["blocked_reasons"]
     assert "worker_run_id worker-run-1 references missing parent run_id run-parent" in graph["blocked_reasons"]
+
+    child_instruction = status["child_agent_instruction_preview"]
+    assert child_instruction["display_only"] is True
+    assert child_instruction["trusted_for_execution"] is False
+    assert child_instruction["would_execute"] is False
+    assert child_instruction["execution_enabled"] is False
+    assert child_instruction["dispatch_enabled"] is False
+    assert child_instruction["session_send_enabled"] is False
+    assert child_instruction["worker_dispatch_enabled"] is False
+    assert child_instruction["stored"] is False
+    assert child_instruction["dry_run_only"] is True
+    assert child_instruction["manual_handoff_only"] is True
+    assert child_instruction["available"] is True
+    assert child_instruction["blocked"] is True
+    assert child_instruction["child_run_id"] == "child-run-1"
+    assert child_instruction["agent_identity"] == "jenny-child"
+    assert child_instruction["objective"] == "Inspect a bounded context packet."
+    assert child_instruction["allowed_actions"] == ["read approved context", "report evidence"]
+    assert "dispatch" in child_instruction["forbidden_actions"]
+    assert "no live delegation activation" in child_instruction["forbidden_actions"]
+    assert "report_id report-child still needs review" in child_instruction["blocked_reasons"]
+    assert "Manual delegation preview only" in child_instruction["manual_handoff_prompt"]
+    assert "Report contract:" in child_instruction["manual_handoff_prompt"]
 
     instruction = status["worker_node_instruction_preview"]
     assert instruction["display_only"] is True
