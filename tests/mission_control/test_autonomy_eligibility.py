@@ -503,6 +503,52 @@ def test_read_only_eligibility_blocks_write_capable_tool_permissions():
     assert result["tool_permissions"]["permission_classification"] == "write_capable_not_safe_for_autonomy"
 
 
+def test_eligibility_blocks_protected_capability_aliases():
+    read_only = evaluate_read_only_autonomy_eligibility(
+        _eligible_preview_payload(
+            capabilities={
+                "daemon_enabled": True,
+                "model_routing_enabled": True,
+                "queue_mutation_enabled": True,
+                "worker_dispatch_enabled": True,
+                "workers_enabled": True,
+            }
+        )
+    )
+    scoped_pr = evaluate_scoped_pr_lane_eligibility(
+        _eligible_pr_preview_payload(
+            capabilities={
+                "daemon": True,
+                "payment_enabled": True,
+                "social_enabled": True,
+                "timer_enabled": True,
+                "waha_enabled": True,
+            }
+        )
+    )
+
+    _assert_inert_preview(read_only)
+    _assert_inert_preview(scoped_pr)
+    assert read_only["eligible"] is False
+    assert scoped_pr["eligible"] is False
+    for reason in (
+        "capability daemon_enabled must be disabled",
+        "capability model_routing_enabled must be disabled",
+        "capability queue_mutation_enabled must be disabled",
+        "capability worker_dispatch_enabled must be disabled",
+        "capability workers_enabled must be disabled",
+    ):
+        assert reason in read_only["blocked_reasons"]
+    for reason in (
+        "capability daemon must be disabled",
+        "capability payment_enabled must be disabled",
+        "capability social_enabled must be disabled",
+        "capability timer_enabled must be disabled",
+        "capability waha_enabled must be disabled",
+    ):
+        assert reason in scoped_pr["blocked_reasons"]
+
+
 def test_scoped_pr_lane_preview_is_inert_and_eligible_with_exact_scope():
     result = evaluate_scoped_pr_lane_eligibility(_eligible_pr_preview_payload())
 
