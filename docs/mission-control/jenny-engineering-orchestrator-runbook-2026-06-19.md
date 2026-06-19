@@ -36,7 +36,8 @@ Jenny packet as permission to bypass Codex safety checks.
   `/workspace-status` and keeps those controls disabled if the backend
   `hard_boundary_contract` is missing or blocked, or if hard-boundary,
   operator-packet, or readiness lock fields expose any truthy execution,
-  dispatch, session-send, worker-dispatch, worker, or live-operation flag.
+  dispatch, send-to-Jenny, session-send, worker-dispatch, worker, or
+  live-operation flag.
 - `/mission-control-compact` is the old compact Mission Control route.
   Its compact chat controls follow the same manual-only bridge rule and the
   same workspace execution-lock gating for hard-boundary, operator-packet, and
@@ -74,8 +75,9 @@ Jenny packet as permission to bypass Codex safety checks.
   worker-dispatch as disabled, so control surfaces can fail closed on those
   backend flags instead of guessing.
 - Mission Control plugin status and preview payloads inherit a base inert flag
-  set with `would_execute`, execution, dispatch, session-send, and
-  worker-dispatch all false by default.
+  set with `would_execute`, execution, dispatch, send-to-Jenny, session-send,
+  and worker-dispatch all false by default where that bridge flag is part of
+  the contract.
 - The Desktop Jenny project chat uses normal chat submission, so it remains
   usable, but its status pill warns when backend safety status reports live
   dispatch, execution, session-send, worker, timer, daemon, Discord automation,
@@ -142,10 +144,10 @@ All current execution scaffolding must remain disabled:
 
 `hard_boundary_contract` is the first-class status object for the current
 do-not-do list. It is display-only, never trusted for execution, and only marks
-itself blocked when a live execution, dispatch, session-send, or worker flag is
-actually enabled inside a projection, or when a sanitized preview reports that
-a caller tried to enable one of those flags before Mission Control forced the
-returned flags back to false. `/workspace-status/preview` also returns this
+itself blocked when a live execution, dispatch, send-to-Jenny, session-send, or
+worker flag is actually enabled inside a projection, or when a sanitized preview
+reports that a caller tried to enable one of those flags before Mission Control
+forced the returned flags back to false. `/workspace-status/preview` also returns this
 contract, next-safe actions, orchestration readiness, instruction previews, and
 the operator decision packet with `stored: false`, so caller-supplied previews
 show the same operator-facing truth as the main workspace status without
@@ -438,15 +440,15 @@ next delegation instruction.
   whether approval is required, next instruction, top report review, blockers,
   and hard locks.
 - Operator packet locks: the operator packet's direct execution, dispatch,
-  session-send, worker-dispatch, and would-send flags. These should all be
-  `no`; any `yes` means Mission Control must treat the operator packet as
-  unsafe review evidence.
+  send-to-Jenny, session-send, worker-dispatch, and would-send flags where
+  present. These should all be `no`; any `yes` means Mission Control must treat
+  the operator packet as unsafe review evidence.
 - Operator execution locks: the operator packet's backend rollup of nested
   packet-body or worker-contract execution locks. `none` is the expected safe
   value; any reason here means Travis should treat the packet as blocked review
   evidence, not as a handoff.
 - Projection execution locks: a broad Desktop rollup of accidental execution,
-  dispatch, session-send, worker-dispatch, `would_dispatch`, or
+  dispatch, send-to-Jenny, session-send, worker-dispatch, `would_dispatch`, or
   `would_session_send` flags across status projections. `none` is the expected
   safe value. Truthy strings or numbers count as unsafe here because Mission
   Control should fail closed on loose API payloads.
@@ -509,8 +511,8 @@ After each code-side change:
 2. Confirm no unrelated dirty files were touched.
 3. Run focused tests for the changed boundary.
 4. Run broader checks when the change touches shared contracts.
-5. Confirm Mission Control still shows disabled execution, dispatch, session
-   sending, and worker dispatch.
+5. Confirm Mission Control still shows disabled execution, dispatch,
+   send-to-Jenny, session sending, and worker dispatch.
    Preview endpoints such as `/workspace-status/preview` must also return the
    `hard_boundary_contract`, `next_safe_actions`, `orchestration_readiness`,
    instruction previews, and `operator_decision_packet`, keep `stored: false`,
@@ -521,8 +523,8 @@ After each code-side change:
    session-send, worker/timer/queue activation, Waha, social, payment, or
    model-routing activation.
    Phone and compact routes must also fail closed on `would_execute`,
-   dispatch, execution, session-send, worker-dispatch, worker, timer, daemon,
-   Discord automation, and model-routing flags. The phone route must also fail
+   dispatch, execution, send-to-Jenny, session-send, worker-dispatch, worker,
+   timer, daemon, Discord automation, and model-routing flags. The phone route must also fail
    closed when `/workspace-status` does not provide a safe hard-boundary
    contract or reports operator/readiness execution lock flags.
    Desktop and compact Mission Control must also surface true nested execution
