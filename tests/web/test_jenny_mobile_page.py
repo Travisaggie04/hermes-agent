@@ -91,11 +91,15 @@ def test_jenny_mobile_renders_codex_like_mobile_chat_controls() -> None:
 
 def test_jenny_mobile_send_is_optimistic_and_foreground_only() -> None:
     src = page_source()
+    send_start = src.index("async function sendMessage()")
+    send_end = src.index("  return (", send_start)
+    send_fn = src[send_start:send_end]
 
     assert "appendMessage(project.project_id" in src
     assert "optimistic: true" in src
     assert "status: \"queued\"" in src
-    assert "await refreshMessages(project.project_id)" in src
+    assert "void refreshMessages(project.project_id)" in send_fn
+    assert "await refreshMessages(project.project_id)" not in send_fn
     assert "void runJennyOnce(project.project_id, requestId)" in src
     assert "await runJennyOnce(project.project_id, requestId)" not in src
     assert "const sendDisabled = sending || !composer.trim();" in src

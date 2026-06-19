@@ -792,8 +792,10 @@ export default function JennyMobilePage() {
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
-      await refreshMessages(project.project_id);
       setSending(false);
+      void refreshMessages(project.project_id).catch((refreshErr) => {
+        setError(refreshErr instanceof Error ? refreshErr.message : String(refreshErr));
+      });
       void runJennyOnce(project.project_id, requestId);
     } catch (err) {
       updateMessageStatus(project.project_id, requestId, "failed");
