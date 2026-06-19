@@ -106,6 +106,126 @@ _PR_BLOCKED_CAPABILITY_KEYS = (
 
 _ACTIVE_PR_STATUSES = {"requested", "preflight_passed", "running", "stopping"}
 
+_PATH_WRITE_CAPABILITY_KEYS = (
+    "write_capable",
+    "write_capable_tools",
+    "file_write",
+    "write_file",
+    "patch",
+    "shell",
+    "terminal",
+    "execute_code",
+    "commit",
+    "pr_create",
+    "merge",
+    "deploy",
+    "restart",
+    "runtime_switch",
+    "waha",
+    "social",
+    "payment",
+    "model_routing",
+    "queue_mutation",
+    "worker",
+    "worker_node_path",
+    "timer",
+    "daemon",
+    "dispatch",
+    "session_send",
+    "send_to_jenny_enabled",
+    "external_response",
+    "external_github_response",
+    "manual_hermes_answer_enabled",
+    "post_github_comment",
+    "worker_dispatch_enabled",
+)
+
+_PATH_WRITE_TOOL_TERMS = (
+    "write",
+    "patch",
+    "shell",
+    "terminal",
+    "execute",
+    "commit",
+    "pull request",
+    "pr create",
+    "merge",
+    "deploy",
+    "restart",
+    "runtime switch",
+    "waha",
+    "whatsapp",
+    "social",
+    "payment",
+    "model routing",
+    "queue",
+    "worker",
+    "timer",
+    "daemon",
+    "dispatch",
+    "session-send",
+    "session_send",
+)
+
+_DEFAULT_PERMISSION_PATHS: tuple[dict[str, Any], ...] = (
+    {
+        "path_id": "github_bridge_outbox",
+        "label": "GitHub bridge outbox",
+        "send_to_jenny_enabled": True,
+        "external_response": True,
+    },
+    {
+        "path_id": "github_bridge_answer_once",
+        "label": "GitHub bridge answer-once",
+        "manual_hermes_answer_enabled": True,
+        "external_github_response": True,
+    },
+    {
+        "path_id": "jenny_bridge_relay",
+        "label": "Jenny bridge relay",
+        "manual_start_only": True,
+        "append_records": True,
+    },
+    {
+        "path_id": "hermes_responder_toolsets",
+        "label": "Hermes responder toolsets",
+        "capability_inheritance": "unknown",
+    },
+    {
+        "path_id": "delegate_tool",
+        "label": "delegate tool",
+        "capability_inheritance": "unknown",
+    },
+    {
+        "path_id": "async_delegation",
+        "label": "async delegation",
+        "worker": True,
+    },
+    {
+        "path_id": "process_registry",
+        "label": "process registry",
+        "capability_inheritance": "unknown",
+    },
+    {
+        "path_id": "file_write_shell_patch",
+        "label": "file/write/shell/patch capabilities",
+        "file_write": True,
+        "shell": True,
+        "patch": True,
+    },
+    {
+        "path_id": "laptop_codex_worker_node",
+        "label": "laptop Codex worker-node path",
+        "worker_node_path": True,
+        "write_capable_tools": True,
+    },
+    {
+        "path_id": "child_agent_capability_inheritance",
+        "label": "child-agent capability inheritance",
+        "capability_inheritance": "unknown",
+    },
+)
+
 
 def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) -> dict[str, Any]:
     """Evaluate caller-supplied runtime/source provenance and fail closed.
@@ -241,6 +361,54 @@ def classify_bridge_permissions(bridge_state: dict[str, Any] | None = None) -> d
     return _bridge_result("unknown_blocked", False, ["bridge safety is not proven; defaulting to blocked"])
 
 
+def classify_control_path_permissions(observed_state: dict[str, Any] | list[Any] | None = None) -> dict[str, Any]:
+    """Classify Mission Control bridge/tool/worker paths without enabling them."""
+
+    paths = [_classify_control_path(path) for path in _permission_path_inputs(observed_state)]
+    write_capable = [path for path in paths if path["permission_classification"] == "write_capable_not_safe_for_autonomy"]
+    unknown = [path for path in paths if path["permission_classification"] == "unknown_blocked"]
+    manual = [path for path in paths if path["permission_classification"] == "manual_only"]
+    read_only = [path for path in paths if path["permission_classification"] == "read_only_safe"]
+    if write_capable:
+        classification = "write_capable_not_safe_for_autonomy"
+    elif unknown:
+        classification = "unknown_blocked"
+    elif paths and len(read_only) == len(paths):
+        classification = "read_only_safe"
+    elif manual:
+        classification = "manual_only"
+    else:
+        classification = "unknown_blocked"
+    blocked_reasons = [
+        f"{path['path_id']}: {reason}"
+        for path in paths
+        if path["permission_classification"] != "read_only_safe"
+        for reason in path.get("reasons", ())
+    ]
+    return {
+        "source": "mission_control_control_path_permission_preview_v1",
+        "permission_classification": classification,
+        "read_only_safe": classification == "read_only_safe",
+        "stored": False,
+        "dry_run_only": True,
+        "display_only": True,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "path_count": len(paths),
+        "read_only_safe_path_count": len(read_only),
+        "manual_only_path_count": len(manual),
+        "write_capable_path_count": len(write_capable),
+        "unknown_blocked_path_count": len(unknown),
+        "write_capable_path_ids": [path["path_id"] for path in write_capable],
+        "unknown_path_ids": [path["path_id"] for path in unknown],
+        "blocked_path_count": len(write_capable) + len(unknown),
+        "blocked_reasons": blocked_reasons,
+        "paths": paths,
+    }
+
+
 def evaluate_read_only_autonomy_eligibility(observed_state: dict[str, Any] | None = None) -> dict[str, Any]:
     """Preview whether a read-only Jenny lane is eligible without executing it."""
 
@@ -255,6 +423,7 @@ def evaluate_read_only_autonomy_eligibility(observed_state: dict[str, Any] | Non
     report = _section(state, "report")
     lane = _section(state, "lane")
     capabilities = _section(state, "capabilities")
+    tool_permissions = _optional_tool_permissions(state)
 
     blocked: list[str] = []
     warnings: list[str] = []
@@ -277,6 +446,8 @@ def evaluate_read_only_autonomy_eligibility(observed_state: dict[str, Any] | Non
         _add(blocked, "bridge path is not read-only safe")
     elif bridge["permission_classification"] == "manual_only":
         _add(warnings, "bridge path is manual-only; preview must not execute")
+    if tool_permissions:
+        _check_tool_permissions_for_read_only(tool_permissions, blocked, warnings)
 
     return {
         "eligible": not blocked,
@@ -284,6 +455,7 @@ def evaluate_read_only_autonomy_eligibility(observed_state: dict[str, Any] | Non
         "warnings": warnings,
         "runtime_provenance": provenance,
         "bridge_permissions": bridge,
+        "tool_permissions": tool_permissions or {},
         "would_execute": False,
         "stored": False,
         "dry_run_only": True,
@@ -308,6 +480,7 @@ def evaluate_scoped_pr_lane_eligibility(observed_state: dict[str, Any] | None = 
     capabilities = _section(state, "capabilities")
     report_contract = _section(state, "report_contract")
     bridge = classify_bridge_permissions(_section(state, "bridge"))
+    tool_permissions = _optional_tool_permissions(state)
 
     blocked: list[str] = []
     warnings: list[str] = []
@@ -344,6 +517,8 @@ def evaluate_scoped_pr_lane_eligibility(observed_state: dict[str, Any] | None = 
         _add(blocked, "write-capable bridge path cannot be used for scoped PR lane execution")
     elif bridge["permission_classification"] in {"manual_only", "unknown_blocked"}:
         _add(warnings, "bridge path is not an executor; PR lane preview remains inert")
+    if tool_permissions:
+        _check_tool_permissions_for_scoped_pr(tool_permissions, blocked, warnings)
 
     scope = _explicit_scope(approval, lane)
     return {
@@ -352,6 +527,7 @@ def evaluate_scoped_pr_lane_eligibility(observed_state: dict[str, Any] | None = 
         "warnings": warnings,
         "runtime_provenance": provenance,
         "bridge_permissions": bridge,
+        "tool_permissions": tool_permissions or {},
         "scope": scope,
         "would_execute": False,
         "would_create_pr": False,
@@ -499,6 +675,152 @@ def _worker_node_contract(state: dict[str, Any]) -> dict[str, Any]:
         "session_send_enabled": False,
         "worker_dispatch_enabled": False,
     }
+
+
+def _optional_tool_permissions(state: dict[str, Any]) -> dict[str, Any]:
+    value = state.get("tool_permissions")
+    if isinstance(value, dict) or isinstance(value, list):
+        return classify_control_path_permissions(value)
+    return {}
+
+
+def _check_tool_permissions_for_read_only(tool_permissions: dict[str, Any], blocked: list[str], warnings: list[str]) -> None:
+    classification = _safe_text(tool_permissions.get("permission_classification"))
+    if classification in {"write_capable_not_safe_for_autonomy", "unknown_blocked"}:
+        _add(blocked, "tool permission paths are not read-only safe")
+        for reason in tool_permissions.get("blocked_reasons", ())[:8]:
+            _add(blocked, str(reason))
+    elif classification == "manual_only":
+        _add(warnings, "tool permission paths are manual-only; preview must not execute")
+
+
+def _check_tool_permissions_for_scoped_pr(tool_permissions: dict[str, Any], blocked: list[str], warnings: list[str]) -> None:
+    classification = _safe_text(tool_permissions.get("permission_classification"))
+    if classification == "write_capable_not_safe_for_autonomy":
+        _add(blocked, "write-capable tool paths cannot be used for scoped PR lane execution")
+        for reason in tool_permissions.get("blocked_reasons", ())[:8]:
+            _add(blocked, str(reason))
+    elif classification in {"manual_only", "unknown_blocked"}:
+        _add(warnings, "tool permission paths are not executors; PR lane preview remains inert")
+
+
+def _permission_path_inputs(observed_state: dict[str, Any] | list[Any] | None) -> list[dict[str, Any]]:
+    if observed_state is None:
+        return [dict(path) for path in _DEFAULT_PERMISSION_PATHS]
+    if isinstance(observed_state, list):
+        return [dict(item) for item in observed_state if isinstance(item, dict)] or [dict(path) for path in _DEFAULT_PERMISSION_PATHS]
+    if not isinstance(observed_state, dict):
+        return [dict(path) for path in _DEFAULT_PERMISSION_PATHS]
+    paths = observed_state.get("paths")
+    if isinstance(paths, list):
+        return [dict(item) for item in paths if isinstance(item, dict)] or [dict(path) for path in _DEFAULT_PERMISSION_PATHS]
+    if isinstance(paths, dict):
+        output: list[dict[str, Any]] = []
+        for path_id, value in paths.items():
+            if isinstance(value, dict):
+                output.append({"path_id": str(path_id), **value})
+        return output or [dict(path) for path in _DEFAULT_PERMISSION_PATHS]
+    if any(key in observed_state for key in ("path_id", "id", "label", "read_only_safe", "manual_only")):
+        return [dict(observed_state)]
+    return [dict(path) for path in _DEFAULT_PERMISSION_PATHS]
+
+
+def _classify_control_path(path: dict[str, Any]) -> dict[str, Any]:
+    path_id = _safe_text(path.get("path_id") or path.get("id") or path.get("name")) or "unknown_path"
+    label = _safe_text(path.get("label") or path.get("name")) or path_id
+    reasons: list[str] = []
+    write_markers = _write_capability_markers(path)
+    if write_markers:
+        _add(reasons, f"path exposes write or execution capabilities: {', '.join(write_markers[:8])}")
+        classification = "write_capable_not_safe_for_autonomy"
+        read_only_safe = False
+    elif _capability_inheritance_unknown(path):
+        _add(reasons, "path capability inheritance is unknown")
+        classification = "unknown_blocked"
+        read_only_safe = False
+    elif _safe_bool(path.get("read_only_safe")):
+        classification = "read_only_safe"
+        read_only_safe = True
+    elif _manual_only_path(path):
+        _add(reasons, "path is manual-only or append-only")
+        classification = "manual_only"
+        read_only_safe = False
+    else:
+        _add(reasons, "path safety is not proven; defaulting to blocked")
+        classification = "unknown_blocked"
+        read_only_safe = False
+    return {
+        "path_id": path_id,
+        "label": label,
+        "permission_classification": classification,
+        "read_only_safe": read_only_safe,
+        "reasons": reasons,
+        "write_capability_markers": write_markers,
+        "manual_only": classification == "manual_only",
+        "stored": False,
+        "dry_run_only": True,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+    }
+
+
+def _write_capability_markers(path: dict[str, Any]) -> list[str]:
+    markers: list[str] = []
+    capability_dict = _section(path, "capabilities")
+    for key in _PATH_WRITE_CAPABILITY_KEYS:
+        if _safe_bool(path.get(key)) or _safe_bool(capability_dict.get(key)):
+            _add(markers, _permission_marker_label(key))
+    for text_value in _path_tool_texts(path):
+        lowered = text_value.lower()
+        for term in _PATH_WRITE_TOOL_TERMS:
+            if term in lowered:
+                _add(markers, term)
+                break
+    return markers
+
+
+def _permission_marker_label(value: str) -> str:
+    return value.replace("_", " ")
+
+
+def _path_tool_texts(path: dict[str, Any]) -> list[str]:
+    texts: list[str] = []
+    for key in ("tools", "tool_names", "allowed_tools", "capability_names"):
+        for item in _as_list(path.get(key)):
+            text = _safe_text(item)
+            if text:
+                texts.append(text)
+    capabilities = path.get("capabilities")
+    if isinstance(capabilities, dict):
+        texts.extend(str(key) for key, value in capabilities.items() if value is True)
+    return texts
+
+
+def _capability_inheritance_unknown(path: dict[str, Any]) -> bool:
+    inheritance = _safe_text(path.get("capability_inheritance")).lower()
+    if inheritance in {"unknown", "parent", "inherits_parent", "unbounded"}:
+        return True
+    if _safe_bool(path.get("unknown_capabilities")):
+        return True
+    if _safe_bool(path.get("inherits_parent_capabilities")) and not _safe_bool(path.get("inherited_capabilities_read_only")):
+        return True
+    return False
+
+
+def _manual_only_path(path: dict[str, Any]) -> bool:
+    return any(
+        _safe_bool(path.get(key))
+        for key in (
+            "manual_only",
+            "manual_start_only",
+            "manual_copy_only",
+            "manual_handoff_only",
+            "append_records",
+            "record_append_only",
+        )
+    )
 
 
 def _check_approval(approval: dict[str, Any], blocked: list[str], *, now: str = "") -> None:

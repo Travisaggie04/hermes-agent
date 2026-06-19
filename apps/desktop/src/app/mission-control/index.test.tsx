@@ -155,6 +155,36 @@ beforeEach(() => {
     runtime_worktree_guard: { decision_state: 'pass' },
     safety: { dispatch_in_gateway: false, send_to_jenny_enabled: false },
     stale_context: { warnings: [] },
+    tool_permission_classification: {
+      blocked_path_count: 1,
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      path_count: 2,
+      paths: [
+        {
+          label: 'audit read',
+          path_id: 'audit_read',
+          permission_classification: 'read_only_safe',
+          read_only_safe: true,
+          reasons: []
+        },
+        {
+          label: 'laptop Codex',
+          path_id: 'laptop_codex_worker_node',
+          permission_classification: 'write_capable_not_safe_for_autonomy',
+          read_only_safe: false,
+          reasons: ['path exposes write or execution capabilities: worker_node_path']
+        }
+      ],
+      permission_classification: 'write_capable_not_safe_for_autonomy',
+      read_only_safe: false,
+      session_send_enabled: false,
+      stored: false,
+      worker_dispatch_enabled: false,
+      write_capable_path_ids: ['laptop_codex_worker_node']
+    },
     worker_node_orchestration: {
       active_count: 1,
       active_runs: [
@@ -966,6 +996,10 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText('blocked / no execution').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('bridge permission')).toBeTruthy()
     expect(screen.getByText('write capable')).toBeTruthy()
+    expect(screen.getByText('tool permissions')).toBeTruthy()
+    expect(screen.getByText('write capable not safe for autonomy / blocked paths 1')).toBeTruthy()
+    expect(screen.getByText('write-capable tool paths')).toBeTruthy()
+    expect(screen.getByText('laptop_codex_worker_node')).toBeTruthy()
     expect(screen.getByText('scoped PR lane')).toBeTruthy()
     expect(screen.getByText('scoped PR bridge')).toBeTruthy()
     expect(screen.getByText('manual only')).toBeTruthy()

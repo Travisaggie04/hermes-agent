@@ -1247,6 +1247,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
   const runtimeProvenance = status.runtime_provenance
   const autonomyEligibility = status.read_only_autonomy_eligibility
   const scopedPrEligibility = status.scoped_pr_lane_eligibility
+  const toolPermissions = status.tool_permission_classification
   const childRecord = latestProjectionRecord(status.child_agent_orchestration) as Record<string, unknown> | null
   const workerRecord = latestProjectionRecord(status.worker_node_orchestration) as Record<string, unknown> | null
   const childBlockedReasons = uniqueTextList([
@@ -1293,6 +1294,9 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     scopedPrWouldCommit: scopedPrEligibility?.would_commit,
     scopedPrWouldCreatePr: scopedPrEligibility?.would_create_pr,
     staleWarnings: status.stale_context?.warnings ?? [],
+    toolPermissionBlockedCount: toolPermissions?.blocked_path_count ?? 0,
+    toolPermissionClassification: toolPermissions?.permission_classification ?? 'unknown',
+    toolPermissionWritePaths: toolPermissions?.write_capable_path_ids ?? [],
     workerActiveCount: status.worker_node_orchestration?.active_count ?? 0,
     workerBlockedReasons,
     workerDispatchEnabled: status.worker_node_orchestration?.worker_dispatch_enabled,
@@ -3901,6 +3905,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
   const scopedPrLabel = status.scopedPrEligible === true ? `preview-ready / ${status.scopedPrScopeCount} scoped path${status.scopedPrScopeCount === 1 ? '' : 's'}` : status.scopedPrEligible === false ? 'blocked / no execution' : 'unknown / no execution'
   const workerLockTone = status.workerExecutionEnabled === false && status.workerDispatchEnabled === false ? 'good' : 'warn'
   const childLockTone = status.childExecutionEnabled === false && status.childDispatchEnabled === false ? 'good' : 'warn'
+  const toolPermissionTone = status.toolPermissionClassification === 'read_only_safe' || status.toolPermissionClassification === 'manual_only' ? 'good' : 'warn'
   return (
     <div className="grid gap-3 rounded-xl border border-border/70 bg-background/40 p-4 md:grid-cols-3">
       <StatusItem label="Runtime Worktree Guard" tone={status.guard === 'pass' ? 'good' : 'warn'} value={status.guard} />
@@ -3910,6 +3915,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="active_lane_count" tone={status.activeLaneCount === 0 ? 'good' : 'warn'} value={String(status.activeLaneCount)} />
       <StatusItem label="deploy state" tone={deploymentTone} value={labelText(status.deploymentGapState)} />
       <StatusItem label="bridge permission" tone={status.bridgePermission === 'read_only_safe' ? 'good' : 'warn'} value={labelText(status.bridgePermission)} />
+      <StatusItem label="tool permissions" tone={toolPermissionTone} value={`${labelText(status.toolPermissionClassification)} / blocked paths ${status.toolPermissionBlockedCount}`} />
       <StatusItem label="scoped PR lane" tone={status.scopedPrEligible === true ? 'good' : 'warn'} value={scopedPrLabel} />
       <StatusItem label="scoped PR bridge" tone={status.scopedPrBridgePermission === 'read_only_safe' ? 'good' : 'warn'} value={labelText(status.scopedPrBridgePermission)} />
       <StatusItem label="lifecycle projection" tone={status.appendOnlyProjection ? 'good' : 'warn'} value={`append-only ${yesNo(status.appendOnlyProjection)} / active mutation lanes ${status.activeMutationLaneCount}`} />
@@ -3925,6 +3931,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-2" label="worker-node blockers" tone={status.workerBlockedReasons.length ? 'warn' : 'good'} value={status.workerBlockedReasons.length ? status.workerBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="desktop app install" tone="warn" value="separate laptop worker-node update; bottom-bar version is not changed by accepted-live/dashboard deploy" />
       <StatusItem className="md:col-span-3" label="autonomy blockers" tone={status.autonomyBlockedReasons.length || status.provenanceReasons.length ? 'warn' : 'good'} value={[...status.provenanceReasons, ...status.autonomyBlockedReasons].length ? [...status.provenanceReasons, ...status.autonomyBlockedReasons].join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="write-capable tool paths" tone={status.toolPermissionWritePaths.length ? 'warn' : 'good'} value={status.toolPermissionWritePaths.length ? status.toolPermissionWritePaths.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="scoped PR blockers" tone={status.scopedPrBlockedReasons.length ? 'warn' : 'good'} value={status.scopedPrBlockedReasons.length ? status.scopedPrBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="child-agent blockers" tone={status.childBlockedReasons.length ? 'warn' : 'good'} value={status.childBlockedReasons.length ? status.childBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="stale warnings" tone={status.staleWarnings.length ? 'warn' : 'good'} value={status.staleWarnings.length ? status.staleWarnings.join(', ') : 'none'} />

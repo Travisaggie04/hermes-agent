@@ -367,6 +367,45 @@ export interface MissionControlOrchestrationProjection<T> {
   worker_dispatch_enabled?: boolean
 }
 
+export interface MissionControlPathPermission {
+  dispatch_enabled?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  label?: string
+  manual_only?: boolean
+  path_id: string
+  permission_classification?: string
+  read_only_safe?: boolean
+  reasons?: string[]
+  session_send_enabled?: boolean
+  stored?: boolean
+  worker_dispatch_enabled?: boolean
+  write_capability_markers?: string[]
+}
+
+export interface MissionControlToolPermissionClassification {
+  blocked_path_count?: number
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  manual_only_path_count?: number
+  path_count?: number
+  paths?: MissionControlPathPermission[]
+  permission_classification?: string
+  read_only_safe?: boolean
+  read_only_safe_path_count?: number
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  unknown_blocked_path_count?: number
+  unknown_path_ids?: string[]
+  worker_dispatch_enabled?: boolean
+  write_capable_path_count?: number
+  write_capable_path_ids?: string[]
+}
+
 export interface MissionControlProjectSession {
   cwd?: null | string
   durable_session_id?: string
@@ -793,6 +832,7 @@ export interface MissionControlWorkspaceStatus {
   runtime_worktree_guard?: { decision_state?: string; reason?: string }
   safety?: { dispatch_in_gateway?: boolean; send_to_jenny_enabled?: boolean }
   stale_context?: { warnings?: string[] }
+  tool_permission_classification?: MissionControlToolPermissionClassification
   worker_node_orchestration?: MissionControlOrchestrationProjection<MissionControlWorkerNodeRunRecord>
 }
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from mission_control.autonomy_eligibility import (
     build_execution_packet_preview,
     classify_bridge_permissions,
+    classify_control_path_permissions,
     evaluate_read_only_autonomy_eligibility,
     evaluate_runtime_provenance,
     evaluate_scoped_pr_lane_eligibility,
@@ -283,6 +284,76 @@ def test_worker_dispatch_bridge_path_is_not_read_only_safe():
     assert bridge["worker_dispatch_enabled"] is False
     assert result["eligible"] is False
     assert "bridge path is not read-only safe" in result["blocked_reasons"]
+
+
+def test_control_path_permission_catalog_covers_required_paths_and_blocks_write_capable_paths():
+    result = classify_control_path_permissions()
+
+    assert result["permission_classification"] == "write_capable_not_safe_for_autonomy"
+    assert result["read_only_safe"] is False
+    assert result["stored"] is False
+    assert result["execution_enabled"] is False
+    assert result["dispatch_enabled"] is False
+    assert result["session_send_enabled"] is False
+    assert result["worker_dispatch_enabled"] is False
+    path_ids = {path["path_id"] for path in result["paths"]}
+    assert {
+        "github_bridge_outbox",
+        "github_bridge_answer_once",
+        "jenny_bridge_relay",
+        "hermes_responder_toolsets",
+        "delegate_tool",
+        "async_delegation",
+        "process_registry",
+        "file_write_shell_patch",
+        "laptop_codex_worker_node",
+        "child_agent_capability_inheritance",
+    }.issubset(path_ids)
+    classifications = {path["path_id"]: path["permission_classification"] for path in result["paths"]}
+    assert classifications["github_bridge_outbox"] == "write_capable_not_safe_for_autonomy"
+    assert classifications["github_bridge_answer_once"] == "write_capable_not_safe_for_autonomy"
+    assert classifications["jenny_bridge_relay"] == "manual_only"
+    assert classifications["delegate_tool"] == "unknown_blocked"
+    assert classifications["file_write_shell_patch"] == "write_capable_not_safe_for_autonomy"
+    assert classifications["laptop_codex_worker_node"] == "write_capable_not_safe_for_autonomy"
+    assert classifications["child_agent_capability_inheritance"] == "unknown_blocked"
+
+
+def test_control_path_permission_detector_separates_read_only_manual_and_write_tools():
+    result = classify_control_path_permissions(
+        {
+            "paths": [
+                {"path_id": "audit_read", "read_only_safe": True, "tools": ["read_file", "list_records"]},
+                {"path_id": "manual_report", "manual_copy_only": True, "append_records": True},
+                {"path_id": "shell_patch", "tools": ["shell", "apply_patch"]},
+            ]
+        }
+    )
+
+    classifications = {path["path_id"]: path["permission_classification"] for path in result["paths"]}
+    assert result["permission_classification"] == "write_capable_not_safe_for_autonomy"
+    assert classifications["audit_read"] == "read_only_safe"
+    assert classifications["manual_report"] == "manual_only"
+    assert classifications["shell_patch"] == "write_capable_not_safe_for_autonomy"
+    assert "shell_patch" in result["write_capable_path_ids"]
+
+
+def test_read_only_eligibility_blocks_write_capable_tool_permissions():
+    result = evaluate_read_only_autonomy_eligibility(
+        _eligible_preview_payload(
+            tool_permissions={
+                "paths": [
+                    {"path_id": "audit_read", "read_only_safe": True, "tools": ["read_file"]},
+                    {"path_id": "file_patch", "patch": True},
+                ]
+            }
+        )
+    )
+
+    assert result["eligible"] is False
+    assert "tool permission paths are not read-only safe" in result["blocked_reasons"]
+    assert any("file_patch" in reason for reason in result["blocked_reasons"])
+    assert result["tool_permissions"]["permission_classification"] == "write_capable_not_safe_for_autonomy"
 
 
 def test_scoped_pr_lane_preview_is_inert_and_eligible_with_exact_scope():

@@ -20,6 +20,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from hermes_constants import get_hermes_home
 from mission_control.autonomy_eligibility import (
     build_execution_packet_preview,
+    classify_control_path_permissions,
     evaluate_read_only_autonomy_eligibility,
     evaluate_runtime_provenance,
     evaluate_scoped_pr_lane_eligibility,
@@ -3311,6 +3312,17 @@ async def workspace_scoped_pr_eligibility_preview(request: Request) -> dict[str,
         "stored": False,
         "source": "caller_supplied_scoped_pr_lane_preview",
         **evaluate_scoped_pr_lane_eligibility(payload),
+    }
+
+
+@router.post("/workspace/tool-permissions/preview")
+async def workspace_tool_permissions_preview(request: Request) -> dict[str, Any]:
+    payload = await _read_json_object_body(request)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": False,
+        "source": "caller_supplied_tool_permission_preview",
+        **classify_control_path_permissions(payload),
     }
 
 

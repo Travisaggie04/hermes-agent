@@ -132,6 +132,29 @@ def test_workspace_status_surfaces_scoped_pr_lane_eligibility_as_inert_preview()
     assert "runtime provenance is not clean" in scoped_pr["blocked_reasons"]
 
 
+def test_workspace_status_surfaces_tool_permission_classification():
+    status = build_workspace_status(
+        _baseline_payload(
+            tool_permissions={
+                "paths": [
+                    {"path_id": "audit_read", "read_only_safe": True, "tools": ["read_file"]},
+                    {"path_id": "worker_path", "worker_node_path": True},
+                ]
+            }
+        )
+    )
+
+    permissions = status["tool_permission_classification"]
+    assert permissions["stored"] is False
+    assert permissions["dry_run_only"] is True
+    assert permissions["permission_classification"] == "write_capable_not_safe_for_autonomy"
+    assert permissions["execution_enabled"] is False
+    assert permissions["dispatch_enabled"] is False
+    assert permissions["session_send_enabled"] is False
+    assert permissions["worker_dispatch_enabled"] is False
+    assert "worker_path" in permissions["write_capable_path_ids"]
+
+
 def test_workspace_status_warns_on_stale_baseline_dispatch_lane_and_workers():
     status = build_workspace_status(
         _baseline_payload(

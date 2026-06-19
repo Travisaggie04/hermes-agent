@@ -2508,6 +2508,7 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/runtime-provenance/preview": {"POST"},
         "/workspace/autonomy-eligibility/preview": {"POST"},
         "/workspace/scoped-pr-eligibility/preview": {"POST"},
+        "/workspace/tool-permissions/preview": {"POST"},
         "/workspace/execution-packet/preview": {"POST"},
         "/pr-merge-verifier-gate/evaluate": {"POST"},
         "/pr-merge-verifier-gate/visibility": {"POST"},
@@ -5135,6 +5136,35 @@ def test_scoped_pr_and_execution_packet_previews_are_inert_and_store_nothing(plu
     assert worker_packet_payload["would_dispatch"] is False
     assert worker_packet_payload["would_session_send"] is False
     assert worker_packet_payload["worker_dispatch_enabled"] is False
+    assert plugin_api.record_store_path().exists() is False
+
+
+def test_tool_permission_preview_classifies_write_paths_and_stores_nothing(plugin_api, client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/tool-permissions/preview",
+        json={
+            "paths": [
+                {"path_id": "audit_read", "read_only_safe": True, "tools": ["read_file"]},
+                {"path_id": "manual_relay", "manual_start_only": True, "append_records": True},
+                {"path_id": "laptop_codex", "worker_node_path": True, "write_capable_tools": True},
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "mission_control_control_path_permission_preview_v1"
+    assert payload["stored"] is False
+    assert payload["permission_classification"] == "write_capable_not_safe_for_autonomy"
+    assert payload["execution_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
+    assert "laptop_codex" in payload["write_capable_path_ids"]
+    classifications = {path["path_id"]: path["permission_classification"] for path in payload["paths"]}
+    assert classifications["audit_read"] == "read_only_safe"
+    assert classifications["manual_relay"] == "manual_only"
+    assert classifications["laptop_codex"] == "write_capable_not_safe_for_autonomy"
     assert plugin_api.record_store_path().exists() is False
 
 

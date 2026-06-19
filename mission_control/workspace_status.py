@@ -12,6 +12,7 @@ import re
 from typing import Any
 
 from mission_control.autonomy_eligibility import (
+    classify_control_path_permissions,
     evaluate_read_only_autonomy_eligibility,
     evaluate_runtime_provenance,
     evaluate_scoped_pr_lane_eligibility,
@@ -221,6 +222,7 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
             },
         )
     )
+    tool_permission_classification = classify_control_path_permissions(_section(source, "tool_permissions"))
 
     warnings: list[str] = []
     if accepted_source == "static_fallback":
@@ -291,6 +293,7 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         "runtime_provenance": runtime_provenance,
         "read_only_autonomy_eligibility": read_only_autonomy_eligibility,
         "scoped_pr_lane_eligibility": scoped_pr_lane_eligibility,
+        "tool_permission_classification": tool_permission_classification,
         "latest_handoff": latest_handoff,
         "stale_context": {
             "baseline_mismatch": "baseline_mismatch" in warnings,
