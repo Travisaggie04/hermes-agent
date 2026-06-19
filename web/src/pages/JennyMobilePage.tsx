@@ -206,6 +206,7 @@ function projectRequestPreview(value: string, maxChars: number): string {
   const visible = stripHiddenJennyContext(value);
   const normalized = visible.replace(/\s+/g, " ").trim();
   const patterns = [
+    /(?:^|\s)Visible request from Travis:\s*([\s\S]*?)(?=\s+Reply as Jenny|$)/i,
     /^Spec-first request for Jenny:\s*Project:\s*.+?\s+Request Travis is considering:\s*([\s\S]*?)(?=\s+Current intake:|$)/i,
     /^Project room request:\s*(?:.+?\s+)?Request:\s*([\s\S]*?)(?=\s+(?:Request intake:|Current brief:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:)|$)/i,
     /(?:^|[\s/])Request:\s*([\s\S]*?)(?=\s+(?:Request intake:|Current brief:|Challenge state:|Categories:|Blocking verdicts:|Readiness:|Current goal:|Allowed:|Forbidden:|Safety(?: status)?:|Structured handoff:|Evidence contract:)|$)/i,

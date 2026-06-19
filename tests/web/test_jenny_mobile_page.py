@@ -100,6 +100,8 @@ def test_jenny_mobile_send_is_optimistic_and_foreground_only() -> None:
     assert "confirm_manual_hermes_answer: true" in src
     assert "manual foreground reply only" in src
     assert "no hidden worker, timer, daemon, gateway restart, deploy, Waha/social/payment/outreach" in src
+    assert "Visible request from Travis:" in src
+    assert "Reply as Jenny" in src
     assert "setSelectedModelChoice" in src
     assert "setSelectedEffort" in src
     assert "createMissionControl" not in src
