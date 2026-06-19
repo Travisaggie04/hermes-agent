@@ -2503,6 +2503,8 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/pr-merge-verifier-gate": {"GET"},
         "/workspace-status": {"GET"},
         "/workspace-status/preview": {"POST"},
+        "/workspace/runtime-provenance/preview": {"POST"},
+        "/workspace/autonomy-eligibility/preview": {"POST"},
         "/pr-merge-verifier-gate/evaluate": {"POST"},
         "/pr-merge-verifier-gate/visibility": {"POST"},
         "/verifier-workflow/evidence": {"GET"},
@@ -4895,6 +4897,117 @@ def test_workspace_status_preview_flags_accepted_live_ahead_of_deployed_dashboar
     assert payload["deployment_gap"]["deployed_head"] == "1111111111111111111111111111111111111111"
     assert payload["deployment_gap"]["latest_merged_pr"] == "108"
     assert "accepted_live_head_not_deployed" in payload["stale_context"]["warnings"]
+    assert plugin_api.record_store_path().exists() is False
+
+
+def test_runtime_provenance_preview_is_inert_and_stores_nothing(plugin_api, client):
+    head = "8ef64e370a51bc19e97fec1526f5bb3d42025a09"
+    runtime = {
+        "path": "/home/jenny/.hermes/hermes-runtime-current",
+        "exists": True,
+        "git_healthy": True,
+        "head": head,
+        "dirty_files": [],
+        "untracked_files": [],
+        "error": "",
+    }
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/runtime-provenance/preview",
+        json={
+            "source": {"head": head},
+            "accepted_baseline": runtime,
+            "dashboard_runtime": runtime,
+            "gateway_runtime": runtime,
+            "rollback_runtime": runtime,
+            "dispatch_in_gateway": False,
+            "active_lane_count": 0,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "caller_supplied_runtime_provenance_preview"
+    assert payload["stored"] is False
+    assert payload["display_only"] is True
+    assert payload["dry_run_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["primary_status"] == "CLEAN_AND_ALIGNED"
+    assert payload["autonomy_blocked"] is False
+    assert plugin_api.record_store_path().exists() is False
+
+
+def test_read_only_autonomy_preview_is_inert_and_stores_nothing(plugin_api, client):
+    forbidden_actions = [
+        "file write",
+        "commit",
+        "PR creation",
+        "merge",
+        "deploy",
+        "restart",
+        "runtime switch",
+        "Waha",
+        "social",
+        "payment",
+        "model routing",
+        "queue mutation",
+        "worker",
+        "timer",
+        "daemon",
+        "dispatch",
+        "session-send",
+    ]
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/autonomy-eligibility/preview",
+        json={
+            "runtime_provenance": {
+                "primary_status": "CLEAN_AND_ALIGNED",
+                "autonomy_blocked": False,
+                "autonomy_blocked_reasons": [],
+            },
+            "approval": {
+                "approval_id": "approval-read-only-1",
+                "status": "approved",
+                "approval_mode": "one_time",
+                "approval_scope": "project-hermes-mission-control:read-only-inspection",
+                "action_class": "read_only_inspection",
+                "expires_at": "2099-01-01T00:00:00Z",
+                "consumed_at": "",
+            },
+            "run": {
+                "run_id": "run-read-only-1",
+                "project_id": "project-hermes-mission-control",
+                "approval_id": "approval-read-only-1",
+                "lane_type": "read_only_inspection",
+                "status": "requested",
+                "dispatch_state": False,
+                "forbidden_actions": forbidden_actions,
+            },
+            "lane": {
+                "lane_type": "read_only_inspection",
+                "forbidden_actions": forbidden_actions,
+            },
+            "bridge": {"manual_start_only": True},
+            "report_inbox_ready": True,
+            "active_mutation_lane_count": 0,
+            "capabilities": {},
+            "now": "2026-06-19T00:00:00Z",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "caller_supplied_read_only_autonomy_preview"
+    assert payload["stored"] is False
+    assert payload["eligible"] is True
+    assert payload["would_execute"] is False
+    assert payload["dry_run_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
     assert plugin_api.record_store_path().exists() is False
 
 

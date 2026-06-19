@@ -1,0 +1,438 @@
+"""Pure Mission Control runtime provenance and autonomy eligibility checks.
+
+The evaluators in this module are intentionally inert. They only inspect
+caller-supplied dictionaries and append-only record projections. They do not
+read files, call Git, inspect services, mutate records, dispatch work, start
+workers, or send sessions.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
+
+
+PROVENANCE_CLEAN = "CLEAN_AND_ALIGNED"
+PROVENANCE_BLOCKED = "BLOCKED_UNSAFE_FOR_AUTONOMY"
+
+_STATUS_PRIORITY = (
+    "BROKEN_GIT_METADATA",
+    "GATEWAY_UNTRUSTED",
+    "MISSING_RUNTIME_PATH",
+    "DIRTY_RUNTIME",
+    "DASHBOARD_GATEWAY_DRIFT",
+    "SOURCE_CURRENT_BUT_BASELINE_STALE",
+    "ROLLBACK_STALE",
+)
+
+_BROAD_APPROVAL_VALUES = {"*", "all", "any", "global", "everything", "unlimited", "blanket"}
+
+_ACTIVE_RUN_STATUSES = {"requested", "preflight_passed", "running", "stopping"}
+_ACTIVE_MUTATION_RUN_STATUSES = {"requested", "preflight_passed", "running", "stopping"}
+_READ_ONLY_LANE_TYPES = {"read_only_lane", "read_only_design", "read_only_inspection"}
+_APPROVED_ACTION_CLASSES = _READ_ONLY_LANE_TYPES
+
+_MUTATION_FORBIDDEN_CLASSES = (
+    ("write", "file write", "file-write"),
+    ("commit",),
+    ("pr", "pull request", "pr creation"),
+    ("merge",),
+    ("deploy",),
+    ("restart",),
+    ("runtime switch", "switch runtime", "runtime-switch"),
+    ("waha", "whatsapp"),
+    ("social",),
+    ("payment",),
+    ("model routing", "model-routing"),
+    ("queue",),
+    ("worker",),
+    ("timer",),
+    ("daemon",),
+    ("dispatch",),
+    ("session-send", "session send", "session_send"),
+)
+
+_CAPABILITY_KEYS = (
+    "write_capable_tools",
+    "file_write",
+    "commit",
+    "pr_create",
+    "merge",
+    "deploy",
+    "restart",
+    "runtime_switch",
+    "waha",
+    "social",
+    "payment",
+    "model_routing",
+    "queue_mutation",
+    "worker",
+    "timer",
+    "dispatch",
+    "session_send",
+)
+
+
+def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Evaluate caller-supplied runtime/source provenance and fail closed.
+
+    Expected input keys are intentionally simple dictionaries:
+    source, accepted_baseline, dashboard_runtime, gateway_runtime,
+    rollback_runtime, dispatch_state, and active_lane_count.
+    """
+
+    state = dict(observed_state or {})
+    source = _section(state, "source")
+    baseline = _section(state, "accepted_baseline")
+    dashboard = _section(state, "dashboard_runtime")
+    gateway = _section(state, "gateway_runtime")
+    rollback = _section(state, "rollback_runtime")
+
+    source_head = _safe_text(source.get("head") or state.get("source_head"))
+    baseline_head = _safe_text(baseline.get("head"))
+    dashboard_head = _safe_text(dashboard.get("head"))
+    gateway_head = _safe_text(gateway.get("head"))
+    rollback_head = _safe_text(rollback.get("head"))
+
+    statuses: list[str] = []
+    reasons: list[str] = []
+    blocked_reasons: list[str] = []
+    runtimes: dict[str, dict[str, Any]] = {}
+
+    for name, runtime in (
+        ("accepted_baseline", baseline),
+        ("dashboard", dashboard),
+        ("gateway", gateway),
+        ("rollback", rollback),
+    ):
+        summary = _runtime_summary(name, runtime)
+        runtimes[name] = summary
+        if summary["missing_path"]:
+            _add(statuses, "MISSING_RUNTIME_PATH")
+            _add(blocked_reasons, f"{name} runtime path is missing or absent")
+        if summary["broken_git_metadata"]:
+            _add(statuses, "BROKEN_GIT_METADATA")
+            if name == "gateway":
+                _add(statuses, "GATEWAY_UNTRUSTED")
+            _add(blocked_reasons, f"{name} git metadata is broken")
+        if summary["dirty"]:
+            _add(statuses, "DIRTY_RUNTIME")
+            _add(blocked_reasons, f"{name} runtime has dirty or untracked files")
+
+    if not source_head:
+        _add(blocked_reasons, "source HEAD is missing")
+    if not baseline_head:
+        _add(blocked_reasons, "accepted baseline HEAD is missing")
+    if source_head and baseline_head and source_head != baseline_head:
+        _add(statuses, "SOURCE_CURRENT_BUT_BASELINE_STALE")
+        _add(blocked_reasons, "accepted baseline HEAD does not match source HEAD")
+    if dashboard_head and baseline_head and dashboard_head != baseline_head:
+        _add(statuses, "SOURCE_CURRENT_BUT_BASELINE_STALE")
+        _add(blocked_reasons, "dashboard runtime HEAD does not match accepted baseline HEAD")
+    if dashboard_head and gateway_head and dashboard_head != gateway_head:
+        _add(statuses, "DASHBOARD_GATEWAY_DRIFT")
+        _add(blocked_reasons, "dashboard and gateway runtime HEADs do not match")
+    if source_head and gateway_head and source_head != gateway_head:
+        _add(statuses, "DASHBOARD_GATEWAY_DRIFT")
+        _add(blocked_reasons, "gateway runtime HEAD does not match source HEAD")
+    if source_head and rollback_head and source_head != rollback_head:
+        _add(statuses, "ROLLBACK_STALE")
+        _add(reasons, "rollback runtime HEAD is stale relative to source HEAD")
+        _add(blocked_reasons, "rollback runtime is stale relative to source HEAD")
+
+    if state.get("dispatch_state") is True or state.get("dispatch_in_gateway") is True:
+        _add(blocked_reasons, "dispatch is enabled")
+    if _safe_int(state.get("active_lane_count")) > _safe_int(state.get("max_active_lane"), default=1):
+        _add(blocked_reasons, "active lane count exceeds configured maximum")
+
+    if not statuses and not blocked_reasons:
+        statuses = [PROVENANCE_CLEAN]
+
+    autonomy_blocked = bool(blocked_reasons) or statuses != [PROVENANCE_CLEAN]
+    return {
+        "status": PROVENANCE_BLOCKED if autonomy_blocked else PROVENANCE_CLEAN,
+        "primary_status": _primary_status(statuses),
+        "statuses": statuses,
+        "autonomy_blocked": autonomy_blocked,
+        "autonomy_blocked_reasons": blocked_reasons,
+        "warnings": reasons,
+        "source_head": source_head,
+        "accepted_baseline_head": baseline_head,
+        "dashboard_head": dashboard_head,
+        "gateway_head": gateway_head,
+        "rollback_head": rollback_head,
+        "runtimes": runtimes,
+        "dry_run_only": True,
+        "enforces_runtime": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+    }
+
+
+def classify_bridge_permissions(bridge_state: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Classify whether a bridge path may be treated as read-only autonomy."""
+
+    state = dict(bridge_state or {})
+    reasons: list[str] = []
+
+    if any(_safe_bool(state.get(key)) for key in ("dispatch_enabled", "session_send_enabled", "worker_enabled", "timer_enabled", "daemon_enabled")):
+        return _bridge_result("unsafe_for_autonomy", False, ["bridge can dispatch, session-send, or run background work"])
+
+    if any(
+        _safe_bool(state.get(key))
+        for key in (
+            "execution_enabled",
+            "manual_hermes_answer_enabled",
+            "external_github_response",
+            "external_jenny_response",
+            "writes_external_response",
+            "post_github_comment",
+        )
+    ):
+        return _bridge_result("write_capable", False, ["bridge can execute or write an external/response record"])
+
+    if _safe_bool(state.get("append_records")) or _safe_bool(state.get("stored")):
+        _add(reasons, "bridge appends records and is manual-only, not a read-only executor")
+        return _bridge_result("manual_only", False, reasons)
+
+    if _safe_bool(state.get("manual_start_only")) or _safe_bool(state.get("manual_copy_only")):
+        _add(reasons, "bridge is manual-only")
+        return _bridge_result("manual_only", False, reasons)
+
+    if _safe_bool(state.get("read_only_safe")):
+        return _bridge_result("read_only_safe", True, [])
+
+    return _bridge_result("manual_only", False, ["bridge safety is not proven; defaulting to manual-only"])
+
+
+def evaluate_read_only_autonomy_eligibility(observed_state: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Preview whether a read-only Jenny lane is eligible without executing it."""
+
+    state = dict(observed_state or {})
+    provenance = state.get("runtime_provenance")
+    if not isinstance(provenance, dict):
+        provenance = evaluate_runtime_provenance(_section(state, "runtime"))
+
+    bridge = classify_bridge_permissions(_section(state, "bridge"))
+    approval = _section(state, "approval")
+    run = _section(state, "run")
+    report = _section(state, "report")
+    lane = _section(state, "lane")
+    capabilities = _section(state, "capabilities")
+
+    blocked: list[str] = []
+    warnings: list[str] = []
+
+    if provenance.get("autonomy_blocked") is not False or provenance.get("primary_status") != PROVENANCE_CLEAN:
+        _add(blocked, "runtime provenance is not clean")
+        for reason in provenance.get("autonomy_blocked_reasons", ()):
+            _add(blocked, str(reason))
+
+    _check_approval(approval, blocked, now=_safe_text(state.get("now")))
+    _check_run(run, approval, blocked)
+    _check_report_inbox(report, state, blocked)
+    _check_lane(run, lane, blocked)
+    _check_forbidden_actions(run, lane, blocked)
+    _check_capabilities(capabilities, blocked)
+
+    if _safe_int(state.get("active_mutation_lane_count")) > 0:
+        _add(blocked, "active mutation lane count must be 0")
+    if bridge["permission_classification"] in {"write_capable", "unsafe_for_autonomy"}:
+        _add(blocked, "bridge path is not read-only safe")
+    elif bridge["permission_classification"] == "manual_only":
+        _add(warnings, "bridge path is manual-only; preview must not execute")
+
+    return {
+        "eligible": not blocked,
+        "blocked_reasons": blocked,
+        "warnings": warnings,
+        "runtime_provenance": provenance,
+        "bridge_permissions": bridge,
+        "would_execute": False,
+        "stored": False,
+        "dry_run_only": True,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+    }
+
+
+def _check_approval(approval: dict[str, Any], blocked: list[str], *, now: str = "") -> None:
+    if not approval:
+        _add(blocked, "exact approved ApprovalRecord is required")
+        return
+    if _safe_text(approval.get("status")) != "approved":
+        _add(blocked, "approval status must be approved")
+    if _safe_text(approval.get("approval_mode") or "one_time") != "one_time":
+        _add(blocked, "approval_mode must be one_time")
+    if _safe_text(approval.get("consumed_at")) or _safe_text(approval.get("status")) == "consumed":
+        _add(blocked, "approval is consumed")
+    if _is_expired(_safe_text(approval.get("expires_at")), now=now):
+        _add(blocked, "approval is expired")
+    if _looks_broad(_safe_text(approval.get("approval_scope"))):
+        _add(blocked, "approval scope must be exact and bounded")
+    if _safe_text(approval.get("action_class")) not in _APPROVED_ACTION_CLASSES:
+        _add(blocked, "approval action_class must be read-only")
+
+
+def _check_run(run: dict[str, Any], approval: dict[str, Any], blocked: list[str]) -> None:
+    if not run:
+        _add(blocked, "valid RunRecord is required")
+        return
+    if _safe_text(run.get("status")) not in _ACTIVE_RUN_STATUSES:
+        _add(blocked, "run status must be an active pre-execution/read-only state")
+    if _safe_text(run.get("approval_id")) != _safe_text(approval.get("approval_id")):
+        _add(blocked, "run approval_id must match the exact ApprovalRecord")
+    if _safe_text(run.get("dispatch_state")) == "true" or run.get("dispatch_state") is True:
+        _add(blocked, "run dispatch_state must be false")
+
+
+def _check_report_inbox(report: dict[str, Any], state: dict[str, Any], blocked: list[str]) -> None:
+    inbox_ready = state.get("report_inbox_ready")
+    if inbox_ready is None:
+        inbox_ready = bool(report) or _safe_bool(state.get("report_record_ready"))
+    if inbox_ready is not True:
+        _add(blocked, "report inbox must be ready")
+
+
+def _check_lane(run: dict[str, Any], lane: dict[str, Any], blocked: list[str]) -> None:
+    lane_types = [
+        _safe_text(item.get("lane_type") or item.get("mode"))
+        for item in (run, lane)
+        if item
+    ]
+    if not lane_types or any(
+        lane_type not in _READ_ONLY_LANE_TYPES and not lane_type.startswith("read_only")
+        for lane_type in lane_types
+    ):
+        _add(blocked, "lane type must be read-only")
+
+
+def _check_forbidden_actions(run: dict[str, Any], lane: dict[str, Any], blocked: list[str]) -> None:
+    forbidden = tuple(_safe_text(item).lower() for item in _as_list(run.get("forbidden_actions")) + _as_list(lane.get("forbidden_actions")))
+    missing = [
+        aliases[0]
+        for aliases in _MUTATION_FORBIDDEN_CLASSES
+        if not any(alias in item for item in forbidden for alias in aliases)
+    ]
+    if missing:
+        _add(blocked, f"forbidden actions missing mutation classes: {', '.join(missing[:8])}")
+
+
+def _check_capabilities(capabilities: dict[str, Any], blocked: list[str]) -> None:
+    for key in _CAPABILITY_KEYS:
+        if _safe_bool(capabilities.get(key)):
+            _add(blocked, f"capability {key} must be disabled")
+
+
+def _runtime_summary(name: str, runtime: dict[str, Any]) -> dict[str, Any]:
+    path = _safe_text(runtime.get("path") or runtime.get("runtime_path"))
+    exists = runtime.get("exists")
+    git_healthy = runtime.get("git_healthy")
+    dirty_files = tuple(_safe_text(item) for item in _as_list(runtime.get("dirty_files")) if _safe_text(item))
+    untracked_files = tuple(_safe_text(item) for item in _as_list(runtime.get("untracked_files")) if _safe_text(item))
+    status_short = tuple(_safe_text(item) for item in _as_list(runtime.get("status_short")) if _safe_text(item))
+    error = _safe_text(runtime.get("error"), max_chars=300)
+    dirty = bool(dirty_files or untracked_files)
+    broken = git_healthy is False or bool(error)
+    missing_path = not path or exists is False
+    return {
+        "name": name,
+        "path": path,
+        "exists": exists if isinstance(exists, bool) else None,
+        "git_healthy": git_healthy if isinstance(git_healthy, bool) else None,
+        "head": _safe_text(runtime.get("head")),
+        "status_short": list(status_short),
+        "dirty_files": list(dirty_files),
+        "untracked_files": list(untracked_files),
+        "error": error,
+        "dirty": dirty,
+        "broken_git_metadata": broken,
+        "missing_path": missing_path,
+    }
+
+
+def _bridge_result(classification: str, read_only_safe: bool, reasons: list[str]) -> dict[str, Any]:
+    return {
+        "permission_classification": classification,
+        "read_only_safe": read_only_safe,
+        "reasons": reasons,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+    }
+
+
+def _is_expired(expires_at: str, *, now: str = "") -> bool:
+    if not expires_at:
+        return False
+    parsed = _parse_datetime(expires_at)
+    if parsed is None:
+        return True
+    current = _parse_datetime(now) if now else datetime.now(timezone.utc)
+    return current is None or parsed <= current
+
+
+def _parse_datetime(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _looks_broad(value: str) -> bool:
+    lowered = value.lower().strip()
+    return lowered in _BROAD_APPROVAL_VALUES or any(term in lowered for term in ("approve all", "anything", "everything", "unlimited", "blanket approval"))
+
+
+def _primary_status(statuses: list[str]) -> str:
+    if not statuses:
+        return PROVENANCE_BLOCKED
+    if statuses == [PROVENANCE_CLEAN]:
+        return PROVENANCE_CLEAN
+    for status in _STATUS_PRIORITY:
+        if status in statuses:
+            return status
+    return statuses[0]
+
+
+def _section(payload: dict[str, Any], key: str) -> dict[str, Any]:
+    value = payload.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_text(value: Any, *, max_chars: int = 240) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip().replace("\x00", "")
+    return text[:max_chars]
+
+
+def _safe_bool(value: Any) -> bool:
+    return value is True
+
+
+def _safe_int(value: Any, *, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    return [value]
+
+
+def _add(items: list[str], value: str) -> None:
+    if value and value not in items:
+        items.append(value)

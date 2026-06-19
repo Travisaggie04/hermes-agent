@@ -11,6 +11,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from mission_control.autonomy_eligibility import (
+    evaluate_read_only_autonomy_eligibility,
+    evaluate_runtime_provenance,
+)
 from mission_control.runtime_worktree_guard import evaluate_runtime_worktree_guard
 
 MAX_TEXT_CHARS = 160
@@ -181,6 +185,29 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
     source_control = _source_control_section(_section(source, "source_control"), defaults=_DEFAULT_STATUS["source_control"])
     deployment_gap = _deployment_gap_section(accepted, source_control)
     runtime_guard = evaluate_runtime_worktree_guard(_runtime_worktree_guard_input(_section(source, "runtime_worktree_guard"), accepted, rollback))
+    runtime_provenance = evaluate_runtime_provenance(
+        _runtime_provenance_input(
+            source=source,
+            accepted=accepted,
+            accepted_record=accepted_record,
+            rollback=rollback,
+            source_control=source_control,
+            safety=safety,
+            lane=lane,
+        )
+    )
+    read_only_autonomy_eligibility = evaluate_read_only_autonomy_eligibility(
+        _merge_dicts(
+            _section(source, "autonomy_eligibility"),
+            {
+                "runtime_provenance": runtime_provenance,
+                "active_mutation_lane_count": _safe_int(
+                    _section(source, "control_plane_lifecycle").get("active_mutation_lane_count"),
+                    default=0,
+                ),
+            },
+        )
+    )
 
     warnings: list[str] = []
     if accepted_source == "static_fallback":
@@ -226,6 +253,9 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
     if deployment_gap["state"] == "merged_not_deployed":
         warnings.append("accepted_live_head_not_deployed")
     warnings.extend(runtime_guard.get("blockers", ()))
+    warnings.extend(status for status in runtime_provenance.get("statuses", ()) if status != "CLEAN_AND_ALIGNED")
+    warnings.extend(runtime_provenance.get("autonomy_blocked_reasons", ()))
+    warnings.extend(read_only_autonomy_eligibility.get("blocked_reasons", ()))
 
     warnings = _dedupe_bounded(warnings)
     return {
@@ -245,12 +275,53 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         "source_control": source_control,
         "deployment_gap": deployment_gap,
         "runtime_worktree_guard": runtime_guard,
+        "runtime_provenance": runtime_provenance,
+        "read_only_autonomy_eligibility": read_only_autonomy_eligibility,
         "latest_handoff": latest_handoff,
         "stale_context": {
             "baseline_mismatch": "baseline_mismatch" in warnings,
             "thread_mismatch": "stale_discord_context" in warnings,
             "warnings": warnings,
         },
+    }
+
+
+def _runtime_provenance_input(
+    *,
+    source: dict[str, Any],
+    accepted: dict[str, Any],
+    accepted_record: dict[str, Any],
+    rollback: dict[str, Any],
+    source_control: dict[str, Any],
+    safety: dict[str, Any],
+    lane: dict[str, Any],
+) -> dict[str, Any]:
+    section = _section(source, "runtime_provenance")
+    return {
+        "source": _merge_dicts(
+            _section(section, "source"),
+            {"head": source_control.get("accepted_live_head", "")},
+        ),
+        "accepted_baseline": _merge_dicts(
+            _section(section, "accepted_baseline"),
+            {
+                "baseline_id": accepted_record.get("baseline_id", ""),
+                "path": accepted.get("runtime_path", ""),
+                "head": accepted.get("head", ""),
+            },
+        ),
+        "dashboard_runtime": _section(section, "dashboard_runtime") or _section(source, "dashboard_runtime"),
+        "gateway_runtime": _section(section, "gateway_runtime") or _section(source, "gateway_runtime"),
+        "rollback_runtime": _merge_dicts(
+            _section(section, "rollback_runtime") or _section(source, "rollback_runtime"),
+            {
+                "path": rollback.get("runtime_path", ""),
+                "head": rollback.get("head", ""),
+            },
+        ),
+        "dispatch_in_gateway": safety.get("dispatch_in_gateway"),
+        "active_lane_count": lane.get("active_lane_count"),
+        "max_active_lane": lane.get("max_active_lane"),
     }
 
 

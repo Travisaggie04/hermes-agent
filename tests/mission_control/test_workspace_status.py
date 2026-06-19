@@ -78,7 +78,11 @@ def test_workspace_status_returns_inert_display_only_flags_and_baselines():
     assert status["activity"]["active_workers"] == 0
     assert status["pr_gate"]["packet_hash_valid"] is True
     assert status["deployment"]["status"] == "accepted"
-    assert status["stale_context"]["warnings"] == ["accepted_baseline_source_missing"]
+    warnings = set(status["stale_context"]["warnings"])
+    assert "accepted_baseline_source_missing" in warnings
+    assert "MISSING_RUNTIME_PATH" in warnings
+    assert status["runtime_provenance"]["autonomy_blocked"] is True
+    assert status["read_only_autonomy_eligibility"]["eligible"] is False
 
 
 def test_workspace_status_warns_on_stale_baseline_dispatch_lane_and_workers():

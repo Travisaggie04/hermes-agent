@@ -18,6 +18,10 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from hermes_constants import get_hermes_home
+from mission_control.autonomy_eligibility import (
+    evaluate_read_only_autonomy_eligibility,
+    evaluate_runtime_provenance,
+)
 from mission_control.action_policy_guardrails import (
     evaluate_action_policy,
     get_action_policy_guardrails,
@@ -3185,6 +3189,32 @@ async def workspace_status_preview(request: Request) -> dict[str, Any]:
         **status,
         "source": "caller_supplied_workspace_status_preview",
         "stored": False,
+    }
+
+
+@router.post("/workspace/runtime-provenance/preview")
+async def workspace_runtime_provenance_preview(request: Request) -> dict[str, Any]:
+    payload = await _read_json_object_body(request)
+    return {
+        **INERT_FLAGS,
+        "enforcement_enabled": False,
+        "dry_run_only": True,
+        "display_only": True,
+        "execution_enabled": False,
+        "stored": False,
+        "source": "caller_supplied_runtime_provenance_preview",
+        **evaluate_runtime_provenance(payload),
+    }
+
+
+@router.post("/workspace/autonomy-eligibility/preview")
+async def workspace_autonomy_eligibility_preview(request: Request) -> dict[str, Any]:
+    payload = await _read_json_object_body(request)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": False,
+        "source": "caller_supplied_read_only_autonomy_preview",
+        **evaluate_read_only_autonomy_eligibility(payload),
     }
 
 

@@ -1,0 +1,256 @@
+from __future__ import annotations
+
+from mission_control.autonomy_eligibility import (
+    classify_bridge_permissions,
+    evaluate_read_only_autonomy_eligibility,
+    evaluate_runtime_provenance,
+)
+from mission_control.workspace_status import build_workspace_status
+
+
+HEAD = "8ef64e370a51bc19e97fec1526f5bb3d42025a09"
+OLD_HEAD = "fe18ce20d6044dd91d115286e949366477a8706b"
+
+
+def _runtime(path: str, head: str = HEAD, **overrides):
+    payload = {
+        "path": path,
+        "exists": True,
+        "git_healthy": True,
+        "head": head,
+        "status_short": ["## HEAD (no branch)"],
+        "dirty_files": [],
+        "untracked_files": [],
+        "error": "",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _clean_runtime_state(**overrides):
+    payload = {
+        "source": {"head": HEAD},
+        "accepted_baseline": _runtime("/runtime/accepted", HEAD),
+        "dashboard_runtime": _runtime("/runtime/dashboard", HEAD),
+        "gateway_runtime": _runtime("/runtime/gateway", HEAD),
+        "rollback_runtime": _runtime("/runtime/rollback", HEAD),
+        "dispatch_in_gateway": False,
+        "active_lane_count": 0,
+        "max_active_lane": 1,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _forbidden_actions():
+    return [
+        "file write",
+        "commit",
+        "PR creation",
+        "merge",
+        "deploy",
+        "restart",
+        "runtime switch",
+        "Waha",
+        "social",
+        "payment",
+        "model routing",
+        "queue mutation",
+        "worker",
+        "timer",
+        "daemon",
+        "dispatch",
+        "session-send",
+    ]
+
+
+def _eligible_preview_payload(**overrides):
+    payload = {
+        "runtime_provenance": evaluate_runtime_provenance(_clean_runtime_state()),
+        "approval": {
+            "approval_id": "approval-read-only-1",
+            "status": "approved",
+            "approval_mode": "one_time",
+            "approval_scope": "project-hermes-mission-control:read-only-inspection",
+            "action_class": "read_only_inspection",
+            "expires_at": "2099-01-01T00:00:00Z",
+            "consumed_at": "",
+        },
+        "run": {
+            "run_id": "run-read-only-1",
+            "project_id": "project-hermes-mission-control",
+            "approval_id": "approval-read-only-1",
+            "lane_type": "read_only_inspection",
+            "status": "requested",
+            "dispatch_state": False,
+            "forbidden_actions": _forbidden_actions(),
+        },
+        "lane": {
+            "lane_type": "read_only_inspection",
+            "forbidden_actions": _forbidden_actions(),
+        },
+        "report_inbox_ready": True,
+        "active_mutation_lane_count": 0,
+        "bridge": {"manual_start_only": True, "dispatch_enabled": False, "session_send_enabled": False},
+        "capabilities": {},
+        "now": "2026-06-19T00:00:00Z",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_clean_aligned_runtime_provenance_allows_preview_inputs():
+    result = evaluate_runtime_provenance(_clean_runtime_state())
+
+    assert result["status"] == "CLEAN_AND_ALIGNED"
+    assert result["primary_status"] == "CLEAN_AND_ALIGNED"
+    assert result["autonomy_blocked"] is False
+    assert result["dispatch_enabled"] is False
+    assert result["session_send_enabled"] is False
+
+
+def test_stale_accepted_baseline_blocks_autonomy():
+    result = evaluate_runtime_provenance(
+        _clean_runtime_state(accepted_baseline=_runtime("/runtime/accepted", OLD_HEAD))
+    )
+
+    assert result["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
+    assert "SOURCE_CURRENT_BUT_BASELINE_STALE" in result["statuses"]
+    assert "accepted baseline HEAD does not match source HEAD" in result["autonomy_blocked_reasons"]
+
+
+def test_dirty_runtime_blocks_autonomy():
+    result = evaluate_runtime_provenance(
+        _clean_runtime_state(dashboard_runtime=_runtime("/runtime/dashboard", dirty_files=[" M package-lock.json"]))
+    )
+
+    assert "DIRTY_RUNTIME" in result["statuses"]
+    assert "dashboard runtime has dirty or untracked files" in result["autonomy_blocked_reasons"]
+
+
+def test_broken_gateway_git_metadata_blocks_autonomy():
+    result = evaluate_runtime_provenance(
+        _clean_runtime_state(
+            gateway_runtime=_runtime(
+                "/runtime/gateway",
+                git_healthy=False,
+                error="fatal: not a git repository: /runtime/gateway",
+            )
+        )
+    )
+
+    assert "BROKEN_GIT_METADATA" in result["statuses"]
+    assert "GATEWAY_UNTRUSTED" in result["statuses"]
+    assert "gateway git metadata is broken" in result["autonomy_blocked_reasons"]
+
+
+def test_dashboard_gateway_mismatch_blocks_autonomy():
+    result = evaluate_runtime_provenance(
+        _clean_runtime_state(gateway_runtime=_runtime("/runtime/gateway", OLD_HEAD))
+    )
+
+    assert "DASHBOARD_GATEWAY_DRIFT" in result["statuses"]
+    assert "dashboard and gateway runtime HEADs do not match" in result["autonomy_blocked_reasons"]
+
+
+def test_missing_runtime_path_blocks_autonomy():
+    result = evaluate_runtime_provenance(_clean_runtime_state(gateway_runtime={"exists": False}))
+
+    assert "MISSING_RUNTIME_PATH" in result["statuses"]
+    assert "gateway runtime path is missing or absent" in result["autonomy_blocked_reasons"]
+
+
+def test_rollback_stale_is_surfaced_and_blocks_autonomy():
+    result = evaluate_runtime_provenance(
+        _clean_runtime_state(rollback_runtime=_runtime("/runtime/rollback", OLD_HEAD))
+    )
+
+    assert "ROLLBACK_STALE" in result["statuses"]
+    assert "rollback runtime is stale relative to source HEAD" in result["autonomy_blocked_reasons"]
+
+
+def test_approved_read_only_lane_preview_is_inert_and_eligible():
+    result = evaluate_read_only_autonomy_eligibility(_eligible_preview_payload())
+
+    assert result["eligible"] is True
+    assert result["would_execute"] is False
+    assert result["stored"] is False
+    assert result["dispatch_enabled"] is False
+    assert result["session_send_enabled"] is False
+
+
+def test_approval_expiry_consumption_and_broad_scope_block_eligibility():
+    result = evaluate_read_only_autonomy_eligibility(
+        _eligible_preview_payload(
+            approval={
+                "approval_id": "approval-read-only-1",
+                "status": "consumed",
+                "approval_mode": "one_time",
+                "approval_scope": "*",
+                "action_class": "read_only_inspection",
+                "expires_at": "2020-01-01T00:00:00Z",
+                "consumed_at": "2026-06-19T00:00:00Z",
+            }
+        )
+    )
+
+    assert result["eligible"] is False
+    assert "approval is consumed" in result["blocked_reasons"]
+    assert "approval is expired" in result["blocked_reasons"]
+    assert "approval scope must be exact and bounded" in result["blocked_reasons"]
+
+
+def test_active_mutation_lane_and_non_read_only_lane_block_eligibility():
+    result = evaluate_read_only_autonomy_eligibility(
+        _eligible_preview_payload(
+            active_mutation_lane_count=1,
+            run={
+                "run_id": "run-impl",
+                "project_id": "project-hermes-mission-control",
+                "approval_id": "approval-read-only-1",
+                "lane_type": "implementation",
+                "status": "requested",
+                "dispatch_state": False,
+                "forbidden_actions": _forbidden_actions(),
+            },
+        )
+    )
+
+    assert result["eligible"] is False
+    assert "active mutation lane count must be 0" in result["blocked_reasons"]
+    assert "lane type must be read-only" in result["blocked_reasons"]
+
+
+def test_write_capable_bridge_is_not_read_only_safe():
+    bridge = classify_bridge_permissions({"manual_hermes_answer_enabled": True})
+    result = evaluate_read_only_autonomy_eligibility(
+        _eligible_preview_payload(bridge={"manual_hermes_answer_enabled": True})
+    )
+
+    assert bridge["permission_classification"] == "write_capable"
+    assert result["eligible"] is False
+    assert "bridge path is not read-only safe" in result["blocked_reasons"]
+
+
+def test_workspace_status_surfaces_provenance_and_blocks_when_gateway_untrusted():
+    status = build_workspace_status(
+        {
+            "accepted_baseline_record": {
+                "baseline_id": "accepted-current",
+                "runtime_path": "/runtime/accepted",
+                "head": HEAD,
+                "rollback_runtime_path": "/runtime/rollback",
+                "rollback_head": HEAD,
+                "dispatch_in_gateway": False,
+            },
+            "source_control": {"accepted_live_head": HEAD},
+            "dashboard_runtime": _runtime("/runtime/dashboard", HEAD),
+            "gateway_runtime": _runtime("/runtime/gateway", git_healthy=False, error="fatal: not a git repository"),
+            "rollback_runtime": _runtime("/runtime/rollback", HEAD),
+        }
+    )
+
+    assert status["runtime_provenance"]["autonomy_blocked"] is True
+    assert "GATEWAY_UNTRUSTED" in status["runtime_provenance"]["statuses"]
+    assert status["read_only_autonomy_eligibility"]["eligible"] is False
+    assert "GATEWAY_UNTRUSTED" in status["stale_context"]["warnings"]

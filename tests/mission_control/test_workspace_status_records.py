@@ -85,4 +85,8 @@ def test_record_sourced_workspace_status_projects_real_active_runs_and_approvals
     assert status["control_plane_records"]["active_run_count"] == 1
     assert status["control_plane_records"]["latest_active_run_id"] == "run-1"
     assert status["control_plane_records"]["pending_approval_count"] == 1
-    assert status["stale_context"]["warnings"] == ["active_workers_tasks_or_runs_present"]
+    warnings = set(status["stale_context"]["warnings"])
+    assert "active_workers_tasks_or_runs_present" in warnings
+    assert "MISSING_RUNTIME_PATH" in warnings
+    assert status["runtime_provenance"]["autonomy_blocked"] is True
+    assert status["read_only_autonomy_eligibility"]["eligible"] is False

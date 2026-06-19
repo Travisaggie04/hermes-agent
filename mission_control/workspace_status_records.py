@@ -16,6 +16,7 @@ from mission_control.records import (
     ApprovalRecord,
     JsonlRecordStore,
     OperatingWorkspaceHandoffRecord,
+    ReportRecord,
     RunRecord,
 )
 from mission_control.records.errors import RecordStoreError
@@ -28,6 +29,18 @@ from mission_control.workspace_status import (
 ACTIVE_RUN_STATUSES = {"requested", "preflight_passed", "running", "stopping"}
 PENDING_APPROVAL_STATUSES = {"proposed"}
 AVAILABLE_APPROVAL_STATUSES = {"approved"}
+MUTATION_LANE_TYPES = {
+    "implementation",
+    "pr_creation",
+    "deploy",
+    "runtime_switch",
+    "payment",
+    "waha",
+    "social_post",
+    "model_routing",
+    "queue_mutation",
+    "worker_timer_enablement",
+}
 
 
 def default_record_store_path() -> Path:
@@ -61,6 +74,9 @@ def build_workspace_status_from_records(
             recent_approvals = tuple(
                 record for _index, record in store.read_latest(ApprovalRecord, limit=50)
             )
+            recent_reports = tuple(
+                record for _index, record in store.read_latest(ReportRecord, limit=50)
+            )
         except RecordStoreError as exc:
             store_status = "malformed"
             store_error = type(exc).__name__
@@ -68,11 +84,13 @@ def build_workspace_status_from_records(
             latest_handoff = {}
             recent_runs = ()
             recent_approvals = ()
+            recent_reports = ()
     else:
         latest_baseline = {}
         latest_handoff = {}
         recent_runs = ()
         recent_approvals = ()
+        recent_reports = ()
 
     if latest_baseline:
         status_input["accepted_baseline_record"] = latest_baseline
@@ -80,6 +98,11 @@ def build_workspace_status_from_records(
         status_input["latest_handoff"] = latest_handoff
 
     active_runs = tuple(record for record in recent_runs if record.status in ACTIVE_RUN_STATUSES)
+    active_mutation_runs = tuple(
+        record
+        for record in active_runs
+        if record.lane_type in MUTATION_LANE_TYPES or record.dispatch_state is True
+    )
     if active_runs:
         latest_active_run = active_runs[-1]
         status_input["lane"] = _merge_status_input(
@@ -93,9 +116,26 @@ def build_workspace_status_from_records(
                 "active_lane_count": len(active_runs),
             },
         )
+        latest_approval = _latest_matching_approval(recent_approvals, latest_active_run.approval_id)
+        status_input["autonomy_eligibility"] = _merge_status_input(
+            status_input.get("autonomy_eligibility") if isinstance(status_input.get("autonomy_eligibility"), dict) else {},
+            {
+                "approval": latest_approval.to_dict() if latest_approval else {},
+                "run": latest_active_run.to_dict(),
+                "report_inbox_ready": store_status == "ok",
+                "report": recent_reports[-1].to_dict() if recent_reports else {},
+                "active_mutation_lane_count": len(active_mutation_runs),
+            },
+        )
     status_input["activity"] = _merge_status_input(
         status_input.get("activity") if isinstance(status_input.get("activity"), dict) else {},
         {"active_runs": len(active_runs)},
+    )
+    status_input["control_plane_lifecycle"] = _control_plane_lifecycle_payload(
+        approvals=recent_approvals,
+        runs=recent_runs,
+        reports=recent_reports,
+        active_mutation_lane_count=len(active_mutation_runs),
     )
 
     status = build_workspace_status(status_input)
@@ -114,6 +154,7 @@ def build_workspace_status_from_records(
         "available_approval_count": sum(
             1 for record in recent_approvals if record.status in AVAILABLE_APPROVAL_STATUSES
         ),
+        "active_mutation_lane_count": len(active_mutation_runs),
     }
     return status
 
@@ -132,6 +173,41 @@ def _latest_record_payload(store: JsonlRecordStore, record_class: type[Any]) -> 
         return {}
     _index, record = records[-1]
     return record.to_dict()
+
+
+def _latest_matching_approval(records: tuple[ApprovalRecord, ...], approval_id: str) -> ApprovalRecord | None:
+    if not approval_id:
+        return None
+    for record in reversed(records):
+        if record.approval_id == approval_id:
+            return record
+    return None
+
+
+def _control_plane_lifecycle_payload(
+    *,
+    approvals: tuple[ApprovalRecord, ...],
+    runs: tuple[RunRecord, ...],
+    reports: tuple[ReportRecord, ...],
+    active_mutation_lane_count: int,
+) -> dict[str, Any]:
+    return {
+        "source": "mission_control_records_jsonl",
+        "latest_approvals_by_id": _latest_by_id(approvals, "approval_id"),
+        "latest_runs_by_id": _latest_by_id(runs, "run_id"),
+        "latest_reports_by_id": _latest_by_id(reports, "report_id"),
+        "active_mutation_lane_count": active_mutation_lane_count,
+        "append_only_projection": True,
+    }
+
+
+def _latest_by_id(records: tuple[Any, ...], field_name: str) -> dict[str, dict[str, Any]]:
+    output: dict[str, dict[str, Any]] = {}
+    for record in records:
+        record_id = str(getattr(record, field_name, "") or "")
+        if record_id:
+            output[record_id] = record.to_dict()
+    return output
 
 
 def _merge_status_input(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
