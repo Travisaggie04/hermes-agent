@@ -13,6 +13,7 @@ describe('asyncAgentLiveSafetyReason', () => {
         send_to_jenny_enabled: false,
         session_send_enabled: false,
         trusted_for_execution: false,
+        worker_dispatch_enabled: false,
         worker_enabled: false
       })
     ).toBe('')
@@ -25,6 +26,7 @@ describe('asyncAgentLiveSafetyReason', () => {
       'execution_enabled',
       'send_to_jenny_enabled',
       'session_send_enabled',
+      'worker_dispatch_enabled',
       'worker_enabled',
       'timer_enabled',
       'daemon_enabled',

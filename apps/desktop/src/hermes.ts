@@ -1370,6 +1370,7 @@ export interface MissionControlAsyncAgentStatusResponse {
   sync_delegate_task_durable?: boolean
   timer_enabled?: boolean
   trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
   worker_enabled?: boolean
 }
 

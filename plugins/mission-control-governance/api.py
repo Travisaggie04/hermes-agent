@@ -984,6 +984,7 @@ def _async_agent_capability_projection() -> dict[str, Any]:
         "stored": False,
         "manual_start_only": True,
         "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
         "worker_enabled": False,
         "timer_enabled": False,
         "daemon_enabled": False,

@@ -843,6 +843,7 @@ def test_workspace_async_agent_status_is_read_only_and_status_only(plugin_api, c
     assert payload["stored"] is False
     assert payload["manual_start_only"] is True
     assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
     assert payload["worker_enabled"] is False
     assert payload["timer_enabled"] is False
     assert payload["daemon_enabled"] is False

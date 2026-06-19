@@ -6,6 +6,7 @@ const ASYNC_AGENT_LIVE_FLAGS: Array<keyof MissionControlAsyncAgentStatusResponse
   'execution_enabled',
   'send_to_jenny_enabled',
   'session_send_enabled',
+  'worker_dispatch_enabled',
   'worker_enabled',
   'timer_enabled',
   'daemon_enabled',
