@@ -404,14 +404,22 @@ def test_workspace_jenny_bridge_api_creates_lists_and_stays_inert(plugin_api, cl
     assert response.status_code == 200
     payload = response.json()
     assert payload["trusted_for_execution"] is False
+    assert payload["would_execute"] is False
     assert payload["execution_enabled"] is False
     assert payload["manual_copy_only"] is False
     assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
     assert payload["stored"] is True
     assert payload["record_type"] == "JennyBridgeMessageRequestRecord"
     assert payload["request"]["project_id"] == "project-hermes"
     assert payload["request"]["status"] == "queued"
+    assert payload["request"]["metadata"]["would_execute"] is False
+    assert payload["request"]["metadata"]["session_send_enabled"] is False
+    assert payload["request"]["metadata"]["worker_dispatch_enabled"] is False
+    assert payload["request"]["metadata"]["trusted_for_execution"] is False
+    assert payload["request"]["metadata"]["inert_context_only"] is True
     assert payload["request"]["metadata"]["requires_external_jenny_poller"] is True
     assert payload["request"]["metadata"]["user_message"] == "Review PR #75."
 
@@ -419,6 +427,8 @@ def test_workspace_jenny_bridge_api_creates_lists_and_stays_inert(plugin_api, cl
     assert len(requests) == 1
     assert requests[0].message == "Please review PR #75 and report whether it is safe to mark ready."
     assert requests[0].metadata["user_message"] == "Review PR #75."
+    assert requests[0].metadata["would_execute"] is False
+    assert requests[0].metadata["worker_dispatch_enabled"] is False
 
     listed = client.get(
         "/api/plugins/mission-control-governance/workspace/jenny-bridge/outbox?project_id=project-hermes&status=queued"
@@ -461,18 +471,28 @@ def test_workspace_jenny_bridge_api_creates_lists_and_stays_inert(plugin_api, cl
     assert inbound.status_code == 200
     inbound_payload = inbound.json()
     assert inbound_payload["trusted_for_execution"] is False
+    assert inbound_payload["would_execute"] is False
     assert inbound_payload["execution_enabled"] is False
     assert inbound_payload["manual_copy_only"] is False
     assert inbound_payload["send_to_jenny_enabled"] is False
     assert inbound_payload["dispatch_enabled"] is False
+    assert inbound_payload["session_send_enabled"] is False
+    assert inbound_payload["worker_dispatch_enabled"] is False
     assert inbound_payload["stored"] is True
     assert inbound_payload["record_type"] == "JennyBridgeMessageResponseRecord"
     assert inbound_payload["response"]["request_id"] == "bridge-request-1"
+    assert inbound_payload["response"]["metadata"]["would_execute"] is False
+    assert inbound_payload["response"]["metadata"]["session_send_enabled"] is False
+    assert inbound_payload["response"]["metadata"]["worker_dispatch_enabled"] is False
+    assert inbound_payload["response"]["metadata"]["trusted_for_execution"] is False
+    assert inbound_payload["response"]["metadata"]["inert_context_only"] is True
     assert inbound_payload["response"]["metadata"]["external_jenny_response"] is True
 
     responses = JsonlRecordStore(plugin_api.record_store_path()).read_all(JennyBridgeMessageResponseRecord)
     assert len(responses) == 1
     assert responses[0].message == "Safe to mark ready. No runtime behavior changed."
+    assert responses[0].metadata["would_execute"] is False
+    assert responses[0].metadata["worker_dispatch_enabled"] is False
 
     inbox = client.get(
         "/api/plugins/mission-control-governance/workspace/jenny-bridge/inbox?project_id=project-hermes&request_id=bridge-request-1"
@@ -524,18 +544,27 @@ def test_workspace_jenny_reply_reviews_append_operator_decisions_and_stay_inert(
     assert payload["display_only"] is True
     assert payload["manual_start_only"] is True
     assert payload["send_to_jenny_enabled"] is False
+    assert payload["would_execute"] is False
     assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
     assert payload["execution_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
     assert payload["worker_enabled"] is False
     assert payload["timer_enabled"] is False
     assert payload["record_type"] == "JennyReplyReviewRecord"
     assert payload["reply_review"]["response_id"] == "bridge-response-1"
     assert payload["reply_review"]["decision"] == "needs_evidence"
+    assert payload["reply_review"]["metadata"]["would_execute"] is False
+    assert payload["reply_review"]["metadata"]["session_send_enabled"] is False
+    assert payload["reply_review"]["metadata"]["worker_dispatch_enabled"] is False
     assert payload["reply_review"]["metadata"]["trusted_for_execution"] is False
+    assert payload["reply_review"]["metadata"]["inert_context_only"] is True
 
     reviews = JsonlRecordStore(plugin_api.record_store_path()).read_all(JennyReplyReviewRecord)
     assert len(reviews) == 1
     assert reviews[0].note == "Ask Jenny for exact files, checks, risks, and next safe lane."
+    assert reviews[0].metadata["would_execute"] is False
+    assert reviews[0].metadata["worker_dispatch_enabled"] is False
 
     listed = client.get(
         "/api/plugins/mission-control-governance/workspace/jenny-reply-reviews?project_id=project-hermes&response_id=bridge-response-1"
@@ -600,6 +629,10 @@ def test_workspace_jenny_bridge_poller_status_is_read_only(plugin_api, client):
     assert payload["stored"] is False
     assert payload["display_only"] is True
     assert payload["manual_start_only"] is True
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["would_execute"] is False
+    assert payload["execution_enabled"] is False
     assert payload["dispatch_enabled"] is False
     assert payload["send_to_jenny_enabled"] is False
     assert payload["session_send_enabled"] is False
@@ -679,6 +712,10 @@ def test_workspace_github_bridge_status_is_read_only_and_manual_only(plugin_api,
     assert payload["stored"] is False
     assert payload["display_only"] is True
     assert payload["manual_start_only"] is True
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["would_execute"] is False
+    assert payload["execution_enabled"] is False
     assert payload["dispatch_enabled"] is False
     assert payload["session_send_enabled"] is False
     assert payload["worker_dispatch_enabled"] is False
