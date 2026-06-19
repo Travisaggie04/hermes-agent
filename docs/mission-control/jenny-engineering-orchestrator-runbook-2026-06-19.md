@@ -207,6 +207,12 @@ hard forbidden actions, and report contract. It is useful copy for Jenny or
 Travis to review, but it does not contact the laptop, start a worker, or enable
 execution.
 
+The orchestration run graph joins parent runs, child-agent runs, laptop Codex
+worker-node runs, and reports into one display-only lineage view. Missing
+parent runs, missing report IDs, stale report links, and reports tied to
+unknown run IDs remain blockers until Jenny can review or repair the append-only
+records.
+
 ## Mission Control Reading Guide
 
 - Runtime provenance: source and runtime trust.
@@ -231,6 +237,8 @@ execution.
   read-only autonomy, scoped PR creation, and laptop Codex worker-node.
 - Worker instruction preview: a manual Codex handoff prompt with objective,
   allowed actions, forbidden actions, and report requirements.
+- Orchestration run graph: parent/child/worker/report lineage and any missing
+  parent or report-link blockers.
 
 If a row says blocked, Travis should read the blocker first instead of trying
 to force the action.

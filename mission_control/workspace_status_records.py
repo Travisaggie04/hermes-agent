@@ -232,6 +232,12 @@ def build_workspace_status_from_records(
         "active_child_run_count": len(active_child_runs),
         "active_worker_node_run_count": len(active_worker_runs),
     }
+    status["orchestration_run_graph"] = _orchestration_run_graph_payload(
+        runs=recent_runs,
+        child_runs=recent_child_runs,
+        worker_runs=recent_worker_runs,
+        reports=recent_reports,
+    )
     status["next_safe_actions"] = _next_safe_actions_payload(status)
     status["orchestration_readiness"] = _orchestration_readiness_payload(status)
     status["worker_node_instruction_preview"] = _worker_node_instruction_preview(status)
@@ -624,6 +630,18 @@ def _next_safe_actions_payload(status: dict[str, Any]) -> dict[str, Any]:
             priority=60,
         )
 
+    run_graph = _mapping(status.get("orchestration_run_graph"))
+    run_graph_reasons = _text_list(run_graph.get("blocked_reasons"))
+    if run_graph_reasons:
+        extend_blockers(run_graph_reasons)
+        add_action(
+            action_id="review_orchestration_run_graph_blockers",
+            label="Review orchestration run graph blockers",
+            reason=_first_reason(run_graph_reasons, "Parent, child, worker-node, or report lineage is incomplete."),
+            blocked_until="run graph parent/report lineage is complete",
+            priority=65,
+        )
+
     tool_permissions = _mapping(status.get("tool_permission_classification"))
     tool_reasons = _text_list(tool_permissions.get("blocked_reasons"))
     write_capable_path_ids = _text_list(tool_permissions.get("write_capable_path_ids"))
@@ -714,6 +732,226 @@ def _next_safe_actions_payload(status: dict[str, Any]) -> dict[str, Any]:
         "primary_action_label": str(primary_action.get("label") or ""),
         "actions": actions,
     }
+
+
+def _orchestration_run_graph_payload(
+    *,
+    runs: tuple[RunRecord, ...],
+    child_runs: tuple[ChildRunRecord, ...],
+    worker_runs: tuple[WorkerNodeRunRecord, ...],
+    reports: tuple[ReportRecord, ...],
+) -> dict[str, Any]:
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, str]] = []
+    blocked_reasons: list[str] = []
+    run_ids = {record.run_id for record in runs if record.run_id}
+    child_run_ids = {record.child_run_id for record in child_runs if record.child_run_id}
+    worker_run_ids = {record.worker_run_id for record in worker_runs if record.worker_run_id}
+    report_ids = {record.report_id for record in reports if record.report_id}
+    reports_by_run_id, reports_by_id = _graph_report_maps(reports)
+
+    for run in runs:
+        nodes.append(
+            _graph_node(
+                node_id=run.run_id,
+                node_type="run",
+                status=run.status,
+                label=run.title or run.objective or run.run_id,
+                report_id=",".join(run.report_ids),
+                report_review_status="",
+            )
+        )
+        for report_id in run.report_ids:
+            if report_id in report_ids:
+                edges.append(_graph_edge(run.run_id, report_id, "declared_report"))
+            else:
+                blocked_reasons.append(f"run_id {run.run_id} links missing report_id {report_id}")
+        if run.status in RUN_REPORT_REQUIRED_STATUSES and not run.report_ids and run.run_id not in reports_by_run_id:
+            blocked_reasons.append(f"run_id {run.run_id} has no linked report")
+
+    for child in child_runs:
+        child_report = reports_by_id.get(child.report_id) if child.report_id else reports_by_run_id.get(child.child_run_id)
+        nodes.append(
+            _graph_node(
+                node_id=child.child_run_id,
+                node_type="child_run",
+                status=child.status,
+                label=child.objective or child.agent_identity or child.child_run_id,
+                parent_run_id=child.parent_run_id,
+                report_id=child_report.report_id if child_report else child.report_id,
+                report_review_status=_linked_report_review_status(child_report) if child_report else "",
+            )
+        )
+        if child.parent_run_id:
+            if child.parent_run_id in run_ids:
+                edges.append(_graph_edge(child.parent_run_id, child.child_run_id, "child_run"))
+            else:
+                blocked_reasons.append(f"child_run_id {child.child_run_id} references missing parent run_id {child.parent_run_id}")
+        else:
+            blocked_reasons.append(f"child_run_id {child.child_run_id} has no parent run_id")
+        _append_report_graph_edge(
+            record_id=child.child_run_id,
+            record_label="child_run_id",
+            report_id=child.report_id,
+            status=child.status,
+            report=child_report,
+            edges=edges,
+            blocked_reasons=blocked_reasons,
+        )
+        for dependency_id in child.depends_on_child_run_ids:
+            if dependency_id in child_run_ids:
+                edges.append(_graph_edge(dependency_id, child.child_run_id, "depends_on_child_run"))
+            else:
+                blocked_reasons.append(f"child_run_id {child.child_run_id} depends on missing child_run_id {dependency_id}")
+
+    for worker in worker_runs:
+        worker_report = reports_by_id.get(worker.report_id) if worker.report_id else reports_by_run_id.get(worker.worker_run_id)
+        nodes.append(
+            _graph_node(
+                node_id=worker.worker_run_id,
+                node_type="worker_node_run",
+                status=worker.status,
+                label=worker.objective or worker.worker_identity or worker.worker_run_id,
+                parent_run_id=worker.parent_run_id,
+                report_id=worker_report.report_id if worker_report else worker.report_id,
+                report_review_status=_linked_report_review_status(worker_report) if worker_report else worker.report_review_status,
+            )
+        )
+        if worker.parent_run_id:
+            if worker.parent_run_id in run_ids:
+                edges.append(_graph_edge(worker.parent_run_id, worker.worker_run_id, "worker_node_run"))
+            else:
+                blocked_reasons.append(f"worker_run_id {worker.worker_run_id} references missing parent run_id {worker.parent_run_id}")
+        else:
+            blocked_reasons.append(f"worker_run_id {worker.worker_run_id} has no parent run_id")
+        _append_report_graph_edge(
+            record_id=worker.worker_run_id,
+            record_label="worker_run_id",
+            report_id=worker.report_id,
+            status=worker.status,
+            report=worker_report,
+            edges=edges,
+            blocked_reasons=blocked_reasons,
+        )
+
+    known_run_like_ids = run_ids | child_run_ids | worker_run_ids
+    for report in reports:
+        nodes.append(
+            _graph_node(
+                node_id=report.report_id,
+                node_type="report",
+                status=report.status or "received",
+                label=report.summary or report.report_id,
+                parent_run_id=report.run_id,
+                report_id=report.report_id,
+                report_review_status=_linked_report_review_status(report),
+            )
+        )
+        if report.run_id:
+            if report.run_id in known_run_like_ids:
+                edges.append(_graph_edge(report.run_id, report.report_id, "produced_report"))
+            else:
+                blocked_reasons.append(f"report_id {report.report_id} references unknown run_id {report.run_id}")
+
+    unique_edges = _unique_graph_edges(edges)
+    unique_blocked_reasons = _unique_reasons(blocked_reasons)
+    return {
+        "source": "mission_control_orchestration_run_graph_v1",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "stored": False,
+        "dry_run_only": True,
+        "node_count": len(nodes),
+        "edge_count": len(unique_edges),
+        "run_node_count": len(runs),
+        "child_run_node_count": len(child_runs),
+        "worker_node_run_count": len(worker_runs),
+        "report_node_count": len(reports),
+        "blocked": bool(unique_blocked_reasons),
+        "blocked_reasons": unique_blocked_reasons,
+        "nodes": nodes,
+        "edges": unique_edges,
+    }
+
+
+def _append_report_graph_edge(
+    *,
+    record_id: str,
+    record_label: str,
+    report_id: str,
+    status: str,
+    report: ReportRecord | None,
+    edges: list[dict[str, str]],
+    blocked_reasons: list[str],
+) -> None:
+    if report:
+        edges.append(_graph_edge(record_id, report.report_id, "linked_report"))
+    elif report_id:
+        blocked_reasons.append(f"{record_label} {record_id} links missing report_id {report_id}")
+    elif status in RUN_REPORT_REQUIRED_STATUSES:
+        blocked_reasons.append(f"{record_label} {record_id} has no linked report")
+
+
+def _graph_node(
+    *,
+    node_id: str,
+    node_type: str,
+    status: str,
+    label: str,
+    parent_run_id: str = "",
+    report_id: str = "",
+    report_review_status: str = "",
+) -> dict[str, str]:
+    return {
+        "node_id": _safe_text(node_id),
+        "node_type": _safe_text(node_type),
+        "status": _safe_text(status),
+        "label": _safe_text(label, max_chars=800),
+        "parent_run_id": _safe_text(parent_run_id),
+        "report_id": _safe_text(report_id),
+        "report_review_status": _safe_text(report_review_status),
+    }
+
+
+def _graph_edge(source_id: str, target_id: str, edge_type: str) -> dict[str, str]:
+    return {
+        "source_id": _safe_text(source_id),
+        "target_id": _safe_text(target_id),
+        "edge_type": _safe_text(edge_type),
+    }
+
+
+def _unique_graph_edges(edges: list[dict[str, str]]) -> list[dict[str, str]]:
+    output: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for edge in edges:
+        key = (
+            str(edge.get("source_id") or ""),
+            str(edge.get("target_id") or ""),
+            str(edge.get("edge_type") or ""),
+        )
+        if key[0] and key[1] and key not in seen:
+            seen.add(key)
+            output.append(edge)
+    return output
+
+
+def _graph_report_maps(
+    reports: tuple[ReportRecord, ...],
+) -> tuple[dict[str, ReportRecord], dict[str, ReportRecord]]:
+    reports_by_run_id: dict[str, ReportRecord] = {}
+    reports_by_id: dict[str, ReportRecord] = {}
+    for report in reports:
+        if report.run_id:
+            reports_by_run_id[report.run_id] = report
+        if report.report_id:
+            reports_by_id[report.report_id] = report
+    return reports_by_run_id, reports_by_id
 
 
 def _orchestration_readiness_payload(status: dict[str, Any]) -> dict[str, Any]:

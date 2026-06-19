@@ -1254,6 +1254,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
   const nextSafeActions = status.next_safe_actions
   const nextSafePrimaryAction = nextSafeActions?.primary_action
   const orchestrationReadiness = status.orchestration_readiness
+  const orchestrationRunGraph = status.orchestration_run_graph
   const workerInstruction = status.worker_node_instruction_preview
   const childRecord = latestProjectionRecord(status.child_agent_orchestration) as Record<string, unknown> | null
   const workerRecord = latestProjectionRecord(status.worker_node_orchestration) as Record<string, unknown> | null
@@ -1338,6 +1339,16 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     orchestrationReadinessExecutionReady: orchestrationReadiness?.execution_ready,
     orchestrationReadinessSummary: orchestrationReadiness?.plain_language_summary ?? 'No orchestration readiness summary recorded.',
     orchestrationReadinessWorkerDispatchEnabled: orchestrationReadiness?.worker_dispatch_enabled,
+    orchestrationRunGraphBlockedReasons: orchestrationRunGraph?.blocked_reasons ?? [],
+    orchestrationRunGraphChildCount: orchestrationRunGraph?.child_run_node_count ?? 0,
+    orchestrationRunGraphDisplayOnly: orchestrationRunGraph?.display_only,
+    orchestrationRunGraphEdgeCount: orchestrationRunGraph?.edge_count ?? 0,
+    orchestrationRunGraphExecutionEnabled: orchestrationRunGraph?.execution_enabled,
+    orchestrationRunGraphNodeCount: orchestrationRunGraph?.node_count ?? 0,
+    orchestrationRunGraphReportCount: orchestrationRunGraph?.report_node_count ?? 0,
+    orchestrationRunGraphRunCount: orchestrationRunGraph?.run_node_count ?? 0,
+    orchestrationRunGraphWorkerCount: orchestrationRunGraph?.worker_node_run_count ?? 0,
+    orchestrationRunGraphWorkerDispatchEnabled: orchestrationRunGraph?.worker_dispatch_enabled,
     readinessReadOnlyState: orchestrationReadiness?.states?.supervised_read_only_autonomy ?? 'unknown',
     readinessScopedPrState: orchestrationReadiness?.states?.scoped_pr_creation ?? 'unknown',
     readinessWorkerNodeState: orchestrationReadiness?.states?.laptop_codex_worker_node ?? 'unknown',
@@ -4013,6 +4024,13 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
         ? 'warn'
         : 'good'
       : 'warn'
+  const runGraphTone =
+    status.orchestrationRunGraphExecutionEnabled === false &&
+    status.orchestrationRunGraphWorkerDispatchEnabled === false
+      ? status.orchestrationRunGraphBlockedReasons.length
+        ? 'warn'
+        : 'good'
+      : 'warn'
   const workerInstructionTone =
     status.workerInstructionExecutionEnabled === false &&
     status.workerInstructionWorkerDispatchEnabled === false &&
@@ -4038,6 +4056,8 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="next action mode" tone={nextSafeActionTone} value={`display-only ${yesNo(status.nextSafeActionDisplayOnly)} / actions ${status.nextSafeActionCount}`} />
       <StatusItem className="md:col-span-2" label="orchestration readiness" tone={readinessTone} value={`read-only ${labelText(status.readinessReadOnlyState)} / scoped PR ${labelText(status.readinessScopedPrState)}`} />
       <StatusItem label="worker readiness" tone={readinessTone} value={`laptop Codex ${labelText(status.readinessWorkerNodeState)} / execution-ready ${yesNo(status.orchestrationReadinessExecutionReady)}`} />
+      <StatusItem className="md:col-span-2" label="orchestration run graph" tone={runGraphTone} value={`nodes ${status.orchestrationRunGraphNodeCount} / edges ${status.orchestrationRunGraphEdgeCount}`} />
+      <StatusItem label="run graph nodes" tone={runGraphTone} value={`runs ${status.orchestrationRunGraphRunCount} / child ${status.orchestrationRunGraphChildCount} / worker ${status.orchestrationRunGraphWorkerCount} / reports ${status.orchestrationRunGraphReportCount}`} />
       <StatusItem label="approval lifecycle" tone={approvalLifecycleTone} value={`available ${status.approvalAvailableCount} / pending ${status.approvalPendingCount} / expired ${status.approvalExpiredCount}`} />
       <StatusItem label="approval gaps" tone={status.approvalDuplicateCount || status.approvalConsumedCount || status.approvalRejectedCount || status.approvalRunMissingIdCount || status.approvalMissingRecordCount || status.approvalUnavailableRunCount ? 'warn' : 'good'} value={`duplicates ${status.approvalDuplicateCount} / consumed ${status.approvalConsumedCount} / unavailable runs ${status.approvalUnavailableRunCount}`} />
       <StatusItem label="run lifecycle" tone={runLifecycleTone} value={`active ${status.runActiveCount} / terminal ${status.runTerminalCount} / stop-cancel ${status.runStopCancelCount}`} />
@@ -4061,6 +4081,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-3" label="desktop app install" tone="warn" value="separate laptop worker-node update; bottom-bar version is not changed by accepted-live/dashboard deploy" />
       <StatusItem className="md:col-span-3" label="next action reasons" tone={status.nextSafeActionReasons.length ? 'warn' : 'good'} value={status.nextSafeActionReasons.length ? status.nextSafeActionReasons.join(', ') : status.nextSafePrimaryReason} />
       <StatusItem className="md:col-span-3" label="orchestration summary" tone={readinessTone} value={status.orchestrationReadinessSummary} />
+      <StatusItem className="md:col-span-3" label="run graph blockers" tone={status.orchestrationRunGraphBlockedReasons.length ? 'warn' : 'good'} value={status.orchestrationRunGraphBlockedReasons.length ? status.orchestrationRunGraphBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="autonomy blockers" tone={status.autonomyBlockedReasons.length || status.provenanceReasons.length ? 'warn' : 'good'} value={[...status.provenanceReasons, ...status.autonomyBlockedReasons].length ? [...status.provenanceReasons, ...status.autonomyBlockedReasons].join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="approval blockers" tone={status.approvalBlockedReasons.length ? 'warn' : 'good'} value={status.approvalBlockedReasons.length ? status.approvalBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="run blockers" tone={status.runBlockedReasons.length ? 'warn' : 'good'} value={status.runBlockedReasons.length ? status.runBlockedReasons.join(', ') : 'none'} />

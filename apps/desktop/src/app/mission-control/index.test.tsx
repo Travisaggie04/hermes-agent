@@ -248,6 +248,37 @@ beforeEach(() => {
       worker_dispatch_enabled: false,
       would_execute: false
     },
+    orchestration_run_graph: {
+      blocked: true,
+      blocked_reasons: ['worker_run_id worker-run-1 references missing parent run_id run-parent-1'],
+      child_run_node_count: 1,
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      edge_count: 3,
+      edges: [
+        { edge_type: 'child_run', source_id: 'run-parent-1', target_id: 'child-run-1' },
+        { edge_type: 'linked_report', source_id: 'worker-run-1', target_id: 'report-worker' },
+        { edge_type: 'produced_report', source_id: 'worker-run-1', target_id: 'report-worker' }
+      ],
+      execution_enabled: false,
+      node_count: 4,
+      nodes: [
+        { label: 'Parent run', node_id: 'run-parent-1', node_type: 'run', status: 'running' },
+        { label: 'Inspect bounded Mission Control context.', node_id: 'child-run-1', node_type: 'child_run', parent_run_id: 'run-parent-1', report_id: 'report-child', report_review_status: 'needs_review', status: 'running' },
+        { label: 'Prepare bounded scoped PR packet.', node_id: 'worker-run-1', node_type: 'worker_node_run', parent_run_id: 'run-parent-1', report_id: 'report-worker', report_review_status: 'accepted', status: 'blocked' },
+        { label: 'Worker node reported evidence.', node_id: 'report-worker', node_type: 'report', parent_run_id: 'worker-run-1', report_id: 'report-worker', report_review_status: 'accepted', status: 'accepted' }
+      ],
+      report_node_count: 1,
+      run_node_count: 1,
+      session_send_enabled: false,
+      source: 'mission_control_orchestration_run_graph_v1',
+      stored: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      worker_node_run_count: 1,
+      would_execute: false
+    },
     read_only_autonomy_eligibility: {
       blocked_reasons: ['runtime provenance is not clean', 'gateway git metadata is broken'],
       bridge_permissions: {
@@ -1238,6 +1269,12 @@ describe('MissionControlView', () => {
     expect(screen.getByText('laptop Codex blocked / execution-ready no')).toBeTruthy()
     expect(screen.getByText('orchestration summary')).toBeTruthy()
     expect(screen.getByText(/Supervised read-only autonomy is blocked: runtime provenance is not clean/)).toBeTruthy()
+    expect(screen.getByText('orchestration run graph')).toBeTruthy()
+    expect(screen.getByText('nodes 4 / edges 3')).toBeTruthy()
+    expect(screen.getByText('run graph nodes')).toBeTruthy()
+    expect(screen.getByText('runs 1 / child 1 / worker 1 / reports 1')).toBeTruthy()
+    expect(screen.getByText('run graph blockers')).toBeTruthy()
+    expect(screen.getByText('worker_run_id worker-run-1 references missing parent run_id run-parent-1')).toBeTruthy()
     expect(screen.getByText('approval lifecycle')).toBeTruthy()
     expect(screen.getByText('available 1 / pending 1 / expired 1')).toBeTruthy()
     expect(screen.getByText('approval gaps')).toBeTruthy()

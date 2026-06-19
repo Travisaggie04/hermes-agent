@@ -604,6 +604,45 @@ export interface MissionControlWorkerNodeInstructionPreview {
   would_execute?: boolean
 }
 
+export interface MissionControlOrchestrationRunGraphNode {
+  label?: string
+  node_id?: string
+  node_type?: string
+  parent_run_id?: string
+  report_id?: string
+  report_review_status?: string
+  status?: string
+}
+
+export interface MissionControlOrchestrationRunGraphEdge {
+  edge_type?: string
+  source_id?: string
+  target_id?: string
+}
+
+export interface MissionControlOrchestrationRunGraph {
+  blocked?: boolean
+  blocked_reasons?: string[]
+  child_run_node_count?: number
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  edge_count?: number
+  edges?: MissionControlOrchestrationRunGraphEdge[]
+  execution_enabled?: boolean
+  node_count?: number
+  nodes?: MissionControlOrchestrationRunGraphNode[]
+  report_node_count?: number
+  run_node_count?: number
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  worker_node_run_count?: number
+  would_execute?: boolean
+}
+
 export interface MissionControlProjectSession {
   cwd?: null | string
   durable_session_id?: string
@@ -995,6 +1034,7 @@ export interface MissionControlWorkspaceStatus {
   lane?: { active_lane_count?: number; max_active_lane?: number }
   next_safe_actions?: MissionControlNextSafeActions
   orchestration_readiness?: MissionControlOrchestrationReadiness
+  orchestration_run_graph?: MissionControlOrchestrationRunGraph
   read_only_autonomy_eligibility?: {
     blocked_reasons?: string[]
     bridge_permissions?: { permission_classification?: string; read_only_safe?: boolean; reasons?: string[] }

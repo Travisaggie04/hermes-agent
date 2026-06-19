@@ -214,6 +214,26 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
     assert status["control_plane_records"]["active_child_run_count"] == 1
     assert status["control_plane_records"]["active_worker_node_run_count"] == 1
 
+    graph = status["orchestration_run_graph"]
+    assert graph["display_only"] is True
+    assert graph["trusted_for_execution"] is False
+    assert graph["would_execute"] is False
+    assert graph["execution_enabled"] is False
+    assert graph["dispatch_enabled"] is False
+    assert graph["session_send_enabled"] is False
+    assert graph["worker_dispatch_enabled"] is False
+    assert graph["stored"] is False
+    assert graph["dry_run_only"] is True
+    assert graph["node_count"] == 4
+    assert graph["child_run_node_count"] == 1
+    assert graph["worker_node_run_count"] == 1
+    assert graph["report_node_count"] == 2
+    assert graph["edge_count"] == 4
+    node_ids = {node["node_id"] for node in graph["nodes"]}
+    assert {"child-run-1", "worker-run-1", "report-child", "report-worker"} <= node_ids
+    assert "child_run_id child-run-1 references missing parent run_id run-parent" in graph["blocked_reasons"]
+    assert "worker_run_id worker-run-1 references missing parent run_id run-parent" in graph["blocked_reasons"]
+
     instruction = status["worker_node_instruction_preview"]
     assert instruction["display_only"] is True
     assert instruction["trusted_for_execution"] is False
