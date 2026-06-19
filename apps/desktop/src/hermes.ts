@@ -406,6 +406,29 @@ export interface MissionControlToolPermissionClassification {
   write_capable_path_ids?: string[]
 }
 
+export interface MissionControlReportLifecycle {
+  append_only_projection?: boolean
+  blocked?: boolean
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  duplicate_report_ids?: string[]
+  execution_enabled?: boolean
+  open_report_ids?: string[]
+  raw_report_count?: number
+  report_count?: number
+  reports_by_run_id?: Record<string, string[]>
+  reviewed_report_ids?: string[]
+  runs_missing_report?: string[]
+  runs_with_missing_linked_report_ids?: Record<string, string[]>
+  session_send_enabled?: boolean
+  source?: string
+  status_counts?: Record<string, number>
+  terminal_report_ids?: string[]
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+}
+
 export interface MissionControlProjectSession {
   cwd?: null | string
   durable_session_id?: string
@@ -832,6 +855,7 @@ export interface MissionControlWorkspaceStatus {
   runtime_worktree_guard?: { decision_state?: string; reason?: string }
   safety?: { dispatch_in_gateway?: boolean; send_to_jenny_enabled?: boolean }
   stale_context?: { warnings?: string[] }
+  report_lifecycle?: MissionControlReportLifecycle
   tool_permission_classification?: MissionControlToolPermissionClassification
   worker_node_orchestration?: MissionControlOrchestrationProjection<MissionControlWorkerNodeRunRecord>
 }

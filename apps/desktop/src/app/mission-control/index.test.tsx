@@ -153,6 +153,30 @@ beforeEach(() => {
       statuses: ['BROKEN_GIT_METADATA', 'GATEWAY_UNTRUSTED']
     },
     runtime_worktree_guard: { decision_state: 'pass' },
+    report_lifecycle: {
+      append_only_projection: true,
+      blocked: true,
+      blocked_reasons: [
+        'report_id report-worker has multiple append-only records',
+        'run_id run-parent-1 has no linked report',
+        'report_id report-worker still needs review'
+      ],
+      dispatch_enabled: false,
+      display_only: true,
+      duplicate_report_ids: ['report-worker'],
+      execution_enabled: false,
+      open_report_ids: ['report-worker'],
+      raw_report_count: 2,
+      report_count: 1,
+      reports_by_run_id: { 'worker-run-1': ['report-worker'] },
+      reviewed_report_ids: [],
+      runs_missing_report: ['run-parent-1'],
+      runs_with_missing_linked_report_ids: {},
+      session_send_enabled: false,
+      terminal_report_ids: [],
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false
+    },
     safety: { dispatch_in_gateway: false, send_to_jenny_enabled: false },
     stale_context: { warnings: [] },
     tool_permission_classification: {
@@ -1005,6 +1029,12 @@ describe('MissionControlView', () => {
     expect(screen.getByText('manual only')).toBeTruthy()
     expect(screen.getByText('lifecycle projection')).toBeTruthy()
     expect(screen.getByText('append-only yes / active mutation lanes 0')).toBeTruthy()
+    expect(screen.getByText('report lifecycle')).toBeTruthy()
+    expect(screen.getByText('open 1 / reviewed 0 / terminal 0')).toBeTruthy()
+    expect(screen.getByText('report gaps')).toBeTruthy()
+    expect(screen.getByText('duplicates 1 / missing 1 / stale links 0')).toBeTruthy()
+    expect(screen.getByText('report review blockers')).toBeTruthy()
+    expect(screen.getByText('report_id report-worker has multiple append-only records, run_id run-parent-1 has no linked report, report_id report-worker still needs review')).toBeTruthy()
     expect(screen.getByText('child-agent status')).toBeTruthy()
     expect(screen.getByText('1 active / latest running')).toBeTruthy()
     expect(screen.getByText('child-agent objective')).toBeTruthy()

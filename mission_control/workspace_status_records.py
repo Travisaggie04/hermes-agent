@@ -32,6 +32,9 @@ ACTIVE_RUN_STATUSES = {"requested", "preflight_passed", "running", "stopping"}
 ACTIVE_ORCHESTRATION_STATUSES = {"requested", "assigned", "preflight_passed", "running", "stopping", "blocked"}
 PENDING_APPROVAL_STATUSES = {"proposed"}
 AVAILABLE_APPROVAL_STATUSES = {"approved"}
+REPORT_OPEN_STATUSES = {"received", "needs_review"}
+REPORT_TERMINAL_STATUSES = {"accepted", "rejected", "superseded"}
+RUN_REPORT_REQUIRED_STATUSES = {"completed", "failed", "blocked", "stopped", "cancelled"}
 MUTATION_LANE_TYPES = {
     "implementation",
     "pr_creation",
@@ -103,6 +106,7 @@ def build_workspace_status_from_records(
             recent_runs = ()
             recent_approvals = ()
             recent_reports = ()
+            recent_reports_raw = ()
             recent_child_runs = ()
             recent_worker_runs = ()
     else:
@@ -111,6 +115,7 @@ def build_workspace_status_from_records(
         recent_runs = ()
         recent_approvals = ()
         recent_reports = ()
+        recent_reports_raw = ()
         recent_child_runs = ()
         recent_worker_runs = ()
 
@@ -177,6 +182,11 @@ def build_workspace_status_from_records(
         source="WorkerNodeRunRecord",
     )
     status["control_plane_lifecycle"] = status_input["control_plane_lifecycle"]
+    status["report_lifecycle"] = _report_lifecycle_payload(
+        reports=recent_reports,
+        raw_reports=recent_reports_raw,
+        runs=recent_runs,
+    )
     status["record_store"] = {
         "status": store_status,
         "error": store_error,
@@ -241,6 +251,80 @@ def _control_plane_lifecycle_payload(
     }
 
 
+def _report_lifecycle_payload(
+    *,
+    reports: tuple[ReportRecord, ...],
+    raw_reports: tuple[ReportRecord, ...],
+    runs: tuple[RunRecord, ...],
+) -> dict[str, Any]:
+    status_counts: dict[str, int] = {}
+    reports_by_run_id: dict[str, list[str]] = {}
+    open_report_ids: list[str] = []
+    terminal_report_ids: list[str] = []
+    reviewed_report_ids: list[str] = []
+    for report in reports:
+        status = str(report.status or "received")
+        status_counts[status] = status_counts.get(status, 0) + 1
+        if report.run_id:
+            reports_by_run_id.setdefault(report.run_id, []).append(report.report_id)
+        if status in REPORT_OPEN_STATUSES or (status not in REPORT_TERMINAL_STATUSES and not report.reviewed_at):
+            open_report_ids.append(report.report_id)
+        if status in REPORT_TERMINAL_STATUSES:
+            terminal_report_ids.append(report.report_id)
+        if report.reviewed_at or report.reviewed_by or status == "reviewed":
+            reviewed_report_ids.append(report.report_id)
+
+    duplicate_report_ids = _duplicate_record_ids(raw_reports, "report_id")
+    report_ids = {report.report_id for report in reports}
+    run_ids_with_reports = set(reports_by_run_id)
+    runs_missing_report = [
+        run.run_id
+        for run in runs
+        if run.status in RUN_REPORT_REQUIRED_STATUSES
+        and not run.report_ids
+        and run.run_id not in run_ids_with_reports
+    ]
+    runs_with_missing_linked_report_ids = {
+        run.run_id: [report_id for report_id in run.report_ids if report_id not in report_ids]
+        for run in runs
+        if run.status in RUN_REPORT_REQUIRED_STATUSES
+        and run.report_ids
+        and any(report_id not in report_ids for report_id in run.report_ids)
+    }
+    blocked_reasons: list[str] = []
+    for report_id in duplicate_report_ids:
+        blocked_reasons.append(f"report_id {report_id} has multiple append-only records")
+    for run_id in runs_missing_report:
+        blocked_reasons.append(f"run_id {run_id} has no linked report")
+    for run_id, report_ids in runs_with_missing_linked_report_ids.items():
+        blocked_reasons.append(f"run_id {run_id} links missing report ids: {', '.join(report_ids)}")
+    for report_id in open_report_ids:
+        blocked_reasons.append(f"report_id {report_id} still needs review")
+
+    return {
+        "source": "ReportRecord",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "append_only_projection": True,
+        "report_count": len(reports),
+        "raw_report_count": len(raw_reports),
+        "status_counts": status_counts,
+        "open_report_ids": open_report_ids,
+        "terminal_report_ids": terminal_report_ids,
+        "reviewed_report_ids": reviewed_report_ids,
+        "duplicate_report_ids": duplicate_report_ids,
+        "runs_missing_report": runs_missing_report,
+        "runs_with_missing_linked_report_ids": runs_with_missing_linked_report_ids,
+        "reports_by_run_id": reports_by_run_id,
+        "blocked": bool(blocked_reasons),
+        "blocked_reasons": blocked_reasons,
+    }
+
+
 def _latest_by_id(records: tuple[Any, ...], field_name: str) -> dict[str, dict[str, Any]]:
     return {
         record_id: record.to_dict()
@@ -256,6 +340,15 @@ def _latest_records_by_id(records: tuple[Any, ...], field_name: str) -> dict[str
             output.pop(record_id, None)
             output[record_id] = record
     return output
+
+
+def _duplicate_record_ids(records: tuple[Any, ...], field_name: str) -> list[str]:
+    counts: dict[str, int] = {}
+    for record in records:
+        record_id = str(getattr(record, field_name, "") or "")
+        if record_id:
+            counts[record_id] = counts.get(record_id, 0) + 1
+    return [record_id for record_id, count in counts.items() if count > 1]
 
 
 def _orchestration_projection(

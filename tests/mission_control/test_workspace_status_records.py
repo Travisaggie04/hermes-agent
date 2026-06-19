@@ -189,3 +189,100 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
     assert worker["worker_dispatch_enabled"] is False
     assert status["control_plane_records"]["active_child_run_count"] == 1
     assert status["control_plane_records"]["active_worker_node_run_count"] == 1
+
+
+def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        RunRecord(
+            run_id="run-reportless",
+            project_id="project-hermes-mission-control",
+            lane_type="read_only_inspection",
+            title="Finished without report",
+            status="completed",
+        )
+    )
+    store.append(
+        RunRecord(
+            run_id="run-missing-linked-report",
+            project_id="project-hermes-mission-control",
+            lane_type="read_only_inspection",
+            title="Finished with stale report pointer",
+            status="completed",
+            report_ids=("report-missing",),
+        )
+    )
+    store.append(
+        RunRecord(
+            run_id="run-with-report",
+            project_id="project-hermes-mission-control",
+            lane_type="read_only_inspection",
+            title="Finished with received report",
+            status="completed",
+            report_ids=("report-duplicate",),
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-duplicate",
+            run_id="run-with-report",
+            project_id="project-hermes-mission-control",
+            status="received",
+            summary="First append-only report record.",
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-accepted",
+            run_id="run-reviewed",
+            project_id="project-hermes-mission-control",
+            status="accepted",
+            summary="Accepted report.",
+            reviewed_at="2026-06-19T10:00:00Z",
+            reviewed_by="jenny",
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-duplicate",
+            run_id="run-with-report",
+            project_id="project-hermes-mission-control",
+            status="needs_review",
+            summary="Second append-only report record.",
+        )
+    )
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    lifecycle = status["report_lifecycle"]
+    assert lifecycle["display_only"] is True
+    assert lifecycle["trusted_for_execution"] is False
+    assert lifecycle["execution_enabled"] is False
+    assert lifecycle["dispatch_enabled"] is False
+    assert lifecycle["session_send_enabled"] is False
+    assert lifecycle["worker_dispatch_enabled"] is False
+    assert lifecycle["append_only_projection"] is True
+    assert lifecycle["raw_report_count"] == 3
+    assert lifecycle["report_count"] == 2
+    assert lifecycle["status_counts"] == {"accepted": 1, "needs_review": 1}
+    assert lifecycle["duplicate_report_ids"] == ["report-duplicate"]
+    assert lifecycle["open_report_ids"] == ["report-duplicate"]
+    assert lifecycle["terminal_report_ids"] == ["report-accepted"]
+    assert lifecycle["reviewed_report_ids"] == ["report-accepted"]
+    assert lifecycle["runs_missing_report"] == ["run-reportless"]
+    assert lifecycle["runs_with_missing_linked_report_ids"] == {
+        "run-missing-linked-report": ["report-missing"]
+    }
+    assert lifecycle["reports_by_run_id"] == {
+        "run-reviewed": ["report-accepted"],
+        "run-with-report": ["report-duplicate"],
+    }
+    assert lifecycle["blocked"] is True
+    assert "report_id report-duplicate has multiple append-only records" in lifecycle["blocked_reasons"]
+    assert "run_id run-reportless has no linked report" in lifecycle["blocked_reasons"]
+    assert (
+        "run_id run-missing-linked-report links missing report ids: report-missing"
+        in lifecycle["blocked_reasons"]
+    )
+    assert "report_id report-duplicate still needs review" in lifecycle["blocked_reasons"]

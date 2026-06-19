@@ -1248,6 +1248,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
   const autonomyEligibility = status.read_only_autonomy_eligibility
   const scopedPrEligibility = status.scoped_pr_lane_eligibility
   const toolPermissions = status.tool_permission_classification
+  const reportLifecycle = status.report_lifecycle
   const childRecord = latestProjectionRecord(status.child_agent_orchestration) as Record<string, unknown> | null
   const workerRecord = latestProjectionRecord(status.worker_node_orchestration) as Record<string, unknown> | null
   const childBlockedReasons = uniqueTextList([
@@ -1261,6 +1262,10 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     projectionRecordText(workerRecord, 'failure_reason')
   ])
   const scopedPrScopeCount = (scopedPrEligibility?.scope?.files?.length ?? 0) + (scopedPrEligibility?.scope?.directories?.length ?? 0)
+  const reportMissingLinkedCount = Object.values(reportLifecycle?.runs_with_missing_linked_report_ids ?? {}).reduce(
+    (count, reportIds) => count + reportIds.length,
+    0
+  )
   return {
     activeLaneCount: status.lane?.active_lane_count ?? 0,
     activeMutationLaneCount: status.control_plane_lifecycle?.active_mutation_lane_count ?? 0,
@@ -1286,6 +1291,16 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     provenanceReasons: runtimeProvenance?.autonomy_blocked_reasons ?? [],
     provenanceStatus: runtimeProvenance?.primary_status ?? runtimeProvenance?.status ?? 'unknown',
     runtime: status.accepted_baseline?.runtime_path ?? 'unknown',
+    reportDuplicateCount: reportLifecycle?.duplicate_report_ids?.length ?? 0,
+    reportLifecycleBlocked: reportLifecycle?.blocked,
+    reportLifecycleBlockedReasons: reportLifecycle?.blocked_reasons ?? [],
+    reportLifecycleExecutionEnabled: reportLifecycle?.execution_enabled,
+    reportMissingLinkedCount,
+    reportMissingRunCount: reportLifecycle?.runs_missing_report?.length ?? 0,
+    reportOpenCount: reportLifecycle?.open_report_ids?.length ?? 0,
+    reportRawCount: reportLifecycle?.raw_report_count ?? 0,
+    reportReviewedCount: reportLifecycle?.reviewed_report_ids?.length ?? 0,
+    reportTerminalCount: reportLifecycle?.terminal_report_ids?.length ?? 0,
     scopedPrBlockedReasons: scopedPrEligibility?.blocked_reasons ?? [],
     scopedPrBridgePermission: scopedPrEligibility?.bridge_permissions?.permission_classification ?? 'unknown',
     scopedPrEligible: scopedPrEligibility?.eligible,
@@ -3906,6 +3921,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
   const workerLockTone = status.workerExecutionEnabled === false && status.workerDispatchEnabled === false ? 'good' : 'warn'
   const childLockTone = status.childExecutionEnabled === false && status.childDispatchEnabled === false ? 'good' : 'warn'
   const toolPermissionTone = status.toolPermissionClassification === 'read_only_safe' || status.toolPermissionClassification === 'manual_only' ? 'good' : 'warn'
+  const reportLifecycleTone = status.reportLifecycleBlocked === false && status.reportLifecycleExecutionEnabled === false ? 'good' : 'warn'
   return (
     <div className="grid gap-3 rounded-xl border border-border/70 bg-background/40 p-4 md:grid-cols-3">
       <StatusItem label="Runtime Worktree Guard" tone={status.guard === 'pass' ? 'good' : 'warn'} value={status.guard} />
@@ -3919,6 +3935,8 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="scoped PR lane" tone={status.scopedPrEligible === true ? 'good' : 'warn'} value={scopedPrLabel} />
       <StatusItem label="scoped PR bridge" tone={status.scopedPrBridgePermission === 'read_only_safe' ? 'good' : 'warn'} value={labelText(status.scopedPrBridgePermission)} />
       <StatusItem label="lifecycle projection" tone={status.appendOnlyProjection ? 'good' : 'warn'} value={`append-only ${yesNo(status.appendOnlyProjection)} / active mutation lanes ${status.activeMutationLaneCount}`} />
+      <StatusItem label="report lifecycle" tone={reportLifecycleTone} value={`open ${status.reportOpenCount} / reviewed ${status.reportReviewedCount} / terminal ${status.reportTerminalCount}`} />
+      <StatusItem label="report gaps" tone={status.reportDuplicateCount || status.reportMissingRunCount || status.reportMissingLinkedCount ? 'warn' : 'good'} value={`duplicates ${status.reportDuplicateCount} / missing ${status.reportMissingRunCount} / stale links ${status.reportMissingLinkedCount}`} />
       <StatusItem className="md:col-span-2" label="accepted runtime" value={status.runtime} />
       <StatusItem label="accepted-live head" value={status.head.slice(0, 12)} />
       <StatusItem label="deployed head" value={status.deployedHead.slice(0, 12)} />
@@ -3931,6 +3949,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-2" label="worker-node blockers" tone={status.workerBlockedReasons.length ? 'warn' : 'good'} value={status.workerBlockedReasons.length ? status.workerBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="desktop app install" tone="warn" value="separate laptop worker-node update; bottom-bar version is not changed by accepted-live/dashboard deploy" />
       <StatusItem className="md:col-span-3" label="autonomy blockers" tone={status.autonomyBlockedReasons.length || status.provenanceReasons.length ? 'warn' : 'good'} value={[...status.provenanceReasons, ...status.autonomyBlockedReasons].length ? [...status.provenanceReasons, ...status.autonomyBlockedReasons].join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="report review blockers" tone={status.reportLifecycleBlockedReasons.length ? 'warn' : 'good'} value={status.reportLifecycleBlockedReasons.length ? status.reportLifecycleBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="write-capable tool paths" tone={status.toolPermissionWritePaths.length ? 'warn' : 'good'} value={status.toolPermissionWritePaths.length ? status.toolPermissionWritePaths.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="scoped PR blockers" tone={status.scopedPrBlockedReasons.length ? 'warn' : 'good'} value={status.scopedPrBlockedReasons.length ? status.scopedPrBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="child-agent blockers" tone={status.childBlockedReasons.length ? 'warn' : 'good'} value={status.childBlockedReasons.length ? status.childBlockedReasons.join(', ') : 'none'} />
