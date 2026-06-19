@@ -984,6 +984,16 @@ def test_record_sourced_workspace_status_projects_report_completion_path(tmp_pat
         )
     )
     store.append(
+        RunRecord(
+            run_id="run-reviewed-only",
+            project_id="project-hermes-mission-control",
+            lane_type="read_only_inspection",
+            title="Reviewed but not accepted terminal run",
+            status="completed",
+            report_ids=("report-reviewed-only",),
+        )
+    )
+    store.append(
         ReportRecord(
             report_id="report-ready",
             run_id="run-ready",
@@ -997,6 +1007,25 @@ def test_record_sourced_workspace_status_projects_report_completion_path(tmp_pat
             next_recommended_lane="Jenny can close this item.",
             evidence_refs=("pytest output",),
             reviewed_at="2026-06-19T10:00:00Z",
+            reviewed_by="jenny",
+            redaction_status="operator_supplied_redacted",
+            metadata={"safety_confirmation": "No live dispatch, deploy, restart, runtime switch, records, or secrets."},
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-reviewed-only",
+            run_id="run-reviewed-only",
+            project_id="project-hermes-mission-control",
+            status="reviewed",
+            summary="Reviewed report that still needs explicit acceptance.",
+            result="Finished the bounded review.",
+            risks=("none beyond focused evidence",),
+            changed_files=("mission_control/workspace_status_records.py",),
+            tests=("mission_control status tests passed",),
+            next_recommended_lane="Jenny can decide whether to accept this item.",
+            evidence_refs=("pytest output",),
+            reviewed_at="2026-06-19T10:30:00Z",
             reviewed_by="jenny",
             redaction_status="operator_supplied_redacted",
             metadata={"safety_confirmation": "No live dispatch, deploy, restart, runtime switch, records, or secrets."},
@@ -1045,9 +1074,9 @@ def test_record_sourced_workspace_status_projects_report_completion_path(tmp_pat
     assert completion["stored"] is False
     assert completion["dry_run_only"] is True
     assert completion["manual_review_only"] is True
-    assert completion["terminal_item_count"] == 4
+    assert completion["terminal_item_count"] == 5
     assert completion["completion_ready_count"] == 1
-    assert completion["blocked_completion_count"] == 3
+    assert completion["blocked_completion_count"] == 4
     assert completion["missing_report_count"] == 1
     assert completion["needs_review_count"] == 1
     assert completion["rejected_report_count"] == 1
@@ -1059,10 +1088,15 @@ def test_record_sourced_workspace_status_projects_report_completion_path(tmp_pat
     assert "report_id report-needs-review still needs Jenny review before completion" in completion["blocked_reasons"]
     assert "report_id report-needs-review missing completion contract fields: result, risks/blockers, evidence, tests, next lane, safety confirmation" in completion["blocked_reasons"]
     assert "report_id report-rejected completion report is rejected" in completion["blocked_reasons"]
+    assert "report_id report-reviewed-only completion report is reviewed but not accepted" in completion["blocked_reasons"]
 
     items = {item["item_id"]: item for item in completion["items"]}
     assert items["report-completion:run:run-ready"]["completion_ready"] is True
     assert items["report-completion:run:run-ready"]["report_review_status"] == "accepted"
+    assert items["report-completion:run:run-reviewed-only"]["completion_ready"] is False
+    assert items["report-completion:run:run-reviewed-only"]["report_review_status"] == "reviewed"
+    assert items["report-completion:run:run-reviewed-only"]["report_contract_complete"] is True
+    assert items["report-completion:run:run-reviewed-only"]["result_ingestion_ready"] is True
     assert items["report-completion:child_run:child-needs-review"]["completion_ready"] is False
     assert items["report-completion:child_run:child-needs-review"]["result_ingestion_ready"] is False
     assert items["report-completion:worker_node_run:worker-missing"]["report_link_status"] == "missing_linked_report"
@@ -1074,9 +1108,10 @@ def test_record_sourced_workspace_status_projects_report_completion_path(tmp_pat
     assert "report_id report-rejected completion report is rejected" in next_safe_actions["blocked_reasons"]
 
     operator_packet = status["operator_decision_packet"]
-    assert operator_packet["report_completion_blocked_count"] == 3
+    assert operator_packet["report_completion_blocked_count"] == 4
     assert "worker_node_run worker-missing has no linked completion report" in operator_packet["report_completion_blocked_reasons"]
-    assert "Report completion path: 1 ready, 3 blocked." in operator_packet["plain_language_summary"]
+    assert "report_id report-reviewed-only completion report is reviewed but not accepted" in operator_packet["report_completion_blocked_reasons"]
+    assert "Report completion path: 1 ready, 4 blocked." in operator_packet["plain_language_summary"]
     assert operator_packet["jenny_review_required"] is True
 
 

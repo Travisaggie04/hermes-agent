@@ -1735,9 +1735,11 @@ def _report_completion_path_item(
     elif duplicate_report:
         blocked_reasons.append(f"report_id {report_id} has multiple append-only records")
 
-    if report is not None and review_status not in {"reviewed", "accepted"}:
+    if report is not None and review_status != "accepted":
         if review_status in {"rejected", "superseded"}:
             blocked_reasons.append(f"report_id {report_id} completion report is {review_status}")
+        elif review_status == "reviewed":
+            blocked_reasons.append(f"report_id {report_id} completion report is reviewed but not accepted")
         else:
             blocked_reasons.append(f"report_id {report_id} still needs Jenny review before completion")
     if contract_missing_fields:

@@ -284,10 +284,12 @@ Travis which reports are ready for manual review and which need repair.
 
 The report completion path checks terminal run, child-run, and laptop Codex
 worker-node records before Jenny treats work as closed. A completed, failed,
-blocked, stopped, or cancelled item must have a linked report that is reviewed
-or accepted, contract-complete, redacted, metadata-safe, and safety-confirmed.
-The projection never closes a run or accepts a report; it only shows whether
-the evidence chain is complete enough for Jenny and Travis to review.
+blocked, stopped, or cancelled item must have a linked report that is accepted,
+contract-complete, redacted, metadata-safe, and safety-confirmed. A report that
+is only reviewed can inform Jenny, but it still blocks completion until Jenny
+or Travis explicitly accepts it. The projection never closes a run or accepts a
+report; it only shows whether the evidence chain is complete enough for Jenny
+and Travis to review.
 
 The child-agent instruction preview mirrors the laptop Codex worker preview for
 planned delegation. It gives Jenny a manual prompt with child-agent identity,
