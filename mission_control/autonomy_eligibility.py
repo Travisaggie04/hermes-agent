@@ -199,6 +199,7 @@ INERT_PREVIEW_FLAGS = {
 
 _BRIDGE_DISABLED_FLAG_REASONS = {
     **_PREVIEW_DISABLED_FLAG_REASONS,
+    "send_to_jenny_enabled": "send_to_jenny_enabled must remain false",
     "worker_enabled": "worker_enabled must remain false",
     "timer_enabled": "timer_enabled must remain false",
     "daemon_enabled": "daemon_enabled must remain false",

@@ -395,6 +395,7 @@ def test_send_to_jenny_bridge_path_is_not_read_only_safe():
     _assert_inert_preview(result)
     assert bridge["permission_classification"] == "write_capable_not_safe_for_autonomy"
     assert bridge["send_to_jenny_enabled"] is False
+    assert any("send_to_jenny_enabled must remain false" in reason for reason in bridge["reasons"])
     assert result["eligible"] is False
     assert "bridge path is not read-only safe" in result["blocked_reasons"]
 
