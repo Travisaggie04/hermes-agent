@@ -1018,6 +1018,9 @@ def _assert_inert_workspace_payload(payload):
     assert payload["manual_copy_only"] is True
     assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
+    assert payload["would_execute"] is False
     assert payload["execution_enabled"] is False
     assert payload["trusted_for_execution"] is False
     assert payload["inert_context_only"] is True
@@ -2667,7 +2670,11 @@ def test_health_is_read_only_and_inert(client):
         "plugin": "mission-control-governance",
         "trusted_for_execution": False,
         "inert_context_only": True,
+        "would_execute": False,
         "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
     }
 
 
@@ -2781,7 +2788,11 @@ def test_start_gate_returns_no_active_envelope_for_missing_store(client):
     assert response.json() == {
         "trusted_for_execution": False,
         "inert_context_only": True,
+        "would_execute": False,
         "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
         "store_status": "missing",
         "error": None,
         "has_active_envelope": False,
@@ -4119,7 +4130,11 @@ def test_empty_store_returns_empty_approval_and_evidence_payloads(client):
     assert approvals.json() == {
         "trusted_for_execution": False,
         "inert_context_only": True,
+        "would_execute": False,
         "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
         "store_status": "missing",
         "error": None,
         "source": "none",
@@ -4129,7 +4144,11 @@ def test_empty_store_returns_empty_approval_and_evidence_payloads(client):
     assert evidence.json() == {
         "trusted_for_execution": False,
         "inert_context_only": True,
+        "would_execute": False,
         "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
         "store_status": "missing",
         "error": None,
         "source": "none",
@@ -4139,7 +4158,11 @@ def test_empty_store_returns_empty_approval_and_evidence_payloads(client):
     assert actions.json() == {
         "trusted_for_execution": False,
         "inert_context_only": True,
+        "would_execute": False,
         "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
         "store_status": "missing",
         "error": None,
         "source": "none",
@@ -4677,7 +4700,11 @@ def test_operator_actions_empty_missing_store_returns_bounded_empty_payload(clie
     assert response.json() == {
         "trusted_for_execution": False,
         "inert_context_only": True,
+        "would_execute": False,
         "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
         "store_status": "missing",
         "error": None,
         "source": "none",

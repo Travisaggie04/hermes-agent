@@ -140,7 +140,11 @@ _PATH_LIKE_RE = re.compile(r"(?<!\w)(?:/[A-Za-z0-9._@%+\-]+){2,}|[A-Za-z]:\\[^\s
 INERT_FLAGS = {
     "trusted_for_execution": False,
     "inert_context_only": True,
+    "would_execute": False,
     "execution_enabled": False,
+    "dispatch_enabled": False,
+    "session_send_enabled": False,
+    "worker_dispatch_enabled": False,
 }
 CONTROL_PLANE_INERT_FLAGS = {
     **INERT_FLAGS,
@@ -977,6 +981,7 @@ def _async_agent_capability_projection() -> dict[str, Any]:
         "display_only": True,
         "manual_copy_only": True,
         "send_to_jenny_enabled": False,
+        "would_execute": False,
         "dispatch_enabled": False,
         "execution_enabled": False,
         "trusted_for_execution": False,

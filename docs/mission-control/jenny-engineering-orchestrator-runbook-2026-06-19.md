@@ -42,6 +42,9 @@ Jenny packet as permission to bypass Codex safety checks.
 - Jenny and GitHub bridge status payloads explicitly report session-send and
   worker-dispatch as disabled, so control surfaces can fail closed on those
   backend flags instead of guessing.
+- Mission Control plugin status and preview payloads inherit a base inert flag
+  set with `would_execute`, execution, dispatch, session-send, and
+  worker-dispatch all false by default.
 - The Desktop Jenny project chat uses normal chat submission, so it remains
   usable, but its status pill warns when backend safety status reports live
   dispatch, execution, session-send, worker, timer, daemon, Discord automation,
