@@ -848,7 +848,9 @@ export interface MissionControlExecutionModeClassification {
   warnings?: string[]
   worker_dispatch_enabled?: boolean
   worker_node_preview_allowed?: boolean
+  would_dispatch?: boolean
   would_execute?: boolean
+  would_session_send?: boolean
 }
 
 export interface MissionControlExecutionLockFields {

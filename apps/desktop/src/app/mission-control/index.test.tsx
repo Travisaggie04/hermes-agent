@@ -207,7 +207,9 @@ beforeEach(() => {
       warnings: ['worker-node mode is manual-handoff only and not an executor'],
       worker_dispatch_enabled: false,
       worker_node_preview_allowed: true,
-      would_execute: false
+      would_dispatch: false,
+      would_execute: false,
+      would_session_send: false
     },
     execution_packet_preview: {
       blocked_reasons: ['runtime provenance is not clean', 'worker-node presence is not confirmed online'],

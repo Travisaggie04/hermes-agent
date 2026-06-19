@@ -1429,6 +1429,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     ...(nextSafeActions?.actions ?? []).map(action => action.reason ?? '')
   ])
   const executionPacketLockReasons = uniqueTextList([
+    ...executionLockReasons('execution mode', executionModeClassification),
     ...executionLockReasons('execution packet', executionPacket),
     ...executionLockReasons('execution packet body', executionPacketBody),
     ...executionLockReasons('worker contract', workerContract)
@@ -1504,6 +1505,9 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     executionModeHigherRisk: executionModeClassification?.higher_risk,
     executionModePreviewReady: executionModeClassification?.preview_ready,
     executionModeProtectedMarkers: executionModeClassification?.protected_action_markers ?? [],
+    executionModeWouldDispatch: executionModeClassification?.would_dispatch,
+    executionModeWouldExecute: executionModeClassification?.would_execute,
+    executionModeWouldSessionSend: executionModeClassification?.would_session_send,
     executionModeWorkerDispatchEnabled: executionModeClassification?.worker_dispatch_enabled,
     executionPacketBlockedReasons: executionPacket?.blocked_reasons ?? [],
     executionPacketBodyDispatchEnabled: executionPacketBody?.dispatch_enabled,
@@ -4395,9 +4399,14 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
   const autonomyLabel = status.autonomyEligible === true ? 'eligible preview only' : status.autonomyEligible === false ? 'blocked / no execution' : 'unknown / no execution'
   const scopedPrLabel = status.scopedPrEligible === true ? `preview-ready / ${status.scopedPrScopeCount} scoped path${status.scopedPrScopeCount === 1 ? '' : 's'}` : status.scopedPrEligible === false ? 'blocked / no execution' : 'unknown / no execution'
   const executionModeTone =
-    status.executionModeExecutionEnabled === false &&
-    status.executionModeDispatchEnabled === false &&
-    status.executionModeWorkerDispatchEnabled === false
+    allFalse([
+      status.executionModeExecutionEnabled,
+      status.executionModeDispatchEnabled,
+      status.executionModeWorkerDispatchEnabled,
+      status.executionModeWouldExecute,
+      status.executionModeWouldDispatch,
+      status.executionModeWouldSessionSend
+    ])
       ? status.executionModeBlockedReasons.length || status.executionModeHigherRisk
         ? 'warn'
         : 'good'
