@@ -383,6 +383,7 @@ def test_live_bridge_flags_override_read_only_safe_claim():
     assert any("discord_automation_enabled must remain false" in reason for reason in bridge["reasons"])
     assert result["eligible"] is False
     assert "bridge path is not read-only safe" in result["blocked_reasons"]
+    assert any(reason.startswith("bridge: bridge live execution flags must be disabled") for reason in result["blocked_reasons"])
 
 
 def test_send_to_jenny_bridge_path_is_not_read_only_safe():
@@ -398,6 +399,7 @@ def test_send_to_jenny_bridge_path_is_not_read_only_safe():
     assert any("send_to_jenny_enabled must remain false" in reason for reason in bridge["reasons"])
     assert result["eligible"] is False
     assert "bridge path is not read-only safe" in result["blocked_reasons"]
+    assert "bridge: bridge live execution flags must be disabled: send_to_jenny_enabled must remain false" in result["blocked_reasons"]
 
 
 def test_control_path_permission_catalog_covers_required_paths_and_blocks_write_capable_paths():

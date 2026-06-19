@@ -90,6 +90,9 @@ def test_record_sourced_workspace_status_uses_latest_baseline_and_idle_when_no_r
 def test_hard_boundary_contract_blocks_truthy_live_flags():
     hard_boundary = hard_boundary_contract_payload(
         {
+            "read_only_autonomy_eligibility": {
+                "send_to_jenny_enabled": "yes",
+            },
             "execution_packet_preview": {
                 "would_dispatch": "true",
                 "packet": {
@@ -108,6 +111,7 @@ def test_hard_boundary_contract_blocks_truthy_live_flags():
     assert hard_boundary["state"] == "live_flag_violation"
     assert hard_boundary["blocked"] is True
     assert hard_boundary["live_flag_violations"] == [
+        "read-only eligibility send_to_jenny_enabled must remain disabled",
         "execution packet would_dispatch must remain disabled",
         "execution packet body session_send_enabled must remain disabled",
         "worker contract would_session_send must remain disabled",
@@ -115,7 +119,7 @@ def test_hard_boundary_contract_blocks_truthy_live_flags():
         "worker presence execution_enabled must remain disabled",
     ]
     assert hard_boundary["blocked_reasons"] == hard_boundary["live_flag_violations"]
-    assert hard_boundary["live_flag_violation_count"] == 5
+    assert hard_boundary["live_flag_violation_count"] == 6
     assert "Hard boundary violation" in hard_boundary["plain_language_summary"]
 
 
@@ -127,6 +131,7 @@ def test_hard_boundary_contract_blocks_sanitized_live_flag_reasons():
                 "worker_dispatch_enabled": False,
                 "blocked_reasons": [
                     "would_dispatch must remain false in previews",
+                    "send_to_jenny_enabled must remain false",
                     "worker dispatch must stay disabled",
                 ],
             }
@@ -138,6 +143,7 @@ def test_hard_boundary_contract_blocks_sanitized_live_flag_reasons():
     assert hard_boundary["blocked"] is True
     assert hard_boundary["live_flag_violations"] == [
         "execution packet would_dispatch must remain disabled",
+        "execution packet send_to_jenny_enabled must remain disabled",
         "execution packet worker_dispatch_enabled must remain disabled",
     ]
     assert hard_boundary["blocked_reasons"] == hard_boundary["live_flag_violations"]

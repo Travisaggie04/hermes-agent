@@ -762,6 +762,7 @@ def evaluate_read_only_autonomy_eligibility(observed_state: dict[str, Any] | Non
         _add(blocked, "active mutation lane count must be 0")
     if bridge["permission_classification"] in {"write_capable", "unsafe_for_autonomy", "write_capable_not_safe_for_autonomy", "unknown_blocked"}:
         _add(blocked, "bridge path is not read-only safe")
+        _add_bridge_blocked_reasons(blocked, bridge)
     elif bridge["permission_classification"] == "manual_only":
         _add(warnings, "bridge path is manual-only; preview must not execute")
     if tool_permissions:
@@ -836,6 +837,7 @@ def evaluate_scoped_pr_lane_eligibility(observed_state: dict[str, Any] | None = 
         _add(blocked, "human review is required before merge")
     if bridge["permission_classification"] in {"write_capable", "unsafe_for_autonomy", "write_capable_not_safe_for_autonomy"}:
         _add(blocked, "write-capable bridge path cannot be used for scoped PR lane execution")
+        _add_bridge_blocked_reasons(blocked, bridge)
     elif bridge["permission_classification"] in {"manual_only", "unknown_blocked"}:
         _add(warnings, "bridge path is not an executor; PR lane preview remains inert")
     if tool_permissions:
@@ -1089,6 +1091,13 @@ def _check_tool_permissions_for_read_only(tool_permissions: dict[str, Any], bloc
             _add(blocked, str(reason))
     elif classification == "manual_only":
         _add(warnings, "tool permission paths are manual-only; preview must not execute")
+
+
+def _add_bridge_blocked_reasons(blocked: list[str], bridge: dict[str, Any]) -> None:
+    for reason in bridge.get("reasons", ())[:8]:
+        reason_text = _safe_text(reason)
+        if reason_text:
+            _add(blocked, f"bridge: {reason_text}")
 
 
 def _check_tool_permissions_for_scoped_pr(tool_permissions: dict[str, Any], blocked: list[str], warnings: list[str]) -> None:

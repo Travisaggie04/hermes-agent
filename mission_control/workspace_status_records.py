@@ -118,6 +118,7 @@ LIVE_EXECUTION_FLAG_NAMES = (
     "execution_enabled",
     "dispatch_enabled",
     "session_send_enabled",
+    "send_to_jenny_enabled",
     "worker_dispatch_enabled",
 )
 INERT_PROJECTION_FLAGS = {
@@ -885,7 +886,7 @@ def _hard_boundary_contract_payload(status: dict[str, Any]) -> dict[str, Any]:
     blocked_reasons = live_flag_violations
     state = "live_flag_violation" if live_flag_violations else "separate_approval_required"
     summary = (
-        "Hard boundary violation: live execution, dispatch, session-send, or worker flags are enabled in a "
+        "Hard boundary violation: live execution, dispatch, session-send, bridge, or worker flags are enabled in a "
         "display-only projection. Stop and review before any handoff."
         if live_flag_violations
         else (
@@ -905,6 +906,7 @@ def _hard_boundary_contract_payload(status: dict[str, Any]) -> dict[str, Any]:
         "execution_enabled": False,
         "dispatch_enabled": False,
         "session_send_enabled": False,
+        "send_to_jenny_enabled": False,
         "worker_dispatch_enabled": False,
         "stored": False,
         "dry_run_only": True,
@@ -3468,6 +3470,7 @@ _LIVE_EXECUTION_FLAG_REASON_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("execution_enabled", ("execution_enabled", "execution enabled", "worker execution")),
     ("dispatch_enabled", ("dispatch_enabled", "dispatch enabled")),
     ("session_send_enabled", ("session_send_enabled", "session send", "session-send", "session sending")),
+    ("send_to_jenny_enabled", ("send_to_jenny_enabled", "send to jenny", "send-to-jenny")),
 )
 _LIVE_EXECUTION_DISABLED_REASON_PHRASES = (
     "must remain false",
