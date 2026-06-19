@@ -40,6 +40,9 @@ Jenny packet as permission to bypass Codex safety checks.
   live-operation flag. Its activity drawer also shows report lifecycle counts,
   report gap counts, and the first report lifecycle review blockers so Travis
   can see when Jenny still needs to review report history from the phone route.
+  The same drawer shows readiness states, laptop Codex worker-node presence,
+  latest worker objective/status, worker handoff readiness, and worker blockers
+  as status-only information; it does not activate a worker.
 - `/mission-control-compact` is the old compact Mission Control route.
   Its compact chat controls follow the same manual-only bridge rule and the
   same workspace execution-lock gating for hard-boundary, operator-packet, and

@@ -167,6 +167,32 @@ interface MobileReportLifecycle extends MobileExecutionLockSource {
   terminal_report_ids?: string[];
 }
 
+interface MobileWorkerNodePresence extends MobileExecutionLockSource {
+  blocked_reasons?: string[];
+  capability_summary?: string;
+  last_seen_at?: string;
+  online?: boolean;
+  presence_state?: string;
+  worker_host_label?: string;
+  worker_run_id?: string;
+}
+
+interface MobileWorkerNodeInstructionPreview extends MobileExecutionLockSource {
+  available?: boolean;
+  blocked_reasons?: string[];
+  manual_handoff_only?: boolean;
+  manual_handoff_prompt?: string;
+  ready_for_handoff?: boolean;
+  worker_host_label?: string;
+}
+
+interface MobileWorkerNodeOrchestration extends MobileExecutionLockSource {
+  active_count?: number;
+  active_runs?: Array<Record<string, unknown>>;
+  blocked_reasons?: string[];
+  latest_by_id?: Record<string, Record<string, unknown>>;
+}
+
 interface MobileWorkspaceStatus {
   hard_boundary_contract?: MobileExecutionLockSource & {
     blocked?: boolean;
@@ -176,8 +202,17 @@ interface MobileWorkspaceStatus {
   operator_decision_packet?: MobileExecutionLockSource & {
     execution_lock_blocked_reasons?: string[];
   };
-  orchestration_readiness?: MobileExecutionLockSource;
+  orchestration_readiness?: MobileExecutionLockSource & {
+    states?: {
+      laptop_codex_worker_node?: string;
+      scoped_pr_creation?: string;
+      supervised_read_only_autonomy?: string;
+    };
+  };
   report_lifecycle?: MobileReportLifecycle;
+  worker_node_instruction_preview?: MobileWorkerNodeInstructionPreview;
+  worker_node_orchestration?: MobileWorkerNodeOrchestration;
+  worker_node_presence?: MobileWorkerNodePresence;
 }
 
 interface OutboxResponse {
@@ -522,6 +557,13 @@ function mobileExecutionLockReasons(label: string, source?: MobileExecutionLockS
     .map(([, reason]) => `${label}: ${reason}`);
 }
 
+function mobileRecordText(record: Record<string, unknown> | undefined, field: string): string {
+  const value = record?.[field];
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return "";
+}
+
 function mobileWorkspaceSafety(status: MobileWorkspaceStatus | null): MobileBridgeSafety {
   const reasons: string[] = [];
   if (!status) {
@@ -546,6 +588,9 @@ function mobileWorkspaceSafety(status: MobileWorkspaceStatus | null): MobileBrid
   reasons.push(...mobileExecutionLockReasons("operator_decision_packet", operatorPacket));
   reasons.push(...mobileExecutionLockReasons("orchestration_readiness", status?.orchestration_readiness));
   reasons.push(...mobileExecutionLockReasons("report_lifecycle", status?.report_lifecycle));
+  reasons.push(...mobileExecutionLockReasons("worker_node_presence", status?.worker_node_presence));
+  reasons.push(...mobileExecutionLockReasons("worker_node_orchestration", status?.worker_node_orchestration));
+  reasons.push(...mobileExecutionLockReasons("worker_node_instruction_preview", status?.worker_node_instruction_preview));
 
   const uniqueReasons = [...new Set(reasons)];
   return { reasons: uniqueReasons, safe: uniqueReasons.length === 0 };
@@ -800,6 +845,18 @@ export default function JennyMobilePage() {
     + reportOverwriteConflictCount
     + (reportLifecycle?.runs_missing_report?.length ?? 0)
     + reportMissingLinkedCount;
+  const readinessStates = workspaceStatus?.orchestration_readiness?.states;
+  const workerPresence = workspaceStatus?.worker_node_presence;
+  const workerInstruction = workspaceStatus?.worker_node_instruction_preview;
+  const workerProjection = workspaceStatus?.worker_node_orchestration;
+  const workerRecord = workerProjection?.active_runs?.[0] ?? Object.values(workerProjection?.latest_by_id ?? {})[0];
+  const workerLatestStatus = mobileRecordText(workerRecord, "status") || "none";
+  const workerLatestObjective = mobileRecordText(workerRecord, "objective") || "no assigned objective";
+  const workerBlockedReasons = [
+    ...(workerPresence?.blocked_reasons ?? []),
+    ...(workerProjection?.blocked_reasons ?? []),
+    ...(workerInstruction?.blocked_reasons ?? []),
+  ].filter(Boolean);
 
   const refreshMessages = useCallback(async (projectId: string) => {
     const [status, workspace] = await Promise.all([
@@ -1233,6 +1290,31 @@ export default function JennyMobilePage() {
                   </dd>
                 </div>
                 <div className="flex justify-between gap-3">
+                  <dt className="text-zinc-400">Readiness</dt>
+                  <dd className="min-w-0 truncate text-right">
+                    read-only {readinessStates?.supervised_read_only_autonomy?.replaceAll("_", " ") ?? "unknown"} / worker{" "}
+                    {readinessStates?.laptop_codex_worker_node?.replaceAll("_", " ") ?? "unknown"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-zinc-400">Laptop Codex</dt>
+                  <dd className={cn("min-w-0 truncate text-right", workerPresence?.online ? "text-emerald-300" : "text-amber-300")}>
+                    {workerPresence?.worker_host_label ?? "laptop Codex"} / {workerPresence?.presence_state?.replaceAll("_", " ") ?? "unknown"} / online{" "}
+                    {workerPresence?.online ? "yes" : "no"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-zinc-400">Worker objective</dt>
+                  <dd className="min-w-0 truncate text-right">{workerLatestObjective}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-zinc-400">Worker handoff</dt>
+                  <dd className={cn("min-w-0 truncate text-right", workerInstruction?.ready_for_handoff ? "text-emerald-300" : "text-amber-300")}>
+                    latest {workerLatestStatus} / available {workerInstruction?.available ? "yes" : "no"} / handoff{" "}
+                    {workerInstruction?.ready_for_handoff ? "yes" : "no"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
                   <dt className="text-zinc-400">Report lifecycle</dt>
                   <dd className={cn("min-w-0 truncate text-right", reportLifecycle?.blocked ? "text-amber-300" : "text-emerald-300")}>
                     open {reportLifecycle?.open_report_ids?.length ?? 0} / reviewed{" "}
@@ -1264,6 +1346,16 @@ export default function JennyMobilePage() {
                   <p className="font-medium">Report lifecycle needs Jenny review</p>
                   <ul className="mt-1 list-disc space-y-1 pl-4">
                     {reportLifecycle.blocked_reasons.slice(0, 4).map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {workerBlockedReasons.length ? (
+                <div className="mt-3 rounded-lg border border-amber-400/30 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
+                  <p className="font-medium">Laptop Codex needs review</p>
+                  <ul className="mt-1 list-disc space-y-1 pl-4">
+                    {[...new Set(workerBlockedReasons)].slice(0, 4).map((reason) => (
                       <li key={reason}>{reason}</li>
                     ))}
                   </ul>
