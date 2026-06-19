@@ -112,6 +112,7 @@ interface GitHubBridgeStatusRecord {
 interface GitHubBridgeStatus {
   background_pending_count?: number;
   daemon_enabled?: boolean;
+  discord_automation_enabled?: boolean;
   dispatch_enabled?: boolean;
   execution_enabled?: boolean;
   foreground_watch_running?: boolean;
@@ -439,6 +440,7 @@ function mobileBridgeSafety(status: GitHubBridgeStatus | undefined): MobileBridg
       ["worker_enabled", "worker_enabled must remain false"],
       ["timer_enabled", "timer_enabled must remain false"],
       ["daemon_enabled", "daemon_enabled must remain false"],
+      ["discord_automation_enabled", "discord_automation_enabled must remain false"],
       ["model_routing_enabled", "model_routing_enabled must remain false"],
     ];
     for (const [flag, reason] of liveFlags) {

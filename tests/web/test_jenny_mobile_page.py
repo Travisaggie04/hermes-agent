@@ -130,6 +130,7 @@ def test_jenny_mobile_bridge_controls_fail_closed_on_live_flags() -> None:
         '["worker_enabled", "worker_enabled must remain false"]',
         '["timer_enabled", "timer_enabled must remain false"]',
         '["daemon_enabled", "daemon_enabled must remain false"]',
+        '["discord_automation_enabled", "discord_automation_enabled must remain false"]',
         '["model_routing_enabled", "model_routing_enabled must remain false"]',
         "const bridgeSafety = useMemo(() => mobileBridgeSafety(bridgeStatus), [bridgeStatus]);",
         "const visibleRunState: RunState = bridgeSafety.safe",

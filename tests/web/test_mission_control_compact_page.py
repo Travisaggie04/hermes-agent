@@ -727,6 +727,37 @@ def test_compact_chat_bridge_controls_fail_closed_on_live_flags() -> None:
     assert run_once_fn.index("if (!bridgeSafety.safe)") < run_once_fn.index("WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL")
 
 
+def test_compact_health_dashboard_fails_closed_on_execution_locks() -> None:
+    src = page_source()
+
+    for expected in [
+        "type CompactExecutionLockSource",
+        "const COMPACT_EXECUTION_LOCK_FLAGS",
+        '["would_execute", "would_execute must remain false"]',
+        '["dispatch_enabled", "dispatch_enabled must remain false"]',
+        '["execution_enabled", "execution_enabled must remain false"]',
+        '["execution_ready", "execution_ready must remain false"]',
+        '["session_send_enabled", "session_send_enabled must remain false"]',
+        '["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"]',
+        '["worker_enabled", "worker_enabled must remain false"]',
+        "function compactExecutionLockReasons",
+        'compactExecutionLockReasons("Safe next actions", nextSafeActions)',
+        'compactExecutionLockReasons("Operator decision", operatorPacket)',
+        'compactExecutionLockReasons("Preview readiness", readiness)',
+        'compactExecutionLockReasons("Worker node", workerPresence)',
+        'compactExecutionLockReasons("Result ingestion", resultIngestion)',
+        'compactExecutionLockReasons("Report completion", reportCompletion)',
+        "status.safety?.model_routing_enabled === true ? \"Model routing safety is not confirmed off\"",
+        "operatorLockReasons.length",
+        "readinessLockReasons.length",
+        "workerLockReasons.length",
+        "ingestionLockReasons.length",
+        "completionLockReasons.length",
+        'model routing=${status.safety?.model_routing_enabled === true ? "enabled" : "disabled"}',
+    ]:
+        assert expected in src
+
+
 def test_compact_chat_uses_plain_language_errors() -> None:
     src = page_source()
     helper = function_source(src, "jennyChatErrorMessage")
