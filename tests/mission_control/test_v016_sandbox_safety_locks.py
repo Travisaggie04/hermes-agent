@@ -80,7 +80,16 @@ def test_record_sourced_workspace_status_defaults_to_idle_and_dispatch_false():
     assert status["activity"]["active_workers"] == 0
     assert status["activity"]["active_tasks"] == 0
     assert status["activity"]["active_runs"] == 0
-    assert status["stale_context"]["warnings"] == []
+    warnings = set(status["stale_context"]["warnings"])
+    assert status["runtime_provenance"]["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
+    assert status["runtime_provenance"]["primary_status"] == "MISSING_RUNTIME_PATH"
+    assert status["runtime_provenance"]["autonomy_blocked"] is True
+    assert status["read_only_autonomy_eligibility"]["eligible"] is False
+    assert "MISSING_RUNTIME_PATH" in warnings
+    assert "dashboard runtime path is missing or absent" in warnings
+    assert "gateway runtime path is missing or absent" in warnings
+    assert "source HEAD is missing" in warnings
+    assert "runtime provenance is not clean" in warnings
 
 
 def test_gateway_kanban_watchers_fail_closed_when_dispatch_flag_missing():
@@ -133,9 +142,15 @@ def test_mission_control_governance_router_exposes_no_execution_or_mutation_cont
         "/workspace/runs/create",
         "/workspace/report-inbox",
         "/workspace/reports/ingest",
+        "/workspace/child-runs",
+        "/workspace/child-runs/create",
+        "/workspace/worker-node-runs",
+        "/workspace/worker-node-runs/create",
     }
     for path, methods in routes:
         if path in allowed_append_only_record_routes:
+            continue
+        if path.endswith(("/evaluate", "/preview", "/visibility")) or path == "/storage-guard/cleanup-manifest":
             continue
         lowered = path.lower()
         assert not any(fragment in lowered for fragment in forbidden_fragments), (path, methods)
@@ -146,9 +161,16 @@ def test_mission_control_governance_router_exposes_no_execution_or_mutation_cont
         if set(methods) & {"POST", "PUT", "PATCH", "DELETE"}
     }
     assert mutating_routes <= {
+        "/action-policy/evaluate",
         "/global-resource-guard/evaluate",
         "/storage-guard/evaluate",
+        "/storage-guard/cleanup-manifest",
         "/workspace-status/preview",
+        "/workspace/runtime-provenance/preview",
+        "/workspace/autonomy-eligibility/preview",
+        "/workspace/scoped-pr-eligibility/preview",
+        "/workspace/tool-permissions/preview",
+        "/workspace/execution-packet/preview",
         "/pr-merge-verifier-gate/evaluate",
         "/pr-merge-verifier-gate/visibility",
         "/verifier-workflow/evaluate",
@@ -169,6 +191,8 @@ def test_mission_control_governance_router_exposes_no_execution_or_mutation_cont
         "/workspace/approvals/create",
         "/workspace/runs/create",
         "/workspace/reports/ingest",
+        "/workspace/child-runs/create",
+        "/workspace/worker-node-runs/create",
     }
 
 
@@ -220,8 +244,12 @@ def test_mission_control_preview_routes_remain_non_persistent_and_inert(client=N
         "/workspace/approvals/create",
         "/workspace/runs/create",
         "/workspace/reports/ingest",
+        "/workspace/child-runs/create",
+        "/workspace/worker-node-runs/create",
     }
     assert all(
-        path.endswith(("/evaluate", "/preview", "/visibility")) or path in allowed_append_only_record_routes
+        path.endswith(("/evaluate", "/preview", "/visibility"))
+        or path == "/storage-guard/cleanup-manifest"
+        or path in allowed_append_only_record_routes
         for path in preview_or_evaluate
     )

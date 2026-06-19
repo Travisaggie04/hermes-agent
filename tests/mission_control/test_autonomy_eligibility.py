@@ -287,6 +287,18 @@ def test_worker_dispatch_bridge_path_is_not_read_only_safe():
     assert "bridge path is not read-only safe" in result["blocked_reasons"]
 
 
+def test_send_to_jenny_bridge_path_is_not_read_only_safe():
+    bridge = classify_bridge_permissions({"send_to_jenny_enabled": True})
+    result = evaluate_read_only_autonomy_eligibility(
+        _eligible_preview_payload(bridge={"send_to_jenny_enabled": True})
+    )
+
+    assert bridge["permission_classification"] == "write_capable_not_safe_for_autonomy"
+    assert bridge["send_to_jenny_enabled"] is False
+    assert result["eligible"] is False
+    assert "bridge path is not read-only safe" in result["blocked_reasons"]
+
+
 def test_control_path_permission_catalog_covers_required_paths_and_blocks_write_capable_paths():
     result = classify_control_path_permissions()
 
@@ -318,6 +330,31 @@ def test_control_path_permission_catalog_covers_required_paths_and_blocks_write_
     assert classifications["file_write_shell_patch"] == "write_capable_not_safe_for_autonomy"
     assert classifications["laptop_codex_worker_node"] == "write_capable_not_safe_for_autonomy"
     assert classifications["child_agent_capability_inheritance"] == "unknown_blocked"
+
+
+def test_control_path_detector_blocks_dangerous_named_tools_even_when_marked_read_only():
+    result = classify_control_path_permissions(
+        {
+            "paths": [
+                {"path_id": "delegator", "read_only_safe": True, "allowed_tools": ["delegate_task"]},
+                {"path_id": "async_agent", "read_only_safe": True, "tools": ["async_delegation"]},
+                {"path_id": "processes", "read_only_safe": True, "tool_names": ["process_registry"]},
+                {"path_id": "messenger", "read_only_safe": True, "tools": ["send_message"]},
+                {"path_id": "file_ops", "read_only_safe": True, "tools": ["file_operations"]},
+            ]
+        }
+    )
+
+    classifications = {path["path_id"]: path["permission_classification"] for path in result["paths"]}
+    assert result["permission_classification"] == "write_capable_not_safe_for_autonomy"
+    assert classifications == {
+        "delegator": "write_capable_not_safe_for_autonomy",
+        "async_agent": "write_capable_not_safe_for_autonomy",
+        "processes": "write_capable_not_safe_for_autonomy",
+        "messenger": "write_capable_not_safe_for_autonomy",
+        "file_ops": "write_capable_not_safe_for_autonomy",
+    }
+    assert set(result["write_capable_path_ids"]) == set(classifications)
 
 
 def test_control_path_permission_detector_separates_read_only_manual_and_write_tools():
