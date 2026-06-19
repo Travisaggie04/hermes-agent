@@ -885,6 +885,14 @@ def build_execution_packet_preview(observed_state: dict[str, Any] | None = None)
             "warnings": [],
         }
     )
+    blocked_reasons = list(eligibility.get("blocked_reasons") or ())
+    _check_preview_disabled_flags(
+        blocked_reasons,
+        state,
+        _section(state, "run"),
+        _section(state, "lane"),
+        _section(state, "worker_node"),
+    )
     packet = {
         **INERT_PREVIEW_FLAGS,
         "packet_version": "mission_control_execution_packet_preview_v1",
@@ -903,8 +911,8 @@ def build_execution_packet_preview(observed_state: dict[str, Any] | None = None)
     return {
         **INERT_PREVIEW_FLAGS,
         "source": "mission_control_execution_packet_preview_v1",
-        "eligible": bool(eligibility.get("eligible")),
-        "blocked_reasons": list(eligibility.get("blocked_reasons") or ()),
+        "eligible": bool(eligibility.get("eligible")) and not blocked_reasons,
+        "blocked_reasons": blocked_reasons,
         "warnings": list(eligibility.get("warnings") or ()),
         "packet": packet,
         "display_only": True,

@@ -782,6 +782,16 @@ def test_execution_packet_preview_rejects_requested_live_action_flags():
             would_execute=True,
             would_session_send=True,
         ),
+        {
+            "mode": "deploy",
+            "dispatch_enabled": True,
+            "execution_enabled": True,
+            "session_send_enabled": True,
+            "worker_dispatch_enabled": True,
+            "would_dispatch": True,
+            "would_execute": True,
+            "would_session_send": True,
+        },
     ]
 
     for payload in cases:
