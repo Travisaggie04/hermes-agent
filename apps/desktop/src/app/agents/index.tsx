@@ -9,6 +9,7 @@ import { FadeText } from '@/components/ui/fade-text'
 import { getMissionControlAsyncAgentStatus, type MissionControlAsyncAgentStatusResponse } from '@/hermes'
 import { type Translations, useI18n } from '@/i18n'
 import { AlertCircle, CheckCircle2, Sparkles } from '@/lib/icons'
+import { asyncAgentLiveSafetyReason } from '@/lib/mission-control-live-flags'
 import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
 import { $activeSessionId } from '@/store/session'
@@ -81,6 +82,7 @@ export function AgentsView({ onClose }: AgentsViewProps) {
   const { t } = useI18n()
   const activeSessionId = useStore($activeSessionId)
   const subagentsBySession = useStore($subagentsBySession)
+
   const asyncAgentStatusQuery = useQuery({
     queryFn: getMissionControlAsyncAgentStatus,
     queryKey: ['mission-control-async-agent-status'],
@@ -124,6 +126,16 @@ function asyncAgentReadiness(status?: MissionControlAsyncAgentStatusResponse | n
     }
   }
 
+  const safetyReason = asyncAgentLiveSafetyReason(status)
+
+  if (safetyReason) {
+    return {
+      detail: `Jenny activity safety check needs review because ${safetyReason}. This panel stays status-only and does not start workers.`,
+      label: 'Jenny activity safety check',
+      tone: 'warn'
+    }
+  }
+
   if (status.async_agent_controls_available) {
     return {
       detail: 'Native async-agent status is available. Starts and steering remain approval-gated.',
@@ -149,12 +161,14 @@ function asyncAgentReadiness(status?: MissionControlAsyncAgentStatusResponse | n
 
 function JennyActivityReadiness({ status }: { status?: MissionControlAsyncAgentStatusResponse | null }) {
   const readiness = asyncAgentReadiness(status)
+
   const toneClass =
     readiness.tone === 'warn'
       ? 'border-destructive/25 bg-destructive/8 text-destructive'
       : readiness.tone === 'pending'
         ? 'border-amber-500/25 bg-amber-500/8 text-amber-700 dark:text-amber-200'
         : 'border-emerald-500/20 bg-emerald-500/8 text-emerald-700 dark:text-emerald-200'
+
   const flags = [
     ['Execution', status?.execution_enabled === true ? 'on' : 'off'],
     ['Dispatch', status?.dispatch_enabled === true ? 'on' : 'off'],

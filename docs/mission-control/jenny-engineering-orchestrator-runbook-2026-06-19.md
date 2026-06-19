@@ -43,6 +43,9 @@ Jenny packet as permission to bypass Codex safety checks.
   usable, but its status pill warns when backend safety status reports live
   dispatch, execution, session-send, worker, timer, daemon, Discord automation,
   or model-routing flags.
+- Desktop Jenny activity panels are status-only. They warn instead of showing
+  async agents as ready if execution, dispatch, session-send, send-to-Jenny,
+  worker, timer, daemon, model-routing, or trusted-execution flags are on.
 
 ## Runtime Provenance
 
