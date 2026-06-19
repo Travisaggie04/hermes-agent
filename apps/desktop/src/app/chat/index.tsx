@@ -52,7 +52,7 @@ import {
   MISSION_CONTROL_PROJECT_LINK_CREATED,
   notifyMissionControlProjectCreated
 } from '@/lib/mission-control-events'
-import { asyncAgentLiveSafetyReason } from '@/lib/mission-control-live-flags'
+import { asyncAgentLiveFlagEnabled, asyncAgentLiveSafetyReason } from '@/lib/mission-control-live-flags'
 import { formatModelStatusLabel } from '@/lib/model-status-label'
 import { latestNativeJennyReplyAttempt } from '@/lib/native-jenny-reply-loop'
 import {
@@ -417,11 +417,11 @@ function NativeJennyActivityDialog({
   const rows = subagents.slice(-8).reverse()
   const readiness = nativeAsyncAgentDetail(asyncStatus) || 'Checking Jenny activity support.'
   const flags = [
-    ['Would execute', asyncStatus?.would_execute === true ? 'on' : 'off'],
-    ['Execution', asyncStatus?.execution_enabled === true ? 'on' : 'off'],
-    ['Dispatch', asyncStatus?.dispatch_enabled === true ? 'on' : 'off'],
-    ['Worker', asyncStatus?.worker_enabled === true ? 'on' : 'off'],
-    ['Timer', asyncStatus?.timer_enabled === true ? 'on' : 'off']
+    ['Would execute', asyncAgentLiveFlagEnabled(asyncStatus?.would_execute) ? 'on' : 'off'],
+    ['Execution', asyncAgentLiveFlagEnabled(asyncStatus?.execution_enabled) ? 'on' : 'off'],
+    ['Dispatch', asyncAgentLiveFlagEnabled(asyncStatus?.dispatch_enabled) ? 'on' : 'off'],
+    ['Worker', asyncAgentLiveFlagEnabled(asyncStatus?.worker_enabled) ? 'on' : 'off'],
+    ['Timer', asyncAgentLiveFlagEnabled(asyncStatus?.timer_enabled) ? 'on' : 'off']
   ]
 
   return (

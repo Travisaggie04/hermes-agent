@@ -9,7 +9,7 @@ import { FadeText } from '@/components/ui/fade-text'
 import { getMissionControlAsyncAgentStatus, type MissionControlAsyncAgentStatusResponse } from '@/hermes'
 import { type Translations, useI18n } from '@/i18n'
 import { AlertCircle, CheckCircle2, Sparkles } from '@/lib/icons'
-import { asyncAgentLiveSafetyReason } from '@/lib/mission-control-live-flags'
+import { asyncAgentLiveFlagEnabled, asyncAgentLiveSafetyReason } from '@/lib/mission-control-live-flags'
 import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
 import { $activeSessionId } from '@/store/session'
@@ -170,11 +170,11 @@ function JennyActivityReadiness({ status }: { status?: MissionControlAsyncAgentS
         : 'border-emerald-500/20 bg-emerald-500/8 text-emerald-700 dark:text-emerald-200'
 
   const flags = [
-    ['Would execute', status?.would_execute === true ? 'on' : 'off'],
-    ['Execution', status?.execution_enabled === true ? 'on' : 'off'],
-    ['Dispatch', status?.dispatch_enabled === true ? 'on' : 'off'],
-    ['Worker', status?.worker_enabled === true ? 'on' : 'off'],
-    ['Timer', status?.timer_enabled === true ? 'on' : 'off']
+    ['Would execute', asyncAgentLiveFlagEnabled(status?.would_execute) ? 'on' : 'off'],
+    ['Execution', asyncAgentLiveFlagEnabled(status?.execution_enabled) ? 'on' : 'off'],
+    ['Dispatch', asyncAgentLiveFlagEnabled(status?.dispatch_enabled) ? 'on' : 'off'],
+    ['Worker', asyncAgentLiveFlagEnabled(status?.worker_enabled) ? 'on' : 'off'],
+    ['Timer', asyncAgentLiveFlagEnabled(status?.timer_enabled) ? 'on' : 'off']
   ]
 
   return (

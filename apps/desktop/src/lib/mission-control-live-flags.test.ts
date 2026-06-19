@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { asyncAgentLiveSafetyReason } from './mission-control-live-flags'
+import { asyncAgentLiveFlagEnabled, asyncAgentLiveSafetyReason } from './mission-control-live-flags'
 
 describe('asyncAgentLiveSafetyReason', () => {
   it('allows status-only async-agent availability when live controls remain off', () => {
@@ -46,5 +46,13 @@ describe('asyncAgentLiveSafetyReason', () => {
     expect(asyncAgentLiveSafetyReason({ worker_dispatch_enabled: 1 } as never)).toBe(
       'live async-agent controls are not confirmed off'
     )
+  })
+
+  it('shares the stringy truthy predicate with visible status rows', () => {
+    expect(asyncAgentLiveFlagEnabled('on')).toBe(true)
+    expect(asyncAgentLiveFlagEnabled('enabled')).toBe(true)
+    expect(asyncAgentLiveFlagEnabled(1)).toBe(true)
+    expect(asyncAgentLiveFlagEnabled('off')).toBe(false)
+    expect(asyncAgentLiveFlagEnabled(0)).toBe(false)
   })
 })
