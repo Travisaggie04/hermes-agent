@@ -28,6 +28,10 @@ Jenny packet as permission to bypass Codex safety checks.
 ## Routes
 
 - `/jenny-mobile` is the phone Jenny mobile chat route.
+  It may create a visible manual bridge request and ask Jenny for one foreground
+  reply, but it must fail closed and disable send/retry controls unless the
+  GitHub bridge status confirms manual-only mode with dispatch, execution,
+  session-send, worker, timer, daemon, and model-routing flags off.
 - `/mission-control-compact` is the old compact Mission Control route.
 - Desktop Mission Control is the advanced audit and recovery surface.
 

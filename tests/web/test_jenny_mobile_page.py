@@ -102,7 +102,7 @@ def test_jenny_mobile_send_is_optimistic_and_foreground_only() -> None:
     assert "await refreshMessages(project.project_id)" not in send_fn
     assert "void runJennyOnce(project.project_id, requestId)" in src
     assert "await runJennyOnce(project.project_id, requestId)" not in src
-    assert "const sendDisabled = sending || !composer.trim();" in src
+    assert "const sendDisabled = sending || loading || !composer.trim() || !bridgeSafety.safe;" in src
     assert 'const ANSWER_ONCE_TIMEOUT_MS = 45_000;' in src
     assert "fetchJSONWithTimeout<AnswerOnceResponse>" in src
     assert "confirm_manual_hermes_answer: true" in src
@@ -113,3 +113,70 @@ def test_jenny_mobile_send_is_optimistic_and_foreground_only() -> None:
     assert "setSelectedModelChoice" in src
     assert "setSelectedEffort" in src
     assert "createMissionControl" not in src
+
+
+def test_jenny_mobile_bridge_controls_fail_closed_on_live_flags() -> None:
+    src = page_source()
+
+    for expected in [
+        "function mobileBridgeSafety(status: GitHubBridgeStatus | undefined): MobileBridgeSafety",
+        'reasons.push("bridge status not loaded")',
+        'status.manual_start_only !== true',
+        '["dispatch_enabled", "dispatch_enabled must remain false"]',
+        '["execution_enabled", "execution_enabled must remain false"]',
+        '["session_send_enabled", "session_send_enabled must remain false"]',
+        '["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"]',
+        '["worker_enabled", "worker_enabled must remain false"]',
+        '["timer_enabled", "timer_enabled must remain false"]',
+        '["daemon_enabled", "daemon_enabled must remain false"]',
+        '["model_routing_enabled", "model_routing_enabled must remain false"]',
+        "const bridgeSafety = useMemo(() => mobileBridgeSafety(bridgeStatus), [bridgeStatus]);",
+        "const visibleRunState: RunState = bridgeSafety.safe",
+        "Manual chat blocked:",
+        "const sendDisabled = sending || loading || !composer.trim() || !bridgeSafety.safe;",
+        'disabled={replyingRequestId !== "" || sending || !bridgeSafety.safe}',
+        'bridgeSafety.safe ? "manual foreground only" : "blocked"',
+    ]:
+        assert expected in src
+
+    run_once_start = src.index("const runJennyOnce = useCallback")
+    run_once_end = src.index("replyingRequestIdRef.current = requestId;", run_once_start)
+    run_once_guard = src[run_once_start:run_once_end]
+    assert "if (!bridgeSafety.safe)" in run_once_guard
+    assert "setRunByProject" in run_once_guard
+    assert "fetchJSONWithTimeout<AnswerOnceResponse>" not in run_once_guard
+
+
+def test_jenny_mobile_has_no_hidden_runtime_status_or_dispatch_wiring() -> None:
+    src = page_source()
+
+    for forbidden in [
+        "/api/status",
+        "9121",
+        "dispatchMissionControl",
+        "session-send",
+        "kanban/dispatch",
+        "new Worker",
+        "window.setInterval",
+        "setInterval(",
+        "/api/model/set",
+    ]:
+        assert forbidden not in src
+
+    assert src.count('method: "POST"') == 2
+
+    timeout_start = src.index("async function fetchJSONWithTimeout")
+    timeout_end = src.index("function stripHiddenJennyContext", timeout_start)
+    timeout_fn = src[timeout_start:timeout_end]
+    assert "window.setTimeout(() => controller.abort(), timeoutMs)" in timeout_fn
+    assert "window.clearTimeout(timeoutId)" in timeout_fn
+
+    send_start = src.index("async function sendMessage()")
+    send_end = src.index("  return (", send_start)
+    send_fn = src[send_start:send_end]
+    run_once_start = src.index("const runJennyOnce = useCallback")
+    run_once_end = src.index("async function sendMessage()", run_once_start)
+    run_once_fn = src[run_once_start:run_once_end]
+    assert "WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL" in send_fn
+    assert "WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL" in run_once_fn
+    assert "confirm_manual_hermes_answer: true" in run_once_fn

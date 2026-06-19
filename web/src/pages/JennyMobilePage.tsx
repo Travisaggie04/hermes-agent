@@ -132,6 +132,7 @@ interface GitHubBridgeStatus {
   timer_enabled?: boolean;
   visible_pending_count?: number;
   visible_pending_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
+  worker_dispatch_enabled?: boolean;
   worker_enabled?: boolean;
 }
 
@@ -160,6 +161,11 @@ interface RunState {
   detail: string;
   requestId?: string;
   status: "idle" | "queued" | "working" | "replied" | "failed";
+}
+
+interface MobileBridgeSafety {
+  reasons: string[];
+  safe: boolean;
 }
 
 interface ModelChoice {
@@ -417,6 +423,29 @@ function statusFromBridge(status: GitHubBridgeStatus | undefined): RunState {
   return { detail: "Ready for a bounded Jenny request.", status: "idle" };
 }
 
+function mobileBridgeSafety(status: GitHubBridgeStatus | undefined): MobileBridgeSafety {
+  const reasons: string[] = [];
+  if (!status) {
+    reasons.push("bridge status not loaded");
+  } else {
+    if (status.manual_start_only !== true) reasons.push("manual_start_only is not confirmed");
+    const liveFlags: Array<[keyof GitHubBridgeStatus, string]> = [
+      ["dispatch_enabled", "dispatch_enabled must remain false"],
+      ["execution_enabled", "execution_enabled must remain false"],
+      ["session_send_enabled", "session_send_enabled must remain false"],
+      ["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"],
+      ["worker_enabled", "worker_enabled must remain false"],
+      ["timer_enabled", "timer_enabled must remain false"],
+      ["daemon_enabled", "daemon_enabled must remain false"],
+      ["model_routing_enabled", "model_routing_enabled must remain false"],
+    ];
+    for (const [flag, reason] of liveFlags) {
+      if (status[flag] === true) reasons.push(reason);
+    }
+  }
+  return { reasons, safe: reasons.length === 0 };
+}
+
 function mobileRequestId(): string {
   const fallback = Math.random().toString(16).slice(2, 14);
   return `jenny-mobile-${globalThis.crypto?.randomUUID?.() ?? fallback}`;
@@ -632,12 +661,19 @@ export default function JennyMobilePage() {
   const messages = messagesByProject[selectedProject.project_id] ?? [];
   const bridgeStatus = statusByProject[selectedProject.project_id];
   const runState = runByProject[selectedProject.project_id] ?? statusFromBridge(bridgeStatus);
+  const bridgeSafety = useMemo(() => mobileBridgeSafety(bridgeStatus), [bridgeStatus]);
+  const visibleRunState: RunState = bridgeSafety.safe
+    ? runState
+    : {
+        detail: `Manual chat blocked: ${bridgeSafety.reasons[0] ?? "bridge safety is not confirmed"}`,
+        status: "failed",
+      };
   const modelChoices = useMemo(() => buildModelChoices(modelInfo, modelOptions), [modelInfo, modelOptions]);
   const currentModelChoice = selectedModelChoice || modelChoices[0]?.key || "";
   const selectedModel = modelChoiceFromKey(currentModelChoice);
   const statusRecords = unwrapRecords(bridgeStatus?.status_records).slice(-5).reverse();
   const latestPendingId = latestPendingRequestId(messages);
-  const sendDisabled = sending || !composer.trim();
+  const sendDisabled = sending || loading || !composer.trim() || !bridgeSafety.safe;
 
   const refreshMessages = useCallback(async (projectId: string) => {
     const status = await fetchJSON<GitHubBridgeStatus>(
@@ -670,7 +706,7 @@ export default function JennyMobilePage() {
 
   useEffect(() => {
     endRef.current?.scrollIntoView?.({ block: "end" });
-  }, [messages.length, runState.status, selectedProject.project_id]);
+  }, [messages.length, visibleRunState.status, selectedProject.project_id]);
 
   const updateMessageStatus = useCallback((projectId: string, requestId: string, status: MobileMessageStatus) => {
     setMessagesByProject((prev) => ({
@@ -692,6 +728,17 @@ export default function JennyMobilePage() {
 
   const runJennyOnce = useCallback(async (projectId: string, requestId: string) => {
     if (!requestId || replyingRequestIdRef.current) return;
+    if (!bridgeSafety.safe) {
+      setRunByProject((prev) => ({
+        ...prev,
+        [projectId]: {
+          detail: `Manual chat blocked: ${bridgeSafety.reasons[0] ?? "bridge safety is not confirmed"}`,
+          requestId,
+          status: "failed",
+        },
+      }));
+      return;
+    }
     replyingRequestIdRef.current = requestId;
     setReplyingRequestId(requestId);
     setRunByProject((prev) => ({
@@ -748,7 +795,7 @@ export default function JennyMobilePage() {
       replyingRequestIdRef.current = "";
       setReplyingRequestId("");
     }
-  }, [appendMessage, refreshMessages, updateMessageStatus]);
+  }, [appendMessage, bridgeSafety.reasons, bridgeSafety.safe, refreshMessages, updateMessageStatus]);
 
   async function sendMessage() {
     const text = composer.trim();
@@ -860,12 +907,12 @@ export default function JennyMobilePage() {
         <div className="flex items-center justify-between gap-3 px-1 text-xs text-zinc-400">
           <span className={cn(
             "inline-flex items-center gap-1 font-medium",
-            runState.status === "failed" ? "text-red-300" : runState.status === "working" ? "text-sky-300" : "text-emerald-300",
+            visibleRunState.status === "failed" ? "text-red-300" : visibleRunState.status === "working" ? "text-sky-300" : "text-emerald-300",
           )}>
-            {runState.status === "working" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : runState.status === "failed" ? <AlertCircle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-            {runState.status}
+            {visibleRunState.status === "working" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : visibleRunState.status === "failed" ? <AlertCircle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+            {visibleRunState.status}
           </span>
-          <span className="min-w-0 truncate text-right">{runState.detail}</span>
+          <span className="min-w-0 truncate text-right">{visibleRunState.detail}</span>
         </div>
 
         {error ? (
@@ -904,7 +951,7 @@ export default function JennyMobilePage() {
                       <button
                         className="rounded-full bg-black/15 px-2 py-0.5 text-[0.7rem] font-semibold text-zinc-950 disabled:opacity-50"
                         type="button"
-                        disabled={replyingRequestId !== "" || sending}
+                        disabled={replyingRequestId !== "" || sending || !bridgeSafety.safe}
                         onClick={() => void runJennyOnce(selectedProject.project_id, message.requestId ?? "")}
                       >
                         {message.status === "failed" ? "Retry" : "Get reply"}
@@ -1051,9 +1098,22 @@ export default function JennyMobilePage() {
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-zinc-400">Safety</dt>
-                  <dd className="text-right">manual foreground only</dd>
+                  <dd className={cn("text-right", bridgeSafety.safe ? "text-emerald-300" : "text-red-300")}>
+                    {bridgeSafety.safe ? "manual foreground only" : "blocked"}
+                  </dd>
                 </div>
               </dl>
+
+              {!bridgeSafety.safe ? (
+                <div className="mt-3 rounded-lg border border-red-400/30 bg-red-950/40 px-3 py-2 text-sm text-red-100">
+                  <p className="font-medium">Manual chat blocked</p>
+                  <ul className="mt-1 list-disc space-y-1 pl-4">
+                    {bridgeSafety.reasons.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
 
               <div className="mt-4 border-t border-white/10 pt-3">
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">Recent status</h3>
