@@ -97,6 +97,9 @@ Blocked examples:
 - write-capable bridge
 - commit, PR creation, deploy, restart, runtime switch, queue, worker, timer,
   daemon, Waha, social, payment, or model-routing capability
+- delegation, async agent, process registry, send-message, file-operation,
+  shell, patch, or `send_to_jenny` paths, even if a caller labels the path
+  read-only
 
 Current state target: blocked or preview-ready, never execution-ready.
 
@@ -230,7 +233,10 @@ The worker-node instruction preview turns the latest laptop Codex worker record
 into a manual handoff prompt. It states the worker, objective, allowed actions,
 hard forbidden actions, and report contract. It is useful copy for Jenny or
 Travis to review, but it does not contact the laptop, start a worker, or enable
-execution.
+execution. It also blocks the next worker instruction when the linked worker
+report is missing, still needs Jenny review, or the worker record carries a
+failure reason. Jenny must review the report before issuing another worker
+packet.
 
 The execution mode classification is the early "what kind of work is this?"
 row. It only classifies the requested lane as read-only preview, scoped PR
