@@ -1280,6 +1280,7 @@ export interface MissionControlJennyBridgePollerStatusResponse {
   stored?: boolean
   timer_enabled?: boolean
   worker_dispatch_enabled?: boolean
+  would_execute?: boolean
   worker_enabled?: boolean
 }
 
@@ -1346,6 +1347,7 @@ export interface MissionControlGitHubBridgeStatusResponse {
   stored?: boolean
   timer_enabled?: boolean
   worker_dispatch_enabled?: boolean
+  would_execute?: boolean
   worker_enabled?: boolean
 }
 

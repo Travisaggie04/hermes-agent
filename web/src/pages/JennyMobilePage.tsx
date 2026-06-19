@@ -133,6 +133,7 @@ interface GitHubBridgeStatus {
   visible_pending_count?: number;
   visible_pending_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
   worker_dispatch_enabled?: boolean;
+  would_execute?: boolean;
   worker_enabled?: boolean;
 }
 
@@ -434,6 +435,7 @@ function mobileBridgeSafety(status: GitHubBridgeStatus | undefined): MobileBridg
       ["execution_enabled", "execution_enabled must remain false"],
       ["session_send_enabled", "session_send_enabled must remain false"],
       ["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"],
+      ["would_execute", "would_execute must remain false"],
       ["worker_enabled", "worker_enabled must remain false"],
       ["timer_enabled", "timer_enabled must remain false"],
       ["daemon_enabled", "daemon_enabled must remain false"],

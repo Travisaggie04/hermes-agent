@@ -82,6 +82,7 @@ function nativeJennySafetyBlockedReason(status: MissionControlGitHubBridgeStatus
     'execution_enabled',
     'session_send_enabled',
     'worker_dispatch_enabled',
+    'would_execute',
     'worker_enabled',
     'timer_enabled',
     'daemon_enabled',

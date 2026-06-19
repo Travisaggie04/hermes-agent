@@ -701,6 +701,7 @@ def test_compact_chat_bridge_controls_fail_closed_on_live_flags() -> None:
         '["execution_enabled", "execution_enabled must remain false"]',
         '["session_send_enabled", "session_send_enabled must remain false"]',
         '["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"]',
+        '["would_execute", "would_execute must remain false"]',
         '["worker_enabled", "worker_enabled must remain false"]',
         '["timer_enabled", "timer_enabled must remain false"]',
         '["daemon_enabled", "daemon_enabled must remain false"]',

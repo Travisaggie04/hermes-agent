@@ -71,7 +71,7 @@ describe('nativeJennyStatus', () => {
         manual_start_only: true,
         pending_count: 0,
         visible_pending_count: 0,
-        worker_dispatch_enabled: true
+        would_execute: true
       },
       gatewayOpen: true,
       projectId: 'project-hermes',

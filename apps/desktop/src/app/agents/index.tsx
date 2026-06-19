@@ -170,6 +170,7 @@ function JennyActivityReadiness({ status }: { status?: MissionControlAsyncAgentS
         : 'border-emerald-500/20 bg-emerald-500/8 text-emerald-700 dark:text-emerald-200'
 
   const flags = [
+    ['Would execute', status?.would_execute === true ? 'on' : 'off'],
     ['Execution', status?.execution_enabled === true ? 'on' : 'off'],
     ['Dispatch', status?.dispatch_enabled === true ? 'on' : 'off'],
     ['Worker', status?.worker_enabled === true ? 'on' : 'off'],

@@ -21,6 +21,7 @@ describe('Agents activity overlay', () => {
   })
 
   it('keeps protected execution flags visible as status only', () => {
+    expect(source).toContain("['Would execute', status?.would_execute === true ? 'on' : 'off']")
     expect(source).toContain("['Execution', status?.execution_enabled === true ? 'on' : 'off']")
     expect(source).toContain("['Dispatch', status?.dispatch_enabled === true ? 'on' : 'off']")
     expect(source).toContain("['Worker', status?.worker_enabled === true ? 'on' : 'off']")
