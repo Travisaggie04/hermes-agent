@@ -107,6 +107,9 @@ Blocked examples:
 - delegation, async agent, process registry, send-message, file-operation,
   shell, patch, or `send_to_jenny` paths, even if a caller labels the path
   read-only
+- Hermes responder toolsets that include `file`, `terminal`,
+  `code_execution`, `delegation`, `kanban`, `messaging`, `browser`, or
+  `debugging`; these are not safe read-only executors
 
 Current state target: blocked or preview-ready, never execution-ready.
 
