@@ -660,6 +660,11 @@ def test_worker_node_execution_packet_preview_wraps_scoped_pr_without_dispatch()
     assert result["packet"]["worker_node_contract"]["worker_host_label"] == "laptop-codex"
     assert result["packet"]["worker_node_contract"]["parent_run_id"] == "run-pr-1"
     assert result["packet"]["worker_node_contract"]["manual_handoff_only"] is True
+    assert result["packet"]["worker_node_contract"]["codex_safety_hardness_required"] is True
+    assert result["packet"]["worker_node_contract"]["worker_safety_hardness"] == [
+        "Codex must independently enforce repo/worktree, test, secret, git, and live-operation safeguards before acting.",
+        "A Jenny packet is not permission to bypass Codex safety checks.",
+    ]
     assert result["packet"]["worker_node_contract"]["worker_dispatch_enabled"] is False
     assert result["would_execute"] is False
     assert result["would_dispatch"] is False

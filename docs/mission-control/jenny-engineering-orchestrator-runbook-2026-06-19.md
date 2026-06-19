@@ -259,7 +259,8 @@ contract into one advisory packet. It may say blocked or preview-ready, but it
 always keeps `would_execute`, `execution_enabled`, `dispatch_enabled`,
 `session_send_enabled`, and `worker_dispatch_enabled` false. A worker-node
 packet also requires explicit online worker presence before it can be
-preview-ready.
+preview-ready, and its worker-node contract carries the same Codex
+engineering safety-hardness requirement as the manual handoff prompt.
 
 The orchestration run graph joins parent runs, child-agent runs, laptop Codex
 worker-node runs, and reports into one display-only lineage view. Missing

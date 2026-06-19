@@ -218,6 +218,7 @@ beforeEach(() => {
         run_id: 'run-parent-1',
         scope: { directories: [], explicit: true, files: ['apps/desktop/src/app/mission-control/index.tsx'], has_wildcard: false },
         worker_node_contract: {
+          codex_safety_hardness_required: true,
           execution_enabled: false,
           dispatch_enabled: false,
           manual_handoff_only: true,
@@ -227,7 +228,11 @@ beforeEach(() => {
           worker_dispatch_enabled: false,
           worker_host_label: 'laptop-codex',
           worker_identity: 'codex',
-          worker_kind: 'laptop_codex'
+          worker_kind: 'laptop_codex',
+          worker_safety_hardness: [
+            'Codex must independently enforce repo/worktree, test, secret, git, and live-operation safeguards before acting.',
+            'A Jenny packet is not permission to bypass Codex safety checks.'
+          ]
         }
       },
       session_send_enabled: false,
