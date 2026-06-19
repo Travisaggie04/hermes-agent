@@ -162,6 +162,27 @@ def test_stale_accepted_baseline_blocks_autonomy():
     assert "accepted baseline HEAD does not match source HEAD" in result["autonomy_blocked_reasons"]
 
 
+def test_merged_prs_after_accepted_baseline_are_explicit_provenance_blockers():
+    result = evaluate_runtime_provenance(
+        _clean_runtime_state(
+            source={
+                "head": HEAD,
+                "latest_merged_pr": "396",
+                "merged_prs_after_accepted_baseline": ["395", "#396"],
+            },
+            accepted_baseline=_runtime("/runtime/accepted", OLD_HEAD),
+        )
+    )
+
+    assert result["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
+    assert result["primary_status"] == "SOURCE_CURRENT_BUT_BASELINE_STALE"
+    assert "SOURCE_CURRENT_BUT_BASELINE_STALE" in result["statuses"]
+    assert result["latest_merged_pr"] == "396"
+    assert result["merged_prs_after_accepted_baseline"] == ["395", "#396"]
+    assert "latest merged PR #396 is after the accepted baseline" in result["autonomy_blocked_reasons"]
+    assert "merged PRs after accepted baseline: PR #395, PR #396" in result["autonomy_blocked_reasons"]
+
+
 def test_dirty_runtime_blocks_autonomy():
     result = evaluate_runtime_provenance(
         _clean_runtime_state(dashboard_runtime=_runtime("/runtime/dashboard", dirty_files=[" M package-lock.json"]))

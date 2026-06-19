@@ -471,6 +471,37 @@ def test_workspace_status_uses_accepted_baseline_record_source_when_present():
     assert "accepted_baseline_source_missing" not in status["stale_context"]["warnings"]
 
 
+def test_workspace_status_surfaces_merged_prs_after_accepted_baseline_in_provenance():
+    status = build_workspace_status(
+        _baseline_payload(
+            accepted_baseline_record=_accepted_baseline_record_payload(),
+            source_control={
+                "accepted_live_head": "d11681f81c7cd16a99c53649f157040b2d10a89f",
+                "latest_merged_pr": "396",
+                "merged_prs_after_accepted_baseline": ["395", "396"],
+            },
+            dashboard_runtime={
+                "path": "/home/jenny/.hermes/hermes-runtime-handoff-8c560c7",
+                "head": "8c560c739606564aeeb4db464fe1989cb67a40b6",
+            },
+            gateway_runtime={
+                "path": "/home/jenny/.hermes/hermes-runtime-handoff-8c560c7",
+                "head": "8c560c739606564aeeb4db464fe1989cb67a40b6",
+            },
+        )
+    )
+
+    provenance = status["runtime_provenance"]
+    warnings = set(status["stale_context"]["warnings"])
+    assert provenance["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
+    assert "SOURCE_CURRENT_BUT_BASELINE_STALE" in provenance["statuses"]
+    assert provenance["latest_merged_pr"] == "396"
+    assert provenance["merged_prs_after_accepted_baseline"] == ["395", "396"]
+    assert "latest merged PR #396 is after the accepted baseline" in provenance["autonomy_blocked_reasons"]
+    assert "merged PRs after accepted baseline: PR #395, PR #396" in provenance["autonomy_blocked_reasons"]
+    assert "latest merged PR #396 is after the accepted baseline" in warnings
+
+
 
 
 def test_workspace_status_record_source_defaults_lane_to_idle_and_matching_baseline():

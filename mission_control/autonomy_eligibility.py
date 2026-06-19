@@ -337,6 +337,15 @@ def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) ->
     dashboard_head = _safe_text(dashboard.get("head"))
     gateway_head = _safe_text(gateway.get("head"))
     rollback_head = _safe_text(rollback.get("head"))
+    latest_merged_pr = _safe_text(source.get("latest_merged_pr") or state.get("latest_merged_pr"))
+    merged_prs_after_baseline = [
+        _safe_text(item, max_chars=80)
+        for item in _as_list(
+            source.get("merged_prs_after_accepted_baseline")
+            or state.get("merged_prs_after_accepted_baseline")
+        )
+        if _safe_text(item, max_chars=80)
+    ]
 
     statuses: list[str] = []
     reasons: list[str] = []
@@ -370,6 +379,15 @@ def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) ->
     if source_head and baseline_head and source_head != baseline_head:
         _add(statuses, "SOURCE_CURRENT_BUT_BASELINE_STALE")
         _add(blocked_reasons, "accepted baseline HEAD does not match source HEAD")
+        if latest_merged_pr:
+            _add(blocked_reasons, f"latest merged PR #{latest_merged_pr} is after the accepted baseline")
+    if merged_prs_after_baseline:
+        _add(statuses, "SOURCE_CURRENT_BUT_BASELINE_STALE")
+        _add(
+            blocked_reasons,
+            "merged PRs after accepted baseline: "
+            + ", ".join(_format_pr_label(item) for item in merged_prs_after_baseline[:8]),
+        )
     if dashboard_head and baseline_head and dashboard_head != baseline_head:
         _add(statuses, "SOURCE_CURRENT_BUT_BASELINE_STALE")
         _add(blocked_reasons, "dashboard runtime HEAD does not match accepted baseline HEAD")
@@ -405,6 +423,8 @@ def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) ->
         "dashboard_head": dashboard_head,
         "gateway_head": gateway_head,
         "rollback_head": rollback_head,
+        "latest_merged_pr": latest_merged_pr,
+        "merged_prs_after_accepted_baseline": merged_prs_after_baseline,
         "runtimes": runtimes,
         "dry_run_only": True,
         "enforces_runtime": False,
@@ -1035,6 +1055,11 @@ def _write_capability_markers(path: dict[str, Any]) -> list[str]:
 
 def _permission_marker_label(value: str) -> str:
     return value.replace("_", " ")
+
+
+def _format_pr_label(value: str) -> str:
+    text = _safe_text(value, max_chars=80).lstrip("#")
+    return f"PR #{text}" if text else "unknown PR"
 
 
 def _path_tool_texts(path: dict[str, Any]) -> list[str]:

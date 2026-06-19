@@ -1486,6 +1486,8 @@ export interface MissionControlWorkspaceStatus {
   runtime_provenance?: {
     autonomy_blocked?: boolean
     autonomy_blocked_reasons?: string[]
+    latest_merged_pr?: string
+    merged_prs_after_accepted_baseline?: string[]
     primary_status?: string
     status?: string
     statuses?: string[]

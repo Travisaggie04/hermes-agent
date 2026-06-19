@@ -41,6 +41,9 @@ Important statuses:
 
 - `CLEAN_AND_ALIGNED`: the only clean state for autonomy previews.
 - `SOURCE_CURRENT_BUT_BASELINE_STALE`: source moved after the accepted runtime.
+  If Mission Control sees merged PRs after the accepted baseline, it names
+  those PRs as explicit provenance blockers until a new accepted baseline is
+  created through a separately approved live reconciliation lane.
 - `DASHBOARD_GATEWAY_DRIFT`: dashboard and gateway do not agree.
 - `GATEWAY_UNTRUSTED`: gateway runtime cannot be trusted.
 - `DIRTY_RUNTIME`: runtime has dirty or untracked files.

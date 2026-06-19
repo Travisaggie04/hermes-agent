@@ -331,7 +331,11 @@ def _runtime_provenance_input(
     return {
         "source": _merge_dicts(
             _section(section, "source"),
-            {"head": source_control.get("accepted_live_head", "")},
+            {
+                "head": source_control.get("accepted_live_head", ""),
+                "latest_merged_pr": source_control.get("latest_merged_pr", ""),
+                "merged_prs_after_accepted_baseline": source_control.get("merged_prs_after_accepted_baseline", ()),
+            },
         ),
         "accepted_baseline": _merge_dicts(
             _section(section, "accepted_baseline"),
@@ -673,6 +677,7 @@ def _source_control_section(section: dict[str, Any], *, defaults: dict[str, Any]
         "branch": _safe_text(merged.get("branch"), max_chars=120),
         "accepted_live_head": _safe_sha(merged.get("accepted_live_head")),
         "latest_merged_pr": _safe_text(merged.get("latest_merged_pr"), max_chars=20),
+        "merged_prs_after_accepted_baseline": _dedupe_bounded(merged.get("merged_prs_after_accepted_baseline") or ()),
         "display_only": True,
         "trusted_for_execution": False,
     }
