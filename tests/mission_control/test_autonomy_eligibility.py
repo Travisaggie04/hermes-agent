@@ -359,6 +359,7 @@ def test_control_path_permission_catalog_covers_required_paths_and_blocks_write_
     assert classifications["github_bridge_outbox"] == "write_capable_not_safe_for_autonomy"
     assert classifications["github_bridge_answer_once"] == "write_capable_not_safe_for_autonomy"
     assert classifications["jenny_bridge_relay"] == "manual_only"
+    assert classifications["hermes_responder_toolsets"] == "write_capable_not_safe_for_autonomy"
     assert classifications["delegate_tool"] == "unknown_blocked"
     assert classifications["file_write_shell_patch"] == "write_capable_not_safe_for_autonomy"
     assert classifications["laptop_codex_worker_node"] == "write_capable_not_safe_for_autonomy"
@@ -374,6 +375,7 @@ def test_control_path_detector_blocks_dangerous_named_tools_even_when_marked_rea
                 {"path_id": "processes", "read_only_safe": True, "tool_names": ["process_registry"]},
                 {"path_id": "messenger", "read_only_safe": True, "tools": ["send_message"]},
                 {"path_id": "file_ops", "read_only_safe": True, "tools": ["file_operations"]},
+                {"path_id": "responder_file_toolset", "read_only_safe": True, "enabled_toolsets": "file,skills"},
             ]
         }
     )
@@ -386,6 +388,7 @@ def test_control_path_detector_blocks_dangerous_named_tools_even_when_marked_rea
         "processes": "write_capable_not_safe_for_autonomy",
         "messenger": "write_capable_not_safe_for_autonomy",
         "file_ops": "write_capable_not_safe_for_autonomy",
+        "responder_file_toolset": "write_capable_not_safe_for_autonomy",
     }
     assert set(result["write_capable_path_ids"]) == set(classifications)
 

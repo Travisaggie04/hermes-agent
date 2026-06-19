@@ -268,6 +268,17 @@ _PATH_WRITE_TOOL_TERMS = (
     "apply_patch",
 )
 
+_PATH_WRITE_TOOLSET_NAMES = {
+    "browser",
+    "code_execution",
+    "debugging",
+    "delegation",
+    "file",
+    "kanban",
+    "messaging",
+    "terminal",
+}
+
 _DEFAULT_PERMISSION_PATHS: tuple[dict[str, Any], ...] = (
     {
         "path_id": "github_bridge_outbox",
@@ -290,7 +301,7 @@ _DEFAULT_PERMISSION_PATHS: tuple[dict[str, Any], ...] = (
     {
         "path_id": "hermes_responder_toolsets",
         "label": "Hermes responder toolsets",
-        "capability_inheritance": "unknown",
+        "enabled_toolsets": ["file", "skills"],
     },
     {
         "path_id": "delegate_tool",
@@ -1078,6 +1089,9 @@ def _write_capability_markers(path: dict[str, Any]) -> list[str]:
     for key in _PATH_WRITE_CAPABILITY_KEYS:
         if _safe_bool(path.get(key)) or _safe_bool(capability_dict.get(key)):
             _add(markers, _permission_marker_label(key))
+    for toolset in _path_toolset_texts(path):
+        if toolset in _PATH_WRITE_TOOLSET_NAMES:
+            _add(markers, f"{toolset} toolset")
     for text_value in _path_tool_texts(path):
         lowered = text_value.lower()
         for term in _PATH_WRITE_TOOL_TERMS:
@@ -1106,6 +1120,17 @@ def _path_tool_texts(path: dict[str, Any]) -> list[str]:
     capabilities = path.get("capabilities")
     if isinstance(capabilities, dict):
         texts.extend(str(key) for key, value in capabilities.items() if value is True)
+    return texts
+
+
+def _path_toolset_texts(path: dict[str, Any]) -> list[str]:
+    texts: list[str] = []
+    for key in ("toolsets", "enabled_toolsets", "responder_toolsets"):
+        for item in _as_list(path.get(key)):
+            text = _safe_text(item).lower().replace(",", " ")
+            for part in text.split():
+                if part:
+                    texts.append(part)
     return texts
 
 
