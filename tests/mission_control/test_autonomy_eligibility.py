@@ -16,6 +16,21 @@ HEAD = "8ef64e370a51bc19e97fec1526f5bb3d42025a09"
 OLD_HEAD = "fe18ce20d6044dd91d115286e949366477a8706b"
 
 
+def _assert_inert_preview(payload):
+    assert payload["display_only"] is True
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["would_execute"] is False
+    assert payload["would_dispatch"] is False
+    assert payload["would_session_send"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
+    assert payload["stored"] is False
+    assert payload["dry_run_only"] is True
+
+
 def _runtime(path: str, head: str = HEAD, **overrides):
     payload = {
         "path": path,
@@ -145,6 +160,7 @@ def _eligible_pr_preview_payload(**overrides):
 def test_clean_aligned_runtime_provenance_allows_preview_inputs():
     result = evaluate_runtime_provenance(_clean_runtime_state())
 
+    _assert_inert_preview(result)
     assert result["status"] == "CLEAN_AND_ALIGNED"
     assert result["primary_status"] == "CLEAN_AND_ALIGNED"
     assert result["autonomy_blocked"] is False
@@ -162,6 +178,7 @@ def test_stale_accepted_baseline_blocks_autonomy():
         _clean_runtime_state(accepted_baseline=_runtime("/runtime/accepted", OLD_HEAD))
     )
 
+    _assert_inert_preview(result)
     assert result["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
     assert "SOURCE_CURRENT_BUT_BASELINE_STALE" in result["statuses"]
     assert "accepted baseline HEAD does not match source HEAD" in result["autonomy_blocked_reasons"]
@@ -253,6 +270,7 @@ def test_rollback_stale_is_surfaced_and_blocks_autonomy():
 def test_approved_read_only_lane_preview_is_inert_and_eligible():
     result = evaluate_read_only_autonomy_eligibility(_eligible_preview_payload())
 
+    _assert_inert_preview(result)
     assert result["eligible"] is True
     assert result["would_execute"] is False
     assert result["stored"] is False
@@ -275,6 +293,7 @@ def test_approval_expiry_consumption_and_broad_scope_block_eligibility():
         )
     )
 
+    _assert_inert_preview(result)
     assert result["eligible"] is False
     assert "approval is consumed" in result["blocked_reasons"]
     assert "approval is expired" in result["blocked_reasons"]
@@ -308,6 +327,8 @@ def test_write_capable_bridge_is_not_read_only_safe():
         _eligible_preview_payload(bridge={"manual_hermes_answer_enabled": True})
     )
 
+    _assert_inert_preview(bridge)
+    _assert_inert_preview(result)
     assert bridge["permission_classification"] == "write_capable_not_safe_for_autonomy"
     assert result["eligible"] is False
     assert "bridge path is not read-only safe" in result["blocked_reasons"]
@@ -319,6 +340,8 @@ def test_worker_dispatch_bridge_path_is_not_read_only_safe():
         _eligible_preview_payload(bridge={"worker_dispatch_enabled": True})
     )
 
+    _assert_inert_preview(bridge)
+    _assert_inert_preview(result)
     assert bridge["permission_classification"] == "write_capable_not_safe_for_autonomy"
     assert bridge["worker_dispatch_enabled"] is False
     assert result["eligible"] is False
@@ -337,6 +360,8 @@ def test_live_bridge_flags_override_read_only_safe_claim():
         _eligible_preview_payload(bridge=bridge_state)
     )
 
+    _assert_inert_preview(bridge)
+    _assert_inert_preview(result)
     assert bridge["permission_classification"] == "write_capable_not_safe_for_autonomy"
     assert bridge["read_only_safe"] is False
     assert bridge["would_execute"] is False
@@ -355,6 +380,8 @@ def test_send_to_jenny_bridge_path_is_not_read_only_safe():
         _eligible_preview_payload(bridge={"send_to_jenny_enabled": True})
     )
 
+    _assert_inert_preview(bridge)
+    _assert_inert_preview(result)
     assert bridge["permission_classification"] == "write_capable_not_safe_for_autonomy"
     assert bridge["send_to_jenny_enabled"] is False
     assert result["eligible"] is False
@@ -364,6 +391,7 @@ def test_send_to_jenny_bridge_path_is_not_read_only_safe():
 def test_control_path_permission_catalog_covers_required_paths_and_blocks_write_capable_paths():
     result = classify_control_path_permissions()
 
+    _assert_inert_preview(result)
     assert result["permission_classification"] == "write_capable_not_safe_for_autonomy"
     assert result["read_only_safe"] is False
     assert result["stored"] is False
@@ -377,6 +405,8 @@ def test_control_path_permission_catalog_covers_required_paths_and_blocks_write_
     assert all(path["would_execute"] is False for path in result["paths"])
     assert all(path["would_dispatch"] is False for path in result["paths"])
     assert all(path["would_session_send"] is False for path in result["paths"])
+    for path in result["paths"]:
+        _assert_inert_preview(path)
     path_ids = {path["path_id"] for path in result["paths"]}
     assert {
         "github_bridge_outbox",
@@ -415,6 +445,9 @@ def test_control_path_detector_blocks_dangerous_named_tools_even_when_marked_rea
         }
     )
 
+    _assert_inert_preview(result)
+    for path in result["paths"]:
+        _assert_inert_preview(path)
     classifications = {path["path_id"]: path["permission_classification"] for path in result["paths"]}
     assert result["permission_classification"] == "write_capable_not_safe_for_autonomy"
     assert classifications == {
@@ -439,6 +472,9 @@ def test_control_path_permission_detector_separates_read_only_manual_and_write_t
         }
     )
 
+    _assert_inert_preview(result)
+    for path in result["paths"]:
+        _assert_inert_preview(path)
     classifications = {path["path_id"]: path["permission_classification"] for path in result["paths"]}
     assert result["permission_classification"] == "write_capable_not_safe_for_autonomy"
     assert classifications["audit_read"] == "read_only_safe"
@@ -459,6 +495,8 @@ def test_read_only_eligibility_blocks_write_capable_tool_permissions():
         )
     )
 
+    _assert_inert_preview(result)
+    _assert_inert_preview(result["tool_permissions"])
     assert result["eligible"] is False
     assert "tool permission paths are not read-only safe" in result["blocked_reasons"]
     assert any("file_patch" in reason for reason in result["blocked_reasons"])
@@ -468,6 +506,7 @@ def test_read_only_eligibility_blocks_write_capable_tool_permissions():
 def test_scoped_pr_lane_preview_is_inert_and_eligible_with_exact_scope():
     result = evaluate_scoped_pr_lane_eligibility(_eligible_pr_preview_payload())
 
+    _assert_inert_preview(result)
     assert result["eligible"] is True
     assert result["would_execute"] is False
     assert result["would_create_pr"] is False
@@ -494,6 +533,7 @@ def test_scoped_pr_lane_blocks_wildcard_scope_and_missing_report_contract():
         )
     )
 
+    _assert_inert_preview(result)
     assert result["eligible"] is False
     assert "approval scope must be exact and bounded" in result["blocked_reasons"]
     assert "scoped PR lane cannot use wildcard paths" in result["blocked_reasons"]
@@ -548,6 +588,7 @@ def test_execution_mode_classification_allows_preview_families_without_execution
     for payload, mode_family, allowed_key in cases:
         result = classify_execution_mode(payload)
 
+        _assert_inert_preview(result)
         assert result["source"] == "mission_control_execution_mode_classification_v1"
         assert result["mode_family"] == mode_family
         assert result["preview_ready"] is True
@@ -579,6 +620,7 @@ def test_execution_mode_classification_blocks_protected_modes_and_enabled_flags(
     for payload in cases:
         result = classify_execution_mode(payload)
 
+        _assert_inert_preview(result)
         assert result["preview_ready"] is False
         assert result["blocked"] is True
         assert result["blocked_reasons"]
@@ -624,6 +666,7 @@ def test_implementation_lane_cannot_smuggle_deploy_or_live_ops():
         }
     )
 
+    _assert_inert_preview(result)
     assert result["mode_family"] == "higher_risk_blocked"
     assert result["preview_ready"] is False
     assert result["blocked"] is True
@@ -653,6 +696,9 @@ def test_implementation_lane_cannot_smuggle_deploy_or_live_ops():
 def test_execution_packet_preview_is_never_an_execution_path():
     result = build_execution_packet_preview(_eligible_pr_preview_payload(mode="scoped_pr"))
 
+    _assert_inert_preview(result)
+    _assert_inert_preview(result["packet"])
+    _assert_inert_preview(result["packet"]["worker_node_contract"])
     assert result["eligible"] is True
     assert result["source"] == "mission_control_execution_packet_preview_v1"
     assert result["display_only"] is True
@@ -695,6 +741,9 @@ def test_execution_packet_preview_rejects_requested_live_action_flags():
     for payload in cases:
         result = build_execution_packet_preview(payload)
 
+        _assert_inert_preview(result)
+        _assert_inert_preview(result["packet"])
+        _assert_inert_preview(result["packet"]["worker_node_contract"])
         assert result["eligible"] is False
         assert "would_execute must remain false in previews" in result["blocked_reasons"]
         assert "would_dispatch must remain false in previews" in result["blocked_reasons"]
@@ -736,6 +785,9 @@ def test_worker_node_execution_packet_preview_wraps_scoped_pr_without_dispatch()
         )
     )
 
+    _assert_inert_preview(result)
+    _assert_inert_preview(result["packet"])
+    _assert_inert_preview(result["packet"]["worker_node_contract"])
     assert result["eligible"] is True
     assert result["packet"]["mode"] == "worker_node"
     assert result["packet"]["worker_node_contract"]["worker_identity"] == "codex"
@@ -777,6 +829,9 @@ def test_worker_node_execution_packet_requires_tests_contract():
         )
     )
 
+    _assert_inert_preview(result)
+    _assert_inert_preview(result["packet"])
+    _assert_inert_preview(result["packet"]["worker_node_contract"])
     assert result["eligible"] is False
     assert "worker-node tests/checks are required" in result["blocked_reasons"]
     assert result["would_execute"] is False
@@ -804,6 +859,9 @@ def test_worker_node_execution_packet_blocks_dispatch_and_missing_report_review(
         )
     )
 
+    _assert_inert_preview(result)
+    _assert_inert_preview(result["packet"])
+    _assert_inert_preview(result["packet"]["worker_node_contract"])
     assert result["eligible"] is False
     assert "worker dispatch must stay disabled" in result["blocked_reasons"]
     assert "worker execution must stay disabled" in result["blocked_reasons"]

@@ -162,6 +162,21 @@ _PREVIEW_DISABLED_FLAG_REASONS = {
     "worker_dispatch_enabled": "worker_dispatch_enabled must remain false",
 }
 
+INERT_PREVIEW_FLAGS = {
+    "display_only": True,
+    "trusted_for_execution": False,
+    "inert_context_only": True,
+    "would_execute": False,
+    "would_dispatch": False,
+    "would_session_send": False,
+    "execution_enabled": False,
+    "dispatch_enabled": False,
+    "session_send_enabled": False,
+    "worker_dispatch_enabled": False,
+    "stored": False,
+    "dry_run_only": True,
+}
+
 _BRIDGE_DISABLED_FLAG_REASONS = {
     **_PREVIEW_DISABLED_FLAG_REASONS,
     "worker_enabled": "worker_enabled must remain false",
@@ -447,6 +462,7 @@ def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) ->
 
     autonomy_blocked = bool(blocked_reasons) or statuses != [PROVENANCE_CLEAN]
     return {
+        **INERT_PREVIEW_FLAGS,
         "status": PROVENANCE_BLOCKED if autonomy_blocked else PROVENANCE_CLEAN,
         "primary_status": _primary_status(statuses),
         "statuses": statuses,
@@ -547,6 +563,7 @@ def classify_control_path_permissions(observed_state: dict[str, Any] | list[Any]
         for reason in path.get("reasons", ())
     ]
     return {
+        **INERT_PREVIEW_FLAGS,
         "source": "mission_control_control_path_permission_preview_v1",
         "permission_classification": classification,
         "read_only_safe": classification == "read_only_safe",
@@ -659,6 +676,7 @@ def classify_execution_mode(observed_state: dict[str, Any] | None = None) -> dic
 
     preview_ready = mode_family in {"read_only_preview", "scoped_pr_preview", "worker_node_preview"} and not blocked_reasons
     return {
+        **INERT_PREVIEW_FLAGS,
         "source": "mission_control_execution_mode_classification_v1",
         "display_only": True,
         "trusted_for_execution": False,
@@ -729,6 +747,7 @@ def evaluate_read_only_autonomy_eligibility(observed_state: dict[str, Any] | Non
         _check_tool_permissions_for_read_only(tool_permissions, blocked, warnings)
 
     return {
+        **INERT_PREVIEW_FLAGS,
         "eligible": not blocked,
         "blocked_reasons": blocked,
         "warnings": warnings,
@@ -803,6 +822,7 @@ def evaluate_scoped_pr_lane_eligibility(observed_state: dict[str, Any] | None = 
 
     scope = _explicit_scope(approval, lane)
     return {
+        **INERT_PREVIEW_FLAGS,
         "eligible": not blocked,
         "blocked_reasons": blocked,
         "warnings": warnings,
@@ -846,6 +866,7 @@ def build_execution_packet_preview(observed_state: dict[str, Any] | None = None)
         }
     )
     packet = {
+        **INERT_PREVIEW_FLAGS,
         "packet_version": "mission_control_execution_packet_preview_v1",
         "mode": mode,
         "run_id": _safe_text(_section(state, "run").get("run_id")),
@@ -860,6 +881,7 @@ def build_execution_packet_preview(observed_state: dict[str, Any] | None = None)
         "worker_node_contract": _worker_node_contract(state),
     }
     return {
+        **INERT_PREVIEW_FLAGS,
         "source": "mission_control_execution_packet_preview_v1",
         "eligible": bool(eligibility.get("eligible")),
         "blocked_reasons": list(eligibility.get("blocked_reasons") or ()),
@@ -936,6 +958,7 @@ def _evaluate_worker_node_packet_preview(state: dict[str, Any]) -> dict[str, Any
 
     _add(warnings, "worker-node packet is a manual handoff preview; no worker dispatch is enabled")
     return {
+        **INERT_PREVIEW_FLAGS,
         "eligible": not blocked,
         "blocked_reasons": blocked,
         "warnings": warnings,
@@ -960,6 +983,7 @@ def _worker_node_contract(state: dict[str, Any]) -> dict[str, Any]:
         "A Jenny packet is not permission to bypass Codex safety checks.",
     ]
     return {
+        **INERT_PREVIEW_FLAGS,
         "worker_identity": _safe_text(worker_node.get("worker_identity")) or "codex",
         "worker_host_label": _safe_text(worker_node.get("worker_host_label")) or "laptop-codex",
         "worker_kind": _safe_text(worker_node.get("worker_kind")) or "laptop_codex",
@@ -1094,6 +1118,7 @@ def _classify_control_path(path: dict[str, Any]) -> dict[str, Any]:
         classification = "unknown_blocked"
         read_only_safe = False
     return {
+        **INERT_PREVIEW_FLAGS,
         "path_id": path_id,
         "label": label,
         "permission_classification": classification,
@@ -1354,6 +1379,7 @@ def _runtime_summary(name: str, runtime: dict[str, Any]) -> dict[str, Any]:
 
 def _bridge_result(classification: str, read_only_safe: bool, reasons: list[str]) -> dict[str, Any]:
     return {
+        **INERT_PREVIEW_FLAGS,
         "permission_classification": classification,
         "legacy_permission_classification": "write_capable" if classification == "write_capable_not_safe_for_autonomy" else classification,
         "read_only_safe": read_only_safe,
