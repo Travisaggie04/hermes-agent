@@ -985,7 +985,13 @@ function missionControlGitHubBridgeSafety(
     }
   }
 
-  return { reasons, safe: reasons.length === 0 }
+  const operatorPacket = workspaceStatus?.operator_decision_packet
+  reasons.push(...(operatorPacket?.execution_lock_blocked_reasons ?? []))
+  reasons.push(...executionLockReasons('operator_decision_packet', operatorPacket))
+  reasons.push(...executionLockReasons('orchestration_readiness', workspaceStatus?.orchestration_readiness))
+
+  const uniqueReasons = [...new Set(reasons)]
+  return { reasons: uniqueReasons, safe: uniqueReasons.length === 0 }
 }
 
 function missionControlBridgeBlockedMessage(safety: MissionControlBridgeSafety): string {

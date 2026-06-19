@@ -51,7 +51,8 @@ Jenny packet as permission to bypass Codex safety checks.
   even when the direct operator packet flags are false.
 - Desktop Mission Control is the advanced audit and recovery surface.
   Any GitHub bridge write button there follows the same fail-closed status
-  check before creating a bridge request.
+  check before creating a bridge request, including hard-boundary,
+  operator-decision-packet, and orchestration-readiness workspace locks.
   The desktop status panel also shows execution packet body locks and worker
   contract locks separately from the outer execution packet wrapper, so a
   nested packet cannot quietly look executable while the wrapper says
