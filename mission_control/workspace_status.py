@@ -684,13 +684,12 @@ def _deployment_section(section: dict[str, Any], *, defaults: dict[str, Any]) ->
 def _source_control_section(section: dict[str, Any], *, defaults: dict[str, Any]) -> dict[str, Any]:
     merged = _merge_dicts(defaults, section)
     return {
+        **INERT_WORKSPACE_FLAGS,
         "branch": _safe_text(merged.get("branch"), max_chars=120),
         "accepted_live_head": _safe_sha(merged.get("accepted_live_head")),
         "default_branch_head": _safe_sha(merged.get("default_branch_head")),
         "latest_merged_pr": _safe_text(merged.get("latest_merged_pr"), max_chars=20),
         "merged_prs_after_accepted_baseline": _dedupe_bounded(merged.get("merged_prs_after_accepted_baseline") or ()),
-        "display_only": True,
-        "trusted_for_execution": False,
     }
 
 
@@ -706,13 +705,12 @@ def _deployment_gap_section(accepted: dict[str, Any], source_control: dict[str, 
     else:
         state = "unknown"
     return {
+        **INERT_WORKSPACE_FLAGS,
         "state": state,
         "accepted_live_head": accepted_live_head,
         "deployed_head": deployed_head,
         "latest_merged_pr": source_control.get("latest_merged_pr") or "",
         "dashboard_deploy_needed": state == "merged_not_deployed",
-        "display_only": True,
-        "trusted_for_execution": False,
     }
 
 

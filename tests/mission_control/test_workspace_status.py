@@ -5,6 +5,20 @@ from __future__ import annotations
 from mission_control.workspace_status import build_workspace_status, default_workspace_status_input
 
 
+def _assert_inert_workspace_flags(payload):
+    assert payload["display_only"] is True
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["would_execute"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
+    assert payload["enforcement_enabled"] is False
+    assert payload["dry_run_only"] is True
+    assert payload["enforces_runtime"] is False
+
+
 def _baseline_payload(**overrides):
     payload = {
         "accepted_baseline": {
@@ -62,6 +76,7 @@ def _baseline_payload(**overrides):
 def test_workspace_status_returns_inert_display_only_flags_and_baselines():
     status = build_workspace_status(_baseline_payload())
 
+    _assert_inert_workspace_flags(status)
     assert status["display_only"] is True
     assert status["trusted_for_execution"] is False
     assert status["inert_context_only"] is True
@@ -87,6 +102,8 @@ def test_workspace_status_returns_inert_display_only_flags_and_baselines():
     assert "MISSING_RUNTIME_PATH" in warnings
     assert status["runtime_provenance"]["autonomy_blocked"] is True
     assert status["read_only_autonomy_eligibility"]["eligible"] is False
+    _assert_inert_workspace_flags(status["source_control"])
+    _assert_inert_workspace_flags(status["deployment_gap"])
 
 
 def test_workspace_status_surfaces_scoped_pr_lane_eligibility_as_inert_preview():
@@ -534,6 +551,8 @@ def test_workspace_status_surfaces_source_default_head_drift_in_provenance():
 
     provenance = status["runtime_provenance"]
     warnings = set(status["stale_context"]["warnings"])
+    _assert_inert_workspace_flags(status["source_control"])
+    _assert_inert_workspace_flags(status["deployment_gap"])
     assert status["source_control"]["default_branch_head"] == default_head
     assert provenance["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
     assert provenance["primary_status"] == "SOURCE_DEFAULT_DRIFT"
