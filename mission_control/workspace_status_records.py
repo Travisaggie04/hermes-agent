@@ -7,6 +7,7 @@ latest append-only Mission Control records.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -835,18 +836,42 @@ def _report_overwrite_conflicts(raw_reports: tuple[ReportRecord, ...]) -> dict[s
         "submitted_by",
         "submitted_from",
     )
+    contract_fields = (
+        "summary",
+        "result",
+        "risks",
+        "blockers",
+        "changed_files",
+        "tests",
+        "next_recommended_lane",
+        "evidence_refs",
+        "artifact_refs",
+        "created_at",
+        "metadata",
+    )
     review_fields = ("status", "reviewed_at", "reviewed_by", "redaction_status")
     for report_id, reports_for_id in grouped.items():
         if len(reports_for_id) < 2:
             continue
         differing_fields = [
             field_name
-            for field_name in (*identity_fields, *review_fields)
-            if len({_safe_text(getattr(report, field_name, "")) for report in reports_for_id}) > 1
+            for field_name in (*identity_fields, *contract_fields, *review_fields)
+            if len({_report_field_fingerprint(getattr(report, field_name, "")) for report in reports_for_id}) > 1
         ]
         if differing_fields:
             conflicts[report_id] = differing_fields
     return conflicts
+
+
+def _report_field_fingerprint(value: Any) -> str:
+    if isinstance(value, tuple):
+        value = list(value)
+    if isinstance(value, (dict, list)):
+        try:
+            return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+        except TypeError:
+            return _safe_text(value, max_chars=2000)
+    return _safe_text(value, max_chars=2000)
 
 
 def _hard_boundary_contract_payload(status: dict[str, Any]) -> dict[str, Any]:

@@ -1926,6 +1926,16 @@ def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_
             project_id="project-hermes-mission-control",
             status="received",
             summary="First append-only report record.",
+            result="First result.",
+            risks=("first risk",),
+            blockers=("first blocker",),
+            changed_files=("mission_control/first.py",),
+            tests=("first test",),
+            next_recommended_lane="first lane",
+            evidence_refs=("first evidence",),
+            artifact_refs=("first artifact",),
+            created_at="2026-06-19T08:00:00Z",
+            metadata={"safety_confirmation": "First safety confirmation."},
         )
     )
     store.append(
@@ -1955,6 +1965,16 @@ def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_
             project_id="project-hermes-mission-control",
             status="needs_review",
             summary="Second append-only report record.",
+            result="Second result.",
+            risks=("second risk",),
+            blockers=("second blocker",),
+            changed_files=("mission_control/second.py",),
+            tests=("second test",),
+            next_recommended_lane="second lane",
+            evidence_refs=("second evidence",),
+            artifact_refs=("second artifact",),
+            created_at="2026-06-19T09:00:00Z",
+            metadata={"safety_confirmation": "Second safety confirmation."},
         )
     )
 
@@ -1974,7 +1994,22 @@ def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_
     assert lifecycle["status_counts"] == {"accepted": 1, "needs_review": 1, "reviewed": 1}
     assert lifecycle["duplicate_report_ids"] == ["report-duplicate"]
     assert lifecycle["report_overwrite_conflict_ids"] == ["report-duplicate"]
-    assert lifecycle["report_overwrite_conflicts"] == {"report-duplicate": ["status"]}
+    assert lifecycle["report_overwrite_conflicts"] == {
+        "report-duplicate": [
+            "summary",
+            "result",
+            "risks",
+            "blockers",
+            "changed_files",
+            "tests",
+            "next_recommended_lane",
+            "evidence_refs",
+            "artifact_refs",
+            "created_at",
+            "metadata",
+            "status",
+        ]
+    }
     assert lifecycle["report_overwrite_conflict_count"] == 1
     assert lifecycle["open_report_ids"] == ["report-duplicate"]
     assert lifecycle["terminal_report_ids"] == ["report-accepted"]
@@ -1991,7 +2026,9 @@ def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_
     assert lifecycle["blocked"] is True
     assert "report_id report-duplicate has multiple append-only records" in lifecycle["blocked_reasons"]
     assert (
-        "report_id report-duplicate attempts to overwrite append-only report fields: status"
+        "report_id report-duplicate attempts to overwrite append-only report fields: "
+        "summary, result, risks, blockers, changed_files, tests, next_recommended_lane, "
+        "evidence_refs, artifact_refs, created_at, metadata, status"
         in lifecycle["blocked_reasons"]
     )
     assert "run_id run-reportless has no linked report" in lifecycle["blocked_reasons"]
@@ -2006,7 +2043,9 @@ def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_
     assert operator_packet["report_overwrite_conflict_count"] == 1
     assert operator_packet["report_overwrite_conflict_ids"] == ["report-duplicate"]
     assert (
-        "report_id report-duplicate attempts to overwrite append-only report fields: status"
+        "report_id report-duplicate attempts to overwrite append-only report fields: "
+        "summary, result, risks, blockers, changed_files, tests, next_recommended_lane, "
+        "evidence_refs, artifact_refs, created_at, metadata, status"
         in operator_packet["blocked_reasons"]
     )
     assert (

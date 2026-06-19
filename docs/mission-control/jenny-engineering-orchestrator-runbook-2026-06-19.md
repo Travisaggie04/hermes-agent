@@ -271,8 +271,9 @@ records. The report lifecycle row shows open, reviewed, and terminal report
 counts. The report gaps row shows duplicate report IDs, overwrite conflicts,
 completed runs with no report, and stale run-to-report links. An overwrite
 conflict means the same report ID was appended more than once with changed
-identity or review fields; Jenny must treat that report chain as quarantined
-until Travis reviews the append-only history. A report link mismatch means the
+identity, report-contract, evidence, safety metadata, or review fields; Jenny
+must treat that report chain as quarantined until Travis reviews the
+append-only history. A report link mismatch means the
 report exists, but its own run ID points to a different run than the child or
 worker record that references it; even an accepted report stays blocked until
 that lineage is reviewed. The report review blockers row lists the exact report
