@@ -921,6 +921,150 @@ def test_record_sourced_workspace_status_projects_report_contract_compliance(tmp
     assert "Report contract completeness: 1 complete, 1 incomplete." in operator_packet["plain_language_summary"]
 
 
+def test_record_sourced_workspace_status_projects_report_completion_path(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        RunRecord(
+            run_id="run-ready",
+            project_id="project-hermes-mission-control",
+            lane_type="read_only_inspection",
+            title="Ready terminal run",
+            status="completed",
+            report_ids=("report-ready",),
+        )
+    )
+    store.append(
+        ChildRunRecord(
+            child_run_id="child-needs-review",
+            parent_run_id="run-parent",
+            project_id="project-hermes-mission-control",
+            agent_identity="jenny-child",
+            status="completed",
+            objective="Inspect bounded evidence.",
+            report_id="report-needs-review",
+        )
+    )
+    store.append(
+        WorkerNodeRunRecord(
+            worker_run_id="worker-missing",
+            parent_run_id="run-parent",
+            project_id="project-hermes-mission-control",
+            worker_identity="codex",
+            worker_host_label="laptop-codex",
+            status="completed",
+            objective="Prepare missing report evidence.",
+        )
+    )
+    store.append(
+        WorkerNodeRunRecord(
+            worker_run_id="worker-rejected",
+            parent_run_id="run-parent",
+            project_id="project-hermes-mission-control",
+            worker_identity="codex",
+            worker_host_label="laptop-codex",
+            status="completed",
+            objective="Prepare rejected report evidence.",
+            report_id="report-rejected",
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-ready",
+            run_id="run-ready",
+            project_id="project-hermes-mission-control",
+            status="accepted",
+            summary="Ready report.",
+            result="Finished the bounded review.",
+            risks=("none beyond focused evidence",),
+            changed_files=("mission_control/workspace_status_records.py",),
+            tests=("mission_control status tests passed",),
+            next_recommended_lane="Jenny can close this item.",
+            evidence_refs=("pytest output",),
+            reviewed_at="2026-06-19T10:00:00Z",
+            reviewed_by="jenny",
+            redaction_status="operator_supplied_redacted",
+            metadata={"safety_confirmation": "No live dispatch, deploy, restart, runtime switch, records, or secrets."},
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-needs-review",
+            run_id="child-needs-review",
+            project_id="project-hermes-mission-control",
+            status="received",
+            summary="Child report still needs Jenny review.",
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-rejected",
+            run_id="worker-rejected",
+            project_id="project-hermes-mission-control",
+            status="rejected",
+            summary="Rejected worker report.",
+            result="The evidence was not sufficient.",
+            risks=("needs rework",),
+            changed_files=("mission_control/workspace_status_records.py",),
+            tests=("mission_control status tests passed",),
+            next_recommended_lane="Ask for a corrected report.",
+            evidence_refs=("pytest output",),
+            reviewed_at="2026-06-19T11:00:00Z",
+            reviewed_by="jenny",
+            redaction_status="operator_supplied_redacted",
+            metadata={"safety_confirmation": "No live dispatch, deploy, restart, runtime switch, records, or secrets."},
+        )
+    )
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    completion = status["report_completion_path"]
+    assert completion["source"] == "mission_control_report_completion_path_v1"
+    assert completion["display_only"] is True
+    assert completion["trusted_for_execution"] is False
+    assert completion["would_execute"] is False
+    assert completion["execution_enabled"] is False
+    assert completion["dispatch_enabled"] is False
+    assert completion["session_send_enabled"] is False
+    assert completion["worker_dispatch_enabled"] is False
+    assert completion["stored"] is False
+    assert completion["dry_run_only"] is True
+    assert completion["manual_review_only"] is True
+    assert completion["terminal_item_count"] == 4
+    assert completion["completion_ready_count"] == 1
+    assert completion["blocked_completion_count"] == 3
+    assert completion["missing_report_count"] == 1
+    assert completion["needs_review_count"] == 1
+    assert completion["rejected_report_count"] == 1
+    assert completion["contract_incomplete_count"] == 2
+    assert completion["ingestion_blocked_count"] == 1
+    assert completion["duplicate_report_count"] == 0
+    assert completion["blocked"] is True
+    assert "worker_node_run worker-missing has no linked completion report" in completion["blocked_reasons"]
+    assert "report_id report-needs-review still needs Jenny review before completion" in completion["blocked_reasons"]
+    assert "report_id report-needs-review missing completion contract fields: result, risks/blockers, evidence, tests, next lane, safety confirmation" in completion["blocked_reasons"]
+    assert "report_id report-rejected completion report is rejected" in completion["blocked_reasons"]
+
+    items = {item["item_id"]: item for item in completion["items"]}
+    assert items["report-completion:run:run-ready"]["completion_ready"] is True
+    assert items["report-completion:run:run-ready"]["report_review_status"] == "accepted"
+    assert items["report-completion:child_run:child-needs-review"]["completion_ready"] is False
+    assert items["report-completion:child_run:child-needs-review"]["result_ingestion_ready"] is False
+    assert items["report-completion:worker_node_run:worker-missing"]["report_link_status"] == "missing_linked_report"
+    assert items["report-completion:worker_node_run:worker-rejected"]["report_review_status"] == "rejected"
+
+    next_safe_actions = status["next_safe_actions"]
+    action_ids = {action["action_id"] for action in next_safe_actions["actions"]}
+    assert "review_report_completion_path" in action_ids
+    assert "report_id report-rejected completion report is rejected" in next_safe_actions["blocked_reasons"]
+
+    operator_packet = status["operator_decision_packet"]
+    assert operator_packet["report_completion_blocked_count"] == 3
+    assert "worker_node_run worker-missing has no linked completion report" in operator_packet["report_completion_blocked_reasons"]
+    assert "Report completion path: 1 ready, 3 blocked." in operator_packet["plain_language_summary"]
+    assert operator_packet["jenny_review_required"] is True
+
+
 def test_record_sourced_workspace_status_projects_stop_cancel_control(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"
     store = JsonlRecordStore(records_path)

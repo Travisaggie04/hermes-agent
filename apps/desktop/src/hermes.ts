@@ -649,6 +649,58 @@ export interface MissionControlResultIngestionContract {
   would_execute?: boolean
 }
 
+export interface MissionControlReportCompletionPathItem {
+  blocked_reasons?: string[]
+  completion_ready?: boolean
+  contract_missing_fields?: string[]
+  duplicate_report?: boolean
+  forbidden_metadata_keys?: string[]
+  item_id?: string
+  label?: string
+  manual_review_required?: boolean
+  parent_run_id?: string
+  recommended_action?: string
+  record_id?: string
+  record_type?: string
+  redaction_status?: string
+  report_contract_complete?: boolean
+  report_id?: string
+  report_link_status?: string
+  report_review_status?: string
+  result_ingestion_ready?: boolean
+  safety_confirmation_present?: boolean
+  status?: string
+}
+
+export interface MissionControlReportCompletionPath {
+  blocked?: boolean
+  blocked_reasons?: string[]
+  blocked_completion_count?: number
+  completion_ready_count?: number
+  contract_incomplete_count?: number
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  duplicate_report_count?: number
+  execution_enabled?: boolean
+  ingestion_blocked_count?: number
+  items?: MissionControlReportCompletionPathItem[]
+  manual_review_only?: boolean
+  missing_report_count?: number
+  needs_review_count?: number
+  primary_item?: MissionControlReportCompletionPathItem
+  primary_item_id?: string
+  primary_item_label?: string
+  rejected_report_count?: number
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  terminal_item_count?: number
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
+}
+
 export interface MissionControlOrchestrationStopControlItem {
   item_id?: string
   label?: string
@@ -715,6 +767,9 @@ export interface MissionControlOperatorDecisionPacket {
   report_contract_blocked_reasons?: string[]
   report_contract_incomplete_count?: number
   report_contract_primary_item_id?: string
+  report_completion_blocked_count?: number
+  report_completion_blocked_reasons?: string[]
+  report_completion_primary_item_id?: string
   report_review_queue_count?: number
   result_ingestion_blocked_count?: number
   result_ingestion_blocked_reasons?: string[]
@@ -1441,6 +1496,7 @@ export interface MissionControlWorkspaceStatus {
   stale_context?: { warnings?: string[] }
   report_lifecycle?: MissionControlReportLifecycle
   report_contract_compliance?: MissionControlReportContractCompliance
+  report_completion_path?: MissionControlReportCompletionPath
   report_review_queue?: MissionControlReportReviewQueue
   result_ingestion_contract?: MissionControlResultIngestionContract
   run_lifecycle?: MissionControlRunLifecycle

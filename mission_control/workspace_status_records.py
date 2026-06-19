@@ -306,6 +306,13 @@ def build_workspace_status_from_records(
         child_runs=recent_child_runs,
         worker_runs=recent_worker_runs,
     )
+    status["report_completion_path"] = _report_completion_path_payload(
+        runs=recent_runs,
+        child_runs=recent_child_runs,
+        worker_runs=recent_worker_runs,
+        reports=recent_reports,
+        raw_reports=recent_reports_raw,
+    )
     status["orchestration_stop_control"] = _orchestration_stop_control_payload(
         runs=recent_runs,
         child_runs=recent_child_runs,
@@ -847,6 +854,21 @@ def _next_safe_actions_payload(status: dict[str, Any]) -> dict[str, Any]:
             reason=_first_reason(report_contract_reasons, "One or more reports are missing required result fields."),
             blocked_until="reports include summary, result, evidence, risks/blockers, tests, next lane, and safety confirmation",
             priority=47,
+        )
+
+    report_completion = _mapping(status.get("report_completion_path"))
+    report_completion_reasons = _text_list(report_completion.get("blocked_reasons"))
+    if report_completion.get("blocked") is True or report_completion_reasons:
+        extend_blockers(report_completion_reasons)
+        add_action(
+            action_id="review_report_completion_path",
+            label="Review report completion path",
+            reason=_first_reason(
+                report_completion_reasons,
+                "One or more terminal runs cannot be closed from reviewed report evidence.",
+            ),
+            blocked_until="terminal runs have linked, reviewed, complete, ingestion-safe reports",
+            priority=48,
         )
 
     stop_control = _mapping(status.get("orchestration_stop_control"))
@@ -1569,6 +1591,200 @@ def _report_contract_missing_fields(report: ReportRecord) -> list[str]:
     if not _safe_text(safety_confirmation):
         missing.append("safety confirmation")
     return missing
+
+
+def _report_completion_path_payload(
+    *,
+    runs: tuple[RunRecord, ...],
+    child_runs: tuple[ChildRunRecord, ...],
+    worker_runs: tuple[WorkerNodeRunRecord, ...],
+    reports: tuple[ReportRecord, ...],
+    raw_reports: tuple[ReportRecord, ...],
+) -> dict[str, Any]:
+    reports_by_id, reports_by_run_id = _report_lookup_maps(reports)
+    duplicate_report_ids = set(_duplicate_record_ids(raw_reports, "report_id"))
+    items: list[dict[str, Any]] = []
+    blocked_reasons: list[str] = []
+
+    for run in runs:
+        if run.status not in RUN_REPORT_REQUIRED_STATUSES:
+            continue
+        report = _record_stop_report(
+            record_id=run.run_id,
+            report_ids=run.report_ids,
+            reports_by_id=reports_by_id,
+            reports_by_run_id=reports_by_run_id,
+        )
+        item = _report_completion_path_item(
+            record_type="run",
+            record_id=run.run_id,
+            parent_run_id="",
+            status=run.status,
+            label=run.title or run.objective or run.run_id,
+            report=report,
+            duplicate_report_ids=duplicate_report_ids,
+        )
+        items.append(item)
+        blocked_reasons.extend(_text_list(item.get("blocked_reasons")))
+
+    for child in child_runs:
+        if child.status not in RUN_REPORT_REQUIRED_STATUSES:
+            continue
+        report = _record_stop_report(
+            record_id=child.child_run_id,
+            report_ids=(child.report_id,),
+            reports_by_id=reports_by_id,
+            reports_by_run_id=reports_by_run_id,
+        )
+        item = _report_completion_path_item(
+            record_type="child_run",
+            record_id=child.child_run_id,
+            parent_run_id=child.parent_run_id,
+            status=child.status,
+            label=child.objective or child.agent_identity or child.child_run_id,
+            report=report,
+            duplicate_report_ids=duplicate_report_ids,
+        )
+        items.append(item)
+        blocked_reasons.extend(_text_list(item.get("blocked_reasons")))
+
+    for worker in worker_runs:
+        if worker.status not in RUN_REPORT_REQUIRED_STATUSES:
+            continue
+        report = _record_stop_report(
+            record_id=worker.worker_run_id,
+            report_ids=(worker.report_id,),
+            reports_by_id=reports_by_id,
+            reports_by_run_id=reports_by_run_id,
+        )
+        item = _report_completion_path_item(
+            record_type="worker_node_run",
+            record_id=worker.worker_run_id,
+            parent_run_id=worker.parent_run_id,
+            status=worker.status,
+            label=worker.objective or worker.assigned_packet_summary or worker.worker_run_id,
+            report=report,
+            duplicate_report_ids=duplicate_report_ids,
+        )
+        items.append(item)
+        blocked_reasons.extend(_text_list(item.get("blocked_reasons")))
+
+    blocked_items = [item for item in items if item.get("completion_ready") is not True]
+    primary_item = blocked_items[0] if blocked_items else {}
+    unique_blocked_reasons = _unique_reasons(blocked_reasons)
+    return {
+        "source": "mission_control_report_completion_path_v1",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "stored": False,
+        "dry_run_only": True,
+        "manual_review_only": True,
+        "terminal_item_count": len(items),
+        "completion_ready_count": len(items) - len(blocked_items),
+        "blocked_completion_count": len(blocked_items),
+        "missing_report_count": sum(1 for item in items if item.get("report_link_status") != "linked_report_found"),
+        "needs_review_count": sum(1 for item in items if item.get("report_review_status") == "needs_review"),
+        "rejected_report_count": sum(
+            1 for item in items if item.get("report_review_status") in {"rejected", "superseded"}
+        ),
+        "contract_incomplete_count": sum(1 for item in items if item.get("report_contract_complete") is not True),
+        "ingestion_blocked_count": sum(
+            1
+            for item in items
+            if item.get("report_link_status") == "linked_report_found"
+            and item.get("result_ingestion_ready") is not True
+        ),
+        "duplicate_report_count": sum(1 for item in items if item.get("duplicate_report") is True),
+        "blocked": bool(unique_blocked_reasons),
+        "blocked_reasons": unique_blocked_reasons,
+        "primary_item": primary_item,
+        "primary_item_id": _safe_text(primary_item.get("item_id")),
+        "primary_item_label": _safe_text(primary_item.get("label"), max_chars=800),
+        "items": items,
+    }
+
+
+def _report_completion_path_item(
+    *,
+    record_type: str,
+    record_id: str,
+    parent_run_id: str,
+    status: str,
+    label: str,
+    report: ReportRecord | None,
+    duplicate_report_ids: set[str],
+) -> dict[str, Any]:
+    report_id = report.report_id if report else ""
+    review_status = _linked_report_review_status(report) if report else "missing_report"
+    report_link_status = "linked_report_found" if report else "missing_linked_report"
+    contract_missing_fields = _report_contract_missing_fields(report) if report else []
+    metadata = report.metadata if report and isinstance(report.metadata, dict) else {}
+    redaction_status = _safe_text(report.redaction_status) if report else ""
+    forbidden_metadata_keys = _result_ingestion_forbidden_metadata_keys(metadata) if report else []
+    safety_confirmation_present = _result_ingestion_safety_confirmation_present(metadata) if report else False
+    duplicate_report = report_id in duplicate_report_ids if report_id else False
+    blocked_reasons: list[str] = []
+
+    if report is None:
+        blocked_reasons.append(f"{record_type} {record_id} has no linked completion report")
+    elif duplicate_report:
+        blocked_reasons.append(f"report_id {report_id} has multiple append-only records")
+
+    if report is not None and review_status not in {"reviewed", "accepted"}:
+        if review_status in {"rejected", "superseded"}:
+            blocked_reasons.append(f"report_id {report_id} completion report is {review_status}")
+        else:
+            blocked_reasons.append(f"report_id {report_id} still needs Jenny review before completion")
+    if contract_missing_fields:
+        blocked_reasons.append(
+            f"report_id {report_id} missing completion contract fields: {', '.join(contract_missing_fields)}"
+        )
+    if report is not None and redaction_status not in RESULT_INGESTION_ACCEPTED_REDACTION_STATUSES:
+        blocked_reasons.append(f"report_id {report_id} redaction_status {redaction_status or 'missing'} is not accepted")
+    if forbidden_metadata_keys:
+        blocked_reasons.append(
+            f"report_id {report_id} metadata contains forbidden keys: {', '.join(forbidden_metadata_keys)}"
+        )
+    if report is not None and not safety_confirmation_present:
+        blocked_reasons.append(f"report_id {report_id} is missing safety confirmation for completion")
+
+    result_ingestion_ready = (
+        report is not None
+        and not duplicate_report
+        and redaction_status in RESULT_INGESTION_ACCEPTED_REDACTION_STATUSES
+        and not forbidden_metadata_keys
+        and safety_confirmation_present
+    )
+    return {
+        "item_id": f"report-completion:{record_type}:{record_id}",
+        "record_type": record_type,
+        "record_id": record_id,
+        "parent_run_id": parent_run_id,
+        "status": status,
+        "label": _safe_text(label, max_chars=800),
+        "report_id": report_id,
+        "report_link_status": report_link_status,
+        "report_review_status": review_status,
+        "report_contract_complete": report is not None and not contract_missing_fields,
+        "contract_missing_fields": contract_missing_fields,
+        "result_ingestion_ready": result_ingestion_ready,
+        "duplicate_report": duplicate_report,
+        "redaction_status": redaction_status,
+        "safety_confirmation_present": safety_confirmation_present,
+        "forbidden_metadata_keys": forbidden_metadata_keys,
+        "completion_ready": not blocked_reasons,
+        "manual_review_required": True,
+        "blocked_reasons": blocked_reasons,
+        "recommended_action": (
+            "Jenny reviews the linked report, contract fields, ingestion safety, and final run status "
+            "before treating this work as complete."
+        ),
+    }
 
 
 def _report_review_linked_record(
@@ -2302,6 +2518,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     report_queue = _mapping(status.get("report_review_queue"))
     result_ingestion = _mapping(status.get("result_ingestion_contract"))
     report_contract = _mapping(status.get("report_contract_compliance"))
+    report_completion = _mapping(status.get("report_completion_path"))
     stop_control = _mapping(status.get("orchestration_stop_control"))
     worker_presence = _mapping(status.get("worker_node_presence"))
     worker_instruction = _mapping(status.get("worker_node_instruction_preview"))
@@ -2312,6 +2529,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     queue_count = _safe_int(report_queue.get("queue_count"))
     result_ingestion_blocked_count = _safe_int(result_ingestion.get("blocked_report_count"))
     incomplete_report_contract_count = _safe_int(report_contract.get("incomplete_report_count"))
+    report_completion_blocked_count = _safe_int(report_completion.get("blocked_completion_count"))
     stop_cancel_count = _safe_int(stop_control.get("stop_cancel_count"))
     readiness_states = _mapping(readiness.get("states"))
     next_label = _safe_text(next_safe_actions.get("primary_action_label"), max_chars=800)
@@ -2336,6 +2554,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             *_text_list(report_queue.get("blocked_reasons")),
             *_text_list(result_ingestion.get("blocked_reasons")),
             *_text_list(report_contract.get("blocked_reasons")),
+            *_text_list(report_completion.get("blocked_reasons")),
             *_text_list(stop_control.get("blocked_reasons")),
             *_text_list(worker_presence.get("blocked_reasons")),
             *_text_list(execution_mode.get("blocked_reasons")),
@@ -2393,6 +2612,12 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             f"{_safe_int(report_contract.get('complete_report_count'))} complete, "
             f"{incomplete_report_contract_count} incomplete."
         )
+    if report_completion:
+        summary_lines.append(
+            "Report completion path: "
+            f"{_safe_int(report_completion.get('completion_ready_count'))} ready, "
+            f"{report_completion_blocked_count} blocked."
+        )
     if stop_cancel_count:
         summary_lines.append(
             "Stop/cancel control: "
@@ -2429,7 +2654,12 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         "state": state,
         "execution_ready": False,
         "approval_required": True,
-        "jenny_review_required": queue_count > 0 or result_ingestion_blocked_count > 0 or stop_cancel_count > 0,
+        "jenny_review_required": (
+            queue_count > 0
+            or result_ingestion_blocked_count > 0
+            or report_completion_blocked_count > 0
+            or stop_cancel_count > 0
+        ),
         "next_safe_action_id": _safe_text(next_safe_actions.get("primary_action_id")),
         "next_safe_action_label": next_label,
         "next_safe_action_reason": next_reason,
@@ -2440,6 +2670,9 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         "report_contract_incomplete_count": incomplete_report_contract_count,
         "report_contract_blocked_reasons": _text_list(report_contract.get("blocked_reasons")),
         "report_contract_primary_item_id": _safe_text(report_contract.get("primary_item_id")),
+        "report_completion_blocked_count": report_completion_blocked_count,
+        "report_completion_blocked_reasons": _text_list(report_completion.get("blocked_reasons")),
+        "report_completion_primary_item_id": _safe_text(report_completion.get("primary_item_id")),
         "stop_cancel_count": stop_cancel_count,
         "stop_cancel_blocked_reasons": _text_list(stop_control.get("blocked_reasons")),
         "stop_cancel_primary_item_id": _safe_text(stop_control.get("primary_item_id")),
