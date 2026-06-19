@@ -46,7 +46,9 @@ Jenny packet as permission to bypass Codex safety checks.
   readiness flags; it also shows report lifecycle blockers, duplicate report
   IDs, overwrite conflicts, missing reports, and stale report links in compact
   health so the old route cannot imply report history is clean when the backend
-  has quarantined it. The manual report/challenge/lane draft buttons are
+  has quarantined it. It also shows approval lifecycle gaps, run lifecycle gaps,
+  and one-active-mutation-lane blockers from the same append-only projections as
+  desktop Mission Control. The manual report/challenge/lane draft buttons are
   separate record actions and remain visibly guarded.
   Its compact health dashboard also treats any true execution lock on the
   execution mode preview, execution packet wrapper, execution packet body,

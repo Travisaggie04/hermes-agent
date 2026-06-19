@@ -341,6 +341,19 @@ interface ProjectSessionRecord {
 
 interface WorkspaceStatus {
   accepted_baseline?: { head?: string; runtime_path?: string };
+  approval_lifecycle?: CompactExecutionLockSource & {
+    available_approval_ids?: string[];
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    consumed_approval_ids?: string[];
+    duplicate_approval_ids?: string[];
+    expired_approval_ids?: string[];
+    pending_approval_ids?: string[];
+    rejected_or_cancelled_approval_ids?: string[];
+    runs_missing_approval_id?: string[];
+    runs_with_missing_approval_record?: Record<string, string>;
+    runs_with_unavailable_approval?: Record<string, string>;
+  };
   deployment_gap?: { accepted_live_head?: string; dashboard_deploy_needed?: boolean; deployed_head?: string; latest_merged_pr?: string; state?: string };
   execution_mode_classification?: CompactExecutionLockSource & {
     blocked?: boolean;
@@ -465,6 +478,19 @@ interface WorkspaceStatus {
     would_execute?: boolean;
     worker_dispatch_enabled?: boolean;
     worker_enabled?: boolean;
+  };
+  run_lifecycle?: CompactExecutionLockSource & {
+    active_mutation_lane_count?: number;
+    active_mutation_run_ids?: string[];
+    active_run_ids?: string[];
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    duplicate_run_ids?: string[];
+    one_active_mutation_lane_rule_passed?: boolean;
+    stop_cancel_run_ids?: string[];
+    terminal_run_ids?: string[];
+    terminal_runs_missing_report?: string[];
+    terminal_runs_with_missing_linked_report_ids?: Record<string, string[]>;
   };
   runtime_worktree_guard?: { decision_state?: string };
   safety?: { dispatch_in_gateway?: boolean; model_routing_enabled?: boolean };
@@ -4134,6 +4160,8 @@ function CompactHermesHealthDashboard({
   const hardBoundary = status.hard_boundary_contract;
   const operatorPacket = status.operator_decision_packet;
   const readiness = status.orchestration_readiness;
+  const approvalLifecycle = status.approval_lifecycle;
+  const runLifecycle = status.run_lifecycle;
   const workerInstruction = status.worker_node_instruction_preview;
   const workerPresence = status.worker_node_presence;
   const resultIngestion = status.result_ingestion_contract;
@@ -4142,6 +4170,24 @@ function CompactHermesHealthDashboard({
   const nextSafeActions = status.next_safe_actions;
   const resultIngestionBlocked = resultIngestion?.blocked_report_count ?? 0;
   const reportCompletionBlocked = reportCompletion?.blocked_completion_count ?? 0;
+  const approvalMissingRecordCount = Object.keys(approvalLifecycle?.runs_with_missing_approval_record ?? {}).length;
+  const approvalUnavailableRunCount = Object.keys(approvalLifecycle?.runs_with_unavailable_approval ?? {}).length;
+  const approvalGapCount =
+    (approvalLifecycle?.duplicate_approval_ids?.length ?? 0)
+    + (approvalLifecycle?.consumed_approval_ids?.length ?? 0)
+    + (approvalLifecycle?.rejected_or_cancelled_approval_ids?.length ?? 0)
+    + (approvalLifecycle?.runs_missing_approval_id?.length ?? 0)
+    + approvalMissingRecordCount
+    + approvalUnavailableRunCount;
+  const runTerminalMissingLinkedCount = Object.values(runLifecycle?.terminal_runs_with_missing_linked_report_ids ?? {}).reduce(
+    (count, reportIds) => count + reportIds.length,
+    0,
+  );
+  const runGapCount =
+    (runLifecycle?.duplicate_run_ids?.length ?? 0)
+    + (runLifecycle?.terminal_runs_missing_report?.length ?? 0)
+    + runTerminalMissingLinkedCount
+    + (runLifecycle?.one_active_mutation_lane_rule_passed === false ? 1 : 0);
   const reportDuplicateCount = reportLifecycle?.duplicate_report_ids?.length ?? 0;
   const reportMissingRunCount = reportLifecycle?.runs_missing_report?.length ?? 0;
   const reportMissingLinkedCount = Object.values(reportLifecycle?.runs_with_missing_linked_report_ids ?? {}).reduce(
@@ -4156,6 +4202,8 @@ function CompactHermesHealthDashboard({
   const workerPresenceState = workerPresence?.presence_state ?? "unknown";
   const readinessStates = readiness?.states;
   const nextSafeActionLockReasons = compactExecutionLockReasons("Safe next actions", nextSafeActions);
+  const approvalLifecycleLockReasons = compactExecutionLockReasons("Approval lifecycle", approvalLifecycle);
+  const runLifecycleLockReasons = compactExecutionLockReasons("Run lifecycle", runLifecycle);
   const executionModeLockReasons = compactExecutionLockReasons("Execution mode", executionMode);
   const executionPacketLockReasons = compactExecutionLockReasons("Execution packet", executionPacket);
   const executionPacketBodyLockReasons = compactExecutionLockReasons("Execution packet body", executionPacket?.packet);
@@ -4179,6 +4227,8 @@ function CompactHermesHealthDashboard({
     staleWarnings.length ? `Stale context: ${staleWarnings.join(", ")}` : "",
     memoryErrors.length ? `${memoryErrors.length} memory storage warning${memoryErrors.length === 1 ? "" : "s"}` : "",
     ...nextSafeActionLockReasons,
+    ...approvalLifecycleLockReasons,
+    ...runLifecycleLockReasons,
     ...executionModeLockReasons,
     ...executionPacketLockReasons,
     ...executionPacketBodyLockReasons,
@@ -4194,6 +4244,8 @@ function CompactHermesHealthDashboard({
     ...reportLifecycleLockReasons,
     hardBoundary?.blocked ? firstReason(hardBoundary.blocked_reasons, "Hard boundary contract needs review") : "",
     operatorPacket?.blocked ? firstReason(operatorPacket.blocked_reasons, "Operator decision packet is blocked") : "",
+    approvalLifecycle?.blocked ? firstReason(approvalLifecycle.blocked_reasons, "Approval lifecycle needs review") : "",
+    runLifecycle?.blocked ? firstReason(runLifecycle.blocked_reasons, "Run lifecycle needs review") : "",
     executionMode?.blocked ? firstReason(executionMode.blocked_reasons, "Execution mode preview is blocked") : "",
     executionPacket?.blocked_reasons?.length ? firstReason(executionPacket.blocked_reasons, "Execution packet preview is blocked") : "",
     readiness?.blocked_reasons?.length ? firstReason(readiness.blocked_reasons, "Orchestration readiness is blocked") : "",
@@ -4206,6 +4258,16 @@ function CompactHermesHealthDashboard({
   const overallTone: CompactHealthTone = issues.length ? "warn" : "good";
   const bridgeTone: CompactHealthTone = bridgeError ? "bad" : bridgePending ? "warn" : "good";
   const safetyOk = guard === "pass" && dispatch === false && !compactLiveFlagEnabled(status.safety?.model_routing_enabled) && activeLaneCount <= 1 && staleWarnings.length === 0;
+  const approvalLifecycleTone: CompactHealthTone = approvalLifecycleLockReasons.length
+    ? "bad"
+    : approvalLifecycle?.blocked || approvalGapCount
+      ? "warn"
+      : "good";
+  const runLifecycleTone: CompactHealthTone = runLifecycleLockReasons.length
+    ? "bad"
+    : runLifecycle?.blocked || runGapCount
+      ? "warn"
+      : "good";
   const executionPreviewTone: CompactHealthTone = [
     ...executionModeLockReasons,
     ...executionPacketLockReasons,
@@ -4282,6 +4344,16 @@ function CompactHermesHealthDashboard({
     workerInstruction?.manual_handoff_prompt,
     "No worker-node instruction preview recorded.",
   ].find(Boolean) ?? "No worker-node instruction preview recorded.", 260);
+  const approvalLifecycleDetail = compactText([
+    ...approvalLifecycleLockReasons,
+    firstReason(approvalLifecycle?.blocked_reasons, ""),
+    `Approval gaps: duplicates ${approvalLifecycle?.duplicate_approval_ids?.length ?? 0}, consumed ${approvalLifecycle?.consumed_approval_ids?.length ?? 0}, unavailable runs ${approvalUnavailableRunCount}.`,
+  ].find(Boolean), 260);
+  const runLifecycleDetail = compactText([
+    ...runLifecycleLockReasons,
+    firstReason(runLifecycle?.blocked_reasons, ""),
+    `Run gaps: duplicates ${runLifecycle?.duplicate_run_ids?.length ?? 0}, missing reports ${runLifecycle?.terminal_runs_missing_report?.length ?? 0}, stale links ${runTerminalMissingLinkedCount}.`,
+  ].find(Boolean), 260);
   const reportLifecycleDetail = compactText([
     ...reportLifecycleLockReasons,
     firstReason(reportLifecycle?.blocked_reasons, ""),
@@ -4322,6 +4394,30 @@ function CompactHermesHealthDashboard({
           label="Safety locks"
           tone={safetyOk ? "good" : "warn"}
           value={safetyOk ? "Holding" : "Check"}
+        />
+        <CompactHealthTile
+          detail={approvalLifecycleDetail}
+          label="Approval lifecycle"
+          tone={approvalLifecycleTone}
+          value={`available ${approvalLifecycle?.available_approval_ids?.length ?? 0} / pending ${approvalLifecycle?.pending_approval_ids?.length ?? 0} / expired ${approvalLifecycle?.expired_approval_ids?.length ?? 0}`}
+        />
+        <CompactHealthTile
+          detail={approvalGapCount ? "Approval gaps block autonomy until approval records and active run links are exact and available." : "No approval lifecycle gaps are currently recorded."}
+          label="Approval gaps"
+          tone={approvalGapCount ? "warn" : "good"}
+          value={`duplicates ${approvalLifecycle?.duplicate_approval_ids?.length ?? 0} / consumed ${approvalLifecycle?.consumed_approval_ids?.length ?? 0} / unavailable runs ${approvalUnavailableRunCount}`}
+        />
+        <CompactHealthTile
+          detail={runLifecycleDetail}
+          label="Run lifecycle"
+          tone={runLifecycleTone}
+          value={`active ${runLifecycle?.active_run_ids?.length ?? 0} / terminal ${runLifecycle?.terminal_run_ids?.length ?? 0} / stop-cancel ${runLifecycle?.stop_cancel_run_ids?.length ?? 0}`}
+        />
+        <CompactHealthTile
+          detail={runLifecycle?.one_active_mutation_lane_rule_passed === false ? "More than one active mutation lane is recorded; autonomy and PR lanes stay blocked." : "Run gaps cover duplicate runs, missing reports, stale report links, and the one-active-mutation-lane rule."}
+          label="Run gaps"
+          tone={runGapCount ? "warn" : "good"}
+          value={`duplicates ${runLifecycle?.duplicate_run_ids?.length ?? 0} / missing reports ${runLifecycle?.terminal_runs_missing_report?.length ?? 0} / stale links ${runTerminalMissingLinkedCount}`}
         />
         <CompactHealthTile
           detail={compactOperatorSummary(status)}
