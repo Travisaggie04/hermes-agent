@@ -494,6 +494,9 @@ export interface MissionControlReportLifecycle {
   open_report_ids?: string[]
   raw_report_count?: number
   report_count?: number
+  report_overwrite_conflict_count?: number
+  report_overwrite_conflict_ids?: string[]
+  report_overwrite_conflicts?: Record<string, string[]>
   reports_by_run_id?: Record<string, string[]>
   reviewed_report_ids?: string[]
   runs_missing_report?: string[]

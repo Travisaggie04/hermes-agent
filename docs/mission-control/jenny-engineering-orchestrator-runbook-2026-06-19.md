@@ -197,9 +197,12 @@ without reports, stale report links, and the one-active-mutation-lane rule.
 
 Mission Control now projects a report lifecycle summary from append-only
 records. The report lifecycle row shows open, reviewed, and terminal report
-counts. The report gaps row shows duplicate report IDs, completed runs with no
-report, and stale run-to-report links. The report review blockers row lists
-the exact report or run IDs Jenny must review before treating the work as
+counts. The report gaps row shows duplicate report IDs, overwrite conflicts,
+completed runs with no report, and stale run-to-report links. An overwrite
+conflict means the same report ID was appended more than once with changed
+identity or review fields; Jenny must treat that report chain as quarantined
+until Travis reviews the append-only history. The report review blockers row
+lists the exact report or run IDs Jenny must review before treating the work as
 closed.
 
 Mission Control also projects a report review queue for Jenny. This queue puts
@@ -326,8 +329,8 @@ next delegation instruction.
   and unavailable approval chains.
 - Run lifecycle: active, terminal, stop/cancel, mutation-lane, and missing
   report chains.
-- Report lifecycle: report inbox/review state, duplicate IDs, missing reports,
-  stale report links, and exact review blockers.
+- Report lifecycle: report inbox/review state, duplicate IDs, overwrite
+  conflicts, missing reports, stale report links, and exact review blockers.
 - Report review queue: Jenny's prioritized manual review list, including top
   report, reason, missing report links, and worker/child report context.
 - Result ingestion: whether reports are linked, redacted, metadata-safe, and

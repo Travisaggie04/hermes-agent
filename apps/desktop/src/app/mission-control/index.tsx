@@ -1421,6 +1421,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     reportLifecycleExecutionEnabled: reportLifecycle?.execution_enabled,
     reportMissingLinkedCount,
     reportMissingRunCount: reportLifecycle?.runs_missing_report?.length ?? 0,
+    reportOverwriteConflictCount: reportLifecycle?.report_overwrite_conflict_count ?? reportLifecycle?.report_overwrite_conflict_ids?.length ?? 0,
     reportContractBlocked: reportContractCompliance?.blocked,
     reportContractBlockedReasons: reportContractCompliance?.blocked_reasons ?? [],
     reportContractCompleteCount: reportContractCompliance?.complete_report_count ?? 0,
@@ -4303,7 +4304,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="run lifecycle" tone={runLifecycleTone} value={`active ${status.runActiveCount} / terminal ${status.runTerminalCount} / stop-cancel ${status.runStopCancelCount}`} />
       <StatusItem label="run gaps" tone={status.runDuplicateCount || status.runTerminalMissingReportCount || status.runTerminalMissingLinkedCount || status.runOneActiveMutationLaneRulePassed === false ? 'warn' : 'good'} value={`duplicates ${status.runDuplicateCount} / missing reports ${status.runTerminalMissingReportCount} / stale links ${status.runTerminalMissingLinkedCount}`} />
       <StatusItem label="report lifecycle" tone={reportLifecycleTone} value={`open ${status.reportOpenCount} / reviewed ${status.reportReviewedCount} / terminal ${status.reportTerminalCount}`} />
-      <StatusItem label="report gaps" tone={status.reportDuplicateCount || status.reportMissingRunCount || status.reportMissingLinkedCount ? 'warn' : 'good'} value={`duplicates ${status.reportDuplicateCount} / missing ${status.reportMissingRunCount} / stale links ${status.reportMissingLinkedCount}`} />
+      <StatusItem label="report gaps" tone={status.reportDuplicateCount || status.reportOverwriteConflictCount || status.reportMissingRunCount || status.reportMissingLinkedCount ? 'warn' : 'good'} value={`duplicates ${status.reportDuplicateCount} / overwrite conflicts ${status.reportOverwriteConflictCount} / missing ${status.reportMissingRunCount} / stale links ${status.reportMissingLinkedCount}`} />
       <StatusItem label="report contract" tone={reportContractTone} value={`reports ${status.reportContractReportCount} / complete ${status.reportContractCompleteCount} / incomplete ${status.reportContractIncompleteCount}`} />
       <StatusItem label="report completion" tone={reportCompletionTone} value={`ready ${status.reportCompletionReadyCount} / blocked ${status.reportCompletionBlockedCount} / terminal ${status.reportCompletionTerminalCount}`} />
       <StatusItem label="report review queue" tone={reportReviewQueueTone} value={`items ${status.reportReviewQueueCount} / needs review ${status.reportReviewQueueNeedsReviewCount} / missing ${status.reportReviewQueueMissingCount}`} />

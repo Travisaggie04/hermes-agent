@@ -290,6 +290,8 @@ beforeEach(() => {
       blocked: true,
       blocked_reasons: [
         'gateway git metadata is broken',
+        'report_id report-worker has multiple append-only records',
+        'report_id report-worker attempts to overwrite append-only report fields: status',
         'report_id report-worker still needs Jenny review',
         'worker node offline',
         'worker-node presence_status is not recorded',
@@ -520,6 +522,7 @@ beforeEach(() => {
       blocked: true,
       blocked_reasons: [
         'report_id report-worker has multiple append-only records',
+        'report_id report-worker attempts to overwrite append-only report fields: status',
         'run_id run-parent-1 has no linked report',
         'report_id report-worker still needs review'
       ],
@@ -530,6 +533,9 @@ beforeEach(() => {
       open_report_ids: ['report-worker'],
       raw_report_count: 2,
       report_count: 1,
+      report_overwrite_conflict_count: 1,
+      report_overwrite_conflict_ids: ['report-worker'],
+      report_overwrite_conflicts: { 'report-worker': ['status'] },
       reports_by_run_id: { 'worker-run-1': ['report-worker'] },
       reviewed_report_ids: [],
       runs_missing_report: ['run-parent-1'],
@@ -1799,7 +1805,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText(/Worker instruction: preview available but blocked/)).toBeTruthy()
     expect(screen.getByText(/Child instruction: preview available but blocked/)).toBeTruthy()
     expect(screen.getByText('operator blockers')).toBeTruthy()
-    expect(screen.getByText('gateway git metadata is broken, report_id report-worker still needs Jenny review, worker node offline, worker-node presence_status is not recorded, runtime provenance is not clean, worker-node presence is not confirmed online, report_id report-worker missing contract fields: result, evidence, tests, next lane, safety confirmation, run run-stopped has no stop_reason, run run-stopped has no linked stop/cancel report')).toBeTruthy()
+    expect(screen.getByText('gateway git metadata is broken, report_id report-worker has multiple append-only records, report_id report-worker attempts to overwrite append-only report fields: status, report_id report-worker still needs Jenny review, worker node offline, worker-node presence_status is not recorded, runtime provenance is not clean, worker-node presence is not confirmed online, report_id report-worker missing contract fields: result, evidence, tests, next lane, safety confirmation, run run-stopped has no stop_reason, run run-stopped has no linked stop/cancel report')).toBeTruthy()
     expect(screen.getByText('execution mode blockers')).toBeTruthy()
     expect(screen.getByText('protected execution markers')).toBeTruthy()
     expect(screen.getByText('execution packet blockers')).toBeTruthy()
@@ -1829,7 +1835,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('report lifecycle')).toBeTruthy()
     expect(screen.getByText('open 1 / reviewed 0 / terminal 0')).toBeTruthy()
     expect(screen.getByText('report gaps')).toBeTruthy()
-    expect(screen.getByText('duplicates 1 / missing 1 / stale links 0')).toBeTruthy()
+    expect(screen.getByText('duplicates 1 / overwrite conflicts 1 / missing 1 / stale links 0')).toBeTruthy()
     expect(screen.getAllByText('report contract').length).toBeGreaterThan(0)
     expect(screen.getByText('reports 1 / complete 0 / incomplete 1')).toBeTruthy()
     expect(screen.getByText('report completion')).toBeTruthy()
@@ -1843,7 +1849,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('top report review')).toBeTruthy()
     expect(screen.getByText('Laptop Codex reported scoped PR evidence.')).toBeTruthy()
     expect(screen.getByText('report review blockers')).toBeTruthy()
-    expect(screen.getByText('report_id report-worker has multiple append-only records, run_id run-parent-1 has no linked report, report_id report-worker still needs review')).toBeTruthy()
+    expect(screen.getByText('report_id report-worker has multiple append-only records, report_id report-worker attempts to overwrite append-only report fields: status, run_id run-parent-1 has no linked report, report_id report-worker still needs review')).toBeTruthy()
     expect(screen.getByText('report contract blockers')).toBeTruthy()
     expect(screen.getByText('report_id report-worker missing contract fields: result, evidence, tests, next lane, safety confirmation')).toBeTruthy()
     expect(screen.getByText('report completion blockers')).toBeTruthy()

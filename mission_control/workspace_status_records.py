@@ -688,6 +688,7 @@ def _report_lifecycle_payload(
             reviewed_report_ids.append(report.report_id)
 
     duplicate_report_ids = _duplicate_record_ids(raw_reports, "report_id")
+    overwrite_conflicts = _report_overwrite_conflicts(raw_reports)
     report_ids = {report.report_id for report in reports}
     run_ids_with_reports = set(reports_by_run_id)
     runs_missing_report = [
@@ -707,6 +708,10 @@ def _report_lifecycle_payload(
     blocked_reasons: list[str] = []
     for report_id in duplicate_report_ids:
         blocked_reasons.append(f"report_id {report_id} has multiple append-only records")
+    for report_id, fields in overwrite_conflicts.items():
+        blocked_reasons.append(
+            f"report_id {report_id} attempts to overwrite append-only report fields: {', '.join(fields)}"
+        )
     for run_id in runs_missing_report:
         blocked_reasons.append(f"run_id {run_id} has no linked report")
     for run_id, report_ids in runs_with_missing_linked_report_ids.items():
@@ -730,12 +735,46 @@ def _report_lifecycle_payload(
         "terminal_report_ids": terminal_report_ids,
         "reviewed_report_ids": reviewed_report_ids,
         "duplicate_report_ids": duplicate_report_ids,
+        "report_overwrite_conflict_ids": list(overwrite_conflicts),
+        "report_overwrite_conflicts": overwrite_conflicts,
+        "report_overwrite_conflict_count": len(overwrite_conflicts),
         "runs_missing_report": runs_missing_report,
         "runs_with_missing_linked_report_ids": runs_with_missing_linked_report_ids,
         "reports_by_run_id": reports_by_run_id,
         "blocked": bool(blocked_reasons),
         "blocked_reasons": blocked_reasons,
     }
+
+
+def _report_overwrite_conflicts(raw_reports: tuple[ReportRecord, ...]) -> dict[str, list[str]]:
+    grouped: dict[str, list[ReportRecord]] = {}
+    for report in raw_reports:
+        report_id = _safe_text(report.report_id)
+        if report_id:
+            grouped.setdefault(report_id, []).append(report)
+
+    conflicts: dict[str, list[str]] = {}
+    identity_fields = (
+        "run_id",
+        "approval_id",
+        "project_id",
+        "lane_request_id",
+        "report_kind",
+        "submitted_by",
+        "submitted_from",
+    )
+    review_fields = ("status", "reviewed_at", "reviewed_by", "redaction_status")
+    for report_id, reports_for_id in grouped.items():
+        if len(reports_for_id) < 2:
+            continue
+        differing_fields = [
+            field_name
+            for field_name in (*identity_fields, *review_fields)
+            if len({_safe_text(getattr(report, field_name, "")) for report in reports_for_id}) > 1
+        ]
+        if differing_fields:
+            conflicts[report_id] = differing_fields
+    return conflicts
 
 
 def _next_safe_actions_payload(status: dict[str, Any]) -> dict[str, Any]:

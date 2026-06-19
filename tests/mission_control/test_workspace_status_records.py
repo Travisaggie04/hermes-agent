@@ -1305,6 +1305,9 @@ def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_
     assert lifecycle["report_count"] == 3
     assert lifecycle["status_counts"] == {"accepted": 1, "needs_review": 1, "reviewed": 1}
     assert lifecycle["duplicate_report_ids"] == ["report-duplicate"]
+    assert lifecycle["report_overwrite_conflict_ids"] == ["report-duplicate"]
+    assert lifecycle["report_overwrite_conflicts"] == {"report-duplicate": ["status"]}
+    assert lifecycle["report_overwrite_conflict_count"] == 1
     assert lifecycle["open_report_ids"] == ["report-duplicate"]
     assert lifecycle["terminal_report_ids"] == ["report-accepted"]
     assert lifecycle["reviewed_report_ids"] == ["report-accepted", "report-reviewed-status"]
@@ -1319,6 +1322,10 @@ def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_
     }
     assert lifecycle["blocked"] is True
     assert "report_id report-duplicate has multiple append-only records" in lifecycle["blocked_reasons"]
+    assert (
+        "report_id report-duplicate attempts to overwrite append-only report fields: status"
+        in lifecycle["blocked_reasons"]
+    )
     assert "run_id run-reportless has no linked report" in lifecycle["blocked_reasons"]
     assert (
         "run_id run-missing-linked-report links missing report ids: report-missing"
