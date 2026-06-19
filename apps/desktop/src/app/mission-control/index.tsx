@@ -1433,6 +1433,26 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     ...executionLockReasons('execution packet body', executionPacketBody),
     ...executionLockReasons('worker contract', workerContract)
   ])
+  const projectionExecutionLockReasons = uniqueTextList([
+    ...executionLockReasons('read-only eligibility', autonomyEligibility),
+    ...executionLockReasons('scoped PR eligibility', scopedPrEligibility),
+    ...executionLockReasons('tool permissions', toolPermissions),
+    ...executionLockReasons('approval lifecycle', approvalLifecycle),
+    ...executionLockReasons('run lifecycle', runLifecycle),
+    ...executionLockReasons('report lifecycle', reportLifecycle),
+    ...executionLockReasons('report review queue', reportReviewQueue),
+    ...executionLockReasons('report contract', reportContractCompliance),
+    ...executionLockReasons('result ingestion', resultIngestionContract),
+    ...executionLockReasons('report completion', reportCompletionPath),
+    ...executionLockReasons('stop/cancel control', stopControl),
+    ...executionLockReasons('next safe actions', nextSafeActions),
+    ...executionLockReasons('operator decision', operatorDecisionPacket),
+    ...executionLockReasons('orchestration readiness', orchestrationReadiness),
+    ...executionLockReasons('orchestration run graph', orchestrationRunGraph),
+    ...executionLockReasons('child instruction', childInstruction),
+    ...executionLockReasons('worker handoff', workerInstruction),
+    ...executionLockReasons('worker presence', workerPresence)
+  ])
   return {
     activeLaneCount: status.lane?.active_lane_count ?? 0,
     activeMutationLaneCount: status.control_plane_lifecycle?.active_mutation_lane_count ?? 0,
@@ -1554,6 +1574,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     operatorPacketWorkerDispatchEnabled: operatorDecisionPacket?.worker_dispatch_enabled,
     operatorPacketWorkerOnline: operatorDecisionPacket?.worker_online,
     operatorPacketWorkerPresenceState: operatorDecisionPacket?.worker_presence_state ?? 'unknown',
+    projectionExecutionLockReasons,
     orchestrationReadinessBlockedReasons: orchestrationReadiness?.blocked_reasons ?? [],
     orchestrationReadinessDispatchEnabled: orchestrationReadiness?.dispatch_enabled,
     orchestrationReadinessDisplayOnly: orchestrationReadiness?.display_only,
@@ -4627,6 +4648,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-3" label="operator summary" tone={operatorPacketTone} value={status.operatorPacketSummary} />
       <StatusItem className="md:col-span-3" label="operator blockers" tone={status.operatorPacketBlockedReasons.length ? 'warn' : 'good'} value={status.operatorPacketBlockedReasons.length ? status.operatorPacketBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="operator execution locks" tone={status.operatorPacketExecutionLockBlockedReasons.length ? 'warn' : 'good'} value={status.operatorPacketExecutionLockBlockedReasons.length ? status.operatorPacketExecutionLockBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="projection execution locks" tone={status.projectionExecutionLockReasons.length ? 'warn' : 'good'} value={status.projectionExecutionLockReasons.length ? status.projectionExecutionLockReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="execution mode blockers" tone={status.executionModeBlockedReasons.length ? 'warn' : 'good'} value={status.executionModeBlockedReasons.length ? status.executionModeBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="protected execution markers" tone={status.executionModeProtectedMarkers.length ? 'warn' : 'good'} value={status.executionModeProtectedMarkers.length ? status.executionModeProtectedMarkers.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="execution packet blockers" tone={status.executionPacketBlockedReasons.length ? 'warn' : 'good'} value={status.executionPacketBlockedReasons.length ? status.executionPacketBlockedReasons.join(', ') : 'none'} />

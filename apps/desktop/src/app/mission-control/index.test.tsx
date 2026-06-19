@@ -1871,6 +1871,8 @@ describe('MissionControlView', () => {
     expect(screen.getByText('gateway git metadata is broken, report_id report-worker has multiple append-only records, report_id report-worker attempts to overwrite append-only report fields: status, report_id report-worker still needs Jenny review, worker node offline, worker-node presence_status is not recorded, runtime provenance is not clean, worker-node presence is not confirmed online, report_id report-worker missing contract fields: result, evidence, tests, next lane, safety confirmation, run run-stopped has no stop_reason, run run-stopped has no linked stop/cancel report')).toBeTruthy()
     expect(screen.getByText('operator execution locks')).toBeTruthy()
     expect(statusItemValue('operator execution locks').textContent).toBe('none')
+    expect(screen.getByText('projection execution locks')).toBeTruthy()
+    expect(statusItemValue('projection execution locks').textContent).toBe('none')
     expect(screen.getByText('execution mode blockers')).toBeTruthy()
     expect(screen.getByText('protected execution markers')).toBeTruthy()
     expect(screen.getByText('execution packet blockers')).toBeTruthy()

@@ -55,6 +55,9 @@ Jenny packet as permission to bypass Codex safety checks.
   The operator packet locks row shows the operator packet's own execution,
   dispatch, session-send, worker-dispatch, `would_dispatch`, and
   `would_session_send` flags, which should all read `no`.
+  The projection execution locks row is a broader sweep across lifecycle,
+  report, readiness, worker, child, and next-safe-action projections; it should
+  read `none`.
 - Jenny and GitHub bridge status payloads explicitly report session-send and
   worker-dispatch as disabled, so control surfaces can fail closed on those
   backend flags instead of guessing.
@@ -417,6 +420,10 @@ next delegation instruction.
   packet-body or worker-contract execution locks. `none` is the expected safe
   value; any reason here means Travis should treat the packet as blocked review
   evidence, not as a handoff.
+- Projection execution locks: a broad Desktop rollup of accidental execution,
+  dispatch, session-send, worker-dispatch, `would_dispatch`, or
+  `would_session_send` flags across status projections. `none` is the expected
+  safe value.
 - Orchestration readiness: blocked or preview-ready state for supervised
   read-only autonomy, scoped PR creation, and laptop Codex worker-node.
 - Worker instruction preview: a manual Codex handoff prompt with objective,
