@@ -336,12 +336,17 @@ beforeEach(() => {
         'report_id report-worker still needs Jenny review before completion',
         'report_id report-worker missing completion contract fields: result, evidence, tests, next lane, safety confirmation'
       ],
+      report_completion_link_mismatch_count: 0,
       report_completion_primary_item_id: 'report-completion:run:run-parent-1',
+      report_link_mismatch_count: 0,
+      report_link_mismatch_ids: [],
       report_overwrite_conflict_count: 1,
       report_overwrite_conflict_ids: ['report-worker'],
+      report_review_queue_link_mismatch_count: 0,
       report_review_queue_count: 3,
       result_ingestion_blocked_count: 0,
       result_ingestion_blocked_reasons: [],
+      result_ingestion_link_mismatch_count: 0,
       result_ingestion_primary_item_id: '',
       session_send_enabled: false,
       source: 'mission_control_operator_decision_packet_v1',
@@ -349,6 +354,7 @@ beforeEach(() => {
       stored: false,
       stop_cancel_blocked_reasons: ['run run-stopped has no stop_reason', 'run run-stopped has no linked stop/cancel report'],
       stop_cancel_count: 1,
+      stop_cancel_link_mismatch_count: 0,
       stop_cancel_primary_item_id: 'run:run-stopped',
       summary_lines: [
         'Operator state: report review required.',
@@ -1811,6 +1817,8 @@ describe('MissionControlView', () => {
     expect(screen.getByText('report review required / approval required yes / display-only yes')).toBeTruthy()
     expect(screen.getByText('operator next instruction')).toBeTruthy()
     expect(screen.getByText('Jenny reviews Laptop Codex reported scoped PR evidence. before issuing another worker instruction.')).toBeTruthy()
+    expect(screen.getByText('operator report links')).toBeTruthy()
+    expect(screen.getByText('mismatch 0 / queue 0 / ingestion 0 / completion 0 / stop 0')).toBeTruthy()
     expect(screen.getByText('next action reasons')).toBeTruthy()
     expect(screen.getByText('gateway git metadata is broken, run_id run-parent-1 references unavailable approval_id approval-old')).toBeTruthy()
     expect(screen.getByText('operator summary')).toBeTruthy()
@@ -2554,6 +2562,11 @@ describe('MissionControlView', () => {
     status.child_agent_orchestration.blocked_reasons = [childMismatch]
     status.worker_node_orchestration.blocked_reasons = [workerMismatch]
     status.report_review_queue.link_mismatch_count = 2
+    status.operator_decision_packet.report_link_mismatch_count = 2
+    status.operator_decision_packet.report_review_queue_link_mismatch_count = 2
+    status.operator_decision_packet.result_ingestion_link_mismatch_count = 0
+    status.operator_decision_packet.report_completion_link_mismatch_count = 0
+    status.operator_decision_packet.stop_cancel_link_mismatch_count = 0
     getMissionControlWorkspaceStatus.mockResolvedValueOnce(status)
 
     await renderMissionControl()
@@ -2569,6 +2582,7 @@ describe('MissionControlView', () => {
     expect(workerReport.textContent).toContain(workerMismatch)
     expect(workerReport.className).toContain('text-amber')
     expect(screen.getByText('items 3 / needs review 2 / missing 1 / mismatch 2')).toBeTruthy()
+    expect(screen.getByText('mismatch 2 / queue 2 / ingestion 0 / completion 0 / stop 0')).toBeTruthy()
   })
 
   it('restores Jenny working status from bridge audit records after refresh', async () => {

@@ -238,7 +238,10 @@ The operator decision packet is the plain-language rollup for Travis. It
 combines runtime provenance, readiness, the next safe action, the report review
 queue, worker instruction availability, child instruction availability, and the
 hard locks into one advisory packet. It is not an approval and is not an
-execution command; it tells Jenny and Travis what to review next.
+execution command; it tells Jenny and Travis what to review next. It also
+rolls up report-link mismatches by unique report and by review surface, so
+Jenny can see whether the queue, ingestion check, completion path, or
+stop/cancel control found lineage that must be reviewed before handoff.
 
 The orchestration readiness summary rolls the backend gates into three plain
 states: supervised read-only autonomy, scoped PR creation, and laptop Codex
@@ -252,8 +255,9 @@ hard forbidden actions, Codex's own engineering safety-hardness contract, and
 the report contract. It is useful copy for Jenny or Travis to review, but it
 does not contact the laptop, start a worker, or enable execution. It also
 blocks the next worker instruction when the linked worker report is missing,
-still needs Jenny review, or the worker record carries a failure reason. Jenny
-must review the report before issuing another worker packet.
+still needs Jenny review, is linked to the wrong run, or the worker record
+carries a failure reason. Jenny must review the report before issuing another
+worker packet.
 Mission Control distinguishes "preview available" from "handoff ready" so a
 visible worker packet is not mistaken for permission to send it.
 

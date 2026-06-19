@@ -786,12 +786,17 @@ export interface MissionControlOperatorDecisionPacket {
   report_contract_primary_item_id?: string
   report_completion_blocked_count?: number
   report_completion_blocked_reasons?: string[]
+  report_completion_link_mismatch_count?: number
   report_completion_primary_item_id?: string
+  report_link_mismatch_count?: number
+  report_link_mismatch_ids?: string[]
   report_overwrite_conflict_count?: number
   report_overwrite_conflict_ids?: string[]
+  report_review_queue_link_mismatch_count?: number
   report_review_queue_count?: number
   result_ingestion_blocked_count?: number
   result_ingestion_blocked_reasons?: string[]
+  result_ingestion_link_mismatch_count?: number
   result_ingestion_primary_item_id?: string
   session_send_enabled?: boolean
   source?: string
@@ -799,6 +804,7 @@ export interface MissionControlOperatorDecisionPacket {
   stored?: boolean
   stop_cancel_blocked_reasons?: string[]
   stop_cancel_count?: number
+  stop_cancel_link_mismatch_count?: number
   stop_cancel_primary_item_id?: string
   summary_lines?: string[]
   top_report_review_item_id?: string
@@ -970,6 +976,9 @@ export interface MissionControlWorkerNodeInstructionPreview {
   ready_for_handoff?: boolean
   report_contract?: string
   report_id?: string
+  report_link_mismatch?: boolean
+  report_link_mismatch_reason?: string
+  report_link_status?: string
   report_review_status?: string
   session_send_enabled?: boolean
   source?: string
@@ -1073,6 +1082,9 @@ export interface MissionControlChildAgentInstructionPreview {
   ready_for_handoff?: boolean
   report_contract?: string
   report_id?: string
+  report_link_mismatch?: boolean
+  report_link_mismatch_reason?: string
+  report_link_status?: string
   report_review_status?: string
   session_send_enabled?: boolean
   source?: string

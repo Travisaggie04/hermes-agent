@@ -1444,6 +1444,11 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
       operatorDecisionPacket?.recommended_operator_instruction ??
       operatorDecisionPacket?.next_safe_action_label ??
       'Keep Mission Control preview-only and wait for exact approval.',
+    operatorPacketLinkMismatchCount: operatorDecisionPacket?.report_link_mismatch_count ?? 0,
+    operatorPacketQueueLinkMismatchCount: operatorDecisionPacket?.report_review_queue_link_mismatch_count ?? 0,
+    operatorPacketIngestionLinkMismatchCount: operatorDecisionPacket?.result_ingestion_link_mismatch_count ?? 0,
+    operatorPacketCompletionLinkMismatchCount: operatorDecisionPacket?.report_completion_link_mismatch_count ?? 0,
+    operatorPacketStopLinkMismatchCount: operatorDecisionPacket?.stop_cancel_link_mismatch_count ?? 0,
     operatorPacketReportQueueCount: operatorDecisionPacket?.report_review_queue_count ?? 0,
     operatorPacketState: operatorDecisionPacket?.state ?? 'unknown',
     operatorPacketSummary: operatorDecisionPacket?.plain_language_summary ?? 'No operator decision packet recorded.',
@@ -4395,6 +4400,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="next action mode" tone={nextSafeActionTone} value={`display-only ${yesNo(status.nextSafeActionDisplayOnly)} / actions ${status.nextSafeActionCount}`} />
       <StatusItem label="operator packet" tone={operatorPacketTone} value={`${labelText(status.operatorPacketState)} / approval required ${yesNo(status.operatorPacketApprovalRequired)} / display-only ${yesNo(status.operatorPacketDisplayOnly)}`} />
       <StatusItem className="md:col-span-2" label="operator next instruction" tone={operatorPacketTone} value={status.operatorPacketNextInstruction} />
+      <StatusItem label="operator report links" tone={status.operatorPacketLinkMismatchCount ? 'warn' : 'good'} value={`mismatch ${status.operatorPacketLinkMismatchCount} / queue ${status.operatorPacketQueueLinkMismatchCount} / ingestion ${status.operatorPacketIngestionLinkMismatchCount} / completion ${status.operatorPacketCompletionLinkMismatchCount} / stop ${status.operatorPacketStopLinkMismatchCount}`} />
       <StatusItem className="md:col-span-2" label="orchestration readiness" tone={readinessTone} value={`read-only ${labelText(status.readinessReadOnlyState)} / scoped PR ${labelText(status.readinessScopedPrState)}`} />
       <StatusItem label="worker readiness" tone={readinessTone} value={`laptop Codex ${labelText(status.readinessWorkerNodeState)} / execution-ready ${yesNo(status.orchestrationReadinessExecutionReady)}`} />
       <StatusItem label="worker presence" tone={workerPresenceTone} value={`${labelText(status.workerPresenceState)} / online ${yesNo(status.workerPresenceOnline)}${status.workerPresenceLastSeen ? ` / seen ${status.workerPresenceLastSeen}` : ''}`} />

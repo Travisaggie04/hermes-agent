@@ -2474,8 +2474,15 @@ def _worker_node_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
         worker_record.get("linked_report_review_status")
         or worker_record.get("report_review_status")
     )
-    if report_id and _safe_text(worker_record.get("report_link_status")) == "linked_report_missing":
+    report_link_status = _safe_text(worker_record.get("report_link_status"))
+    report_link_mismatch_reason = _safe_text(worker_record.get("report_link_mismatch_reason"))
+    if report_id and report_link_status == "linked_report_missing":
         blocked_reasons.append(f"worker_run_id {worker_run_id} links missing report_id {report_id}")
+    if report_id and report_link_status == "linked_report_run_id_mismatch":
+        blocked_reasons.append(
+            report_link_mismatch_reason
+            or f"report_id {report_id} run_id does not match worker_run_id {worker_run_id}"
+        )
     if report_id and report_review_status == "needs_review":
         blocked_reasons.append(f"report_id {report_id} still needs Jenny review")
     if worker_record.get("worker_dispatch_enabled") is True:
@@ -2555,6 +2562,9 @@ def _worker_node_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
         "worker_safety_hardness": worker_safety_hardness,
         "report_contract": report_contract,
         "report_id": report_id,
+        "report_link_status": report_link_status,
+        "report_link_mismatch": worker_record.get("report_link_mismatch") is True,
+        "report_link_mismatch_reason": report_link_mismatch_reason,
         "report_review_status": report_review_status,
         "instruction_lines": instruction_lines,
         "manual_handoff_prompt": "\n".join(instruction_lines),
@@ -2581,12 +2591,13 @@ def _child_agent_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
     )
     report_id = _safe_text(child_record.get("report_id"))
     report_link_status = _safe_text(child_record.get("report_link_status"))
+    report_link_mismatch_reason = _safe_text(child_record.get("report_link_mismatch_reason"))
     child_run_id = _safe_text(child_record.get("child_run_id"))
     if report_id and report_link_status == "linked_report_missing":
         blocked_reasons.append(f"child_run_id {child_run_id} links missing report_id {report_id}")
     if report_id and report_link_status == "linked_report_run_id_mismatch":
         blocked_reasons.append(
-            _safe_text(child_record.get("report_link_mismatch_reason"))
+            report_link_mismatch_reason
             or f"report_id {report_id} run_id does not match child_run_id {child_run_id}"
         )
     if report_id and report_review_status == "needs_review":
@@ -2651,10 +2662,42 @@ def _child_agent_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
         "forbidden_actions": effective_forbidden_actions,
         "report_contract": report_contract,
         "report_id": report_id,
+        "report_link_status": report_link_status,
+        "report_link_mismatch": child_record.get("report_link_mismatch") is True,
+        "report_link_mismatch_reason": report_link_mismatch_reason,
         "report_review_status": report_review_status,
         "instruction_lines": instruction_lines,
         "manual_handoff_prompt": "\n".join(instruction_lines),
     }
+
+
+def _report_link_mismatch_keys(*sections: dict[str, Any]) -> list[str]:
+    keys: list[str] = []
+    for section in sections:
+        items = section.get("items")
+        for item in items if isinstance(items, list) else ():
+            item_payload = _mapping(item)
+            if item_payload.get("report_link_mismatch") is not True:
+                continue
+            key = _safe_text(
+                item_payload.get("report_id")
+                or item_payload.get("item_id")
+                or item_payload.get("record_id")
+                or item_payload.get("linked_record_id")
+            )
+            if key:
+                keys.append(key)
+        primary_item = _mapping(section.get("primary_item") or section.get("primary_review_item"))
+        if primary_item.get("report_link_mismatch") is True:
+            key = _safe_text(
+                primary_item.get("report_id")
+                or primary_item.get("item_id")
+                or primary_item.get("record_id")
+                or primary_item.get("linked_record_id")
+            )
+            if key:
+                keys.append(key)
+    return _unique_reasons(keys)
 
 
 def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
@@ -2679,6 +2722,17 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     incomplete_report_contract_count = _safe_int(report_contract.get("incomplete_report_count"))
     report_completion_blocked_count = _safe_int(report_completion.get("blocked_completion_count"))
     stop_cancel_count = _safe_int(stop_control.get("stop_cancel_count"))
+    report_queue_link_mismatch_count = _safe_int(report_queue.get("link_mismatch_count"))
+    result_ingestion_link_mismatch_count = _safe_int(result_ingestion.get("link_mismatch_count"))
+    report_completion_link_mismatch_count = _safe_int(report_completion.get("link_mismatch_count"))
+    stop_cancel_link_mismatch_count = _safe_int(stop_control.get("link_mismatch_count"))
+    report_link_mismatch_ids = _report_link_mismatch_keys(
+        report_queue,
+        result_ingestion,
+        report_completion,
+        stop_control,
+    )
+    report_link_mismatch_count = len(report_link_mismatch_ids)
     readiness_states = _mapping(readiness.get("states"))
     next_label = _safe_text(next_safe_actions.get("primary_action_label"), max_chars=800)
     next_reason = _safe_text(
@@ -2774,6 +2828,15 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             f"{_safe_int(report_completion.get('completion_ready_count'))} ready, "
             f"{report_completion_blocked_count} blocked."
         )
+    if report_link_mismatch_count:
+        summary_lines.append(
+            "Report link mismatches: "
+            f"unique {report_link_mismatch_count}, "
+            f"queue {report_queue_link_mismatch_count}, "
+            f"ingestion {result_ingestion_link_mismatch_count}, "
+            f"completion {report_completion_link_mismatch_count}, "
+            f"stop/cancel {stop_cancel_link_mismatch_count}; Jenny must review lineage before handoff."
+        )
     if stop_cancel_count:
         summary_lines.append(
             "Stop/cancel control: "
@@ -2820,6 +2883,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             queue_count > 0
             or report_overwrite_conflict_count > 0
             or result_ingestion_blocked_count > 0
+            or report_link_mismatch_count > 0
             or report_completion_blocked_count > 0
             or stop_cancel_count > 0
         ),
@@ -2827,17 +2891,23 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         "next_safe_action_label": next_label,
         "next_safe_action_reason": next_reason,
         "report_review_queue_count": queue_count,
+        "report_link_mismatch_count": report_link_mismatch_count,
+        "report_link_mismatch_ids": report_link_mismatch_ids,
+        "report_review_queue_link_mismatch_count": report_queue_link_mismatch_count,
         "result_ingestion_blocked_count": result_ingestion_blocked_count,
         "result_ingestion_blocked_reasons": _text_list(result_ingestion.get("blocked_reasons")),
+        "result_ingestion_link_mismatch_count": result_ingestion_link_mismatch_count,
         "result_ingestion_primary_item_id": _safe_text(result_ingestion.get("primary_item_id")),
         "report_contract_incomplete_count": incomplete_report_contract_count,
         "report_contract_blocked_reasons": _text_list(report_contract.get("blocked_reasons")),
         "report_contract_primary_item_id": _safe_text(report_contract.get("primary_item_id")),
         "report_completion_blocked_count": report_completion_blocked_count,
         "report_completion_blocked_reasons": _text_list(report_completion.get("blocked_reasons")),
+        "report_completion_link_mismatch_count": report_completion_link_mismatch_count,
         "report_completion_primary_item_id": _safe_text(report_completion.get("primary_item_id")),
         "stop_cancel_count": stop_cancel_count,
         "stop_cancel_blocked_reasons": _text_list(stop_control.get("blocked_reasons")),
+        "stop_cancel_link_mismatch_count": stop_cancel_link_mismatch_count,
         "stop_cancel_primary_item_id": _safe_text(stop_control.get("primary_item_id")),
         "execution_mode_family": execution_mode_family,
         "execution_mode_blocked_reasons": _text_list(execution_mode.get("blocked_reasons")),

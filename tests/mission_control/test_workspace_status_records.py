@@ -942,9 +942,27 @@ def test_record_sourced_workspace_status_blocks_mismatched_worker_report_link(tm
     assert mismatch_reason in completion["blocked_reasons"]
 
     operator_packet = status["operator_decision_packet"]
+    instruction = status["worker_node_instruction_preview"]
+    assert instruction["available"] is True
+    assert instruction["ready_for_handoff"] is False
+    assert instruction["report_link_status"] == "linked_report_run_id_mismatch"
+    assert instruction["report_link_mismatch"] is True
+    assert instruction["report_link_mismatch_reason"] == mismatch_reason
+    assert mismatch_reason in instruction["blocked_reasons"]
+
     assert mismatch_reason in operator_packet["blocked_reasons"]
     assert mismatch_reason in operator_packet["result_ingestion_blocked_reasons"]
     assert mismatch_reason in operator_packet["report_completion_blocked_reasons"]
+    assert operator_packet["report_link_mismatch_count"] == 1
+    assert operator_packet["report_link_mismatch_ids"] == ["report-worker"]
+    assert operator_packet["report_review_queue_link_mismatch_count"] == 1
+    assert operator_packet["result_ingestion_link_mismatch_count"] == 1
+    assert operator_packet["report_completion_link_mismatch_count"] == 1
+    assert operator_packet["stop_cancel_link_mismatch_count"] == 0
+    assert (
+        "Report link mismatches: unique 1, queue 1, ingestion 1, completion 1, stop/cancel 0; "
+        "Jenny must review lineage before handoff."
+    ) in operator_packet["plain_language_summary"]
 
 
 def test_child_agent_instruction_preview_blocks_projected_report_link_mismatch(tmp_path):
@@ -1002,6 +1020,9 @@ def test_child_agent_instruction_preview_blocks_projected_report_link_mismatch(t
     instruction = status["child_agent_instruction_preview"]
     assert instruction["available"] is True
     assert instruction["ready_for_handoff"] is False
+    assert instruction["report_link_status"] == "linked_report_run_id_mismatch"
+    assert instruction["report_link_mismatch"] is True
+    assert instruction["report_link_mismatch_reason"] == mismatch_reason
     assert instruction["execution_enabled"] is False
     assert instruction["dispatch_enabled"] is False
     assert instruction["session_send_enabled"] is False
@@ -1399,8 +1420,18 @@ def test_record_sourced_workspace_status_projects_stop_cancel_control(tmp_path):
 
     operator_packet = status["operator_decision_packet"]
     assert operator_packet["stop_cancel_count"] == 4
+    assert operator_packet["report_link_mismatch_count"] == 1
+    assert operator_packet["report_link_mismatch_ids"] == ["report-stop-mismatch"]
+    assert operator_packet["report_review_queue_link_mismatch_count"] == 1
+    assert operator_packet["result_ingestion_link_mismatch_count"] == 1
+    assert operator_packet["report_completion_link_mismatch_count"] == 1
+    assert operator_packet["stop_cancel_link_mismatch_count"] == 1
     assert mismatch_reason in operator_packet["stop_cancel_blocked_reasons"]
     assert "worker_node_run worker-cancelled has no stop_reason" in operator_packet["stop_cancel_blocked_reasons"]
+    assert (
+        "Report link mismatches: unique 1, queue 1, ingestion 1, completion 1, stop/cancel 1; "
+        "Jenny must review lineage before handoff."
+    ) in operator_packet["plain_language_summary"]
     assert "Stop/cancel control: 4 items, blocked true." in operator_packet["plain_language_summary"]
     assert operator_packet["jenny_review_required"] is True
 
