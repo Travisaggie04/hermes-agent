@@ -36,7 +36,9 @@ export function PageHeaderProvider({
 
   const isChatRoute = pathname === "/chat" || pathname === "/chat/";
   const isCompactChatRoute = pathname === "/mission-control-compact" || pathname === "/mission-control-compact/";
-  const isChatLikeRoute = isChatRoute || isCompactChatRoute;
+  const isJennyMobileRoute = pathname === "/jenny-mobile" || pathname === "/jenny-mobile/";
+  const isBodyScrollChatRoute = isCompactChatRoute || isJennyMobileRoute;
+  const isChatLikeRoute = isChatRoute || isCompactChatRoute || isJennyMobileRoute;
   /** Env jump-nav is wide — stack below title on small screens so KEYS stays readable. */
   const isEnvRoute =
     pathname === "/env" || pathname.startsWith("/env/");
@@ -54,7 +56,7 @@ export function PageHeaderProvider({
     <PageHeaderContext.Provider value={value}>
       <div className={cn(
         "flex min-h-0 w-full min-w-0 flex-1 flex-col",
-        isCompactChatRoute ? "overflow-visible" : "overflow-hidden",
+        isBodyScrollChatRoute ? "overflow-visible" : "overflow-hidden",
       )}>
         <header
           className={cn(
@@ -63,7 +65,7 @@ export function PageHeaderProvider({
             "bg-background-base/40 backdrop-blur-sm",
             // Mobile stacks title + toolbar — fixed h-14 clips content; desktop stays one row.
             "min-h-0 overflow-x-hidden overflow-y-visible py-3 sm:h-14 sm:min-h-[3.5rem] sm:overflow-hidden sm:py-0",
-            isCompactChatRoute && "sr-only",
+            (isCompactChatRoute || isJennyMobileRoute) && "sr-only",
           )}
           role="banner"
         >
@@ -134,7 +136,7 @@ export function PageHeaderProvider({
             // `App.tsx` (`w-full min-w-0`) so it pads scrollable content, not flex chrome.
             isChatRoute
               ? "overflow-hidden"
-              : isCompactChatRoute
+              : isBodyScrollChatRoute
                 ? "overflow-visible overflow-x-hidden"
               : "overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]",
           )}

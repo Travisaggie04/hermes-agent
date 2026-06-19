@@ -163,4 +163,23 @@ describe('Mission Control desktop API helpers', () => {
       path: '/api/plugins/mission-control-governance/workspace/project-sessions?limit=50'
     })
   })
+
+  it('bounds session project link previews before posting to the workspace API', async () => {
+    const api = vi.fn().mockResolvedValue({})
+    vi.stubGlobal('window', { hermesDesktop: { api } })
+    const longAuditPrompt = 'audit '.repeat(4000)
+
+    await createMissionControlSessionProjectLink({
+      cwd_snapshot: 'C:/repo',
+      link_method: 'manual',
+      project_id: 'project-hermes-mission-control',
+      session_id: 'session-root',
+      status: 'active',
+      title_snapshot: longAuditPrompt
+    })
+
+    const request = api.mock.calls[0]?.[0] as { body: { title_snapshot: string } }
+    expect(request.body.title_snapshot.length).toBeLessThanOrEqual(240)
+    expect(request.body.title_snapshot).toMatch(/\.\.\.$/)
+  })
 })
