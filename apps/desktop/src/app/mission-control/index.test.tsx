@@ -2682,6 +2682,7 @@ describe('MissionControlView', () => {
     status.execution_packet_preview.packet.worker_node_contract.worker_dispatch_enabled = 1
     status.next_safe_actions.execution_enabled = 'enabled'
     status.operator_decision_packet.would_session_send = 'on'
+    status.hard_boundary_contract.send_to_jenny_enabled = 'yes'
 
     const summary = summarizeWorkspaceStatus(status)
 
@@ -2692,6 +2693,7 @@ describe('MissionControlView', () => {
     ])
     expect(summary.projectionExecutionLockReasons).toContain('next safe actions: execution_enabled must remain false')
     expect(summary.projectionExecutionLockReasons).toContain('operator decision: would_session_send must remain false')
+    expect(summary.projectionExecutionLockReasons).toContain('hard boundary: send_to_jenny_enabled must remain false')
   })
 
   it('restores Jenny working status from bridge audit records after refresh', async () => {
@@ -3034,6 +3036,7 @@ describe('MissionControlView', () => {
       '[\'discord_automation_enabled\', \'discord_automation_enabled must remain false\']',
       '[\'model_routing_enabled\', \'model_routing_enabled must remain false\']',
       'hard_boundary_contract is not loaded',
+      'hard_boundary_contract send_to_jenny_enabled must remain false',
       'hard_boundary_contract execution_ready must remain false',
       'hard_boundary_contract live_operations_enabled must remain false',
       'const operatorPacket = workspaceStatus?.operator_decision_packet',

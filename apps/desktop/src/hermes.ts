@@ -921,6 +921,7 @@ export interface MissionControlHardBoundaryContract extends MissionControlExecut
   live_operations_goal?: boolean
   manual_review_only?: boolean
   plain_language_summary?: string
+  send_to_jenny_enabled?: boolean
   separate_approval_action_count?: number
   separate_approval_actions?: string[]
   separate_approval_required?: boolean

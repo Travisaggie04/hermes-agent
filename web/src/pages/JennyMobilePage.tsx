@@ -145,6 +145,7 @@ interface MobileExecutionLockSource {
   execution_enabled?: unknown;
   execution_ready?: unknown;
   live_operations_enabled?: unknown;
+  send_to_jenny_enabled?: unknown;
   session_send_enabled?: unknown;
   worker_dispatch_enabled?: unknown;
   worker_enabled?: unknown;
@@ -497,6 +498,7 @@ function mobileExecutionLockReasons(label: string, source?: MobileExecutionLockS
     ["execution_enabled", "execution_enabled must remain false"],
     ["execution_ready", "execution_ready must remain false"],
     ["live_operations_enabled", "live_operations_enabled must remain false"],
+    ["send_to_jenny_enabled", "send_to_jenny_enabled must remain false"],
     ["session_send_enabled", "session_send_enabled must remain false"],
     ["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"],
     ["worker_enabled", "worker_enabled must remain false"],

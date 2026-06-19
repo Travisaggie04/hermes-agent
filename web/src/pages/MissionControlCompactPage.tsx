@@ -1428,6 +1428,7 @@ function compactGitHubBridgeSafety(status: GitHubBridgeStatus | undefined, works
       ["execution_enabled", "hard_boundary_contract execution_enabled must remain false"],
       ["dispatch_enabled", "hard_boundary_contract dispatch_enabled must remain false"],
       ["session_send_enabled", "hard_boundary_contract session_send_enabled must remain false"],
+      ["send_to_jenny_enabled", "hard_boundary_contract send_to_jenny_enabled must remain false"],
       ["worker_dispatch_enabled", "hard_boundary_contract worker_dispatch_enabled must remain false"],
       ["execution_ready", "hard_boundary_contract execution_ready must remain false"],
       ["live_operations_enabled", "hard_boundary_contract live_operations_enabled must remain false"],
@@ -4057,6 +4058,7 @@ type CompactExecutionLockSource = {
   dispatch_enabled?: boolean;
   execution_enabled?: boolean;
   execution_ready?: boolean;
+  send_to_jenny_enabled?: boolean;
   session_send_enabled?: boolean;
   would_dispatch?: boolean;
   would_execute?: boolean;
@@ -4072,6 +4074,7 @@ const COMPACT_EXECUTION_LOCK_FLAGS: Array<[keyof CompactExecutionLockSource, str
   ["dispatch_enabled", "dispatch_enabled must remain false"],
   ["execution_enabled", "execution_enabled must remain false"],
   ["execution_ready", "execution_ready must remain false"],
+  ["send_to_jenny_enabled", "send_to_jenny_enabled must remain false"],
   ["session_send_enabled", "session_send_enabled must remain false"],
   ["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"],
   ["worker_enabled", "worker_enabled must remain false"],

@@ -141,6 +141,7 @@ def test_jenny_mobile_bridge_controls_fail_closed_on_live_flags() -> None:
         'reasons.push("hard_boundary_contract is not loaded")',
         'hardBoundary.blocked_reasons?.[0] ?? "hard_boundary_contract is blocked"',
         "hardBoundary.live_flag_violations",
+        '["send_to_jenny_enabled", "send_to_jenny_enabled must remain false"]',
         'mobileExecutionLockReasons("hard_boundary_contract", hardBoundary)',
         "operatorPacket?.execution_lock_blocked_reasons",
         'mobileExecutionLockReasons("operator_decision_packet", operatorPacket)',
