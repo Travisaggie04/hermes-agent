@@ -39,6 +39,10 @@ Jenny packet as permission to bypass Codex safety checks.
 - Desktop Mission Control is the advanced audit and recovery surface.
   Any GitHub bridge write button there follows the same fail-closed status
   check before creating a bridge request.
+- The Desktop Jenny project chat uses normal chat submission, so it remains
+  usable, but its status pill warns when backend safety status reports live
+  dispatch, execution, session-send, worker, timer, daemon, Discord automation,
+  or model-routing flags.
 
 ## Runtime Provenance
 

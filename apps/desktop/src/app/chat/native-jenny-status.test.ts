@@ -48,6 +48,45 @@ describe('nativeJennyStatus', () => {
     expectCleanVisibleStatus(status)
   })
 
+  it('warns when Jenny project manual controls are not confirmed', () => {
+    const status = nativeJennyStatus({
+      bridgeStatus: { manual_start_only: false, pending_count: 0, visible_pending_count: 0 },
+      gatewayOpen: true,
+      projectId: 'project-hermes'
+    })
+
+    expect(status).toMatchObject({
+      detail: 'Jenny project safety check needs attention because manual controls are not confirmed. Normal chat can continue, but project automation must stay off until reviewed.',
+      label: 'Jenny safety check',
+      summary: 'Review safety check',
+      tone: 'warn'
+    })
+    expectCleanVisibleStatus(status)
+  })
+
+  it('warns before normal ready or queued states when live automation flags are present', () => {
+    const status = nativeJennyStatus({
+      bridgeStatus: {
+        last_status: 'hermes_answer_completed',
+        manual_start_only: true,
+        pending_count: 0,
+        visible_pending_count: 0,
+        worker_dispatch_enabled: true
+      },
+      gatewayOpen: true,
+      projectId: 'project-hermes',
+      replyAttemptStatus: 'queued'
+    })
+
+    expect(status).toMatchObject({
+      detail: 'Jenny project safety check needs attention because live automation controls are not confirmed off. Normal chat can continue, but project automation must stay off until reviewed.',
+      label: 'Jenny safety check',
+      summary: 'Review safety check',
+      tone: 'warn'
+    })
+    expectCleanVisibleStatus(status)
+  })
+
   it('summarizes bridge record errors as Jenny attention without raw backend wording', () => {
     const status = nativeJennyStatus({
       gatewayOpen: true,

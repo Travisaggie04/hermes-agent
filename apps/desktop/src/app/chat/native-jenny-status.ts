@@ -68,6 +68,30 @@ function friendlyBridgeError(message: string): string {
   return 'Jenny had trouble finishing that message. Retry once, or open details.'
 }
 
+function nativeJennySafetyBlockedReason(status: MissionControlGitHubBridgeStatusResponse | null | undefined): string {
+  if (!status) {
+    return ''
+  }
+
+  if (status.manual_start_only === false) {
+    return 'manual controls are not confirmed'
+  }
+
+  const liveFlags: Array<keyof MissionControlGitHubBridgeStatusResponse> = [
+    'dispatch_enabled',
+    'execution_enabled',
+    'session_send_enabled',
+    'worker_dispatch_enabled',
+    'worker_enabled',
+    'timer_enabled',
+    'daemon_enabled',
+    'discord_automation_enabled',
+    'model_routing_enabled'
+  ]
+
+  return liveFlags.some(flag => status[flag] === true) ? 'live automation controls are not confirmed off' : ''
+}
+
 export function nativeJennyStatus({
   activeTurnRunning = false,
   awaitingResponse = false,
@@ -98,6 +122,17 @@ export function nativeJennyStatus({
       label: 'Pick a project',
       summary: 'Choose a project',
       tone: 'idle'
+    }
+  }
+
+  const safetyBlockedReason = nativeJennySafetyBlockedReason(bridgeStatus)
+
+  if (safetyBlockedReason) {
+    return {
+      detail: `Jenny project safety check needs attention because ${safetyBlockedReason}. Normal chat can continue, but project automation must stay off until reviewed.`,
+      label: 'Jenny safety check',
+      summary: 'Review safety check',
+      tone: 'warn'
     }
   }
 
@@ -206,10 +241,13 @@ export function nativeJennyStatus({
   const pending = bridgeStatus?.visible_pending_count ?? bridgeStatus?.pending_count ?? 0
   const backgroundPending = bridgeStatus?.background_pending_count ?? 0
   const statusIsFresh = isFreshStatus(bridgeStatus?.last_poll_at, nowMs)
+
   const latestReplyIsNewerThanStatus =
     dateMs(bridgeStatus?.last_response_at) > 0 && dateMs(bridgeStatus?.last_response_at) >= dateMs(bridgeStatus?.last_poll_at)
+
   const staleOrBackgroundOnlyError = pending === 0 && (backgroundPending > 0 || latestReplyIsNewerThanStatus)
   const answerIsWorking = ANSWER_WORKING_STATUSES.has(lastStatus) && statusIsFresh
+
   const watchIsWorking = Boolean(
     bridgeStatus?.foreground_watch_running && WATCH_WORKING_STATUSES.has(lastStatus) && statusIsFresh
   )
