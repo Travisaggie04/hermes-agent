@@ -68,6 +68,13 @@ function renderMissionControl() {
   )
 }
 
+function statusItemValue(label: string): HTMLElement {
+  const value = screen.getByText(label).nextElementSibling
+  expect(value).toBeTruthy()
+
+  return value as HTMLElement
+}
+
 beforeEach(() => {
   Object.assign(navigator, {
     clipboard: {
@@ -2521,6 +2528,43 @@ describe('MissionControlView', () => {
     expect(await screen.findByText('Jenny bridge is offline. Start or reconnect the Hermes gateway, then send the message again.')).toBeTruthy()
     expect(screen.queryByText(/ECONNREFUSED/)).toBeNull()
     expect(answerMissionControlGitHubBridgeOnce).not.toHaveBeenCalled()
+  })
+
+  it('warns when accepted child or worker reports have mismatched lineage', async () => {
+    const status = JSON.parse(JSON.stringify(await getMissionControlWorkspaceStatus()))
+    const childMismatch = 'report_id report-child run_id other-child-run does not match linked child_run child-run-1'
+    const workerMismatch = 'report_id report-worker run_id other-worker-run does not match linked worker_node_run worker-run-1'
+
+    Object.assign(status.child_agent_orchestration.active_runs[0], {
+      blocked_reasons: [childMismatch],
+      linked_report_review_status: 'accepted',
+      report_link_mismatch: true,
+      report_link_mismatch_reason: childMismatch,
+      report_link_status: 'linked_report_run_id_mismatch'
+    })
+    Object.assign(status.worker_node_orchestration.active_runs[0], {
+      blocked_reasons: [workerMismatch],
+      linked_report_review_status: 'accepted',
+      report_link_mismatch: true,
+      report_link_mismatch_reason: workerMismatch,
+      report_link_status: 'linked_report_run_id_mismatch'
+    })
+    status.child_agent_orchestration.blocked_reasons = [childMismatch]
+    status.worker_node_orchestration.blocked_reasons = [workerMismatch]
+    getMissionControlWorkspaceStatus.mockResolvedValueOnce(status)
+
+    await renderMissionControl()
+    await screen.findByText('child-agent report')
+
+    const childReport = statusItemValue('child-agent report')
+    expect(childReport.textContent).toContain('linked report run id mismatch / accepted / mismatch yes')
+    expect(childReport.textContent).toContain(childMismatch)
+    expect(childReport.className).toContain('text-amber')
+
+    const workerReport = statusItemValue('worker-node report')
+    expect(workerReport.textContent).toContain('required / linked report run id mismatch / accepted / mismatch yes')
+    expect(workerReport.textContent).toContain(workerMismatch)
+    expect(workerReport.className).toContain('text-amber')
   })
 
   it('restores Jenny working status from bridge audit records after refresh', async () => {

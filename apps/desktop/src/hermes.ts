@@ -323,6 +323,8 @@ export interface MissionControlChildRunRecord {
   linked_report_review_status?: string
   linked_report_status?: string
   linked_report_summary?: string
+  report_link_mismatch?: boolean
+  report_link_mismatch_reason?: string
   report_link_status?: string
   report_id?: string
   result_record_id?: string
@@ -348,6 +350,8 @@ export interface MissionControlWorkerNodeRunRecord {
   linked_report_review_status?: string
   linked_report_status?: string
   linked_report_summary?: string
+  report_link_mismatch?: boolean
+  report_link_mismatch_reason?: string
   report_link_status?: string
   report_contract_status?: string
   report_id?: string

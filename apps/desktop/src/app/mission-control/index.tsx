@@ -1235,12 +1235,60 @@ function projectionRecordList(record: Record<string, unknown> | null, key: strin
   return Array.isArray(value) ? value.map(item => String(item)).filter(Boolean) : []
 }
 
+function projectionRecordFlag(record: Record<string, unknown> | null, key: string): boolean {
+  return record?.[key] === true
+}
+
 function uniqueTextList(values: string[]): string[] {
   return [...new Set(values.map(value => value.trim()).filter(Boolean))]
 }
 
 function labelText(value: string): string {
   return (value || 'unknown').replaceAll('_', ' ')
+}
+
+function reportReviewAccepted(value: string): boolean {
+  const normalized = value.trim().toLowerCase().replaceAll(' ', '_')
+
+  return normalized === 'accepted' || normalized === 'reviewed'
+}
+
+function reportLinkHealthy({
+  mismatch,
+  reportId,
+  reviewStatus,
+  linkStatus
+}: {
+  mismatch: boolean
+  reportId: string
+  reviewStatus: string
+  linkStatus: string
+}): boolean {
+  return Boolean(reportId) && linkStatus === 'linked_report_found' && reportReviewAccepted(reviewStatus) && !mismatch
+}
+
+function reportLinkValue({
+  linkStatus,
+  mismatch,
+  mismatchReason,
+  reportId,
+  reviewStatus
+}: {
+  linkStatus: string
+  mismatch: boolean
+  mismatchReason: string
+  reportId: string
+  reviewStatus: string
+}): string {
+  return [
+    labelText(linkStatus),
+    labelText(reviewStatus),
+    mismatch ? 'mismatch yes' : '',
+    mismatchReason,
+    reportId
+  ]
+    .filter(Boolean)
+    .join(' / ')
 }
 
 export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) {
@@ -1268,6 +1316,16 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
   const workerPresence = status.worker_node_presence
   const childRecord = latestProjectionRecord(status.child_agent_orchestration) as Record<string, unknown> | null
   const workerRecord = latestProjectionRecord(status.worker_node_orchestration) as Record<string, unknown> | null
+  const childReportLinkStatus = projectionRecordText(childRecord, 'report_link_status') || 'no report id recorded'
+
+  const childReportLinkMismatch =
+    projectionRecordFlag(childRecord, 'report_link_mismatch') || childReportLinkStatus === 'linked_report_run_id_mismatch'
+
+  const workerReportLinkStatus = projectionRecordText(workerRecord, 'report_link_status') || 'no report id recorded'
+
+  const workerReportLinkMismatch =
+    projectionRecordFlag(workerRecord, 'report_link_mismatch') || workerReportLinkStatus === 'linked_report_run_id_mismatch'
+
   const childBlockedReasons = uniqueTextList([
     ...(status.child_agent_orchestration?.blocked_reasons ?? []),
     ...projectionRecordList(childRecord, 'blocked_reasons'),
@@ -1320,7 +1378,9 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     childLatestObjective: projectionRecordText(childRecord, 'objective'),
     childLatestStatus: projectionRecordText(childRecord, 'status') || 'none',
     childReportId: projectionRecordText(childRecord, 'report_id'),
-    childReportLinkStatus: projectionRecordText(childRecord, 'report_link_status') || 'no report id recorded',
+    childReportLinkMismatch,
+    childReportLinkMismatchReason: projectionRecordText(childRecord, 'report_link_mismatch_reason'),
+    childReportLinkStatus,
     childReportReviewStatus: projectionRecordText(childRecord, 'linked_report_review_status') || 'not reviewed',
     childInstructionAvailable: childInstruction?.available,
     childInstructionBlockedReasons: childInstruction?.blocked_reasons ?? [],
@@ -1561,7 +1621,9 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     workerVersion: workerPresence?.worker_version ?? '',
     workerReportContractStatus: projectionRecordText(workerRecord, 'report_contract_status') || 'not reported',
     workerReportId: projectionRecordText(workerRecord, 'report_id'),
-    workerReportLinkStatus: projectionRecordText(workerRecord, 'report_link_status') || 'no report id recorded',
+    workerReportLinkMismatch,
+    workerReportLinkMismatchReason: projectionRecordText(workerRecord, 'report_link_mismatch_reason'),
+    workerReportLinkStatus,
     workerReportReviewStatus: projectionRecordText(workerRecord, 'linked_report_review_status') || projectionRecordText(workerRecord, 'report_review_status') || 'not reviewed'
   }
 }
@@ -4277,6 +4339,41 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
         ? 'warn'
         : 'good'
       : 'warn'
+
+  const childReportTone = reportLinkHealthy({
+    linkStatus: status.childReportLinkStatus,
+    mismatch: status.childReportLinkMismatch,
+    reportId: status.childReportId,
+    reviewStatus: status.childReportReviewStatus
+  })
+    ? 'good'
+    : 'warn'
+
+  const childReportValue = reportLinkValue({
+    linkStatus: status.childReportLinkStatus,
+    mismatch: status.childReportLinkMismatch,
+    mismatchReason: status.childReportLinkMismatchReason,
+    reportId: status.childReportId,
+    reviewStatus: status.childReportReviewStatus
+  })
+
+  const workerReportTone = reportLinkHealthy({
+    linkStatus: status.workerReportLinkStatus,
+    mismatch: status.workerReportLinkMismatch,
+    reportId: status.workerReportId,
+    reviewStatus: status.workerReportReviewStatus
+  })
+    ? 'good'
+    : 'warn'
+
+  const workerReportValue = `${status.workerReportContractStatus} / ${reportLinkValue({
+    linkStatus: status.workerReportLinkStatus,
+    mismatch: status.workerReportLinkMismatch,
+    mismatchReason: status.workerReportLinkMismatchReason,
+    reportId: status.workerReportId,
+    reviewStatus: status.workerReportReviewStatus
+  })}`
+
   return (
     <div className="grid gap-3 rounded-xl border border-border/70 bg-background/40 p-4 md:grid-cols-3">
       <StatusItem label="Runtime Worktree Guard" tone={status.guard === 'pass' ? 'good' : 'warn'} value={status.guard} />
@@ -4324,12 +4421,12 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="latest merged PR" value={status.latestMergedPr || 'unknown'} />
       <StatusItem label="child-agent status" tone={childLockTone} value={`${status.childActiveCount} active / latest ${labelText(status.childLatestStatus)}`} />
       <StatusItem className="md:col-span-2" label="child-agent objective" value={status.childLatestObjective || status.childLatestAgent} />
-      <StatusItem label="child-agent report" tone={status.childReportId && status.childReportReviewStatus !== 'needs_review' ? 'good' : 'warn'} value={`${labelText(status.childReportLinkStatus)} / ${labelText(status.childReportReviewStatus)}${status.childReportId ? ` / ${status.childReportId}` : ''}`} />
+      <StatusItem label="child-agent report" tone={childReportTone} value={childReportValue} />
       <StatusItem label="child instruction preview" tone={childInstructionTone} value={`available ${yesNo(status.childInstructionAvailable)} / handoff ready ${yesNo(status.childInstructionReadyForHandoff)} / manual ${yesNo(status.childInstructionManualHandoffOnly)}`} />
       <StatusItem className="md:col-span-2" label="child instruction prompt" tone={childInstructionTone} value={status.childInstructionPrompt} />
       <StatusItem label="laptop Codex worker-node" tone={workerLockTone} value={`${status.workerHostLabel} / ${labelText(status.workerLatestStatus)}`} />
       <StatusItem className="md:col-span-2" label="worker-node objective" value={status.workerLatestObjective || `${status.workerIdentity} has no assigned objective recorded`} />
-      <StatusItem label="worker-node report" tone={status.workerReportId && status.workerReportReviewStatus !== 'needs_review' ? 'good' : 'warn'} value={`${status.workerReportContractStatus} / ${labelText(status.workerReportLinkStatus)} / ${labelText(status.workerReportReviewStatus)}${status.workerReportId ? ` / ${status.workerReportId}` : ''}`} />
+      <StatusItem label="worker-node report" tone={workerReportTone} value={workerReportValue} />
       <StatusItem label="worker instruction preview" tone={workerInstructionTone} value={`available ${yesNo(status.workerInstructionAvailable)} / handoff ready ${yesNo(status.workerInstructionReadyForHandoff)} / manual ${yesNo(status.workerInstructionManualHandoffOnly)}`} />
       <StatusItem className="md:col-span-2" label="worker-node blockers" tone={status.workerBlockedReasons.length ? 'warn' : 'good'} value={status.workerBlockedReasons.length ? status.workerBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="worker instruction prompt" tone={workerInstructionTone} value={status.workerInstructionPrompt} />
