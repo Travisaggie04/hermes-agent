@@ -16,6 +16,7 @@ from mission_control.records import StartGateCheck, TaskControlEnvelope
 
 DEFAULT_OFF = True
 INERT = True
+WOULD_EXECUTE = False
 ENFORCES_RUNTIME = False
 
 _REQUIRED_FIELDS = (
@@ -118,6 +119,7 @@ def evaluate_start_gate(envelope: TaskControlEnvelope | Mapping[str, Any]) -> St
         metadata={
             "default_off": DEFAULT_OFF,
             "inert": INERT,
+            "would_execute": WOULD_EXECUTE,
             "enforces_runtime": ENFORCES_RUNTIME,
             "policy": "mission_control.start_gate.default_off.v1",
             "action_policy": action_policy.policy_id,

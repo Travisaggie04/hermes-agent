@@ -443,6 +443,7 @@ def _accepted_baseline_record_section(section: dict[str, Any]) -> dict[str, Any]
         "max_active_lane": _safe_int(section.get("max_active_lane"), default=1) or 1,
         "issue": _safe_text(section.get("issue")),
         "display_only": True,
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
     }
@@ -529,6 +530,7 @@ def _latest_handoff_section(section: dict[str, Any]) -> dict[str, Any]:
         "last_result": _safe_text(section.get("last_result")),
         "next_action": _safe_text(section.get("next_action")),
         "warnings": _dedupe_bounded(section.get("warnings") if isinstance(section.get("warnings"), list | tuple) else ()),
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
         "display_only": True,
@@ -596,6 +598,7 @@ def _baseline_section(section: dict[str, Any], *, defaults: dict[str, Any]) -> d
         "runtime_path": _safe_text(merged.get("runtime_path"), max_chars=240),
         "head": _safe_sha(merged.get("head")),
         "status": _safe_text(merged.get("status") or "accepted"),
+        "would_execute": False,
     }
 
 
@@ -605,6 +608,7 @@ def _rollback_section(section: dict[str, Any], *, defaults: dict[str, Any]) -> d
         "runtime_path": _safe_text(merged.get("runtime_path"), max_chars=240),
         "head": _safe_sha(merged.get("head")),
         "clean": _safe_bool(merged.get("clean"), default=False),
+        "would_execute": False,
     }
 
 

@@ -51,6 +51,7 @@ WAHA_HARD_WALL_POLICY: dict[str, Any] = {
     "enforcement": {
         "trusted_for_execution": False,
         "inert_context_only": True,
+        "would_execute": False,
         "enforcement_enabled": False,
         "display_only": True,
     },

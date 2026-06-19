@@ -36,6 +36,7 @@ def test_waha_hard_wall_policy_is_explicit_and_inert():
     assert policy["enforcement"] == {
         "trusted_for_execution": False,
         "inert_context_only": True,
+        "would_execute": False,
         "enforcement_enabled": False,
         "display_only": True,
     }

@@ -17,6 +17,7 @@ PolicyDecisionState = Literal["allow", "ask", "deny"]
 
 POLICY_ID = "mission_control.action_policy.allow_ask_deny.v1"
 DEFAULT_OFF = True
+WOULD_EXECUTE = False
 ENFORCES_RUNTIME = False
 
 
@@ -37,6 +38,7 @@ class ActionPolicyReport:
     required_approvals: tuple[str, ...]
     approval_satisfied: bool
     default_off: bool = DEFAULT_OFF
+    would_execute: bool = WOULD_EXECUTE
     enforces_runtime: bool = ENFORCES_RUNTIME
 
 

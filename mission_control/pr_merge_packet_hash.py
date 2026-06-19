@@ -44,6 +44,7 @@ def _empty_validation(expected_hash: Any) -> dict[str, Any]:
         "reasons": [],
         "missing_fields": [],
         "invalid_fields": [],
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
     }

@@ -1986,6 +1986,7 @@ def test_pr_merge_verifier_gate_evaluate_valid_state_stores_nothing(client):
             "verifier_id": "jenny-verifier",
             "would_block": False,
             "blocked_actions": [],
+            "would_execute": False,
             "dry_run_only": True,
             "enforces_runtime": False,
             "observed_state_raw": {"secret": "must not be exposed"},
@@ -1999,6 +2000,7 @@ def test_pr_merge_verifier_gate_evaluate_valid_state_stores_nothing(client):
     assert payload["stored"] is False
     assert payload["decision_state"] == "warn"
     assert payload["would_block"] is False
+    assert payload["would_execute"] is False
     assert payload["dry_run_only"] is True
     assert payload["enforces_runtime"] is False
     assert "observed_state_raw" not in str(payload)
@@ -2028,6 +2030,7 @@ def test_pr_merge_verifier_gate_evaluate_hash_mismatch_blocks(client):
             "verifier_id": "jenny-verifier",
             "would_block": False,
             "blocked_actions": [],
+            "would_execute": False,
             "dry_run_only": True,
             "enforces_runtime": False,
         },
@@ -2073,11 +2076,12 @@ def _valid_pr_merge_visibility_body() -> dict[str, object]:
                 "head_commit": "abc123",
                 "packet_hash": "sha256:packet",
                 "implementer_id": "jenny-implementer",
-                "verifier_id": "jenny-verifier",
-                "would_block": False,
-                "blocked_actions": [],
-                "dry_run_only": True,
-                "enforces_runtime": False,
+            "verifier_id": "jenny-verifier",
+            "would_block": False,
+            "blocked_actions": [],
+            "would_execute": False,
+            "dry_run_only": True,
+            "enforces_runtime": False,
             },
         },
     }
@@ -2127,6 +2131,7 @@ def test_pr_merge_gate_visibility_valid_packet_shows_fields_and_allows(client):
     assert payload["packet_hash"] == "sha256:packet"
     assert payload["evidence_record_id"] == "evidence-38"
     assert payload["blocked_actions"] == []
+    assert payload["would_execute"] is False
     assert payload["dry_run_only"] is True
     assert payload["enforces_runtime"] is False
 
@@ -4100,6 +4105,7 @@ def test_domain_governance_endpoint_exposes_waha_hard_wall_policy_as_display_onl
     assert policy["enforcement"] == {
         "trusted_for_execution": False,
         "inert_context_only": True,
+        "would_execute": False,
         "enforcement_enabled": False,
         "display_only": True,
     }
@@ -5472,6 +5478,7 @@ def test_workspace_status_get_includes_latest_handoff_record_without_mutation(pl
     assert payload["latest_handoff"]["present"] is True
     assert payload["latest_handoff"]["handoff_id"] == "handoff-001"
     assert payload["latest_handoff"]["target_id"] == "45"
+    assert payload["latest_handoff"]["would_execute"] is False
     assert payload["latest_handoff"]["display_only"] is True
     assert payload["stored"] is False
 
@@ -5500,6 +5507,7 @@ def test_workspace_status_preview_remains_unstored_with_caller_supplied_handoff(
     assert payload["stored"] is False
     assert payload["latest_handoff"]["present"] is True
     assert payload["latest_handoff"]["handoff_id"] == "preview-001"
+    assert payload["latest_handoff"]["would_execute"] is False
     assert payload["latest_handoff"]["dry_run_only"] is True
     assert payload["latest_handoff"]["enforces_runtime"] is False
     assert payload["latest_handoff"]["display_only"] is True
@@ -5552,6 +5560,7 @@ def test_workspace_status_get_uses_latest_accepted_baseline_record_without_mutat
     assert payload["rollback_baseline"]["runtime_path"] == "/home/jenny/.hermes/hermes-runtime-workspaceui-d11681f"
     assert payload["rollback_baseline"]["head"] == "d11681f81c7cd16a99c53649f157040b2d10a89f"
     assert payload["display_only"] is True
+    assert payload["accepted_baseline"]["would_execute"] is False
     assert payload["dry_run_only"] is True
     assert payload["enforces_runtime"] is False
     assert payload["record_store"]["status"] == "ok"

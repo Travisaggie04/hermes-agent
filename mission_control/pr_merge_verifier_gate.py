@@ -17,6 +17,7 @@ from mission_control.pr_merge_packet_hash import validate_pr_merge_packet_hash
 _INERT_GATE_FLAGS: dict[str, Any] = {
     "trusted_for_execution": False,
     "inert_context_only": True,
+    "would_execute": False,
     "enforcement_enabled": False,
     "dry_run_only": True,
     "display_only": True,
@@ -264,6 +265,9 @@ def evaluate_pr_merge_verifier_gate(state: dict[str, Any] | None) -> dict[str, A
         if _has_merge_blocked_action(evidence_blocked_actions):
             _add_unique(reasons, "verifier evidence contains merge-related blocked action")
             _add_unique(blocked_actions, "proceed with PR merge packet")
+        if evidence.get("would_execute") is not False:
+            _add_unique(reasons, "verifier evidence would_execute is not false")
+            _add_unique(blocked_actions, "proceed with PR merge packet")
         if evidence.get("dry_run_only") is not True:
             _add_unique(reasons, "verifier evidence dry_run_only is not true")
             _add_unique(blocked_actions, "proceed with PR merge packet")
@@ -289,6 +293,7 @@ def evaluate_pr_merge_verifier_gate(state: dict[str, Any] | None) -> dict[str, A
         "blocked_actions": blocked_actions,
         "required_approvals": required_approvals,
         "unresolved_policy_fields": list(PR_MERGE_VERIFIER_GATE_POLICY["unresolved_policy_fields"]),
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
     }

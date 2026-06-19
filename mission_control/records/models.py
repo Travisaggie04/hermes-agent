@@ -1604,6 +1604,7 @@ class VerifierWorkflowEvidenceRecord:
     blocked_actions: tuple[str, ...] = ()
     required_approvals: tuple[str, ...] = ()
     unresolved_policy_fields: tuple[str, ...] = ()
+    would_execute: bool = False
     dry_run_only: bool = True
     enforces_runtime: bool = False
     packet_hash: str = ""
@@ -1618,6 +1619,7 @@ class VerifierWorkflowEvidenceRecord:
         object.__setattr__(self, "blocked_actions", tuple(str(item) for item in _tuple(self.blocked_actions)))
         object.__setattr__(self, "required_approvals", tuple(str(item) for item in _tuple(self.required_approvals)))
         object.__setattr__(self, "unresolved_policy_fields", tuple(str(item) for item in _tuple(self.unresolved_policy_fields)))
+        object.__setattr__(self, "would_execute", False)
         object.__setattr__(self, "dry_run_only", True)
         object.__setattr__(self, "enforces_runtime", False)
         object.__setattr__(self, "packet_hash", _sanitize_pr_merge_packet_hash(self.action_class, self.packet_hash))
@@ -1640,6 +1642,7 @@ class VerifierWorkflowEvidenceRecord:
             "blocked_actions": list(self.blocked_actions),
             "required_approvals": list(self.required_approvals),
             "unresolved_policy_fields": list(self.unresolved_policy_fields),
+            "would_execute": False,
             "dry_run_only": True,
             "enforces_runtime": False,
         }
@@ -1690,6 +1693,7 @@ class PrMergeApprovalRecord:
     operator_id: str = ""
     approved_scope: str = ""
     consumed: bool = False
+    would_execute: bool = False
     dry_run_only: bool = True
     enforces_runtime: bool = False
 
@@ -1710,6 +1714,7 @@ class PrMergeApprovalRecord:
         object.__setattr__(self, "approved_scope", _sanitize_pr_merge_approved_scope(self.approved_scope) if action_class == "pr_merge" else "")
         object.__setattr__(self, "expires_at", str(self.expires_at).strip() if self.expires_at else None)
         object.__setattr__(self, "consumed", False)
+        object.__setattr__(self, "would_execute", False)
         object.__setattr__(self, "dry_run_only", True)
         object.__setattr__(self, "enforces_runtime", False)
 
@@ -1737,6 +1742,7 @@ class PrMergeApprovalRecord:
             if value:
                 payload[field_name] = value
         payload["consumed"] = False
+        payload["would_execute"] = False
         payload["dry_run_only"] = True
         payload["enforces_runtime"] = False
         return payload
@@ -1759,6 +1765,7 @@ class PrMergeApprovalRecord:
             operator_id=data.get("operator_id", ""),
             approved_scope=data.get("approved_scope", ""),
             consumed=False,
+            would_execute=False,
             dry_run_only=True,
             enforces_runtime=False,
         )
@@ -1820,6 +1827,9 @@ def approval_matches_pr_merge_packet(
         if approval_payload.get("consumed") is not False:
             invalid_fields.append("consumed")
             reasons.append("approval consumed")
+        if approval_payload.get("would_execute") is not False:
+            invalid_fields.append("would_execute")
+            reasons.append("approval would_execute is not false")
         if approval_payload.get("dry_run_only") is not True:
             invalid_fields.append("dry_run_only")
             reasons.append("approval dry_run_only is not true")
@@ -1840,6 +1850,7 @@ def approval_matches_pr_merge_packet(
         "reasons": reasons,
         "missing_fields": missing_fields,
         "invalid_fields": invalid_fields,
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
     }
@@ -2247,6 +2258,7 @@ class AcceptedBaselineRecord:
     max_active_lane: int = 1
     issue: str = ""
     display_only: bool = True
+    would_execute: bool = False
     dry_run_only: bool = True
     enforces_runtime: bool = False
 
@@ -2265,6 +2277,7 @@ class AcceptedBaselineRecord:
         object.__setattr__(self, "max_active_lane", _bounded_handoff_int(self.max_active_lane, default=1) or 1)
         object.__setattr__(self, "issue", _bounded_handoff_text(self.issue))
         object.__setattr__(self, "display_only", True)
+        object.__setattr__(self, "would_execute", False)
         object.__setattr__(self, "dry_run_only", True)
         object.__setattr__(self, "enforces_runtime", False)
 
@@ -2282,6 +2295,7 @@ class AcceptedBaselineRecord:
             "max_active_lane": self.max_active_lane,
             "issue": self.issue,
             "display_only": True,
+            "would_execute": False,
             "dry_run_only": True,
             "enforces_runtime": False,
         }
@@ -2301,6 +2315,7 @@ class AcceptedBaselineRecord:
             max_active_lane=data.get("max_active_lane", 1),
             issue=data.get("issue", ""),
             display_only=True,
+            would_execute=False,
             dry_run_only=True,
             enforces_runtime=False,
         )
@@ -2327,6 +2342,7 @@ class OperatingWorkspaceHandoffRecord:
     last_result: str = ""
     next_action: str = ""
     warnings: tuple[str, ...] = ()
+    would_execute: bool = False
     dry_run_only: bool = True
     enforces_runtime: bool = False
     display_only: bool = True
@@ -2353,6 +2369,7 @@ class OperatingWorkspaceHandoffRecord:
         object.__setattr__(self, "last_result", _bounded_handoff_text(self.last_result))
         object.__setattr__(self, "next_action", _bounded_handoff_text(self.next_action))
         object.__setattr__(self, "warnings", _bounded_handoff_warnings(self.warnings))
+        object.__setattr__(self, "would_execute", False)
         object.__setattr__(self, "dry_run_only", True)
         object.__setattr__(self, "enforces_runtime", False)
         object.__setattr__(self, "display_only", True)
@@ -2378,6 +2395,7 @@ class OperatingWorkspaceHandoffRecord:
             "last_result": self.last_result,
             "next_action": self.next_action,
             "warnings": list(self.warnings),
+            "would_execute": False,
             "dry_run_only": True,
             "enforces_runtime": False,
             "display_only": True,
@@ -2405,6 +2423,7 @@ class OperatingWorkspaceHandoffRecord:
             last_result=data.get("last_result", ""),
             next_action=data.get("next_action", ""),
             warnings=data.get("warnings") or (),
+            would_execute=False,
             dry_run_only=True,
             enforces_runtime=False,
             display_only=True,

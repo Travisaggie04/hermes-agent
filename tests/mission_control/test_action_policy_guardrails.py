@@ -15,6 +15,7 @@ def test_action_policy_guardrails_are_inert_and_display_only():
     assert policy["policy_id"] == "jenny_os_action_policy_v1"
     assert policy["trusted_for_execution"] is False
     assert policy["inert_context_only"] is True
+    assert policy["would_execute"] is False
     assert policy["enforcement_enabled"] is False
     assert policy["dry_run_only"] is True
     assert policy["display_only"] is True
@@ -47,6 +48,7 @@ def test_action_policy_allows_bounded_read_plan_test_request():
     assert result["decision_state"] == "allowed_in_current_guardrails"
     assert result["blocked_actions"] == []
     assert result["required_approvals"] == []
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
 
@@ -71,6 +73,7 @@ def test_action_policy_asks_for_protected_deploy_payment_and_waha_actions():
     assert "explicit gateway restart/runtime approval" in result["required_approvals"]
     assert "explicit payment/checkout approval" in result["required_approvals"]
     assert "explicit Waha/social/publishing approval" in result["required_approvals"]
+    assert result["would_execute"] is False
 
 
 def test_action_policy_asks_for_hidden_workers_state_and_local_model_routing():
@@ -111,6 +114,7 @@ def test_action_policy_denies_broad_approval_and_guardrail_bypass():
     assert "accept broad approval" in result["blocked_actions"]
     assert "disable guardrails" in result["blocked_actions"]
     assert "bypass review/tests/evidence" in result["blocked_actions"]
+    assert result["would_execute"] is False
 
 
 def test_action_policy_asks_for_missing_request_text():
@@ -120,6 +124,7 @@ def test_action_policy_asks_for_missing_request_text():
     assert result["decision_state"] == "needs_request"
     assert result["reasons"] == ["request text or requested_actions are required"]
     assert result["blocked_actions"] == []
+    assert result["would_execute"] is False
 
 
 def test_action_policy_does_not_echo_raw_request_text():

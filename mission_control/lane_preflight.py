@@ -16,6 +16,7 @@ from mission_control.preflight import (
     DEFAULT_OFF,
     DRY_RUN_ONLY,
     ENFORCES_RUNTIME,
+    WOULD_EXECUTE,
     evaluate_lane_start_preflight,
 )
 from mission_control.records import StartGateCheck
@@ -73,6 +74,7 @@ def run_lane_start_preflight(lane_start: Mapping[str, Any]) -> dict[str, Any]:
         "caller": CALLER_POLICY,
         "preflight_adapter": ADAPTER_POLICY,
         "default_off": DEFAULT_OFF,
+        "would_execute": WOULD_EXECUTE,
         "dry_run_only": DRY_RUN_ONLY,
         "enforces_runtime": ENFORCES_RUNTIME,
         "would_block": would_block,

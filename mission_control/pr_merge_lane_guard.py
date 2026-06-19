@@ -68,6 +68,7 @@ def evaluate_pr_merge_lane_guard(
         "blocked_actions": blocked_actions,
         "required_approvals": list(gate_result.get("required_approvals") or []),
         "unresolved_policy_fields": list(gate_result.get("unresolved_policy_fields") or []),
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
     }

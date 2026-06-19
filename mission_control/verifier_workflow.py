@@ -14,6 +14,7 @@ from typing import Any
 _INERT_VERIFIER_FLAGS: dict[str, Any] = {
     "trusted_for_execution": False,
     "inert_context_only": True,
+    "would_execute": False,
     "enforcement_enabled": False,
     "dry_run_only": True,
     "display_only": True,
@@ -305,6 +306,7 @@ def evaluate_verifier_workflow(observed_state: dict[str, Any] | None) -> dict[st
         "blocked_actions": blocked_actions,
         "required_approvals": required_approvals,
         "unresolved_policy_fields": list(policy["unresolved_policy_fields"]),
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
     }

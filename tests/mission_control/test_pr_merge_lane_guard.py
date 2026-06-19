@@ -41,6 +41,7 @@ def _valid_packet():
             "verifier_id": "jenny-verifier",
             "would_block": False,
             "blocked_actions": [],
+            "would_execute": False,
             "dry_run_only": True,
             "enforces_runtime": False,
         },
@@ -59,6 +60,7 @@ def test_missing_or_false_config_is_advisory_only_and_never_stops():
     assert result["advisory_only"] is True
     assert result["would_block"] is True
     assert result["stop_merge_lane"] is False
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
     assert "PR merge verifier gate is default-off; advisory only" in result["reasons"]
@@ -75,6 +77,7 @@ def test_enabled_valid_packet_allows_merge_lane_but_does_not_execute():
     assert result["advisory_only"] is False
     assert result["would_block"] is False
     assert result["stop_merge_lane"] is False
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
 
@@ -133,6 +136,7 @@ def test_enabled_bad_evidence_state_stops_merge_lane():
         {
             "would_block": True,
             "blocked_actions": ["merge PR"],
+            "would_execute": True,
             "dry_run_only": False,
             "enforces_runtime": True,
         }
@@ -143,8 +147,10 @@ def test_enabled_bad_evidence_state_stops_merge_lane():
     assert result["stop_merge_lane"] is True
     assert "verifier evidence would_block is true" in result["reasons"]
     assert "verifier evidence contains merge-related blocked action" in result["reasons"]
+    assert "verifier evidence would_execute is not false" in result["reasons"]
     assert "verifier evidence dry_run_only is not true" in result["reasons"]
     assert "verifier evidence enforces_runtime is not false" in result["reasons"]
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
 
@@ -158,5 +164,6 @@ def test_guard_uses_caller_supplied_state_only(monkeypatch):
     result = evaluate_pr_merge_lane_guard(_enabled_config(True), _valid_packet())
 
     assert result["stop_merge_lane"] is False
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False

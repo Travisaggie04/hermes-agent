@@ -16,6 +16,7 @@ from mission_control.start_gate import evaluate_start_gate
 
 
 DEFAULT_OFF = True
+WOULD_EXECUTE = False
 DRY_RUN_ONLY = True
 ENFORCES_RUNTIME = False
 ADAPTER_POLICY = "mission_control.preflight.lane_start.v1"
@@ -55,6 +56,7 @@ def build_task_control_envelope(lane_start: Mapping[str, Any]) -> TaskControlEnv
             "requested_actions": list(requested_actions),
             "preflight_adapter": ADAPTER_POLICY,
             "default_off": DEFAULT_OFF,
+            "would_execute": WOULD_EXECUTE,
             "dry_run_only": DRY_RUN_ONLY,
             "enforces_runtime": ENFORCES_RUNTIME,
         },
@@ -72,6 +74,7 @@ def _with_preflight_flags(check: StartGateCheck) -> StartGateCheck:
     metadata.update(
         {
             "default_off": DEFAULT_OFF,
+            "would_execute": WOULD_EXECUTE,
             "dry_run_only": DRY_RUN_ONLY,
             "enforces_runtime": ENFORCES_RUNTIME,
             "adapter": ADAPTER_POLICY,

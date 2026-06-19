@@ -16,6 +16,7 @@ def test_storage_guard_policy_is_inert_dry_run_and_display_only():
     assert policy["guard_id"] == "storage_guard_v1"
     assert policy["trusted_for_execution"] is False
     assert policy["inert_context_only"] is True
+    assert policy["would_execute"] is False
     assert policy["enforcement_enabled"] is False
     assert policy["dry_run_only"] is True
     assert policy["display_only"] is True
@@ -60,6 +61,7 @@ def test_storage_guard_blocks_done_without_required_artifact_manifest():
 
     assert result["decision_state"] == "would_block"
     assert result["would_block"] is True
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
     assert "task marked done without required artifact manifest" in result["reasons"]
@@ -307,6 +309,7 @@ def test_storage_guard_unknown_without_observed_state():
 
     assert result["decision_state"] == "unknown"
     assert result["would_block"] is False
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
     assert "caller-supplied observed storage state is incomplete" in result["reasons"]
@@ -337,6 +340,7 @@ def test_cleanup_manifest_is_dry_run_and_protects_live_paths():
     )
 
     assert manifest["dry_run_only"] is True
+    assert manifest["would_execute"] is False
     assert manifest["delete_enabled"] is False
     assert manifest["upload_enabled"] is False
     assert manifest["current_live_runtime_protected"] is True

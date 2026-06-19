@@ -126,10 +126,11 @@ _PR_MERGE_GATE_EVIDENCE_FIELDS = {
     "verifier_id",
     "would_block",
     "blocked_actions",
+    "would_execute",
     "dry_run_only",
     "enforces_runtime",
 }
-_PR_MERGE_GATE_BOOL_FIELDS = {"would_block", "dry_run_only", "enforces_runtime"}
+_PR_MERGE_GATE_BOOL_FIELDS = {"would_block", "would_execute", "dry_run_only", "enforces_runtime"}
 _PR_MERGE_GATE_LIST_FIELDS = {"blocked_actions"}
 _VERIFIER_EVIDENCE_FIELDS = {"source", "lane_id", "task_id", "domain_id", "action_class"}
 _SECRET_LIKE_RE = re.compile(
@@ -2884,6 +2885,7 @@ def _pr_merge_visibility_payload(config: dict[str, Any], packet: dict[str, Any])
         "missing_requirements": missing_requirements[:MAX_EVALUATION_LIST_ITEMS],
         "required_approvals": required_approvals,
         "unresolved_policy_fields": unresolved_policy_fields,
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
     }

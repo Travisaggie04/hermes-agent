@@ -15,6 +15,7 @@ Decision = Literal["ALLOW", "ASK", "DENY"]
 INERT_POLICY_FLAGS: dict[str, Any] = {
     "trusted_for_execution": False,
     "inert_context_only": True,
+    "would_execute": False,
     "enforcement_enabled": False,
     "dry_run_only": True,
     "display_only": True,
@@ -247,6 +248,7 @@ def evaluate_action_policy(payload: dict[str, Any] | None) -> dict[str, Any]:
             "reasons": ["request text or requested_actions are required"],
             "blocked_actions": [],
             "required_approvals": [],
+            "would_execute": False,
             "dry_run_only": True,
             "enforces_runtime": False,
         }
@@ -266,6 +268,7 @@ def evaluate_action_policy(payload: dict[str, Any] | None) -> dict[str, Any]:
             "reasons": reasons,
             "blocked_actions": blocked_actions,
             "required_approvals": required_approvals,
+            "would_execute": False,
             "dry_run_only": True,
             "enforces_runtime": False,
         }
@@ -286,6 +289,7 @@ def evaluate_action_policy(payload: dict[str, Any] | None) -> dict[str, Any]:
             "reasons": reasons,
             "blocked_actions": blocked_actions,
             "required_approvals": required_approvals,
+            "would_execute": False,
             "dry_run_only": True,
             "enforces_runtime": False,
         }
@@ -297,6 +301,7 @@ def evaluate_action_policy(payload: dict[str, Any] | None) -> dict[str, Any]:
         "reasons": ["request has no protected action matches"],
         "blocked_actions": [],
         "required_approvals": [],
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
     }

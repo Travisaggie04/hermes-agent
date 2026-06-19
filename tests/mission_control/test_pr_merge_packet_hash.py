@@ -137,6 +137,7 @@ def test_validate_reports_missing_required_fields(field: str):
     assert field in result["missing_fields"]
     assert result["computed_hash"] == ""
     assert result["canonical_json"] == ""
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
 
@@ -176,6 +177,7 @@ def test_validate_matching_hash_passes_and_mismatch_fails():
     assert matching["expected_hash"] == packet_hash
     assert matching["canonical_json"]
     assert matching["reasons"] == []
+    assert matching["would_execute"] is False
     assert matching["dry_run_only"] is True
     assert matching["enforces_runtime"] is False
 
@@ -194,4 +196,5 @@ def test_bad_input_returns_invalid_not_exception():
         assert result["valid"] is False
         assert result["computed_hash"] == ""
         assert result["canonical_json"] == ""
+        assert result["would_execute"] is False
         assert result["reasons"]

@@ -40,6 +40,7 @@ def test_valid_bounded_envelope_passes_default_off_and_inert():
     assert check.created_at == ""
     assert check.metadata["default_off"] is True
     assert check.metadata["inert"] is True
+    assert check.metadata["would_execute"] is False
     assert check.metadata["enforces_runtime"] is False
     assert check.metadata["action_policy"] == POLICY_ID
 
@@ -136,4 +137,5 @@ def test_explicit_approval_can_pass_privileged_action_as_informational_only():
     assert check.decision_state == "informational"
     assert check.blocked_actions == ()
     assert check.required_approvals == ("approval-pr-k-push",)
+    assert check.metadata["would_execute"] is False
     assert check.metadata["enforces_runtime"] is False

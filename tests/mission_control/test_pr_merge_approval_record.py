@@ -53,6 +53,7 @@ def make_record(**overrides):
         "github_response": {"raw": "do not store"},
         "service_status": {"gateway": "active"},
         "full_observed_state": {"too": "much"},
+        "would_execute": True,
     }
     data.update(overrides)
     return PrMergeApprovalRecord.from_dict(data)
@@ -77,6 +78,7 @@ def test_pr_merge_approval_record_stores_bounded_packet_binding_fields_only():
         "operator_id": "Travis",
         "approved_scope": "merge_pr_only",
         "consumed": False,
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
     }
@@ -116,6 +118,7 @@ def test_pr_merge_approval_record_omits_invalid_hash_version_action_sha_method_s
         "expires_at": "2026-06-09T16:00:00Z",
         "operator_id": "Travis",
         "consumed": False,
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
     }
@@ -154,6 +157,7 @@ def test_approval_matches_pr_merge_packet_requires_exact_hash_identity_and_actio
         "reasons": [],
         "missing_fields": [],
         "invalid_fields": [],
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
     }

@@ -838,6 +838,7 @@ def test_operating_workspace_handoff_record_round_trips_display_only_fields():
         last_result="PR #44 accepted",
         next_action="Implement PR #45 tests",
         warnings=("display-only",),
+        would_execute=True,
         dry_run_only=False,
         enforces_runtime=True,
         display_only=False,
@@ -865,6 +866,7 @@ def test_operating_workspace_handoff_record_round_trips_display_only_fields():
         "last_result": "PR #44 accepted",
         "next_action": "Implement PR #45 tests",
         "warnings": ["display-only"],
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
         "display_only": True,
@@ -932,6 +934,7 @@ def test_accepted_baseline_record_round_trips_and_forces_inert_flags():
         max_active_lane=1,
         issue="none",
         display_only=False,
+        would_execute=True,
         dry_run_only=False,
         enforces_runtime=True,
     )
@@ -951,6 +954,7 @@ def test_accepted_baseline_record_round_trips_and_forces_inert_flags():
         "max_active_lane": 1,
         "issue": "none",
         "display_only": True,
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
     }
