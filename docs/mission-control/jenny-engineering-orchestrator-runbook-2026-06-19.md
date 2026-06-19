@@ -42,14 +42,16 @@ Jenny packet as permission to bypass Codex safety checks.
   worker contract, operator decision packet, readiness summary, worker handoff
   preview, worker presence, result ingestion, report completion, or
   next-safe-action summary as a red health issue instead of implying the lane is
-  safe.
+  safe. Backend operator execution-lock rollups are also shown as health issues
+  even when the direct operator packet flags are false.
 - Desktop Mission Control is the advanced audit and recovery surface.
   Any GitHub bridge write button there follows the same fail-closed status
   check before creating a bridge request.
   The desktop status panel also shows execution packet body locks and worker
   contract locks separately from the outer execution packet wrapper, so a
   nested packet cannot quietly look executable while the wrapper says
-  preview-only.
+  preview-only. The operator execution locks row shows the backend's
+  `execution_lock_blocked_reasons` rollup from the operator decision packet.
 - Jenny and GitHub bridge status payloads explicitly report session-send and
   worker-dispatch as disabled, so control surfaces can fail closed on those
   backend flags instead of guessing.
@@ -278,7 +280,10 @@ hard locks into one advisory packet. It is not an approval and is not an
 execution command; it tells Jenny and Travis what to review next. It also
 rolls up report-link mismatches by unique report and by review surface, so
 Jenny can see whether the queue, ingestion check, completion path, or
-stop/cancel control found lineage that must be reviewed before handoff.
+stop/cancel control found lineage that must be reviewed before handoff. It also
+exposes `execution_lock_blocked_reasons`, a backend rollup of true nested
+execution locks found in the packet body or worker contract, so Mission Control
+can warn Travis even if the outer operator packet remains display-only.
 
 The orchestration readiness summary rolls the backend gates into three plain
 states: supervised read-only autonomy, scoped PR creation, and laptop Codex
@@ -401,6 +406,10 @@ next delegation instruction.
 - Operator decision packet: a plain-language packet for Travis showing state,
   whether approval is required, next instruction, top report review, blockers,
   and hard locks.
+- Operator execution locks: the operator packet's backend rollup of nested
+  packet-body or worker-contract execution locks. `none` is the expected safe
+  value; any reason here means Travis should treat the packet as blocked review
+  evidence, not as a handoff.
 - Orchestration readiness: blocked or preview-ready state for supervised
   read-only autonomy, scoped PR creation, and laptop Codex worker-node.
 - Worker instruction preview: a manual Codex handoff prompt with objective,
@@ -466,6 +475,7 @@ After each code-side change:
    dispatch, execution, session-send, worker-dispatch, worker, timer, daemon,
    Discord automation, and model-routing flags.
    Desktop and compact Mission Control must also surface true nested execution
-   locks from the execution packet body and worker-node contract.
+   locks from the execution packet body, worker-node contract, and operator
+   decision packet `execution_lock_blocked_reasons` rollup.
 6. Confirm no secrets or raw private paths were added to docs, tests, or UI.
 7. Commit coherent chunks and keep the PR reviewable.
