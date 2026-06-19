@@ -5036,6 +5036,11 @@ def test_workspace_status_preview_is_caller_supplied_and_stores_nothing(plugin_a
     assert hard_boundary["separate_approval_required"] is True
     assert "live deploy" in hard_boundary["forbidden_actions"]
     assert "PR merge" in hard_boundary["separate_approval_actions"]
+    assert payload["next_safe_actions"]["source"] == "mission_control_next_safe_actions_v1"
+    assert payload["orchestration_readiness"]["source"] == "mission_control_orchestration_readiness_v1"
+    assert payload["operator_decision_packet"]["source"] == "mission_control_operator_decision_packet_v1"
+    assert payload["operator_decision_packet"]["execution_ready"] is False
+    assert payload["operator_decision_packet"]["approval_required"] is True
     rendered = str(payload).lower()
     assert "must not be stored or exposed" not in rendered
     assert "secret-token-value" not in rendered
@@ -5096,6 +5101,32 @@ def test_workspace_status_preview_hard_boundary_blocks_live_flag_attempts(plugin
     assert hard_boundary["dispatch_enabled"] is False
     assert hard_boundary["session_send_enabled"] is False
     assert hard_boundary["worker_dispatch_enabled"] is False
+    next_safe_actions = payload["next_safe_actions"]
+    assert next_safe_actions["source"] == "mission_control_next_safe_actions_v1"
+    assert next_safe_actions["primary_action_id"] == "review_hard_boundary_contract"
+    assert next_safe_actions["primary_action"]["manual_only"] is True
+    assert next_safe_actions["execution_enabled"] is False
+    readiness = payload["orchestration_readiness"]
+    assert readiness["source"] == "mission_control_orchestration_readiness_v1"
+    assert readiness["states"] == {
+        "supervised_read_only_autonomy": "blocked",
+        "scoped_pr_creation": "blocked",
+        "laptop_codex_worker_node": "blocked",
+    }
+    assert "execution packet would_dispatch must remain disabled" in readiness["blocked_reasons"]
+    assert readiness["execution_ready"] is False
+    operator_packet = payload["operator_decision_packet"]
+    assert operator_packet["source"] == "mission_control_operator_decision_packet_v1"
+    assert operator_packet["state"] == "blocked"
+    assert operator_packet["jenny_review_required"] is True
+    assert operator_packet["next_safe_action_id"] == "review_hard_boundary_contract"
+    assert operator_packet["hard_boundary_live_flag_violation_count"] == 2
+    assert operator_packet["execution_lock_blocked_reasons"] == [
+        "execution packet would_dispatch must remain disabled",
+        "execution packet worker_dispatch_enabled must remain disabled",
+    ]
+    assert operator_packet["execution_ready"] is False
+    assert operator_packet["worker_dispatch_enabled"] is False
     assert plugin_api.record_store_path().exists() is False
 
 

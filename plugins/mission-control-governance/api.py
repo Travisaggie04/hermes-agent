@@ -52,7 +52,7 @@ from mission_control.verifier_workflow import (
 from mission_control.workspace_status import build_workspace_status
 from mission_control.workspace_status_records import (
     build_workspace_status_from_records,
-    hard_boundary_contract_payload,
+    decorate_workspace_status_operator_projections,
 )
 from mission_control.lane_preflight import run_lane_start_preflight
 from mission_control.github_bridge_mailbox import answer_pending_with_hermes, post_github_message
@@ -3250,8 +3250,7 @@ async def workspace_profile_memory_storage() -> dict[str, Any]:
 @router.post("/workspace-status/preview")
 async def workspace_status_preview(request: Request) -> dict[str, Any]:
     payload = await _read_json_object_body(request)
-    status = build_workspace_status(payload)
-    status["hard_boundary_contract"] = hard_boundary_contract_payload(status)
+    status = decorate_workspace_status_operator_projections(build_workspace_status(payload))
     return {
         **INERT_FLAGS,
         "enforcement_enabled": False,

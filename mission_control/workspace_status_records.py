@@ -366,6 +366,12 @@ def build_workspace_status_from_records(
         worker_runs=recent_worker_runs,
         reports=recent_reports,
     )
+    return decorate_workspace_status_operator_projections(status)
+
+
+def decorate_workspace_status_operator_projections(status: dict[str, Any]) -> dict[str, Any]:
+    """Attach inert operator-facing Mission Control projections to a status payload."""
+
     status["hard_boundary_contract"] = _hard_boundary_contract_payload(status)
     status["next_safe_actions"] = _next_safe_actions_payload(status)
     status["orchestration_readiness"] = _orchestration_readiness_payload(status)
@@ -2936,11 +2942,16 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     execution_packet_mode = _safe_text(_mapping(execution_packet.get("packet")).get("mode")) or "unknown"
     execution_packet_eligible = execution_packet.get("eligible") is True
     execution_mode_family = _safe_text(execution_mode.get("mode_family")) or "unknown"
-    execution_lock_reasons = _execution_lock_blockers(
-        ("hard boundary", hard_boundary),
-        ("execution packet", execution_packet),
-        ("execution packet body", execution_packet_body),
-        ("worker contract", worker_contract),
+    execution_lock_reasons = _unique_reasons(
+        [
+            *_text_list(hard_boundary.get("live_flag_violations")),
+            *_execution_lock_blockers(
+                ("hard boundary", hard_boundary),
+                ("execution packet", execution_packet),
+                ("execution packet body", execution_packet_body),
+                ("worker contract", worker_contract),
+            ),
+        ]
     )
     blocked_reasons = _unique_reasons(
         [

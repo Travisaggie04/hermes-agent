@@ -9,12 +9,14 @@ from mission_control.records import (
     RunRecord,
     WorkerNodeRunRecord,
 )
+from mission_control.workspace_status import build_workspace_status
 from mission_control.workspace_status_records import (
     _child_agent_instruction_preview,
     _operator_decision_packet_payload,
     _orchestration_readiness_payload,
     _worker_node_instruction_preview,
     build_workspace_status_from_records,
+    decorate_workspace_status_operator_projections,
     hard_boundary_contract_payload,
 )
 
@@ -139,6 +141,61 @@ def test_hard_boundary_contract_blocks_sanitized_live_flag_reasons():
         "execution packet worker_dispatch_enabled must remain disabled",
     ]
     assert hard_boundary["blocked_reasons"] == hard_boundary["live_flag_violations"]
+
+
+def test_operator_projection_decorator_adds_preview_rollups_to_pure_status():
+    status = decorate_workspace_status_operator_projections(
+        build_workspace_status(
+            {
+                "execution_packet_preview": {
+                    "mode": "worker_node",
+                    "would_dispatch": "true",
+                    "worker_dispatch_enabled": "true",
+                    "worker_node": {
+                        "worker_dispatch_enabled": "true",
+                        "presence_status": "online",
+                        "objective": "Inspect Mission Control report status.",
+                        "parent_run_id": "run-worker-preview",
+                    },
+                    "run": {
+                        "run_id": "run-worker-preview",
+                        "lane_type": "read_only_lane",
+                        "objective": "Inspect Mission Control report status.",
+                    },
+                    "lane": {
+                        "lane_type": "read_only_lane",
+                        "objective": "Inspect Mission Control report status.",
+                    },
+                    "report_contract": {
+                        "required": True,
+                        "tests_required": True,
+                        "review_required": True,
+                    },
+                },
+                "control_plane_lifecycle": {"active_mutation_lane_count": 0},
+            }
+        )
+    )
+
+    hard_boundary = status["hard_boundary_contract"]
+    _assert_inert_projection(hard_boundary)
+    assert hard_boundary["state"] == "live_flag_violation"
+    assert hard_boundary["live_flag_violations"] == [
+        "execution packet would_dispatch must remain disabled",
+        "execution packet worker_dispatch_enabled must remain disabled",
+    ]
+    next_safe_actions = status["next_safe_actions"]
+    _assert_inert_projection(next_safe_actions)
+    assert next_safe_actions["primary_action_id"] == "review_hard_boundary_contract"
+    readiness = status["orchestration_readiness"]
+    _assert_inert_projection(readiness)
+    assert readiness["states"]["laptop_codex_worker_node"] == "blocked"
+    assert "execution packet would_dispatch must remain disabled" in readiness["blocked_reasons"]
+    operator_packet = status["operator_decision_packet"]
+    _assert_inert_projection(operator_packet)
+    assert operator_packet["state"] == "blocked"
+    assert operator_packet["jenny_review_required"] is True
+    assert operator_packet["execution_lock_blocked_reasons"] == hard_boundary["live_flag_violations"]
 
 
 def test_orchestration_readiness_honors_hard_boundary_violations():

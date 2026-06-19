@@ -140,10 +140,11 @@ itself blocked when a live execution, dispatch, session-send, or worker flag is
 actually enabled inside a projection, or when a sanitized preview reports that
 a caller tried to enable one of those flags before Mission Control forced the
 returned flags back to false. `/workspace-status/preview` also returns this
-contract with `stored: false`, so caller-supplied previews show the same hard
-boundary truth as the main workspace status without writing records or
-executing work. Separate live operational reconciliation still requires a later
-explicit approval.
+contract, next-safe actions, orchestration readiness, instruction previews, and
+the operator decision packet with `stored: false`, so caller-supplied previews
+show the same operator-facing truth as the main workspace status without
+writing records or executing work. Separate live operational reconciliation
+still requires a later explicit approval.
 
 ## Supervised Read-Only Autonomy
 
@@ -504,8 +505,9 @@ After each code-side change:
 5. Confirm Mission Control still shows disabled execution, dispatch, session
    sending, and worker dispatch.
    Preview endpoints such as `/workspace-status/preview` must also return the
-   `hard_boundary_contract`, keep `stored: false`, and report sanitized live
-   flag attempts as hard-boundary blockers.
+   `hard_boundary_contract`, `next_safe_actions`, `orchestration_readiness`,
+   instruction previews, and `operator_decision_packet`, keep `stored: false`,
+   and report sanitized live flag attempts as hard-boundary blockers.
    Phone and compact routes must also fail closed on `would_execute`,
    dispatch, execution, session-send, worker-dispatch, worker, timer, daemon,
    Discord automation, and model-routing flags.
