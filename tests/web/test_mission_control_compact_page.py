@@ -142,9 +142,12 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Visible chat rule:",
         "Project message",
         "cleanChatDisplayMessage",
+        "ownerVisibleJennyReply",
+        "technicalJennyReply",
+        "compact-jenny-raw-reply",
         "user_message",
         "displayBody",
-        'chat.speaker === "You" ? chat.displayBody ?? projectRequestPreview(chat.body, 750) : chat.body',
+        'chat.speaker === "You" ? chat.displayBody ?? projectRequestPreview(chat.body, 750) : ownerVisibleJennyReply(chat.body)',
         "projectRoomRequestMatch",
         "Project room request:",
         'message.from_agent === "jenny" ? undefined : cleanChatDisplayMessage',
@@ -376,6 +379,26 @@ def test_compact_chat_strips_hidden_jenny_context_from_user_preview() -> None:
     assert "Visible chat rule:" in stripper_fn
     assert "blankSeparator" in stripper_fn
     assert "visibleRuleIndex" in stripper_fn
+
+
+def test_compact_chat_summarizes_technical_jenny_reply_in_owner_bubble() -> None:
+    src = page_source()
+    reply_fn = function_source(src, "ownerVisibleJennyReply")
+
+    for expected in [
+        "session_id:",
+        "preflight",
+        "safety confirmation",
+        "stale-runtime confusion",
+        "i did not deploy",
+        "Jenny replied with a guarded status update.",
+        "Open Review reply for evidence, risks, and safety details.",
+        "Recommendation:",
+    ]:
+        assert expected in reply_fn
+    assert "ownerVisibleJennyReply(chat.body)" in src
+    assert 'data-testid="compact-jenny-raw-reply"' in src
+    assert "{chat.body}" in src
 
 
 def test_compact_jenny_mailbox_payload_is_bounded() -> None:
