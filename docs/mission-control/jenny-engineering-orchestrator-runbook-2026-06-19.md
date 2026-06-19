@@ -209,10 +209,12 @@ or run IDs Jenny must review before treating the work as closed.
 
 Mission Control also projects a report review queue for Jenny. This queue puts
 worker-node reports, child-agent reports, duplicate report records, and missing
-required reports into a manual review order. The top report review row tells
-Travis what Jenny should read first and why. The queue is advisory and
-display-only; it does not write review records, contact Codex, dispatch work,
-or mark a report accepted.
+required reports into a manual review order. It also counts linked reports whose
+own run ID points at a different parent, child, or worker record, because an
+accepted-but-mismatched report is still unsafe to rely on. The top report review
+row tells Travis what Jenny should read first and why. The queue is advisory and
+display-only; it does not write review records, contact Codex, dispatch work, or
+mark a report accepted.
 
 Mission Control also checks report contract completeness. A report should have
 summary, result, risks or blockers, evidence, tests, next lane, and safety
@@ -281,9 +283,11 @@ records.
 The stop/cancel control row reviews any stopping, stopped, or cancelled parent,
 child-agent, or laptop Codex worker-node run. A stopped or cancelled item still
 needs a stop reason, a linked final report, and Jenny review before another
-instruction depends on it. A stopping item remains blocked until a human
-confirms the stop state. This is only a review surface; it does not send stop
-signals, cancel work, dispatch agents, or mutate records.
+instruction depends on it. If the final report exists but its own run ID points
+at a different run, child run, or worker-node run, the item stays blocked as a
+report-link mismatch. A stopping item remains blocked until a human confirms
+the stop state. This is only a review surface; it does not send stop signals,
+cancel work, dispatch agents, or mutate records.
 
 The result ingestion contract checks whether a report is safe for Jenny to
 rely on. It requires append-only consistency, linkage to a parent/child/worker
@@ -334,7 +338,8 @@ next delegation instruction.
 - Report lifecycle: report inbox/review state, duplicate IDs, overwrite
   conflicts, missing reports, stale report links, and exact review blockers.
 - Report review queue: Jenny's prioritized manual review list, including top
-  report, reason, missing report links, and worker/child report context.
+  report, reason, missing report links, mismatched report links, and
+  worker/child report context.
 - Result ingestion: whether reports are linked, redacted, metadata-safe, and
   include a safety confirmation before Jenny relies on them; mismatched report
   links stay blocked.
@@ -344,7 +349,7 @@ next delegation instruction.
 - Report contract compliance: whether reports include required result fields
   before Jenny accepts or relies on them.
 - Stop/cancel control: whether stopping, stopped, or cancelled runs have a
-  reason, final report, and Jenny review.
+  reason, final report, Jenny review, and matching final-report lineage.
 - Next safe action: the highest-priority manual review or preview-preparation
   step; it does not enable execution.
 - Operator decision packet: a plain-language packet for Travis showing state,
