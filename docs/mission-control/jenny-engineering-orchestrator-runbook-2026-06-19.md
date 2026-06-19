@@ -31,8 +31,8 @@ Jenny packet as permission to bypass Codex safety checks.
   It may create a visible manual bridge request and ask Jenny for one foreground
   reply, but it must fail closed and disable send/retry controls unless the
   GitHub bridge status confirms manual-only mode with `would_execute`,
-  dispatch, execution, session-send, worker-dispatch, worker, timer, daemon,
-  Discord automation, and model-routing flags off. It also loads
+  send-to-Jenny, dispatch, execution, session-send, worker-dispatch, worker,
+  timer, daemon, Discord automation, and model-routing flags off. It also loads
   `/workspace-status` and keeps those controls disabled if the backend
   `hard_boundary_contract` is missing or blocked, or if hard-boundary,
   operator-packet, or readiness lock fields expose any truthy execution,

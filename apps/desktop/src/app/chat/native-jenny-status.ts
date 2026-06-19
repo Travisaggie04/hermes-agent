@@ -92,6 +92,7 @@ function nativeJennySafetyBlockedReason(status: MissionControlGitHubBridgeStatus
   const liveFlags: Array<keyof MissionControlGitHubBridgeStatusResponse> = [
     'dispatch_enabled',
     'execution_enabled',
+    'send_to_jenny_enabled',
     'session_send_enabled',
     'worker_dispatch_enabled',
     'would_execute',

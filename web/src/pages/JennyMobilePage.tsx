@@ -129,6 +129,7 @@ interface GitHubBridgeStatus {
   pending_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
   recent_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
   response_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
+  send_to_jenny_enabled?: boolean;
   session_send_enabled?: boolean;
   status_records?: Array<WrappedRecord<GitHubBridgeStatusRecord> | GitHubBridgeStatusRecord>;
   timer_enabled?: boolean;
@@ -460,6 +461,7 @@ function mobileBridgeSafety(status: GitHubBridgeStatus | undefined): MobileBridg
     const liveFlags: Array<[keyof GitHubBridgeStatus, string]> = [
       ["dispatch_enabled", "dispatch_enabled must remain false"],
       ["execution_enabled", "execution_enabled must remain false"],
+      ["send_to_jenny_enabled", "send_to_jenny_enabled must remain false"],
       ["session_send_enabled", "session_send_enabled must remain false"],
       ["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"],
       ["would_execute", "would_execute must remain false"],
