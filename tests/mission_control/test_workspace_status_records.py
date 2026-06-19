@@ -11,6 +11,7 @@ from mission_control.records import (
 )
 from mission_control.workspace_status_records import (
     _child_agent_instruction_preview,
+    _hard_boundary_contract_payload,
     _operator_decision_packet_payload,
     _orchestration_readiness_payload,
     _worker_node_instruction_preview,
@@ -70,6 +71,50 @@ def test_record_sourced_workspace_status_uses_latest_baseline_and_idle_when_no_r
     assert status["record_store"]["status"] == "ok"
     assert "accepted_baseline_source_missing" not in status["stale_context"]["warnings"]
     _assert_inert_projection(status["control_plane_lifecycle"])
+    hard_boundary = status["hard_boundary_contract"]
+    _assert_inert_projection(hard_boundary)
+    assert hard_boundary["source"] == "mission_control_hard_boundary_contract_v1"
+    assert hard_boundary["state"] == "separate_approval_required"
+    assert hard_boundary["blocked"] is False
+    assert hard_boundary["separate_approval_required"] is True
+    assert hard_boundary["live_operations_goal"] is False
+    assert hard_boundary["live_operations_enabled"] is False
+    assert hard_boundary["execution_ready"] is False
+    assert "live deploy" in hard_boundary["forbidden_actions"]
+    assert "9121 /api/status gate" in hard_boundary["forbidden_actions"]
+    assert "PR merge" in hard_boundary["separate_approval_actions"]
+
+
+def test_hard_boundary_contract_blocks_truthy_live_flags():
+    hard_boundary = _hard_boundary_contract_payload(
+        {
+            "execution_packet_preview": {
+                "would_dispatch": "true",
+                "packet": {
+                    "session_send_enabled": "yes",
+                    "worker_node_contract": {
+                        "would_session_send": "on",
+                        "worker_dispatch_enabled": 1,
+                    },
+                },
+            },
+            "worker_node_presence": {"execution_enabled": "enabled"},
+        }
+    )
+
+    _assert_inert_projection(hard_boundary)
+    assert hard_boundary["state"] == "live_flag_violation"
+    assert hard_boundary["blocked"] is True
+    assert hard_boundary["live_flag_violations"] == [
+        "execution packet would_dispatch must remain disabled",
+        "execution packet body session_send_enabled must remain disabled",
+        "worker contract would_session_send must remain disabled",
+        "worker contract worker_dispatch_enabled must remain disabled",
+        "worker presence execution_enabled must remain disabled",
+    ]
+    assert hard_boundary["blocked_reasons"] == hard_boundary["live_flag_violations"]
+    assert hard_boundary["live_flag_violation_count"] == 5
+    assert "Hard boundary violation" in hard_boundary["plain_language_summary"]
 
 
 def test_record_sourced_workspace_status_projects_real_active_runs_and_approvals(tmp_path):

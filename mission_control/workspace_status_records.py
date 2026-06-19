@@ -103,6 +103,30 @@ INERT_PROJECTION_FLAGS = {
     "stored": False,
     "dry_run_only": True,
 }
+HARD_BOUNDARY_FORBIDDEN_ACTIONS = (
+    "live deploy",
+    "restart",
+    "runtime switch",
+    "AcceptedBaselineRecord append",
+    "live state.db mutation",
+    "live config mutation",
+    "live record mutation",
+    "live POST/PUT/PATCH/DELETE endpoint call",
+    "live dispatch activation",
+    "live session-send activation",
+    "Waha/social/payment/model-routing/queue/worker/timer activation",
+    "secrets inspection or output",
+    "PR merge",
+    "operational reconciliation of gateway/dashboard/baseline",
+    "9121 /api/status gate",
+)
+HARD_BOUNDARY_SEPARATE_APPROVAL_ACTIONS = (
+    "live operational reconciliation",
+    "AcceptedBaselineRecord append",
+    "live worker dispatch",
+    "deploy/restart/runtime switch",
+    "PR merge",
+)
 
 
 def default_record_store_path() -> Path:
@@ -342,6 +366,7 @@ def build_workspace_status_from_records(
         worker_runs=recent_worker_runs,
         reports=recent_reports,
     )
+    status["hard_boundary_contract"] = _hard_boundary_contract_payload(status)
     status["next_safe_actions"] = _next_safe_actions_payload(status)
     status["orchestration_readiness"] = _orchestration_readiness_payload(status)
     status["child_agent_instruction_preview"] = _child_agent_instruction_preview(status)
@@ -786,6 +811,79 @@ def _report_overwrite_conflicts(raw_reports: tuple[ReportRecord, ...]) -> dict[s
     return conflicts
 
 
+def _hard_boundary_contract_payload(status: dict[str, Any]) -> dict[str, Any]:
+    execution_packet = _mapping(status.get("execution_packet_preview"))
+    execution_packet_body = _mapping(execution_packet.get("packet"))
+    worker_contract = _mapping(execution_packet_body.get("worker_node_contract"))
+    live_flag_violations = _execution_lock_blockers(
+        ("accepted baseline", status.get("accepted_baseline")),
+        ("rollback baseline", status.get("rollback_baseline")),
+        ("latest handoff", status.get("latest_handoff")),
+        ("read-only eligibility", status.get("read_only_autonomy_eligibility")),
+        ("scoped PR eligibility", status.get("scoped_pr_lane_eligibility")),
+        ("tool permissions", status.get("tool_permission_classification")),
+        ("execution mode", status.get("execution_mode_classification")),
+        ("execution packet", execution_packet),
+        ("execution packet body", execution_packet_body),
+        ("worker contract", worker_contract),
+        ("approval lifecycle", status.get("approval_lifecycle")),
+        ("run lifecycle", status.get("run_lifecycle")),
+        ("report lifecycle", status.get("report_lifecycle")),
+        ("report review queue", status.get("report_review_queue")),
+        ("result ingestion", status.get("result_ingestion_contract")),
+        ("report contract", status.get("report_contract_compliance")),
+        ("report completion", status.get("report_completion_path")),
+        ("stop/cancel control", status.get("orchestration_stop_control")),
+        ("orchestration run graph", status.get("orchestration_run_graph")),
+        ("child orchestration", status.get("child_agent_orchestration")),
+        ("worker orchestration", status.get("worker_node_orchestration")),
+        ("worker presence", status.get("worker_node_presence")),
+    )
+    blocked_reasons = live_flag_violations
+    state = "live_flag_violation" if live_flag_violations else "separate_approval_required"
+    summary = (
+        "Hard boundary violation: live execution, dispatch, session-send, or worker flags are enabled in a "
+        "display-only projection. Stop and review before any handoff."
+        if live_flag_violations
+        else (
+            "This goal is code-side only. Live deploy, restart, runtime switch, record/state/config mutation, "
+            "dispatch/session-send, worker activation, PR merge, secrets, and operational reconciliation all "
+            "require separate approval."
+        )
+    )
+    return {
+        **INERT_PROJECTION_FLAGS,
+        "source": "mission_control_hard_boundary_contract_v1",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "would_dispatch": False,
+        "would_session_send": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "stored": False,
+        "dry_run_only": True,
+        "manual_review_only": True,
+        "separate_approval_required": True,
+        "live_operations_goal": False,
+        "live_operations_enabled": False,
+        "execution_ready": False,
+        "state": state,
+        "blocked": bool(blocked_reasons),
+        "blocked_reasons": blocked_reasons,
+        "forbidden_actions": list(HARD_BOUNDARY_FORBIDDEN_ACTIONS),
+        "forbidden_action_count": len(HARD_BOUNDARY_FORBIDDEN_ACTIONS),
+        "separate_approval_actions": list(HARD_BOUNDARY_SEPARATE_APPROVAL_ACTIONS),
+        "separate_approval_action_count": len(HARD_BOUNDARY_SEPARATE_APPROVAL_ACTIONS),
+        "live_flag_violations": live_flag_violations,
+        "live_flag_violation_count": len(live_flag_violations),
+        "live_operational_reconciliation_state": "separate_approval_required",
+        "plain_language_summary": summary,
+    }
+
+
 def _next_safe_actions_payload(status: dict[str, Any]) -> dict[str, Any]:
     actions: list[dict[str, Any]] = []
     blocked_reasons: list[str] = []
@@ -814,6 +912,26 @@ def _next_safe_actions_payload(status: dict[str, Any]) -> dict[str, Any]:
                 "manual_only": True,
                 "blocked_until": blocked_until,
             }
+        )
+
+    hard_boundary = _mapping(status.get("hard_boundary_contract"))
+    hard_boundary_reasons = _unique_reasons(
+        [
+            *_text_list(hard_boundary.get("blocked_reasons")),
+            *_text_list(hard_boundary.get("live_flag_violations")),
+        ]
+    )
+    if hard_boundary.get("blocked") is True or hard_boundary_reasons:
+        extend_blockers(hard_boundary_reasons)
+        add_action(
+            action_id="review_hard_boundary_contract",
+            label="Review hard-boundary contract",
+            reason=_first_reason(
+                hard_boundary_reasons,
+                "Mission Control detected a live operation flag inside a display-only projection.",
+            ),
+            blocked_until="all live execution, dispatch, session-send, and worker flags are disabled",
+            priority=1,
         )
 
     runtime_provenance = _mapping(status.get("runtime_provenance"))
@@ -2738,6 +2856,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     report_contract = _mapping(status.get("report_contract_compliance"))
     report_completion = _mapping(status.get("report_completion_path"))
     stop_control = _mapping(status.get("orchestration_stop_control"))
+    hard_boundary = _mapping(status.get("hard_boundary_contract"))
     worker_presence = _mapping(status.get("worker_node_presence"))
     worker_instruction = _mapping(status.get("worker_node_instruction_preview"))
     child_instruction = _mapping(status.get("child_agent_instruction_preview"))
@@ -2756,6 +2875,9 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     result_ingestion_link_mismatch_count = _safe_int(result_ingestion.get("link_mismatch_count"))
     report_completion_link_mismatch_count = _safe_int(report_completion.get("link_mismatch_count"))
     stop_cancel_link_mismatch_count = _safe_int(stop_control.get("link_mismatch_count"))
+    hard_boundary_forbidden_count = _safe_int(hard_boundary.get("forbidden_action_count"))
+    hard_boundary_separate_approval_count = _safe_int(hard_boundary.get("separate_approval_action_count"))
+    hard_boundary_live_flag_violation_count = _safe_int(hard_boundary.get("live_flag_violation_count"))
     report_link_mismatch_ids = _report_link_mismatch_keys(
         report_queue,
         result_ingestion,
@@ -2780,6 +2902,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     execution_packet_eligible = execution_packet.get("eligible") is True
     execution_mode_family = _safe_text(execution_mode.get("mode_family")) or "unknown"
     execution_lock_reasons = _execution_lock_blockers(
+        ("hard boundary", hard_boundary),
         ("execution packet", execution_packet),
         ("execution packet body", execution_packet_body),
         ("worker contract", worker_contract),
@@ -2794,6 +2917,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             *_text_list(report_contract.get("blocked_reasons")),
             *_text_list(report_completion.get("blocked_reasons")),
             *_text_list(stop_control.get("blocked_reasons")),
+            *_text_list(hard_boundary.get("blocked_reasons")),
             *_text_list(worker_presence.get("blocked_reasons")),
             *_text_list(execution_mode.get("blocked_reasons")),
             *_text_list(execution_packet.get("blocked_reasons")),
@@ -2879,6 +3003,14 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             f"{stop_cancel_count} item{'s' if stop_cancel_count != 1 else ''}, "
             f"blocked {str(stop_control.get('blocked') is True).lower()}."
         )
+    if hard_boundary:
+        summary_lines.append(
+            "Hard boundary contract: "
+            f"{_safe_text(hard_boundary.get('state')) or 'unknown'}; "
+            f"forbidden actions {hard_boundary_forbidden_count}; "
+            f"separate approval actions {hard_boundary_separate_approval_count}; "
+            f"live flag violations {hard_boundary_live_flag_violation_count}."
+        )
     worker_instruction_ready = worker_instruction.get("ready_for_handoff") is True
     if worker_instruction.get("available") is True:
         summary_lines.append(
@@ -2929,6 +3061,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             or incomplete_report_contract_count > 0
             or report_completion_blocked_count > 0
             or stop_cancel_count > 0
+            or hard_boundary_live_flag_violation_count > 0
             or bool(execution_lock_reasons)
         ),
         "next_safe_action_id": _safe_text(next_safe_actions.get("primary_action_id")),
@@ -2953,6 +3086,11 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         "stop_cancel_blocked_reasons": _text_list(stop_control.get("blocked_reasons")),
         "stop_cancel_link_mismatch_count": stop_cancel_link_mismatch_count,
         "stop_cancel_primary_item_id": _safe_text(stop_control.get("primary_item_id")),
+        "hard_boundary_state": _safe_text(hard_boundary.get("state")) or "unknown",
+        "hard_boundary_blocked_reasons": _text_list(hard_boundary.get("blocked_reasons")),
+        "hard_boundary_forbidden_action_count": hard_boundary_forbidden_count,
+        "hard_boundary_separate_approval_action_count": hard_boundary_separate_approval_count,
+        "hard_boundary_live_flag_violation_count": hard_boundary_live_flag_violation_count,
         "execution_mode_family": execution_mode_family,
         "execution_mode_blocked_reasons": _text_list(execution_mode.get("blocked_reasons")),
         "execution_packet_mode": execution_packet_mode,

@@ -58,6 +58,9 @@ Jenny packet as permission to bypass Codex safety checks.
   The projection execution locks row is a broader sweep across lifecycle,
   report, readiness, worker, child, and next-safe-action projections; it should
   read `none`.
+  The hard-boundary rows render the backend `hard_boundary_contract`, including
+  exact forbidden actions, separate-approval actions, and any live-flag
+  violations found across nested Mission Control projections.
   These lock checks treat API-shaped truthy values such as `"true"`, `"yes"`,
   `"on"`, and `1` as unsafe enabled flags. Positive safety proofs still require
   real backend evidence; stringy inputs do not make a lane execution-ready.
@@ -130,6 +133,12 @@ All current execution scaffolding must remain disabled:
 - `dispatch_enabled: false`
 - `session_send_enabled: false`
 - `worker_dispatch_enabled: false`
+
+`hard_boundary_contract` is the first-class status object for the current
+do-not-do list. It is display-only, never trusted for execution, and only marks
+itself blocked when a live execution, dispatch, session-send, or worker flag is
+actually enabled inside a projection. Separate live operational reconciliation
+still requires a later explicit approval.
 
 ## Supervised Read-Only Autonomy
 

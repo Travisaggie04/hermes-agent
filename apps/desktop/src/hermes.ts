@@ -775,6 +775,11 @@ export interface MissionControlOperatorDecisionPacket {
   execution_lock_blocked_reasons?: string[]
   execution_enabled?: boolean
   execution_ready?: boolean
+  hard_boundary_blocked_reasons?: string[]
+  hard_boundary_forbidden_action_count?: number
+  hard_boundary_live_flag_violation_count?: number
+  hard_boundary_separate_approval_action_count?: number
+  hard_boundary_state?: string
   jenny_review_required?: boolean
   manual_operator_review_only?: boolean
   next_safe_action_id?: string
@@ -901,6 +906,26 @@ export interface MissionControlExecutionPacketPreview extends MissionControlExec
   packet?: MissionControlExecutionPacketBody
   source?: string
   warnings?: string[]
+}
+
+export interface MissionControlHardBoundaryContract extends MissionControlExecutionLockFields {
+  blocked?: boolean
+  blocked_reasons?: string[]
+  execution_ready?: boolean
+  forbidden_action_count?: number
+  forbidden_actions?: string[]
+  live_flag_violation_count?: number
+  live_flag_violations?: string[]
+  live_operational_reconciliation_state?: string
+  live_operations_enabled?: boolean
+  live_operations_goal?: boolean
+  manual_review_only?: boolean
+  plain_language_summary?: string
+  separate_approval_action_count?: number
+  separate_approval_actions?: string[]
+  separate_approval_required?: boolean
+  source?: string
+  state?: string
 }
 
 export interface MissionControlNextSafeAction {
@@ -1568,6 +1593,7 @@ export interface MissionControlWorkspaceStatus {
   deployment_gap?: { dashboard_deploy_needed?: boolean; deployed_head?: string; accepted_live_head?: string; latest_merged_pr?: string; state?: string }
   execution_mode_classification?: MissionControlExecutionModeClassification
   execution_packet_preview?: MissionControlExecutionPacketPreview
+  hard_boundary_contract?: MissionControlHardBoundaryContract
   lane?: { active_lane_count?: number; max_active_lane?: number }
   latest_handoff?: MissionControlWorkspaceHandoff
   next_safe_actions?: MissionControlNextSafeActions

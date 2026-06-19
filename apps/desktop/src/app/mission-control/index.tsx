@@ -1392,6 +1392,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
   const reportReviewQueue = status.report_review_queue
   const resultIngestionContract = status.result_ingestion_contract
   const stopControl = status.orchestration_stop_control
+  const hardBoundary = status.hard_boundary_contract
   const nextSafeActions = status.next_safe_actions
   const nextSafePrimaryAction = nextSafeActions?.primary_action
   const executionModeClassification = status.execution_mode_classification
@@ -1459,6 +1460,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     ...executionLockReasons('result ingestion', resultIngestionContract),
     ...executionLockReasons('report completion', reportCompletionPath),
     ...executionLockReasons('stop/cancel control', stopControl),
+    ...executionLockReasons('hard boundary', hardBoundary),
     ...executionLockReasons('next safe actions', nextSafeActions),
     ...executionLockReasons('operator decision', operatorDecisionPacket),
     ...executionLockReasons('orchestration readiness', orchestrationReadiness),
@@ -1543,6 +1545,19 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     executionPacketWouldExecute: executionPacket?.would_execute,
     executionPacketWouldSessionSend: executionPacket?.would_session_send,
     guard: status.runtime_worktree_guard?.decision_state ?? 'unknown',
+    hardBoundaryBlockedReasons: hardBoundary?.blocked_reasons ?? [],
+    hardBoundaryDisplayOnly: hardBoundary?.display_only,
+    hardBoundaryExecutionEnabled: hardBoundary?.execution_enabled,
+    hardBoundaryExecutionReady: hardBoundary?.execution_ready,
+    hardBoundaryForbiddenActionCount: hardBoundary?.forbidden_action_count ?? hardBoundary?.forbidden_actions?.length ?? 0,
+    hardBoundaryLiveFlagViolationCount: hardBoundary?.live_flag_violation_count ?? hardBoundary?.live_flag_violations?.length ?? 0,
+    hardBoundaryLiveOperationsEnabled: hardBoundary?.live_operations_enabled,
+    hardBoundaryLiveOperationsGoal: hardBoundary?.live_operations_goal,
+    hardBoundarySeparateApprovalActionCount: hardBoundary?.separate_approval_action_count ?? hardBoundary?.separate_approval_actions?.length ?? 0,
+    hardBoundarySeparateApprovalRequired: hardBoundary?.separate_approval_required,
+    hardBoundaryState: hardBoundary?.state ?? 'unknown',
+    hardBoundarySummary: hardBoundary?.plain_language_summary ?? 'No hard-boundary contract recorded.',
+    hardBoundaryWorkerDispatchEnabled: hardBoundary?.worker_dispatch_enabled,
     head: status.deployment_gap?.accepted_live_head ?? status.accepted_baseline?.head ?? 'unknown',
     latestMergedPr: status.deployment_gap?.latest_merged_pr ?? '',
     latestHandoffWouldExecute: status.latest_handoff?.would_execute,
@@ -4512,6 +4527,17 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
         ? 'warn'
         : 'good'
       : 'warn'
+  const hardBoundaryTone =
+    status.hardBoundaryDisplayOnly === true &&
+    status.hardBoundaryExecutionEnabled === false &&
+    status.hardBoundaryWorkerDispatchEnabled === false &&
+    status.hardBoundaryExecutionReady === false &&
+    status.hardBoundaryLiveOperationsEnabled === false &&
+    status.hardBoundaryLiveOperationsGoal === false
+      ? status.hardBoundaryBlockedReasons.length || status.hardBoundaryLiveFlagViolationCount
+        ? 'warn'
+        : 'good'
+      : 'warn'
   const nextSafeActionTone =
     status.nextSafeActionExecutionEnabled === false &&
     status.nextSafeActionDispatchEnabled === false &&
@@ -4625,6 +4651,8 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="operator packet locks" tone={operatorPacketTone} value={`execute ${yesNo(status.operatorPacketExecutionEnabled)} / dispatch ${yesNo(status.operatorPacketDispatchEnabled)} / session ${yesNo(status.operatorPacketSessionSendEnabled)} / worker ${yesNo(status.operatorPacketWorkerDispatchEnabled)} / would dispatch ${yesNo(status.operatorPacketWouldDispatch)} / would session ${yesNo(status.operatorPacketWouldSessionSend)}`} />
       <StatusItem className="md:col-span-2" label="operator next instruction" tone={operatorPacketTone} value={status.operatorPacketNextInstruction} />
       <StatusItem label="operator report links" tone={status.operatorPacketLinkMismatchCount ? 'warn' : 'good'} value={`mismatch ${status.operatorPacketLinkMismatchCount} / queue ${status.operatorPacketQueueLinkMismatchCount} / ingestion ${status.operatorPacketIngestionLinkMismatchCount} / completion ${status.operatorPacketCompletionLinkMismatchCount} / stop ${status.operatorPacketStopLinkMismatchCount}`} />
+      <StatusItem label="hard boundary" tone={hardBoundaryTone} value={`${labelText(status.hardBoundaryState)} / forbidden ${status.hardBoundaryForbiddenActionCount} / separate approval ${status.hardBoundarySeparateApprovalActionCount}`} />
+      <StatusItem label="hard boundary locks" tone={hardBoundaryTone} value={`execute ${yesNo(status.hardBoundaryExecutionEnabled)} / execution-ready ${yesNo(status.hardBoundaryExecutionReady)} / worker ${yesNo(status.hardBoundaryWorkerDispatchEnabled)} / live ops ${yesNo(status.hardBoundaryLiveOperationsEnabled)}`} />
       <StatusItem className="md:col-span-2" label="orchestration readiness" tone={readinessTone} value={`read-only ${labelText(status.readinessReadOnlyState)} / scoped PR ${labelText(status.readinessScopedPrState)}`} />
       <StatusItem label="worker readiness" tone={readinessTone} value={`laptop Codex ${labelText(status.readinessWorkerNodeState)} / execution-ready ${yesNo(status.orchestrationReadinessExecutionReady)}`} />
       <StatusItem label="worker presence" tone={workerPresenceTone} value={`${labelText(status.workerPresenceState)} / online ${yesNo(status.workerPresenceOnline)}${status.workerPresenceLastSeen ? ` / seen ${status.workerPresenceLastSeen}` : ''}`} />
@@ -4670,6 +4698,8 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-3" label="operator summary" tone={operatorPacketTone} value={status.operatorPacketSummary} />
       <StatusItem className="md:col-span-3" label="operator blockers" tone={status.operatorPacketBlockedReasons.length ? 'warn' : 'good'} value={status.operatorPacketBlockedReasons.length ? status.operatorPacketBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="operator execution locks" tone={status.operatorPacketExecutionLockBlockedReasons.length ? 'warn' : 'good'} value={status.operatorPacketExecutionLockBlockedReasons.length ? status.operatorPacketExecutionLockBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="hard boundary summary" tone={hardBoundaryTone} value={status.hardBoundarySummary} />
+      <StatusItem className="md:col-span-3" label="hard boundary blockers" tone={status.hardBoundaryBlockedReasons.length ? 'warn' : 'good'} value={status.hardBoundaryBlockedReasons.length ? status.hardBoundaryBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="projection execution locks" tone={status.projectionExecutionLockReasons.length ? 'warn' : 'good'} value={status.projectionExecutionLockReasons.length ? status.projectionExecutionLockReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="execution mode blockers" tone={status.executionModeBlockedReasons.length ? 'warn' : 'good'} value={status.executionModeBlockedReasons.length ? status.executionModeBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="protected execution markers" tone={status.executionModeProtectedMarkers.length ? 'warn' : 'good'} value={status.executionModeProtectedMarkers.length ? status.executionModeProtectedMarkers.join(', ') : 'none'} />

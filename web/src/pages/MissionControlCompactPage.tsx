@@ -362,6 +362,22 @@ interface WorkspaceStatus {
     };
     warnings?: string[];
   };
+  hard_boundary_contract?: CompactExecutionLockSource & {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    execution_ready?: boolean;
+    forbidden_action_count?: number;
+    forbidden_actions?: string[];
+    live_flag_violation_count?: number;
+    live_flag_violations?: string[];
+    live_operations_enabled?: boolean;
+    live_operations_goal?: boolean;
+    plain_language_summary?: string;
+    separate_approval_action_count?: number;
+    separate_approval_actions?: string[];
+    separate_approval_required?: boolean;
+    state?: string;
+  };
   lane?: { active_lane_count?: number };
   next_safe_actions?: {
     action_count?: number;
@@ -4053,6 +4069,7 @@ function CompactHermesHealthDashboard({
   const deployedHead = status.deployment_gap?.deployed_head ?? status.accepted_baseline?.head ?? "unknown";
   const executionMode = status.execution_mode_classification;
   const executionPacket = status.execution_packet_preview;
+  const hardBoundary = status.hard_boundary_contract;
   const operatorPacket = status.operator_decision_packet;
   const readiness = status.orchestration_readiness;
   const workerInstruction = status.worker_node_instruction_preview;
@@ -4062,6 +4079,9 @@ function CompactHermesHealthDashboard({
   const nextSafeActions = status.next_safe_actions;
   const resultIngestionBlocked = resultIngestion?.blocked_report_count ?? 0;
   const reportCompletionBlocked = reportCompletion?.blocked_completion_count ?? 0;
+  const hardBoundaryViolationCount = hardBoundary?.live_flag_violation_count ?? hardBoundary?.live_flag_violations?.length ?? 0;
+  const hardBoundaryForbiddenCount = hardBoundary?.forbidden_action_count ?? hardBoundary?.forbidden_actions?.length ?? 0;
+  const hardBoundarySeparateApprovalCount = hardBoundary?.separate_approval_action_count ?? hardBoundary?.separate_approval_actions?.length ?? 0;
   const workerPresenceState = workerPresence?.presence_state ?? "unknown";
   const readinessStates = readiness?.states;
   const nextSafeActionLockReasons = compactExecutionLockReasons("Safe next actions", nextSafeActions);
@@ -4069,6 +4089,7 @@ function CompactHermesHealthDashboard({
   const executionPacketLockReasons = compactExecutionLockReasons("Execution packet", executionPacket);
   const executionPacketBodyLockReasons = compactExecutionLockReasons("Execution packet body", executionPacket?.packet);
   const workerContractLockReasons = compactExecutionLockReasons("Worker contract", executionPacket?.packet?.worker_node_contract);
+  const hardBoundaryLockReasons = compactExecutionLockReasons("Hard boundary", hardBoundary);
   const operatorLockReasons = compactExecutionLockReasons("Operator decision", operatorPacket);
   const operatorExecutionLockBlockedReasons = operatorPacket?.execution_lock_blocked_reasons ?? [];
   const readinessLockReasons = compactExecutionLockReasons("Preview readiness", readiness);
@@ -4090,6 +4111,7 @@ function CompactHermesHealthDashboard({
     ...executionPacketLockReasons,
     ...executionPacketBodyLockReasons,
     ...workerContractLockReasons,
+    ...hardBoundaryLockReasons,
     ...operatorLockReasons,
     operatorExecutionLockBlockedReasons.length ? firstReason(operatorExecutionLockBlockedReasons, "Operator execution locks need review") : "",
     ...readinessLockReasons,
@@ -4097,6 +4119,7 @@ function CompactHermesHealthDashboard({
     ...workerLockReasons,
     ...ingestionLockReasons,
     ...completionLockReasons,
+    hardBoundary?.blocked ? firstReason(hardBoundary.blocked_reasons, "Hard boundary contract needs review") : "",
     operatorPacket?.blocked ? firstReason(operatorPacket.blocked_reasons, "Operator decision packet is blocked") : "",
     executionMode?.blocked ? firstReason(executionMode.blocked_reasons, "Execution mode preview is blocked") : "",
     executionPacket?.blocked_reasons?.length ? firstReason(executionPacket.blocked_reasons, "Execution packet preview is blocked") : "",
@@ -4124,6 +4147,11 @@ function CompactHermesHealthDashboard({
     : operatorExecutionLockBlockedReasons.length
       ? "bad"
       : operatorPacket?.blocked || operatorPacket?.jenny_review_required
+      ? "warn"
+      : "good";
+  const hardBoundaryTone: CompactHealthTone = hardBoundaryLockReasons.length || hardBoundaryViolationCount
+    ? "bad"
+    : !hardBoundary || hardBoundary.live_operations_enabled !== false || hardBoundary.live_operations_goal !== false || hardBoundary.execution_ready !== false
       ? "warn"
       : "good";
   const readinessTone: CompactHealthTone = readinessLockReasons.length
@@ -4163,6 +4191,12 @@ function CompactHermesHealthDashboard({
     ...(executionMode?.warnings ?? []),
     "Execution preview remains display-only; dispatch, session send, and worker activation stay disabled.",
   ].find(Boolean) ?? "Execution preview remains display-only.", 260);
+  const hardBoundaryDetail = compactText([
+    ...hardBoundaryLockReasons,
+    firstReason(hardBoundary?.blocked_reasons, ""),
+    hardBoundary?.plain_language_summary,
+    "Live operations require separate approval.",
+  ].find(Boolean) ?? "Live operations require separate approval.", 260);
   const workerInstructionDetail = compactText([
     ...workerInstructionLockReasons,
     firstReason(workerInstruction?.blocked_reasons, ""),
@@ -4210,6 +4244,12 @@ function CompactHermesHealthDashboard({
           label="Operator decision"
           tone={operatorTone}
           value={`${compactStateLabel(operatorPacket?.state)} / display-only ${operatorPacket?.display_only === false ? "no" : "yes"}`}
+        />
+        <CompactHealthTile
+          detail={hardBoundaryDetail}
+          label="Hard boundary"
+          tone={hardBoundaryTone}
+          value={`${compactStateLabel(hardBoundary?.state)} / forbidden ${hardBoundaryForbiddenCount} / separate approval ${hardBoundarySeparateApprovalCount}`}
         />
         <CompactHealthTile
           detail={`${compactReadinessSummary(status)}. Next safe action: ${nextSafeActions?.primary_action_label || operatorPacket?.next_safe_action_label || "review Mission Control status"}.`}

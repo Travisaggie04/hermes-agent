@@ -276,6 +276,36 @@ beforeEach(() => {
       would_execute: false,
       would_session_send: false
     },
+    hard_boundary_contract: {
+      blocked: false,
+      blocked_reasons: [],
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      execution_ready: false,
+      forbidden_action_count: 15,
+      forbidden_actions: ['live deploy', 'restart', 'runtime switch', '9121 /api/status gate'],
+      live_flag_violation_count: 0,
+      live_flag_violations: [],
+      live_operational_reconciliation_state: 'separate_approval_required',
+      live_operations_enabled: false,
+      live_operations_goal: false,
+      manual_review_only: true,
+      plain_language_summary: 'This goal is code-side only. Live deploy, restart, runtime switch, record/state/config mutation, dispatch/session-send, worker activation, PR merge, secrets, and operational reconciliation all require separate approval.',
+      separate_approval_action_count: 5,
+      separate_approval_actions: ['live operational reconciliation', 'AcceptedBaselineRecord append', 'live worker dispatch', 'deploy/restart/runtime switch', 'PR merge'],
+      separate_approval_required: true,
+      session_send_enabled: false,
+      source: 'mission_control_hard_boundary_contract_v1',
+      state: 'separate_approval_required',
+      stored: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      would_dispatch: false,
+      would_execute: false,
+      would_session_send: false
+    },
     lane: { active_lane_count: 0 },
     latest_handoff: {
       handoff_id: 'handoff-1',
@@ -1861,6 +1891,10 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Jenny reviews Laptop Codex reported scoped PR evidence. before issuing another worker instruction.')).toBeTruthy()
     expect(screen.getByText('operator report links')).toBeTruthy()
     expect(screen.getByText('mismatch 0 / queue 0 / ingestion 0 / completion 0 / stop 0')).toBeTruthy()
+    expect(screen.getByText('hard boundary')).toBeTruthy()
+    expect(screen.getByText('separate approval required / forbidden 15 / separate approval 5')).toBeTruthy()
+    expect(screen.getByText('hard boundary locks')).toBeTruthy()
+    expect(screen.getByText('execute no / execution-ready no / worker no / live ops no')).toBeTruthy()
     expect(screen.getByText('next action reasons')).toBeTruthy()
     expect(screen.getByText('gateway git metadata is broken, run_id run-parent-1 references unavailable approval_id approval-old')).toBeTruthy()
     expect(screen.getByText('operator summary')).toBeTruthy()
@@ -1873,6 +1907,10 @@ describe('MissionControlView', () => {
     expect(screen.getByText('gateway git metadata is broken, report_id report-worker has multiple append-only records, report_id report-worker attempts to overwrite append-only report fields: status, report_id report-worker still needs Jenny review, worker node offline, worker-node presence_status is not recorded, runtime provenance is not clean, worker-node presence is not confirmed online, report_id report-worker missing contract fields: result, evidence, tests, next lane, safety confirmation, run run-stopped has no stop_reason, run run-stopped has no linked stop/cancel report')).toBeTruthy()
     expect(screen.getByText('operator execution locks')).toBeTruthy()
     expect(statusItemValue('operator execution locks').textContent).toBe('none')
+    expect(screen.getByText('hard boundary summary')).toBeTruthy()
+    expect(screen.getByText(/This goal is code-side only/)).toBeTruthy()
+    expect(screen.getByText('hard boundary blockers')).toBeTruthy()
+    expect(statusItemValue('hard boundary blockers').textContent).toBe('none')
     expect(screen.getByText('projection execution locks')).toBeTruthy()
     expect(statusItemValue('projection execution locks').textContent).toBe('none')
     expect(screen.getByText('execution mode blockers')).toBeTruthy()
