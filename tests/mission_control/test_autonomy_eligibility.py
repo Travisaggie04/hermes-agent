@@ -540,6 +540,66 @@ def test_execution_mode_classification_blocks_protected_modes_and_enabled_flags(
         assert result["trusted_for_execution"] is False
 
 
+def test_implementation_lane_cannot_smuggle_deploy_or_live_ops():
+    result = classify_execution_mode(
+        {
+            "mode": "implementation",
+            "action_class": "implementation",
+            "lane": {
+                "lane_type": "implementation",
+                "allowed_actions": [
+                    "deploy gateway",
+                    "restart runtime",
+                    "runtime switch",
+                    "Waha send",
+                    "payment checkout",
+                    "model routing",
+                    "queue enqueue",
+                    "cron timer",
+                    "session-send",
+                ],
+            },
+            "capabilities": {
+                "deploy": True,
+                "restart": True,
+                "runtime_switch": True,
+                "waha": True,
+                "payment": True,
+                "model_routing": True,
+                "queue_mutation": True,
+                "dispatch": True,
+                "session_send": True,
+                "worker_dispatch_enabled": True,
+            },
+        }
+    )
+
+    assert result["mode_family"] == "higher_risk_blocked"
+    assert result["preview_ready"] is False
+    assert result["blocked"] is True
+    assert result["separate_approval_required"] is True
+    assert "action_class implementation is not eligible for autonomous execution" in result["blocked_reasons"]
+    assert set(result["protected_action_markers"]) >= {
+        "deploy",
+        "restart",
+        "runtime_switch",
+        "waha",
+        "payment",
+        "model_routing",
+        "queue_mutation",
+        "dispatch",
+        "session_send",
+        "worker dispatch enabled",
+        "worker_timer_enablement",
+    }
+    assert result["would_execute"] is False
+    assert result["execution_enabled"] is False
+    assert result["dispatch_enabled"] is False
+    assert result["session_send_enabled"] is False
+    assert result["worker_dispatch_enabled"] is False
+    assert result["trusted_for_execution"] is False
+
+
 def test_execution_packet_preview_is_never_an_execution_path():
     result = build_execution_packet_preview(_eligible_pr_preview_payload(mode="scoped_pr"))
 
