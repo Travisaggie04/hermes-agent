@@ -922,6 +922,7 @@ function missionControlGitHubBridgeSafety(
       reasons.push('manual_start_only is not confirmed')
     }
     const liveFlags: Array<[keyof MissionControlGitHubBridgeStatusResponse, string]> = [
+      ['would_execute', 'would_execute must remain false'],
       ['dispatch_enabled', 'dispatch_enabled must remain false'],
       ['execution_enabled', 'execution_enabled must remain false'],
       ['session_send_enabled', 'session_send_enabled must remain false'],

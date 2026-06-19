@@ -15,6 +15,7 @@ def test_global_resource_guard_policy_is_inert_dry_run_and_display_only():
     assert policy["guard_id"] == "global_concurrency_resource_v1"
     assert policy["trusted_for_execution"] is False
     assert policy["inert_context_only"] is True
+    assert policy["would_execute"] is False
     assert policy["enforcement_enabled"] is False
     assert policy["dry_run_only"] is True
     assert policy["display_only"] is True

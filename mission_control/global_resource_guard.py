@@ -13,6 +13,7 @@ from typing import Any
 _INERT_GUARD_FLAGS: dict[str, Any] = {
     "trusted_for_execution": False,
     "inert_context_only": True,
+    "would_execute": False,
     "enforcement_enabled": False,
     "dry_run_only": True,
     "display_only": True,
