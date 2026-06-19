@@ -4977,6 +4977,12 @@ def test_workspace_status_endpoint_returns_display_only_status(client):
     assert "accepted_baseline" in payload
     assert "rollback_baseline" in payload
     assert "stale_context" in payload
+    operator_packet = payload["operator_decision_packet"]
+    assert operator_packet["source"] == "mission_control_operator_decision_packet_v1"
+    assert operator_packet["display_only"] is True
+    assert operator_packet["execution_enabled"] is False
+    assert operator_packet["worker_dispatch_enabled"] is False
+    assert isinstance(operator_packet["execution_lock_blocked_reasons"], list)
 
 
 def test_workspace_status_preview_is_caller_supplied_and_stores_nothing(plugin_api, client):
