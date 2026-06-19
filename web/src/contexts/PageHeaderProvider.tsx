@@ -52,7 +52,10 @@ export function PageHeaderProvider({
 
   return (
     <PageHeaderContext.Provider value={value}>
-      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
+      <div className={cn(
+        "flex min-h-0 w-full min-w-0 flex-1 flex-col",
+        isCompactChatRoute ? "overflow-visible" : "overflow-hidden",
+      )}>
         <header
           className={cn(
             "z-1 w-full shrink-0",
@@ -132,7 +135,7 @@ export function PageHeaderProvider({
             isChatRoute
               ? "overflow-hidden"
               : isCompactChatRoute
-                ? "overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable] sm:overflow-hidden"
+                ? "overflow-visible overflow-x-hidden"
               : "overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]",
           )}
         >

@@ -478,7 +478,12 @@ export default function App() {
   return (
     <div
       data-layout-variant={layoutVariant}
-      className="flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-black text-text-primary antialiased"
+      className={cn(
+        "flex flex-col bg-black text-text-primary antialiased",
+        isCompactChatRoute
+          ? "min-h-dvh overflow-x-hidden overflow-y-visible"
+          : "h-dvh max-h-dvh min-h-0 overflow-hidden",
+      )}
     >
       <SelectionSwitcher />
       <Backdrop />
@@ -531,8 +536,14 @@ export default function App() {
 
       <PluginSlot name="header-banner" />
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pt-14 lg:pt-0">
-        <div className="flex min-h-0 min-w-0 flex-1">
+      <div className={cn(
+        "flex min-w-0 flex-1 flex-col pt-14 lg:pt-0",
+        isCompactChatRoute ? "overflow-visible" : "min-h-0 overflow-hidden",
+      )}>
+        <div className={cn(
+          "flex min-w-0 flex-1",
+          isCompactChatRoute ? "overflow-visible" : "min-h-0",
+        )}>
           <aside
             id="app-sidebar"
             aria-label={t.app.navigation}

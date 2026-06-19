@@ -29,9 +29,15 @@ def test_mobile_compact_route_is_registered() -> None:
     assert 'import MissionControlCompactPage from "@/pages/MissionControlCompactPage"' in app
     assert 'const isCompactChatRoute = normalizedPath === "/mission-control-compact";' in app
     assert "const isChatLikeRoute = isChatRoute || isCompactChatRoute;" in app
+    assert 'isCompactChatRoute' in app
+    assert '"min-h-dvh overflow-x-hidden overflow-y-visible"' in app
+    assert '"h-dvh max-h-dvh min-h-0 overflow-hidden"' in app
+    assert 'isCompactChatRoute ? "overflow-visible" : "min-h-0 overflow-hidden"' in app
     assert 'const isCompactChatRoute = pathname === "/mission-control-compact" || pathname === "/mission-control-compact/";' in provider
     assert "isChatLikeRoute" in provider
     assert 'isCompactChatRoute && "sr-only"' in provider
+    assert 'isCompactChatRoute ? "overflow-visible" : "overflow-hidden"' in provider
+    assert '"overflow-visible overflow-x-hidden"' in provider
 
 
 def test_renders_five_real_projects_in_compact_mode() -> None:
@@ -665,7 +671,9 @@ def test_compact_chat_send_uses_github_mailbox_not_local_only_outbox() -> None:
     assert "requested_effort" in send_fn
     assert "Message sent. Use Get reply" in send_fn
     assert 'setProjectRequest("")' in send_fn
+    assert "void refreshSnapshot().catch" in send_fn
     assert "await runJennyOnce" not in send_fn
+    assert "await refreshSnapshot()" not in send_fn
 
 
 def test_compact_chat_uses_plain_language_errors() -> None:
