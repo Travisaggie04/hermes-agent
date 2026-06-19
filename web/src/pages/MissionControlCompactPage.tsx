@@ -2847,6 +2847,9 @@ function CompactProjectRoom({
     responseCount,
   });
   useEffect(() => {
+    if (typeof window !== "undefined" && !window.matchMedia("(min-width: 640px)").matches) {
+      return;
+    }
     chatEndRef.current?.scrollIntoView?.({ block: "end" });
   }, [
     chatMessages.length,
@@ -3060,7 +3063,7 @@ function CompactProjectRoom({
           </div>
         </details>
 
-        <section className="mt-2 flex min-w-0 max-w-full touch-pan-y flex-none flex-col overflow-visible overflow-x-clip p-0 sm:min-h-0 sm:flex-1 sm:overflow-hidden" aria-label="Project chat transcript">
+        <section className="order-3 mt-2 flex min-w-0 max-w-full touch-pan-y flex-none flex-col overflow-visible overflow-x-clip p-0 sm:order-none sm:min-h-0 sm:flex-1 sm:overflow-hidden" aria-label="Project chat transcript">
           <div className="sr-only">
             <h3 className="text-sm font-semibold text-[#f3ebda]">Conversation</h3>
             <span className="text-[0.68rem] text-[#a59783] [overflow-wrap:anywhere] sm:text-right">{chatMessages.length ? `${chatMessages.length} recent messages` : "No messages yet"}</span>
@@ -3088,7 +3091,7 @@ function CompactProjectRoom({
                     className={cn(
                       "max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word]",
                       chat.speaker === "Jenny"
-                        ? "overflow-visible sm:max-h-[min(52dvh,32rem)] sm:touch-pan-y sm:overflow-y-auto sm:overscroll-contain sm:pr-1 sm:[-webkit-overflow-scrolling:touch]"
+                        ? "max-h-[min(42dvh,24rem)] touch-pan-y overflow-y-auto overscroll-contain pr-1 [-webkit-overflow-scrolling:touch] sm:max-h-[min(52dvh,32rem)]"
                         : "overflow-visible",
                     )}
                     data-testid={chat.speaker === "Jenny" ? "compact-jenny-reply-body" : undefined}
@@ -3177,7 +3180,7 @@ function CompactProjectRoom({
           </div>
         </section>
 
-        <div className="z-10 mt-2 mb-[max(env(safe-area-inset-bottom),1rem)] min-w-0 max-w-full shrink-0 overflow-hidden overflow-x-clip rounded-[1.5rem] border border-[#f3ebda]/10 bg-[#15101a]/95 p-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-[0_-18px_40px_rgba(14,11,18,0.88)] backdrop-blur" aria-label="Project chat composer" data-testid="compact-chat-composer">
+        <div className="order-1 z-10 mt-2 mb-[max(env(safe-area-inset-bottom),1rem)] min-w-0 max-w-full shrink-0 overflow-hidden overflow-x-clip rounded-[1.5rem] border border-[#f3ebda]/10 bg-[#15101a]/95 p-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-[0_-18px_40px_rgba(14,11,18,0.88)] backdrop-blur sm:order-none" aria-label="Project chat composer" data-testid="compact-chat-composer">
           {reviewRequired ? (
             <p className="mb-2 max-w-full text-xs font-semibold text-amber-700 [overflow-wrap:anywhere] dark:text-amber-100" role="status">
               Review the latest Jenny reply in the chat before acting on it.
