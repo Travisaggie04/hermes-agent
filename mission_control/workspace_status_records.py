@@ -1071,6 +1071,7 @@ def _next_safe_actions_payload(status: dict[str, Any]) -> dict[str, Any]:
 
     primary_action = actions[0] if actions else {}
     return {
+        **INERT_PROJECTION_FLAGS,
         "source": "mission_control_next_safe_actions_v1",
         "display_only": True,
         "trusted_for_execution": False,
@@ -1213,6 +1214,7 @@ def _orchestration_run_graph_payload(
     unique_edges = _unique_graph_edges(edges)
     unique_blocked_reasons = _unique_reasons(blocked_reasons)
     return {
+        **INERT_PROJECTION_FLAGS,
         "source": "mission_control_orchestration_run_graph_v1",
         "display_only": True,
         "trusted_for_execution": False,
@@ -1388,6 +1390,7 @@ def _report_review_queue_payload(
     unique_blocked_reasons = _unique_reasons(blocked_reasons)
     primary_item = items[0] if items else {}
     return {
+        **INERT_PROJECTION_FLAGS,
         "source": "mission_control_report_review_queue_v1",
         "display_only": True,
         "trusted_for_execution": False,
@@ -1486,6 +1489,7 @@ def _result_ingestion_contract_payload(
     primary_item = blocked_items[0] if blocked_items else {}
     unique_blocked_reasons = _unique_reasons(blocked_reasons)
     return {
+        **INERT_PROJECTION_FLAGS,
         "source": "mission_control_result_ingestion_contract_v1",
         "display_only": True,
         "trusted_for_execution": False,
@@ -1603,6 +1607,7 @@ def _report_contract_compliance_payload(
     primary_item = incomplete_items[0] if incomplete_items else {}
     unique_blocked_reasons = _unique_reasons(blocked_reasons)
     return {
+        **INERT_PROJECTION_FLAGS,
         "source": "mission_control_report_contract_compliance_v1",
         "display_only": True,
         "trusted_for_execution": False,
@@ -1731,6 +1736,7 @@ def _report_completion_path_payload(
     primary_item = blocked_items[0] if blocked_items else {}
     unique_blocked_reasons = _unique_reasons(blocked_reasons)
     return {
+        **INERT_PROJECTION_FLAGS,
         "source": "mission_control_report_completion_path_v1",
         "display_only": True,
         "trusted_for_execution": False,
@@ -2039,6 +2045,7 @@ def _orchestration_stop_control_payload(
     unique_blocked_reasons = _unique_reasons(blocked_reasons)
     primary_item = items[0] if items else {}
     return {
+        **INERT_PROJECTION_FLAGS,
         "source": "mission_control_orchestration_stop_control_v1",
         "display_only": True,
         "trusted_for_execution": False,
@@ -2191,6 +2198,7 @@ def _worker_node_presence_payload(
                     presence_state = "online"
 
     return {
+        **INERT_PROJECTION_FLAGS,
         "source": "mission_control_worker_node_presence_v1",
         "display_only": True,
         "trusted_for_execution": False,
@@ -2350,6 +2358,7 @@ def _orchestration_readiness_payload(status: dict[str, Any]) -> dict[str, Any]:
         ]
     )
     return {
+        **INERT_PROJECTION_FLAGS,
         "source": "mission_control_orchestration_readiness_v1",
         "display_only": True,
         "trusted_for_execution": False,
@@ -2388,6 +2397,7 @@ def _eligibility_readiness(
     unique_blocked_reasons = _unique_reasons(blocked_reasons)
     state = "preview_ready" if payload.get("eligible") is True and not unique_blocked_reasons else "blocked"
     return {
+        **INERT_PROJECTION_FLAGS,
         "state": state,
         "eligible": payload.get("eligible") is True,
         "preview_ready": state == "preview_ready",
@@ -2435,6 +2445,7 @@ def _worker_node_readiness(
     )
     unique_blocked_reasons = _unique_reasons(blocked_reasons)
     return {
+        **INERT_PROJECTION_FLAGS,
         "state": state,
         "recorded": has_worker_record,
         "presence_state": _safe_text(worker_presence.get("presence_state")) or "unknown",
@@ -2539,6 +2550,7 @@ def _worker_node_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
         "Manual handoff only; execution and worker dispatch remain disabled.",
     ]
     return {
+        **INERT_PROJECTION_FLAGS,
         "source": "mission_control_worker_node_instruction_preview_v1",
         "display_only": True,
         "trusted_for_execution": False,
@@ -2650,6 +2662,7 @@ def _child_agent_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
         "Manual delegation preview only; execution and dispatch remain disabled.",
     ]
     return {
+        **INERT_PROJECTION_FLAGS,
         "source": "mission_control_child_agent_instruction_preview_v1",
         "display_only": True,
         "trusted_for_execution": False,
@@ -2876,6 +2889,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         recommended_instruction = f"Jenny reviews {report_label} before issuing another worker instruction."
 
     return {
+        **INERT_PROJECTION_FLAGS,
         "source": "mission_control_operator_decision_packet_v1",
         "display_only": True,
         "trusted_for_execution": False,
@@ -3029,6 +3043,7 @@ def _orchestration_projection(
         for record in active_records
     )
     return {
+        **INERT_PROJECTION_FLAGS,
         "source": source,
         "display_only": True,
         "trusted_for_execution": False,

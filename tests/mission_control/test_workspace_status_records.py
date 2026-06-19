@@ -215,6 +215,8 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
 
     child = status["child_agent_orchestration"]
     worker = status["worker_node_orchestration"]
+    _assert_inert_projection(child)
+    _assert_inert_projection(worker)
     assert child["active_count"] == 1
     assert child["active_runs"][0]["child_run_id"] == "child-run-1"
     assert child["active_runs"][0]["report_link_status"] == "linked_report_found"
@@ -238,6 +240,7 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
     assert status["control_plane_records"]["active_worker_node_run_count"] == 1
 
     review_queue = status["report_review_queue"]
+    _assert_inert_projection(review_queue)
     assert review_queue["display_only"] is True
     assert review_queue["trusted_for_execution"] is False
     assert review_queue["would_execute"] is False
@@ -258,6 +261,7 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
     assert "report_id report-child still needs Jenny review" in review_queue["blocked_reasons"]
 
     graph = status["orchestration_run_graph"]
+    _assert_inert_projection(graph)
     assert graph["display_only"] is True
     assert graph["trusted_for_execution"] is False
     assert graph["would_execute"] is False
@@ -278,6 +282,7 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
     assert "worker_run_id worker-run-1 references missing parent run_id run-parent" in graph["blocked_reasons"]
 
     child_instruction = status["child_agent_instruction_preview"]
+    _assert_inert_projection(child_instruction)
     assert child_instruction["display_only"] is True
     assert child_instruction["trusted_for_execution"] is False
     assert child_instruction["would_execute"] is False
@@ -303,6 +308,7 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
     assert "Report contract:" in child_instruction["manual_handoff_prompt"]
 
     instruction = status["worker_node_instruction_preview"]
+    _assert_inert_projection(instruction)
     assert instruction["display_only"] is True
     assert instruction["trusted_for_execution"] is False
     assert instruction["would_execute"] is False
@@ -1702,6 +1708,7 @@ def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_
     assert "report_id report-duplicate still needs review" in lifecycle["blocked_reasons"]
 
     operator_packet = status["operator_decision_packet"]
+    _assert_inert_projection(operator_packet)
     assert operator_packet["report_overwrite_conflict_count"] == 1
     assert operator_packet["report_overwrite_conflict_ids"] == ["report-duplicate"]
     assert (
@@ -1907,6 +1914,7 @@ def test_record_sourced_workspace_status_projects_approval_and_run_lifecycle_blo
     )
 
     next_safe_actions = status["next_safe_actions"]
+    _assert_inert_projection(next_safe_actions)
     assert next_safe_actions["display_only"] is True
     assert next_safe_actions["trusted_for_execution"] is False
     assert next_safe_actions["would_execute"] is False
@@ -1927,6 +1935,7 @@ def test_record_sourced_workspace_status_projects_approval_and_run_lifecycle_blo
     assert "run_id run-terminal-missing-report has no linked report" in next_safe_actions["blocked_reasons"]
 
     readiness = status["orchestration_readiness"]
+    _assert_inert_projection(readiness)
     assert readiness["display_only"] is True
     assert readiness["trusted_for_execution"] is False
     assert readiness["would_execute"] is False
