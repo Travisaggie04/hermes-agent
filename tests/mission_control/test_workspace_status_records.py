@@ -216,6 +216,26 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
     assert status["control_plane_records"]["active_child_run_count"] == 1
     assert status["control_plane_records"]["active_worker_node_run_count"] == 1
 
+    review_queue = status["report_review_queue"]
+    assert review_queue["display_only"] is True
+    assert review_queue["trusted_for_execution"] is False
+    assert review_queue["would_execute"] is False
+    assert review_queue["execution_enabled"] is False
+    assert review_queue["dispatch_enabled"] is False
+    assert review_queue["session_send_enabled"] is False
+    assert review_queue["worker_dispatch_enabled"] is False
+    assert review_queue["stored"] is False
+    assert review_queue["dry_run_only"] is True
+    assert review_queue["manual_review_only"] is True
+    assert review_queue["queue_count"] == 1
+    assert review_queue["needs_review_count"] == 1
+    assert review_queue["missing_report_count"] == 0
+    assert review_queue["primary_review_item_id"] == "report:report-child"
+    assert review_queue["primary_review_item"]["linked_record_type"] == "child_run"
+    assert review_queue["primary_review_item"]["linked_record_id"] == "child-run-1"
+    assert review_queue["primary_review_item"]["manual_only"] is True
+    assert "report_id report-child still needs Jenny review" in review_queue["blocked_reasons"]
+
     graph = status["orchestration_run_graph"]
     assert graph["display_only"] is True
     assert graph["trusted_for_execution"] is False
@@ -282,6 +302,111 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
     assert "worker node offline" in instruction["blocked_reasons"]
     assert "Manual handoff only" in instruction["manual_handoff_prompt"]
     assert "Report contract:" in instruction["manual_handoff_prompt"]
+
+
+def test_record_sourced_workspace_status_projects_report_review_queue(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        RunRecord(
+            run_id="run-terminal-missing-report",
+            project_id="project-hermes-mission-control",
+            lane_type="read_only_inspection",
+            title="Terminal run missing report",
+            status="completed",
+        )
+    )
+    store.append(
+        ChildRunRecord(
+            child_run_id="child-run-1",
+            parent_run_id="run-parent",
+            project_id="project-hermes-mission-control",
+            agent_identity="jenny-child",
+            status="running",
+            objective="Inspect bounded context.",
+            report_id="report-child",
+        )
+    )
+    store.append(
+        WorkerNodeRunRecord(
+            worker_run_id="worker-run-1",
+            parent_run_id="run-parent",
+            project_id="project-hermes-mission-control",
+            worker_identity="codex",
+            worker_host_label="laptop-codex",
+            status="blocked",
+            objective="Prepare scoped PR evidence.",
+            report_id="report-worker",
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-child",
+            run_id="child-run-1",
+            project_id="project-hermes-mission-control",
+            status="received",
+            summary="Child evidence is waiting for Jenny.",
+            blockers=("needs provenance check",),
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-worker",
+            run_id="worker-run-1",
+            project_id="project-hermes-mission-control",
+            status="needs_review",
+            summary="Laptop Codex reported scoped PR evidence.",
+            risks=("test coverage is focused",),
+            tests=("mission_control status tests passed",),
+            submitted_by="codex",
+            submitted_from="laptop-codex",
+        )
+    )
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    queue = status["report_review_queue"]
+    assert queue["source"] == "mission_control_report_review_queue_v1"
+    assert queue["display_only"] is True
+    assert queue["trusted_for_execution"] is False
+    assert queue["would_execute"] is False
+    assert queue["execution_enabled"] is False
+    assert queue["dispatch_enabled"] is False
+    assert queue["session_send_enabled"] is False
+    assert queue["worker_dispatch_enabled"] is False
+    assert queue["stored"] is False
+    assert queue["dry_run_only"] is True
+    assert queue["manual_review_only"] is True
+    assert queue["queue_count"] == 3
+    assert queue["needs_review_count"] == 2
+    assert queue["missing_report_count"] == 1
+    assert queue["duplicate_report_count"] == 0
+    assert queue["blocked"] is True
+    assert queue["primary_review_item_id"] == "report:report-worker"
+    assert queue["primary_review_label"] == "Laptop Codex reported scoped PR evidence."
+    assert queue["primary_review_reason"] == "report_id report-worker still needs Jenny review"
+    primary = queue["primary_review_item"]
+    assert primary["linked_record_type"] == "worker_node_run"
+    assert primary["linked_record_id"] == "worker-run-1"
+    assert primary["manual_only"] is True
+    assert primary["submitted_by"] == "codex"
+    assert primary["submitted_from"] == "laptop-codex"
+    assert primary["risks"] == ["test coverage is focused"]
+    assert primary["tests"] == ["mission_control status tests passed"]
+    item_ids = {item["item_id"] for item in queue["items"]}
+    assert item_ids == {
+        "report:report-child",
+        "report:report-worker",
+        "missing-report:run:run-terminal-missing-report",
+    }
+    assert "report_id report-worker still needs Jenny review" in queue["blocked_reasons"]
+    assert "report_id report-child still needs Jenny review" in queue["blocked_reasons"]
+    assert "run_id run-terminal-missing-report has no linked report" in queue["blocked_reasons"]
+
+    next_safe_actions = status["next_safe_actions"]
+    action_ids = {action["action_id"] for action in next_safe_actions["actions"]}
+    assert "review_report_review_queue" in action_ids
+    assert "report_id report-worker still needs Jenny review" in next_safe_actions["blocked_reasons"]
 
 
 def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_path):

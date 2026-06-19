@@ -182,6 +182,13 @@ report, and stale run-to-report links. The report review blockers row lists
 the exact report or run IDs Jenny must review before treating the work as
 closed.
 
+Mission Control also projects a report review queue for Jenny. This queue puts
+worker-node reports, child-agent reports, duplicate report records, and missing
+required reports into a manual review order. The top report review row tells
+Travis what Jenny should read first and why. The queue is advisory and
+display-only; it does not write review records, contact Codex, dispatch work,
+or mark a report accepted.
+
 Child-agent and laptop Codex worker-node rows also join against `ReportRecord`
 when possible. A worker row can therefore show whether the referenced report
 was found and whether Jenny has reviewed, accepted, rejected, or superseded it.
@@ -236,6 +243,8 @@ not start delegation, send a session, mutate records, or enable dispatch.
   report chains.
 - Report lifecycle: report inbox/review state, duplicate IDs, missing reports,
   stale report links, and exact review blockers.
+- Report review queue: Jenny's prioritized manual review list, including top
+  report, reason, missing report links, and worker/child report context.
 - Next safe action: the highest-priority manual review or preview-preparation
   step; it does not enable execution.
 - Orchestration readiness: blocked or preview-ready state for supervised

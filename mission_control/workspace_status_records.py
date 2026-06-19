@@ -238,6 +238,13 @@ def build_workspace_status_from_records(
         worker_runs=recent_worker_runs,
         reports=recent_reports,
     )
+    status["report_review_queue"] = _report_review_queue_payload(
+        reports=recent_reports,
+        raw_reports=recent_reports_raw,
+        runs=recent_runs,
+        child_runs=recent_child_runs,
+        worker_runs=recent_worker_runs,
+    )
     status["next_safe_actions"] = _next_safe_actions_payload(status)
     status["orchestration_readiness"] = _orchestration_readiness_payload(status)
     status["child_agent_instruction_preview"] = _child_agent_instruction_preview(status)
@@ -607,6 +614,22 @@ def _next_safe_actions_payload(status: dict[str, Any]) -> dict[str, Any]:
             priority=40,
         )
 
+    report_review_queue = _mapping(status.get("report_review_queue"))
+    report_queue_reasons = _text_list(report_review_queue.get("blocked_reasons"))
+    if report_review_queue.get("queue_count", 0) or report_queue_reasons:
+        extend_blockers(report_queue_reasons)
+        add_action(
+            action_id="review_report_review_queue",
+            label="Review Jenny report queue",
+            reason=_safe_text(
+                report_review_queue.get("primary_review_reason"),
+                max_chars=800,
+            )
+            or _first_reason(report_queue_reasons, "Reports are waiting for Jenny review or remediation."),
+            blocked_until="Jenny reviews required reports and missing report links",
+            priority=45,
+        )
+
     worker_projection = _mapping(status.get("worker_node_orchestration"))
     worker_reasons = _text_list(worker_projection.get("blocked_reasons"))
     if worker_reasons:
@@ -877,6 +900,258 @@ def _orchestration_run_graph_payload(
         "blocked_reasons": unique_blocked_reasons,
         "nodes": nodes,
         "edges": unique_edges,
+    }
+
+
+def _report_review_queue_payload(
+    *,
+    reports: tuple[ReportRecord, ...],
+    raw_reports: tuple[ReportRecord, ...],
+    runs: tuple[RunRecord, ...],
+    child_runs: tuple[ChildRunRecord, ...],
+    worker_runs: tuple[WorkerNodeRunRecord, ...],
+) -> dict[str, Any]:
+    reports_by_id, reports_by_run_id = _report_lookup_maps(reports)
+    duplicate_report_ids = set(_duplicate_record_ids(raw_reports, "report_id"))
+    items: list[dict[str, Any]] = []
+    blocked_reasons: list[str] = []
+
+    for report in reports:
+        review_status = _linked_report_review_status(report)
+        duplicate = report.report_id in duplicate_report_ids
+        if review_status != "needs_review" and not duplicate:
+            continue
+        linked = _report_review_linked_record(
+            report=report,
+            runs=runs,
+            child_runs=child_runs,
+            worker_runs=worker_runs,
+        )
+        reasons = []
+        if review_status == "needs_review":
+            reasons.append(f"report_id {report.report_id} still needs Jenny review")
+        if duplicate:
+            reasons.append(f"report_id {report.report_id} has multiple append-only records")
+        reason = "; ".join(reasons)
+        blocked_reasons.extend(reasons)
+        items.append(
+            _report_review_queue_item(
+                item_id=f"report:{report.report_id}",
+                item_type="report_needs_review",
+                priority=_report_review_priority(linked, duplicate=duplicate),
+                report_id=report.report_id,
+                run_id=report.run_id,
+                linked_record_type=linked.get("linked_record_type", ""),
+                linked_record_id=linked.get("linked_record_id", ""),
+                status=report.status or "received",
+                review_status=review_status,
+                summary=report.summary,
+                reason=reason,
+                recommended_action="Jenny reviews the report evidence, blockers, changed files, and tests before any next instruction.",
+                submitted_by=report.submitted_by,
+                submitted_from=report.submitted_from,
+                created_at=report.created_at,
+                blockers=report.blockers,
+                risks=report.risks,
+                tests=report.tests,
+            )
+        )
+
+    for run in runs:
+        if run.status not in RUN_REPORT_REQUIRED_STATUSES:
+            continue
+        if not run.report_ids and run.run_id not in reports_by_run_id:
+            reason = f"run_id {run.run_id} has no linked report"
+            blocked_reasons.append(reason)
+            items.append(
+                _report_review_queue_item(
+                    item_id=f"missing-report:run:{run.run_id}",
+                    item_type="missing_required_report",
+                    priority=25,
+                    run_id=run.run_id,
+                    linked_record_type="run",
+                    linked_record_id=run.run_id,
+                    status=run.status,
+                    review_status="missing_report",
+                    summary=run.title or run.objective or run.run_id,
+                    reason=reason,
+                    recommended_action="Find or request the terminal run report before marking the lane complete.",
+                )
+            )
+        for report_id in run.report_ids:
+            if report_id not in reports_by_id:
+                reason = f"run_id {run.run_id} links missing report_id {report_id}"
+                blocked_reasons.append(reason)
+                items.append(
+                    _report_review_queue_item(
+                        item_id=f"missing-link:run:{run.run_id}:{report_id}",
+                        item_type="missing_linked_report",
+                        priority=30,
+                        report_id=report_id,
+                        run_id=run.run_id,
+                        linked_record_type="run",
+                        linked_record_id=run.run_id,
+                        status=run.status,
+                        review_status="missing_report",
+                        summary=run.title or run.objective or run.run_id,
+                        reason=reason,
+                        recommended_action="Repair the append-only evidence chain in a later approved record lane.",
+                    )
+                )
+
+    for child in child_runs:
+        child_report = reports_by_id.get(child.report_id) if child.report_id else reports_by_run_id.get(child.child_run_id)
+        if child.status in RUN_REPORT_REQUIRED_STATUSES and child_report is None:
+            reason = f"child_run_id {child.child_run_id} has no linked report"
+            blocked_reasons.append(reason)
+            items.append(
+                _report_review_queue_item(
+                    item_id=f"missing-report:child:{child.child_run_id}",
+                    item_type="missing_child_report",
+                    priority=35,
+                    report_id=child.report_id,
+                    run_id=child.child_run_id,
+                    linked_record_type="child_run",
+                    linked_record_id=child.child_run_id,
+                    status=child.status,
+                    review_status="missing_report",
+                    summary=child.objective or child.agent_identity or child.child_run_id,
+                    reason=reason,
+                    recommended_action="Request a child-agent report before trusting the delegation result.",
+                )
+            )
+
+    for worker in worker_runs:
+        worker_report = reports_by_id.get(worker.report_id) if worker.report_id else reports_by_run_id.get(worker.worker_run_id)
+        if worker.status in RUN_REPORT_REQUIRED_STATUSES and worker_report is None:
+            reason = f"worker_run_id {worker.worker_run_id} has no linked report"
+            blocked_reasons.append(reason)
+            items.append(
+                _report_review_queue_item(
+                    item_id=f"missing-report:worker:{worker.worker_run_id}",
+                    item_type="missing_worker_report",
+                    priority=20,
+                    report_id=worker.report_id,
+                    run_id=worker.worker_run_id,
+                    linked_record_type="worker_node_run",
+                    linked_record_id=worker.worker_run_id,
+                    status=worker.status,
+                    review_status="missing_report",
+                    summary=worker.objective or worker.assigned_packet_summary or worker.worker_run_id,
+                    reason=reason,
+                    recommended_action="Have the laptop Codex worker provide its structured report before Jenny gives another instruction.",
+                )
+            )
+
+    items.sort(key=lambda item: (int(item.get("priority", 999)), str(item.get("item_id", ""))))
+    unique_blocked_reasons = _unique_reasons(blocked_reasons)
+    primary_item = items[0] if items else {}
+    return {
+        "source": "mission_control_report_review_queue_v1",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "stored": False,
+        "dry_run_only": True,
+        "manual_review_only": True,
+        "queue_count": len(items),
+        "needs_review_count": sum(1 for item in items if item.get("review_status") == "needs_review"),
+        "missing_report_count": sum(1 for item in items if item.get("review_status") == "missing_report"),
+        "duplicate_report_count": len(duplicate_report_ids),
+        "blocked": bool(items or unique_blocked_reasons),
+        "blocked_reasons": unique_blocked_reasons,
+        "primary_review_item": primary_item,
+        "primary_review_item_id": _safe_text(primary_item.get("item_id")),
+        "primary_review_label": _safe_text(primary_item.get("summary"), max_chars=800),
+        "primary_review_reason": _safe_text(primary_item.get("reason"), max_chars=800),
+        "items": items,
+    }
+
+
+def _report_review_linked_record(
+    *,
+    report: ReportRecord,
+    runs: tuple[RunRecord, ...],
+    child_runs: tuple[ChildRunRecord, ...],
+    worker_runs: tuple[WorkerNodeRunRecord, ...],
+) -> dict[str, str]:
+    if report.run_id:
+        for worker in worker_runs:
+            if worker.worker_run_id == report.run_id or worker.report_id == report.report_id:
+                return {"linked_record_type": "worker_node_run", "linked_record_id": worker.worker_run_id}
+        for child in child_runs:
+            if child.child_run_id == report.run_id or child.report_id == report.report_id:
+                return {"linked_record_type": "child_run", "linked_record_id": child.child_run_id}
+        for run in runs:
+            if run.run_id == report.run_id or report.report_id in run.report_ids:
+                return {"linked_record_type": "run", "linked_record_id": run.run_id}
+    for worker in worker_runs:
+        if worker.report_id == report.report_id:
+            return {"linked_record_type": "worker_node_run", "linked_record_id": worker.worker_run_id}
+    for child in child_runs:
+        if child.report_id == report.report_id:
+            return {"linked_record_type": "child_run", "linked_record_id": child.child_run_id}
+    for run in runs:
+        if report.report_id in run.report_ids:
+            return {"linked_record_type": "run", "linked_record_id": run.run_id}
+    return {"linked_record_type": "", "linked_record_id": ""}
+
+
+def _report_review_priority(linked: dict[str, str], *, duplicate: bool) -> int:
+    if linked.get("linked_record_type") == "worker_node_run":
+        return 10
+    if linked.get("linked_record_type") == "child_run":
+        return 15
+    if duplicate:
+        return 20
+    return 40
+
+
+def _report_review_queue_item(
+    *,
+    item_id: str,
+    item_type: str,
+    priority: int,
+    report_id: str = "",
+    run_id: str = "",
+    linked_record_type: str = "",
+    linked_record_id: str = "",
+    status: str = "",
+    review_status: str = "",
+    summary: str = "",
+    reason: str = "",
+    recommended_action: str = "",
+    submitted_by: str = "",
+    submitted_from: str = "",
+    created_at: str = "",
+    blockers: tuple[str, ...] = (),
+    risks: tuple[str, ...] = (),
+    tests: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    return {
+        "item_id": _safe_text(item_id),
+        "item_type": _safe_text(item_type),
+        "priority": priority,
+        "report_id": _safe_text(report_id),
+        "run_id": _safe_text(run_id),
+        "linked_record_type": _safe_text(linked_record_type),
+        "linked_record_id": _safe_text(linked_record_id),
+        "status": _safe_text(status),
+        "review_status": _safe_text(review_status),
+        "summary": _safe_text(summary, max_chars=800),
+        "reason": _safe_text(reason, max_chars=800),
+        "recommended_action": _safe_text(recommended_action, max_chars=800),
+        "submitted_by": _safe_text(submitted_by),
+        "submitted_from": _safe_text(submitted_from),
+        "created_at": _safe_text(created_at),
+        "blockers": [_safe_text(item) for item in blockers if _safe_text(item)],
+        "risks": [_safe_text(item) for item in risks if _safe_text(item)],
+        "tests": [_safe_text(item) for item in tests if _safe_text(item)],
+        "manual_only": True,
     }
 
 

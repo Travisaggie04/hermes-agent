@@ -502,6 +502,53 @@ export interface MissionControlReportLifecycle {
   worker_dispatch_enabled?: boolean
 }
 
+export interface MissionControlReportReviewQueueItem {
+  blockers?: string[]
+  created_at?: string
+  item_id?: string
+  item_type?: string
+  linked_record_id?: string
+  linked_record_type?: string
+  manual_only?: boolean
+  priority?: number
+  reason?: string
+  recommended_action?: string
+  report_id?: string
+  review_status?: string
+  risks?: string[]
+  run_id?: string
+  status?: string
+  submitted_by?: string
+  submitted_from?: string
+  summary?: string
+  tests?: string[]
+}
+
+export interface MissionControlReportReviewQueue {
+  blocked?: boolean
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  duplicate_report_count?: number
+  execution_enabled?: boolean
+  items?: MissionControlReportReviewQueueItem[]
+  manual_review_only?: boolean
+  missing_report_count?: number
+  needs_review_count?: number
+  primary_review_item?: MissionControlReportReviewQueueItem
+  primary_review_item_id?: string
+  primary_review_label?: string
+  primary_review_reason?: string
+  queue_count?: number
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
+}
+
 export interface MissionControlNextSafeAction {
   action_id?: string
   blocked_until?: string
@@ -1103,6 +1150,7 @@ export interface MissionControlWorkspaceStatus {
   safety?: { dispatch_in_gateway?: boolean; send_to_jenny_enabled?: boolean }
   stale_context?: { warnings?: string[] }
   report_lifecycle?: MissionControlReportLifecycle
+  report_review_queue?: MissionControlReportReviewQueue
   run_lifecycle?: MissionControlRunLifecycle
   tool_permission_classification?: MissionControlToolPermissionClassification
   worker_node_instruction_preview?: MissionControlWorkerNodeInstructionPreview

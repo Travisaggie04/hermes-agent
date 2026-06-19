@@ -1251,6 +1251,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
   const approvalLifecycle = status.approval_lifecycle
   const runLifecycle = status.run_lifecycle
   const reportLifecycle = status.report_lifecycle
+  const reportReviewQueue = status.report_review_queue
   const nextSafeActions = status.next_safe_actions
   const nextSafePrimaryAction = nextSafeActions?.primary_action
   const orchestrationReadiness = status.orchestration_readiness
@@ -1371,6 +1372,25 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     reportMissingRunCount: reportLifecycle?.runs_missing_report?.length ?? 0,
     reportOpenCount: reportLifecycle?.open_report_ids?.length ?? 0,
     reportRawCount: reportLifecycle?.raw_report_count ?? 0,
+    reportReviewQueueBlocked: reportReviewQueue?.blocked,
+    reportReviewQueueBlockedReasons: reportReviewQueue?.blocked_reasons ?? [],
+    reportReviewQueueCount: reportReviewQueue?.queue_count ?? reportReviewQueue?.items?.length ?? 0,
+    reportReviewQueueDisplayOnly: reportReviewQueue?.display_only,
+    reportReviewQueueDuplicateCount: reportReviewQueue?.duplicate_report_count ?? 0,
+    reportReviewQueueExecutionEnabled: reportReviewQueue?.execution_enabled,
+    reportReviewQueueManualOnly: reportReviewQueue?.manual_review_only,
+    reportReviewQueueMissingCount: reportReviewQueue?.missing_report_count ?? 0,
+    reportReviewQueueNeedsReviewCount: reportReviewQueue?.needs_review_count ?? 0,
+    reportReviewQueuePrimaryId: reportReviewQueue?.primary_review_item_id ?? '',
+    reportReviewQueuePrimaryLabel:
+      reportReviewQueue?.primary_review_label ??
+      reportReviewQueue?.primary_review_item?.summary ??
+      'No report waiting for review',
+    reportReviewQueuePrimaryReason:
+      reportReviewQueue?.primary_review_reason ??
+      reportReviewQueue?.primary_review_item?.reason ??
+      'No report review queue blockers recorded.',
+    reportReviewQueueWorkerDispatchEnabled: reportReviewQueue?.worker_dispatch_enabled,
     reportReviewedCount: reportLifecycle?.reviewed_report_ids?.length ?? 0,
     reportTerminalCount: reportLifecycle?.terminal_report_ids?.length ?? 0,
     runActiveCount: runLifecycle?.active_run_ids?.length ?? 0,
@@ -4022,6 +4042,14 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
   const approvalLifecycleTone = status.approvalLifecycleBlocked === false && status.approvalLifecycleExecutionEnabled === false ? 'good' : 'warn'
   const runLifecycleTone = status.runLifecycleBlocked === false && status.runLifecycleExecutionEnabled === false && status.runOneActiveMutationLaneRulePassed !== false ? 'good' : 'warn'
   const reportLifecycleTone = status.reportLifecycleBlocked === false && status.reportLifecycleExecutionEnabled === false ? 'good' : 'warn'
+  const reportReviewQueueTone =
+    status.reportReviewQueueExecutionEnabled === false &&
+    status.reportReviewQueueWorkerDispatchEnabled === false &&
+    status.reportReviewQueueManualOnly === true
+      ? status.reportReviewQueueBlocked || status.reportReviewQueueCount
+        ? 'warn'
+        : 'good'
+      : 'warn'
   const nextSafeActionTone =
     status.nextSafeActionExecutionEnabled === false &&
     status.nextSafeActionDispatchEnabled === false &&
@@ -4079,6 +4107,8 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="run gaps" tone={status.runDuplicateCount || status.runTerminalMissingReportCount || status.runTerminalMissingLinkedCount || status.runOneActiveMutationLaneRulePassed === false ? 'warn' : 'good'} value={`duplicates ${status.runDuplicateCount} / missing reports ${status.runTerminalMissingReportCount} / stale links ${status.runTerminalMissingLinkedCount}`} />
       <StatusItem label="report lifecycle" tone={reportLifecycleTone} value={`open ${status.reportOpenCount} / reviewed ${status.reportReviewedCount} / terminal ${status.reportTerminalCount}`} />
       <StatusItem label="report gaps" tone={status.reportDuplicateCount || status.reportMissingRunCount || status.reportMissingLinkedCount ? 'warn' : 'good'} value={`duplicates ${status.reportDuplicateCount} / missing ${status.reportMissingRunCount} / stale links ${status.reportMissingLinkedCount}`} />
+      <StatusItem label="report review queue" tone={reportReviewQueueTone} value={`items ${status.reportReviewQueueCount} / needs review ${status.reportReviewQueueNeedsReviewCount} / missing ${status.reportReviewQueueMissingCount}`} />
+      <StatusItem className="md:col-span-2" label="top report review" tone={reportReviewQueueTone} value={status.reportReviewQueuePrimaryLabel} />
       <StatusItem className="md:col-span-2" label="accepted runtime" value={status.runtime} />
       <StatusItem label="accepted-live head" value={status.head.slice(0, 12)} />
       <StatusItem label="deployed head" value={status.deployedHead.slice(0, 12)} />
@@ -4103,6 +4133,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-3" label="approval blockers" tone={status.approvalBlockedReasons.length ? 'warn' : 'good'} value={status.approvalBlockedReasons.length ? status.approvalBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="run blockers" tone={status.runBlockedReasons.length ? 'warn' : 'good'} value={status.runBlockedReasons.length ? status.runBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="report review blockers" tone={status.reportLifecycleBlockedReasons.length ? 'warn' : 'good'} value={status.reportLifecycleBlockedReasons.length ? status.reportLifecycleBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="report queue reason" tone={reportReviewQueueTone} value={status.reportReviewQueueBlockedReasons.length ? status.reportReviewQueueBlockedReasons.join(', ') : status.reportReviewQueuePrimaryReason} />
       <StatusItem className="md:col-span-3" label="write-capable tool paths" tone={status.toolPermissionWritePaths.length ? 'warn' : 'good'} value={status.toolPermissionWritePaths.length ? status.toolPermissionWritePaths.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="scoped PR blockers" tone={status.scopedPrBlockedReasons.length ? 'warn' : 'good'} value={status.scopedPrBlockedReasons.length ? status.scopedPrBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="child-agent blockers" tone={status.childBlockedReasons.length ? 'warn' : 'good'} value={status.childBlockedReasons.length ? status.childBlockedReasons.join(', ') : 'none'} />

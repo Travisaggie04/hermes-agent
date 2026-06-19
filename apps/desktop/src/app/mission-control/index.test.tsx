@@ -376,6 +376,87 @@ beforeEach(() => {
       trusted_for_execution: false,
       worker_dispatch_enabled: false
     },
+    report_review_queue: {
+      blocked: true,
+      blocked_reasons: [
+        'report_id report-worker still needs Jenny review',
+        'report_id report-child still needs Jenny review',
+        'run_id run-parent-1 has no linked report'
+      ],
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      duplicate_report_count: 1,
+      execution_enabled: false,
+      items: [
+        {
+          item_id: 'report:report-worker',
+          item_type: 'report_needs_review',
+          linked_record_id: 'worker-run-1',
+          linked_record_type: 'worker_node_run',
+          manual_only: true,
+          priority: 10,
+          reason: 'report_id report-worker still needs Jenny review',
+          recommended_action: 'Jenny reviews the report evidence, blockers, changed files, and tests before any next instruction.',
+          report_id: 'report-worker',
+          review_status: 'needs_review',
+          run_id: 'worker-run-1',
+          status: 'needs_review',
+          summary: 'Laptop Codex reported scoped PR evidence.'
+        },
+        {
+          item_id: 'report:report-child',
+          item_type: 'report_needs_review',
+          linked_record_id: 'child-run-1',
+          linked_record_type: 'child_run',
+          manual_only: true,
+          priority: 15,
+          reason: 'report_id report-child still needs Jenny review',
+          recommended_action: 'Jenny reviews the report evidence, blockers, changed files, and tests before any next instruction.',
+          report_id: 'report-child',
+          review_status: 'needs_review',
+          run_id: 'child-run-1',
+          status: 'received',
+          summary: 'Child reported evidence.'
+        },
+        {
+          item_id: 'missing-report:run:run-parent-1',
+          item_type: 'missing_required_report',
+          linked_record_id: 'run-parent-1',
+          linked_record_type: 'run',
+          manual_only: true,
+          priority: 25,
+          reason: 'run_id run-parent-1 has no linked report',
+          recommended_action: 'Find or request the terminal run report before marking the lane complete.',
+          review_status: 'missing_report',
+          run_id: 'run-parent-1',
+          status: 'completed',
+          summary: 'Parent run'
+        }
+      ],
+      manual_review_only: true,
+      missing_report_count: 1,
+      needs_review_count: 2,
+      primary_review_item: {
+        item_id: 'report:report-worker',
+        linked_record_id: 'worker-run-1',
+        linked_record_type: 'worker_node_run',
+        reason: 'report_id report-worker still needs Jenny review',
+        report_id: 'report-worker',
+        review_status: 'needs_review',
+        summary: 'Laptop Codex reported scoped PR evidence.'
+      },
+      primary_review_item_id: 'report:report-worker',
+      primary_review_label: 'Laptop Codex reported scoped PR evidence.',
+      primary_review_reason: 'report_id report-worker still needs Jenny review',
+      queue_count: 3,
+      session_send_enabled: false,
+      source: 'mission_control_report_review_queue_v1',
+      stored: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      would_execute: false
+    },
     run_lifecycle: {
       active_mutation_lane_count: 0,
       active_mutation_run_ids: [],
@@ -1321,8 +1402,14 @@ describe('MissionControlView', () => {
     expect(screen.getByText('open 1 / reviewed 0 / terminal 0')).toBeTruthy()
     expect(screen.getByText('report gaps')).toBeTruthy()
     expect(screen.getByText('duplicates 1 / missing 1 / stale links 0')).toBeTruthy()
+    expect(screen.getByText('report review queue')).toBeTruthy()
+    expect(screen.getByText('items 3 / needs review 2 / missing 1')).toBeTruthy()
+    expect(screen.getByText('top report review')).toBeTruthy()
+    expect(screen.getByText('Laptop Codex reported scoped PR evidence.')).toBeTruthy()
     expect(screen.getByText('report review blockers')).toBeTruthy()
     expect(screen.getByText('report_id report-worker has multiple append-only records, run_id run-parent-1 has no linked report, report_id report-worker still needs review')).toBeTruthy()
+    expect(screen.getByText('report queue reason')).toBeTruthy()
+    expect(screen.getByText('report_id report-worker still needs Jenny review, report_id report-child still needs Jenny review, run_id run-parent-1 has no linked report')).toBeTruthy()
     expect(screen.getByText('child-agent status')).toBeTruthy()
     expect(screen.getByText('1 active / latest running')).toBeTruthy()
     expect(screen.getByText('child-agent objective')).toBeTruthy()
