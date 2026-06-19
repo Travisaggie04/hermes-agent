@@ -774,6 +774,8 @@ export interface MissionControlOperatorDecisionPacket {
   report_completion_blocked_count?: number
   report_completion_blocked_reasons?: string[]
   report_completion_primary_item_id?: string
+  report_overwrite_conflict_count?: number
+  report_overwrite_conflict_ids?: string[]
   report_review_queue_count?: number
   result_ingestion_blocked_count?: number
   result_ingestion_blocked_reasons?: string[]

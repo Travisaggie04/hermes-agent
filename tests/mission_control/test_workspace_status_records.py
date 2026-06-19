@@ -1333,6 +1333,18 @@ def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_
     )
     assert "report_id report-duplicate still needs review" in lifecycle["blocked_reasons"]
 
+    operator_packet = status["operator_decision_packet"]
+    assert operator_packet["report_overwrite_conflict_count"] == 1
+    assert operator_packet["report_overwrite_conflict_ids"] == ["report-duplicate"]
+    assert (
+        "report_id report-duplicate attempts to overwrite append-only report fields: status"
+        in operator_packet["blocked_reasons"]
+    )
+    assert (
+        "Report overwrite conflicts: 1; duplicate report IDs are quarantined."
+        in operator_packet["plain_language_summary"]
+    )
+
 
 def test_record_sourced_workspace_status_projects_approval_and_run_lifecycle_blockers(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"

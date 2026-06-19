@@ -2590,6 +2590,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     runtime_provenance = _mapping(status.get("runtime_provenance"))
     next_safe_actions = _mapping(status.get("next_safe_actions"))
     readiness = _mapping(status.get("orchestration_readiness"))
+    report_lifecycle = _mapping(status.get("report_lifecycle"))
     report_queue = _mapping(status.get("report_review_queue"))
     result_ingestion = _mapping(status.get("result_ingestion_contract"))
     report_contract = _mapping(status.get("report_contract_compliance"))
@@ -2602,6 +2603,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     execution_packet = _mapping(status.get("execution_packet_preview"))
 
     queue_count = _safe_int(report_queue.get("queue_count"))
+    report_overwrite_conflict_count = _safe_int(report_lifecycle.get("report_overwrite_conflict_count"))
     result_ingestion_blocked_count = _safe_int(result_ingestion.get("blocked_report_count"))
     incomplete_report_contract_count = _safe_int(report_contract.get("incomplete_report_count"))
     report_completion_blocked_count = _safe_int(report_completion.get("blocked_completion_count"))
@@ -2626,6 +2628,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         [
             *_text_list(runtime_provenance.get("autonomy_blocked_reasons")),
             *_text_list(readiness.get("blocked_reasons")),
+            *_text_list(report_lifecycle.get("blocked_reasons")),
             *_text_list(report_queue.get("blocked_reasons")),
             *_text_list(result_ingestion.get("blocked_reasons")),
             *_text_list(report_contract.get("blocked_reasons")),
@@ -2676,6 +2679,11 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         summary_lines.append(
             f"Top report review: {report_label or 'unlabeled report'}"
             f"{f' because {report_reason}' if report_reason else ''}."
+        )
+    if report_overwrite_conflict_count:
+        summary_lines.append(
+            "Report overwrite conflicts: "
+            f"{report_overwrite_conflict_count}; duplicate report IDs are quarantined."
         )
     if result_ingestion:
         summary_lines.append(
@@ -2739,6 +2747,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         "approval_required": approval_required,
         "jenny_review_required": (
             queue_count > 0
+            or report_overwrite_conflict_count > 0
             or result_ingestion_blocked_count > 0
             or report_completion_blocked_count > 0
             or stop_cancel_count > 0
@@ -2770,6 +2779,8 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         "top_report_review_item_id": _safe_text(report_queue.get("primary_review_item_id")),
         "top_report_review_label": report_label,
         "top_report_review_reason": report_reason,
+        "report_overwrite_conflict_count": report_overwrite_conflict_count,
+        "report_overwrite_conflict_ids": _text_list(report_lifecycle.get("report_overwrite_conflict_ids")),
         "worker_instruction_available": worker_instruction.get("available") is True,
         "worker_instruction_ready_for_handoff": worker_instruction_ready,
         "child_instruction_available": child_instruction.get("available") is True,
