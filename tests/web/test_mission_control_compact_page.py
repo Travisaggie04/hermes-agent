@@ -161,7 +161,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Evidence: exact files/commands/checks/PR/CI/runtime/links used.",
         "Approval/rollback: approval needed before live action plus rollback path.",
         "Rule: if evidence is missing, say \\\"not proven\\\"; do not present it as done.",
-        "Message sent. Jenny is answering...",
+        "Message sent. Use Get reply to run one foreground Jenny answer, or Refresh to check for an existing reply.",
         "Live reply refresh is on and read-only",
         "setInterval",
         "clearInterval",
@@ -182,7 +182,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Save challenge draft",
         "Save read-only lane draft",
         "Send",
-        "Jenny is answering...",
+        "Jenny is answering one pending message...",
         "Request intake:",
         "assessProjectRequest",
         "Approval check",
@@ -223,16 +223,24 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Return only the spec/challenge review and the recommended next safe lane.",
         "COMPACT_JENNY_MESSAGE_LIMIT = 1900",
         "MODEL_INFO_URL = \"/api/model/info\"",
+        "MODEL_OPTIONS_URL = \"/api/model/options\"",
+        "COMPACT_RUN_EFFORTS",
         "compactModelLabel",
+        "compactRunSettingsLabel",
+        "compactRunSettingsLines",
         "modelLabel={compactModelLabel(modelInfo)}",
         "Compact chat tools",
-        "Attach: desktop app",
-        "Model: {modelLabel}",
+        "Requested model",
+        "Requested effort",
+        "Extra high",
+        "Get reply",
+        "metadata",
+        "requested_effort",
         "boundCompactJennyMessage",
         "COMPACT_JENNY_MESSAGE_LIMIT - 3",
         "Queue for Jenny bridge",
         "Refresh replies",
-        "min-h-[100dvh] w-full min-w-0 max-w-full touch-pan-y flex-col overflow-y-auto overflow-x-clip overscroll-x-none",
+        "min-h-full w-full min-w-0 max-w-full touch-pan-y flex-col overflow-visible overflow-x-clip overscroll-x-none",
         "sr-only",
         "min-w-0 max-w-full overflow-visible sm:flex-1 sm:min-h-0 sm:overflow-hidden",
         "sr-only order-2 min-w-0 max-w-full overflow-hidden",
@@ -418,7 +426,7 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
     src = page_source()
     for expected in [
         "overflow-x-hidden",
-        "min-h-[100dvh] w-full min-w-0 max-w-full touch-pan-y flex-col overflow-y-auto overflow-x-clip overscroll-x-none",
+        "min-h-full w-full min-w-0 max-w-full touch-pan-y flex-col overflow-visible overflow-x-clip overscroll-x-none",
         "sm:h-full sm:max-h-full sm:min-h-0 sm:flex-1 sm:overflow-hidden",
         "block w-full min-w-0 max-w-full overflow-visible overflow-x-clip sm:flex sm:flex-1 sm:min-h-0 sm:overflow-hidden",
         "flex min-h-0 min-w-0 max-w-full flex-col overflow-visible overflow-x-clip",
@@ -445,7 +453,7 @@ def test_compact_project_chat_wraps_long_mobile_text() -> None:
         "w-full max-w-full rounded-lg border px-3 py-2 text-sm",
         "sm:w-fit sm:max-w-[88%]",
         "max-w-full whitespace-pre-wrap break-words",
-        "max-h-[min(42dvh,24rem)] touch-pan-y overflow-y-auto overscroll-contain",
+        "overflow-visible pr-0 sm:max-h-[min(52dvh,32rem)] sm:touch-pan-y sm:overflow-y-auto sm:overscroll-contain",
         "sm:max-h-[min(52dvh,32rem)]",
         "chat.speaker === \"Jenny\"",
         ": \"overflow-visible\"",
@@ -500,7 +508,7 @@ def test_compact_mobile_transcript_uses_page_scroll_not_trapped_panel() -> None:
     transcript_src = src[transcript_start - 300:composer_start]
     composer_src = src[composer_start - 420:composer_start + 150]
 
-    assert "overflow-y-auto" in main_src
+    assert "overflow-visible" in main_src
     assert "sm:overflow-hidden" in main_src
     assert "overflow-visible" in room_src
     assert "sm:overflow-hidden" in room_src
@@ -654,9 +662,10 @@ def test_compact_chat_send_uses_github_mailbox_not_local_only_outbox() -> None:
     assert 'from_agent: "travis"' in send_fn
     assert 'to_agent: "jenny"' in send_fn
     assert "bridgeRequestId()" in send_fn
-    assert "Message sent. Jenny is answering..." in send_fn
+    assert "requested_effort" in send_fn
+    assert "Message sent. Use Get reply" in send_fn
     assert 'setProjectRequest("")' in send_fn
-    assert "await runJennyOnce(projectView, result.message?.request_id || requestId)" in send_fn
+    assert "await runJennyOnce" not in send_fn
 
 
 def test_compact_chat_uses_plain_language_errors() -> None:

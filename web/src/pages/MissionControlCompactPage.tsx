@@ -25,7 +25,15 @@ const WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL = "/api/plugins/mission-control-go
 const WORKSPACE_PROJECT_STATE_URL = "/api/plugins/mission-control-governance/workspace/project-state";
 const WORKSPACE_PROFILE_MEMORY_STORAGE_URL = "/api/plugins/mission-control-governance/workspace/profile-memory-storage";
 const MODEL_INFO_URL = "/api/model/info";
+const MODEL_OPTIONS_URL = "/api/model/options";
 const COMPACT_JENNY_MESSAGE_LIMIT = 1900;
+const COMPACT_RUN_EFFORTS = [
+  { label: "Minimal", value: "minimal" },
+  { label: "Low", value: "low" },
+  { label: "Medium", value: "medium" },
+  { label: "High", value: "high" },
+  { label: "Extra high", value: "xhigh" },
+] as const;
 
 const REAL_PROJECT_IDS = [
   "project-hermes-mission-control",
@@ -387,6 +395,24 @@ interface ProfileMemoryStorage {
 interface CompactModelInfo {
   model?: string;
   provider?: string;
+}
+
+interface CompactModelOptionProvider {
+  models?: string[];
+  name?: string;
+  slug: string;
+}
+
+interface CompactModelOptions {
+  model?: string;
+  provider?: string;
+  providers?: CompactModelOptionProvider[];
+}
+
+interface CompactRunSettings {
+  effort: string;
+  model: string;
+  provider: string;
 }
 
 interface CompactSnapshot {
@@ -1507,6 +1533,39 @@ function compactModelLabel(info: CompactModelInfo | null): string {
   return model || provider || "model unknown";
 }
 
+function compactModelChoiceKey(provider: string, model: string): string {
+  return `${provider}\u0000${model}`;
+}
+
+function compactModelChoiceFromKey(value: string): CompactRunSettings | null {
+  const [provider, model] = value.split("\u0000");
+  if (!provider?.trim() || !model?.trim()) {
+    return null;
+  }
+  return { effort: "", model: model.trim(), provider: provider.trim() };
+}
+
+function compactRunSettingsLabel(settings: CompactRunSettings): string {
+  const provider = settings.provider.trim();
+  const model = settings.model.trim();
+  const effort = COMPACT_RUN_EFFORTS.find(option => option.value === settings.effort)?.label ?? settings.effort;
+  return [
+    provider && model ? `${provider} / ${model}` : model || provider || "model unknown",
+    effort ? `effort ${effort}` : "",
+  ].filter(Boolean).join(" / ");
+}
+
+function compactRunSettingsLines(settings: CompactRunSettings): string[] {
+  const effortLabel = COMPACT_RUN_EFFORTS.find(option => option.value === settings.effort)?.label ?? settings.effort;
+  return [
+    "Run preference:",
+    `Requested model: ${settings.provider && settings.model ? `${settings.provider} / ${settings.model}` : settings.model || settings.provider || "current Hermes model"}`,
+    `Requested effort: ${effortLabel || "current default"}`,
+    "These are foreground handoff preferences only; this compact page does not mutate global model routing.",
+    "",
+  ];
+}
+
 function latestForProject<T extends { project_id?: string }>(projectId: string, values: T[]): T | undefined {
   return [...values].reverse().find(value => value.project_id === projectId);
 }
@@ -1705,11 +1764,12 @@ function assessProjectRequest(requestText: string, review: ChallengeReviewRecord
   };
 }
 
-function buildSpecFirstComposerText(projectName: string, requestText: string, intake: RequestIntakeAssessment): string {
+function buildSpecFirstComposerText(projectName: string, requestText: string, intake: RequestIntakeAssessment, settings?: CompactRunSettings): string {
   const request = compactText(requestText, 520) || "<write the request Travis is considering>";
   return [
     "Spec-first request for Jenny:",
     `Project: ${projectName}`,
+    ...(settings ? compactRunSettingsLines(settings) : []),
     "Request Travis is considering:",
     request,
     "",
@@ -1754,7 +1814,7 @@ function buildCompactNextLanePrompt(projectView: ProjectViewModel, workspaceStat
   ].join("\n");
 }
 
-function buildPhoneSafeProjectPacket(projectView: ProjectViewModel, requestText: string, workspaceStatus: WorkspaceStatus): string {
+function buildPhoneSafeProjectPacket(projectView: ProjectViewModel, requestText: string, workspaceStatus: WorkspaceStatus, settings?: CompactRunSettings): string {
   const request = compactText(requestText, 420) || "<write the request>";
   const brief = projectView.projectBrief;
   const review = projectView.challengeReview;
@@ -1766,6 +1826,7 @@ function buildPhoneSafeProjectPacket(projectView: ProjectViewModel, requestText:
     "Project room request:",
     projectView.project.name,
     "",
+    ...(settings ? compactRunSettingsLines(settings) : []),
     "Request:",
     request,
     "",
@@ -1804,13 +1865,13 @@ function boundCompactJennyMessage(message: string): string {
     : `${trimmed.slice(0, COMPACT_JENNY_MESSAGE_LIMIT - 3).trim()}...`;
 }
 
-function buildJennyMailboxMessage(projectView: ProjectViewModel, requestText: string, workspaceStatus: WorkspaceStatus): string {
+function buildJennyMailboxMessage(projectView: ProjectViewModel, requestText: string, workspaceStatus: WorkspaceStatus, settings?: CompactRunSettings): string {
   const request = chatRequestText(requestText);
   const intake = assessProjectRequest(request, projectView.challengeReview);
   if (shouldAutoChallengeRequest(intake)) {
-    return boundCompactJennyMessage(buildSpecFirstComposerText(projectView.project.name, request, intake));
+    return boundCompactJennyMessage(buildSpecFirstComposerText(projectView.project.name, request, intake, settings));
   }
-  return boundCompactJennyMessage(buildPhoneSafeProjectPacket(projectView, request, workspaceStatus));
+  return boundCompactJennyMessage(buildPhoneSafeProjectPacket(projectView, request, workspaceStatus, settings));
 }
 
 function buildHermesUpdateLanePacket(workspaceStatus: WorkspaceStatus): string {
@@ -1954,6 +2015,9 @@ export default function MissionControlCompactPage() {
   const [jennyRunElapsedSeconds, setJennyRunElapsedSeconds] = useState(0);
   const [jennyRunProgress, setJennyRunProgress] = useState<JennyRunProgress | null>(null);
   const [modelInfo, setModelInfo] = useState<CompactModelInfo | null>(null);
+  const [modelOptions, setModelOptions] = useState<CompactModelOptions | null>(null);
+  const [selectedModelChoice, setSelectedModelChoice] = useState("");
+  const [selectedEffort, setSelectedEffort] = useState("xhigh");
 
   useEffect(() => {
     setTitle("Jenny");
@@ -1982,6 +2046,17 @@ export default function MissionControlCompactPage() {
     loadMissionControlEndpoint<CompactModelInfo | null>("model info", () => fetchJSON<CompactModelInfo>(MODEL_INFO_URL), null)
       .then(info => {
         if (!cancelled) setModelInfo(info);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadMissionControlEndpoint<CompactModelOptions | null>("model options", () => fetchJSON<CompactModelOptions>(MODEL_OPTIONS_URL), null)
+      .then(options => {
+        if (!cancelled) setModelOptions(options);
       });
     return () => {
       cancelled = true;
@@ -2042,6 +2117,34 @@ export default function MissionControlCompactPage() {
     const selected = projectRoomProjects.find(project => project.project_id === selectedProjectId) ?? projectRoomProjects[0];
     return viewModelForProject(snapshot, selected);
   }, [projectRoomProjects, selectedProjectId, snapshot]);
+  const modelChoices = useMemo(() => {
+    const choices: Array<{ key: string; label: string }> = [];
+    for (const provider of modelOptions?.providers ?? []) {
+      for (const model of provider.models ?? []) {
+        const key = compactModelChoiceKey(provider.slug, model);
+        choices.push({
+          key,
+          label: `${provider.name || provider.slug} / ${model}`,
+        });
+      }
+    }
+    const currentProvider = modelOptions?.provider || modelInfo?.provider || "";
+    const currentModel = modelOptions?.model || modelInfo?.model || "";
+    if (currentProvider && currentModel) {
+      const key = compactModelChoiceKey(currentProvider, currentModel);
+      if (!choices.some(choice => choice.key === key)) {
+        choices.unshift({ key, label: `${currentProvider} / ${currentModel}` });
+      }
+    }
+    return choices;
+  }, [modelInfo, modelOptions]);
+  const currentModelChoice = selectedModelChoice || modelChoices[0]?.key || "";
+  const currentModelSelection = compactModelChoiceFromKey(currentModelChoice);
+  const compactRunSettings: CompactRunSettings = {
+    effort: selectedEffort,
+    model: currentModelSelection?.model || modelInfo?.model || "",
+    provider: currentModelSelection?.provider || modelInfo?.provider || "",
+  };
   const updateNotice = useMemo(() => snapshot ? dashboardUpdateNotice(snapshot.workspaceStatus) : "", [snapshot]);
 
   async function copyPrompt(projectView: ProjectViewModel) {
@@ -2051,7 +2154,7 @@ export default function MissionControlCompactPage() {
   }
 
   async function copyPhoneSafePacket(projectView: ProjectViewModel) {
-    const packet = buildPhoneSafeProjectPacket(projectView, chatRequestText(projectRequest), snapshot?.workspaceStatus ?? {});
+    const packet = buildPhoneSafeProjectPacket(projectView, chatRequestText(projectRequest), snapshot?.workspaceStatus ?? {}, compactRunSettings);
     if (!navigator.clipboard?.writeText) {
       setRoomMessage("Clipboard unavailable. Select and copy the phone-safe packet manually.");
       return;
@@ -2070,10 +2173,15 @@ export default function MissionControlCompactPage() {
     setRoomBusy(true);
     setRoomMessage("");
     try {
-      const result = await fetchJSON<{ message?: { request_id?: string } }>(WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL, {
+      await fetchJSON<{ message?: { request_id?: string } }>(WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL, {
         body: JSON.stringify({
           from_agent: "travis",
-          message: buildJennyMailboxMessage(projectView, chatRequest, snapshot?.workspaceStatus ?? {}),
+          message: buildJennyMailboxMessage(projectView, chatRequest, snapshot?.workspaceStatus ?? {}, compactRunSettings),
+          metadata: {
+            requested_effort: compactRunSettings.effort,
+            requested_model: compactRunSettings.model,
+            requested_provider: compactRunSettings.provider,
+          },
           project_id: projectView.project.project_id,
           request_id: requestId,
           to_agent: "jenny",
@@ -2083,12 +2191,12 @@ export default function MissionControlCompactPage() {
         method: "POST",
       });
       setJennyRunProgress({
-        detail: "Message sent. Jenny is starting one guarded reply.",
-        phase: "starting",
+        detail: "Message sent. Use Get reply when you want the foreground Jenny run; no hidden worker was started.",
+        phase: "queued",
       });
       setProjectRequest("");
-      setRoomMessage("Message sent. Jenny is answering...");
-      await runJennyOnce(projectView, result.message?.request_id || requestId);
+      await refreshSnapshot();
+      setRoomMessage("Message sent. Use Get reply to run one foreground Jenny answer, or Refresh to check for an existing reply.");
     } catch (err) {
       setRoomMessage(jennyChatErrorMessage(err));
     } finally {
@@ -2324,7 +2432,7 @@ export default function MissionControlCompactPage() {
       await fetchJSON(WORKSPACE_LANE_REQUESTS_CREATE_URL, {
         body: JSON.stringify({
           allowed_actions: ["read approved project context", "report status", "recommend next safe lane"],
-          draft_prompt: buildPhoneSafeProjectPacket(projectView, projectRequest, snapshot?.workspaceStatus ?? {}),
+          draft_prompt: buildPhoneSafeProjectPacket(projectView, projectRequest, snapshot?.workspaceStatus ?? {}, compactRunSettings),
           expected_report_format: ["preflight", "recommendation", "risks", "next lane", "safety confirmation"],
           forbidden_actions: ["dispatch", "run tools", "queue mutation", "Waha mutation", "model routing", "automatic send"],
           objective: projectRequest.trim(),
@@ -2381,7 +2489,7 @@ export default function MissionControlCompactPage() {
   }
 
   return (
-    <main className="box-border flex min-h-[100dvh] w-full min-w-0 max-w-full touch-pan-y flex-col overflow-y-auto overflow-x-clip overscroll-x-none bg-[#0e0b12] px-0 py-0 pb-[max(env(safe-area-inset-bottom),0.75rem)] text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:h-full sm:max-h-full sm:min-h-0 sm:flex-1 sm:overflow-hidden sm:px-3 sm:py-1 [&_*]:box-border" data-testid="mission-control-compact-route">
+    <main className="box-border flex min-h-full w-full min-w-0 max-w-full touch-pan-y flex-col overflow-visible overflow-x-clip overscroll-x-none bg-[#0e0b12] px-0 py-0 pb-[max(env(safe-area-inset-bottom),0.75rem)] text-[#f7efe4] [overflow-wrap:anywhere] [word-break:break-word] sm:h-full sm:max-h-full sm:min-h-0 sm:flex-1 sm:overflow-hidden sm:px-3 sm:py-1 [&_*]:box-border" data-testid="mission-control-compact-route">
       <header className="sr-only">
         <p className="sr-only max-w-full text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#a89782] [overflow-wrap:anywhere]">
           <span className="font-serif text-lg italic text-[#d4a574]">IV.</span>
@@ -2440,15 +2548,20 @@ export default function MissionControlCompactPage() {
               jennyRunElapsedSeconds={jennyRunElapsedSeconds}
               jennyRunProgress={jennyRunProgress}
               memoryStorage={snapshot?.memoryStorage ?? {}}
+              modelChoices={modelChoices}
+              modelChoice={currentModelChoice}
               modelLabel={compactModelLabel(modelInfo)}
+              onEffortChange={setSelectedEffort}
               replyReviews={snapshot?.jennyReplyReviews.filter(review => review.project_id === selectedProjectView.project.project_id) ?? []}
               onCopyPacket={() => void copyPhoneSafePacket(selectedProjectView)}
+              onModelChoiceChange={setSelectedModelChoice}
               onQueueBridge={() => void queueJennyBridgeMessage(selectedProjectView)}
               onQueueHermesUpdate={selectedProjectView.project.project_id === HERMES_PROJECT_ID ? () => void queueHermesUpdateLane(selectedProjectView) : undefined}
               onQueueStorageCleanup={selectedProjectView.project.project_id === HERMES_PROJECT_ID ? () => void queueHermesStorageCleanupLane(selectedProjectView) : undefined}
               onRefreshBridge={() => void refreshBridge()}
               onRequestChange={setProjectRequest}
               onReviewReply={(decision, responseId, reply) => void reviewJennyReply(selectedProjectView, decision, responseId, reply)}
+              onRunJennyOnce={() => void runJennyOnce(selectedProjectView)}
               onSaveChallenge={() => void saveChallengeDraft(selectedProjectView)}
               onSaveLane={() => void saveReadOnlyLaneDraft(selectedProjectView)}
               onOpenSession={session => {
@@ -2460,10 +2573,12 @@ export default function MissionControlCompactPage() {
                 setSelectedProjectId(projectId);
                 setRoomMessage("");
               }}
-              packet={buildPhoneSafeProjectPacket(selectedProjectView, projectRequest, snapshot?.workspaceStatus ?? {})}
+              packet={buildPhoneSafeProjectPacket(selectedProjectView, projectRequest, snapshot?.workspaceStatus ?? {}, compactRunSettings)}
               paused={!ACTIVE_OS_PROJECT_IDS.includes(selectedProjectView.project.project_id)}
               projectRequest={projectRequest}
               projects={projectRoomProjects}
+              runEffort={selectedEffort}
+              runSettingsLabel={compactRunSettingsLabel(compactRunSettings)}
               selectedProjectView={selectedProjectView}
             />
           </div>
@@ -2721,8 +2836,12 @@ function CompactProjectRoom({
   jennyRunProgress,
   memoryStorage,
   message,
+  modelChoices,
+  modelChoice,
   modelLabel,
   onCopyPacket,
+  onEffortChange,
+  onModelChoiceChange,
   onQueueBridge,
   onQueueHermesUpdate,
   onQueueStorageCleanup,
@@ -2730,6 +2849,7 @@ function CompactProjectRoom({
   onRefreshBridge,
   onReviewReply,
   onRequestChange,
+  onRunJennyOnce,
   onSaveChallenge,
   onSaveLane,
   onSelectProject,
@@ -2738,6 +2858,8 @@ function CompactProjectRoom({
   projectRequest,
   projects,
   replyReviews,
+  runEffort,
+  runSettingsLabel,
   selectedProjectView,
 }: {
   busy: boolean;
@@ -2750,8 +2872,12 @@ function CompactProjectRoom({
   jennyRunProgress: JennyRunProgress | null;
   memoryStorage: ProfileMemoryStorage;
   message: string;
+  modelChoices: Array<{ key: string; label: string }>;
+  modelChoice: string;
   modelLabel: string;
   onCopyPacket: () => void;
+  onEffortChange: (value: string) => void;
+  onModelChoiceChange: (value: string) => void;
   onQueueBridge: () => void;
   onQueueHermesUpdate?: () => void;
   onQueueStorageCleanup?: () => void;
@@ -2759,6 +2885,7 @@ function CompactProjectRoom({
   onRefreshBridge: () => void;
   onReviewReply: (decision: JennyReplyReviewDecision, responseId: string, reply: string) => void;
   onRequestChange: (value: string) => void;
+  onRunJennyOnce: () => void;
   onSaveChallenge: () => void;
   onSaveLane: () => void;
   onSelectProject: (projectId: string) => void;
@@ -2767,6 +2894,8 @@ function CompactProjectRoom({
   projectRequest: string;
   projects: ProjectRecord[];
   replyReviews: JennyReplyReviewRecord[];
+  runEffort: string;
+  runSettingsLabel: string;
   selectedProjectView: ProjectViewModel;
 }) {
   const chatEndRef = useRef<HTMLDivElement | null>(null);
@@ -2809,6 +2938,7 @@ function CompactProjectRoom({
   const latestReviewByResponseId = latestReplyReviewByResponseId(replyReviews);
   const bridgeError = normalizedBridgeError(bridgeStatus, githubBridgeStatus);
   const hasRunnablePendingMessage = Boolean(projectedVisiblePending ?? latestPending);
+  const canRunForegroundReply = !paused && (hasRunnablePendingMessage || pendingCount > 0);
   const statusRecords = unwrapRecords(githubBridgeStatus.status_records);
   const statusSourceBridgeMessages = [
     ...visibleGitHubBridgeMessages,
@@ -3123,7 +3253,7 @@ function CompactProjectRoom({
                     className={cn(
                       "max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word]",
                       chat.speaker === "Jenny"
-                        ? "max-h-[min(42dvh,24rem)] touch-pan-y overflow-y-auto overscroll-contain pr-1 [-webkit-overflow-scrolling:touch] sm:max-h-[min(52dvh,32rem)]"
+                        ? "overflow-visible pr-0 sm:max-h-[min(52dvh,32rem)] sm:touch-pan-y sm:overflow-y-auto sm:overscroll-contain sm:pr-1 sm:[-webkit-overflow-scrolling:touch]"
                         : "overflow-visible",
                     )}
                     data-testid={chat.speaker === "Jenny" ? "compact-jenny-reply-body" : undefined}
@@ -3221,13 +3351,42 @@ function CompactProjectRoom({
               Review the latest Jenny reply in the chat before acting on it.
             </p>
           ) : null}
-          <div className="mb-2 flex min-w-0 max-w-full flex-wrap items-center gap-1.5 text-[0.68rem]" aria-label="Compact chat tools">
-            <span className="rounded-full border border-[#f3ebda]/15 bg-[#0e0b12]/80 px-2 py-1 font-semibold text-[#c9b8a2] [overflow-wrap:anywhere]">
-              Attach: desktop app
-            </span>
-            <span className="min-w-0 max-w-full rounded-full border border-[#f3ebda]/15 bg-[#0e0b12]/80 px-2 py-1 font-semibold text-[#c9b8a2] [overflow-wrap:anywhere]">
-              Model: {modelLabel}
-            </span>
+          <div className="mb-2 grid min-w-0 max-w-full grid-cols-2 gap-1.5 text-[0.68rem]" aria-label="Compact chat tools">
+            <label className="min-w-0">
+              <span className="mb-1 block font-semibold uppercase tracking-[0.14em] text-[#a59783]">Model</span>
+              <select
+                aria-label="Requested model"
+                className="min-h-10 w-full min-w-0 max-w-full truncate rounded-full border border-[#f3ebda]/15 bg-[#0e0b12]/80 px-2 py-1 font-semibold text-[#c9b8a2] outline-none focus:border-[#d4a574]/50"
+                disabled={!modelChoices.length}
+                onChange={event => onModelChoiceChange(event.target.value)}
+                value={modelChoice}
+              >
+                {modelChoices.length ? (
+                  modelChoices.map(choice => (
+                    <option key={choice.key} value={choice.key}>
+                      {choice.label}
+                    </option>
+                  ))
+                ) : (
+                  <option value="">{modelLabel}</option>
+                )}
+              </select>
+            </label>
+            <label className="min-w-0">
+              <span className="mb-1 block font-semibold uppercase tracking-[0.14em] text-[#a59783]">Effort</span>
+              <select
+                aria-label="Requested effort"
+                className="min-h-10 w-full min-w-0 max-w-full rounded-full border border-[#f3ebda]/15 bg-[#0e0b12]/80 px-2 py-1 font-semibold text-[#c9b8a2] outline-none focus:border-[#d4a574]/50"
+                onChange={event => onEffortChange(event.target.value)}
+                value={runEffort}
+              >
+                {COMPACT_RUN_EFFORTS.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <div className="flex min-w-0 items-end gap-2">
             <label className="min-w-0 flex-1 text-sm font-medium">
@@ -3246,6 +3405,27 @@ function CompactProjectRoom({
                 {sendButtonLabel}
               </button>
             </div>
+          </div>
+          <div className="mt-2 flex min-w-0 max-w-full flex-wrap items-center gap-1.5 text-[0.68rem]">
+            <span className="min-w-0 max-w-full rounded-full border border-[#f3ebda]/10 bg-[#0e0b12]/70 px-2 py-1 text-[#a59783] [overflow-wrap:anywhere]">
+              {runSettingsLabel}
+            </span>
+            <button
+              className="min-h-9 rounded-full border border-sky-500/35 bg-sky-500/10 px-3 py-1.5 font-semibold text-sky-700 hover:bg-sky-500/15 disabled:opacity-60 dark:text-sky-300"
+              disabled={busy || !canRunForegroundReply}
+              onClick={onRunJennyOnce}
+              type="button"
+            >
+              Get reply
+            </button>
+            <button
+              className="min-h-9 rounded-full border border-[#f3ebda]/15 bg-[#0e0b12]/70 px-3 py-1.5 font-semibold text-[#c9b8a2] hover:bg-[#251d2c]/70 disabled:opacity-60"
+              disabled={busy}
+              onClick={onRefreshBridge}
+              type="button"
+            >
+              Refresh
+            </button>
           </div>
           <details className="hidden" hidden>
             <summary className="cursor-pointer text-sm font-semibold">Request options</summary>

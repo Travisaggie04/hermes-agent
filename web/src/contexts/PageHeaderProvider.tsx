@@ -129,8 +129,10 @@ export function PageHeaderProvider({
             "min-h-0 w-full min-w-0 flex-1 flex flex-col",
             // Bottom inset for scrolled pages lives on the route outlet wrapper in
             // `App.tsx` (`w-full min-w-0`) so it pads scrollable content, not flex chrome.
-            isChatLikeRoute
+            isChatRoute
               ? "overflow-hidden"
+              : isCompactChatRoute
+                ? "overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable] sm:overflow-hidden"
               : "overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]",
           )}
         >
