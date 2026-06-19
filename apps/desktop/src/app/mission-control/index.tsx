@@ -1216,8 +1216,13 @@ function latestForProject<T extends { project_id?: string }>(projectId: string, 
 }
 
 export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) {
+  const runtimeProvenance = status.runtime_provenance
+  const autonomyEligibility = status.read_only_autonomy_eligibility
   return {
     activeLaneCount: status.lane?.active_lane_count ?? 0,
+    autonomyBlockedReasons: autonomyEligibility?.blocked_reasons ?? [],
+    autonomyEligible: autonomyEligibility?.eligible,
+    bridgePermission: autonomyEligibility?.bridge_permissions?.permission_classification ?? 'unknown',
     deploymentGapState: status.deployment_gap?.state ?? 'unknown',
     deploymentNeeded: status.deployment_gap?.dashboard_deploy_needed ?? false,
     deployedHead: status.deployment_gap?.deployed_head ?? status.accepted_baseline?.head ?? 'unknown',
@@ -1225,6 +1230,9 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     guard: status.runtime_worktree_guard?.decision_state ?? 'unknown',
     head: status.deployment_gap?.accepted_live_head ?? status.accepted_baseline?.head ?? 'unknown',
     latestMergedPr: status.deployment_gap?.latest_merged_pr ?? '',
+    provenanceBlocked: runtimeProvenance?.autonomy_blocked,
+    provenanceReasons: runtimeProvenance?.autonomy_blocked_reasons ?? [],
+    provenanceStatus: runtimeProvenance?.primary_status ?? runtimeProvenance?.status ?? 'unknown',
     runtime: status.accepted_baseline?.runtime_path ?? 'unknown',
     staleWarnings: status.stale_context?.warnings ?? []
   }
@@ -3819,17 +3827,23 @@ function ReportInput({
 
 function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeWorkspaceStatus> }) {
   const deploymentTone = status.deploymentGapState === 'deployed_and_accepted' ? 'good' : status.deploymentNeeded ? 'warn' : undefined
+  const provenanceTone = status.provenanceStatus === 'CLEAN_AND_ALIGNED' && status.provenanceBlocked === false ? 'good' : 'warn'
+  const autonomyLabel = status.autonomyEligible === true ? 'eligible preview only' : status.autonomyEligible === false ? 'blocked / no execution' : 'unknown / no execution'
   return (
     <div className="grid gap-3 rounded-xl border border-border/70 bg-background/40 p-4 md:grid-cols-3">
       <StatusItem label="Runtime Worktree Guard" tone={status.guard === 'pass' ? 'good' : 'warn'} value={status.guard} />
+      <StatusItem label="runtime provenance" tone={provenanceTone} value={status.provenanceStatus.replaceAll('_', ' ')} />
+      <StatusItem label="read-only autonomy" tone={status.autonomyEligible === true ? 'good' : 'warn'} value={autonomyLabel} />
       <StatusItem label="dispatch_in_gateway" tone={status.dispatch === false ? 'good' : 'warn'} value={yesNo(status.dispatch)} />
       <StatusItem label="active_lane_count" tone={status.activeLaneCount === 0 ? 'good' : 'warn'} value={String(status.activeLaneCount)} />
       <StatusItem label="deploy state" tone={deploymentTone} value={status.deploymentGapState.replaceAll('_', ' ')} />
+      <StatusItem label="bridge permission" tone={status.bridgePermission === 'read_only_safe' ? 'good' : 'warn'} value={status.bridgePermission.replaceAll('_', ' ')} />
       <StatusItem className="md:col-span-2" label="accepted runtime" value={status.runtime} />
       <StatusItem label="accepted-live head" value={status.head.slice(0, 12)} />
       <StatusItem label="deployed head" value={status.deployedHead.slice(0, 12)} />
       <StatusItem label="latest merged PR" value={status.latestMergedPr || 'unknown'} />
       <StatusItem className="md:col-span-3" label="desktop app install" tone="warn" value="separate laptop worker-node update; bottom-bar version is not changed by accepted-live/dashboard deploy" />
+      <StatusItem className="md:col-span-3" label="autonomy blockers" tone={status.autonomyBlockedReasons.length || status.provenanceReasons.length ? 'warn' : 'good'} value={[...status.provenanceReasons, ...status.autonomyBlockedReasons].length ? [...status.provenanceReasons, ...status.autonomyBlockedReasons].join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="stale warnings" tone={status.staleWarnings.length ? 'warn' : 'good'} value={status.staleWarnings.length ? status.staleWarnings.join(', ') : 'none'} />
     </div>
   )
@@ -3854,9 +3868,11 @@ function HermesHealthDashboard({
     return state?.has_real_report || state?.latest_report || state?.latest_jenny_report || latestReportForProject(project.project_id, snapshot.reports)
   }).length
   const memoryErrors = snapshot.memoryStorage.errors ?? []
-  const safetyOk = status.guard === 'pass' && status.dispatch === false && status.activeLaneCount <= 1 && status.staleWarnings.length === 0
+  const safetyOk = status.guard === 'pass' && status.dispatch === false && status.activeLaneCount <= 1 && status.staleWarnings.length === 0 && status.provenanceBlocked === false && status.autonomyEligible !== false
   const blockingIssues = [
     bridgeError ? `Jenny bridge error: ${bridgeError}` : '',
+    status.provenanceBlocked ? `Runtime provenance blocked: ${status.provenanceStatus}` : '',
+    status.autonomyEligible === false ? `Read-only autonomy blocked: ${status.autonomyBlockedReasons[0] ?? 'backend eligibility gate failed'}` : '',
     status.guard !== 'pass' ? `Runtime guard is ${status.guard}` : '',
     status.dispatch !== false ? 'Dispatch safety is not confirmed off' : '',
     status.activeLaneCount > 1 ? `${status.activeLaneCount} active lanes recorded` : '',

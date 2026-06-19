@@ -685,6 +685,25 @@ export interface MissionControlWorkspaceStatus {
   accepted_baseline?: { head?: string; runtime_path?: string }
   deployment_gap?: { dashboard_deploy_needed?: boolean; deployed_head?: string; accepted_live_head?: string; latest_merged_pr?: string; state?: string }
   lane?: { active_lane_count?: number; max_active_lane?: number }
+  read_only_autonomy_eligibility?: {
+    blocked_reasons?: string[]
+    bridge_permissions?: { permission_classification?: string; read_only_safe?: boolean; reasons?: string[] }
+    dispatch_enabled?: boolean
+    dry_run_only?: boolean
+    eligible?: boolean
+    execution_enabled?: boolean
+    session_send_enabled?: boolean
+    warnings?: string[]
+    would_execute?: boolean
+  }
+  runtime_provenance?: {
+    autonomy_blocked?: boolean
+    autonomy_blocked_reasons?: string[]
+    primary_status?: string
+    status?: string
+    statuses?: string[]
+    warnings?: string[]
+  }
   runtime_worktree_guard?: { decision_state?: string; reason?: string }
   safety?: { dispatch_in_gateway?: boolean; send_to_jenny_enabled?: boolean }
   stale_context?: { warnings?: string[] }

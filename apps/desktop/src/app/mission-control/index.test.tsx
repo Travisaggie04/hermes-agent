@@ -88,6 +88,26 @@ beforeEach(() => {
       state: 'merged_not_deployed'
     },
     lane: { active_lane_count: 0 },
+    read_only_autonomy_eligibility: {
+      blocked_reasons: ['runtime provenance is not clean', 'gateway git metadata is broken'],
+      bridge_permissions: {
+        permission_classification: 'write_capable',
+        read_only_safe: false
+      },
+      dispatch_enabled: false,
+      dry_run_only: true,
+      eligible: false,
+      execution_enabled: false,
+      session_send_enabled: false,
+      would_execute: false
+    },
+    runtime_provenance: {
+      autonomy_blocked: true,
+      autonomy_blocked_reasons: ['gateway git metadata is broken'],
+      primary_status: 'GATEWAY_UNTRUSTED',
+      status: 'BLOCKED_UNSAFE_FOR_AUTONOMY',
+      statuses: ['BROKEN_GIT_METADATA', 'GATEWAY_UNTRUSTED']
+    },
     runtime_worktree_guard: { decision_state: 'pass' },
     safety: { dispatch_in_gateway: false, send_to_jenny_enabled: false },
     stale_context: { warnings: [] }
@@ -872,6 +892,14 @@ describe('MissionControlView', () => {
     expect(screen.getByText('daemon disabled / worker disabled / timer disabled')).toBeTruthy()
     expect(screen.getByText('deploy state')).toBeTruthy()
     expect(screen.getByText('merged not deployed')).toBeTruthy()
+    expect(screen.getByText('runtime provenance')).toBeTruthy()
+    expect(screen.getByText('GATEWAY UNTRUSTED')).toBeTruthy()
+    expect(screen.getByText('read-only autonomy')).toBeTruthy()
+    expect(screen.getByText('blocked / no execution')).toBeTruthy()
+    expect(screen.getByText('bridge permission')).toBeTruthy()
+    expect(screen.getByText('write capable')).toBeTruthy()
+    expect(screen.getByText('autonomy blockers')).toBeTruthy()
+    expect(screen.getAllByText(/gateway git metadata is broken/).length).toBeGreaterThan(0)
     expect(screen.getByText(/Desktop can be current while phone\/web waits for a safe dashboard-only update/)).toBeTruthy()
     expect(screen.getByText('accepted-live head')).toBeTruthy()
     expect(screen.getByText('0f87620038d2')).toBeTruthy()
