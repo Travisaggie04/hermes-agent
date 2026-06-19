@@ -201,9 +201,11 @@ counts. The report gaps row shows duplicate report IDs, overwrite conflicts,
 completed runs with no report, and stale run-to-report links. An overwrite
 conflict means the same report ID was appended more than once with changed
 identity or review fields; Jenny must treat that report chain as quarantined
-until Travis reviews the append-only history. The report review blockers row
-lists the exact report or run IDs Jenny must review before treating the work as
-closed.
+until Travis reviews the append-only history. A report link mismatch means the
+report exists, but its own run ID points to a different run than the child or
+worker record that references it; even an accepted report stays blocked until
+that lineage is reviewed. The report review blockers row lists the exact report
+or run IDs Jenny must review before treating the work as closed.
 
 Mission Control also projects a report review queue for Jenny. This queue puts
 worker-node reports, child-agent reports, duplicate report records, and missing
@@ -334,9 +336,11 @@ next delegation instruction.
 - Report review queue: Jenny's prioritized manual review list, including top
   report, reason, missing report links, and worker/child report context.
 - Result ingestion: whether reports are linked, redacted, metadata-safe, and
-  include a safety confirmation before Jenny relies on them.
+  include a safety confirmation before Jenny relies on them; mismatched report
+  links stay blocked.
 - Report completion: whether terminal run, child, and worker-node records have
-  linked, reviewed, contract-complete, ingestion-safe reports before closure.
+  linked, reviewed, contract-complete, ingestion-safe reports before closure,
+  including mismatched-link blockers.
 - Report contract compliance: whether reports include required result fields
   before Jenny accepts or relies on them.
 - Stop/cancel control: whether stopping, stopped, or cancelled runs have a

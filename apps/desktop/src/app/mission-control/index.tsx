@@ -1444,6 +1444,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     reportCompletionDuplicateCount: reportCompletionPath?.duplicate_report_count ?? 0,
     reportCompletionExecutionEnabled: reportCompletionPath?.execution_enabled,
     reportCompletionIngestionBlockedCount: reportCompletionPath?.ingestion_blocked_count ?? 0,
+    reportCompletionLinkMismatchCount: reportCompletionPath?.link_mismatch_count ?? 0,
     reportCompletionManualOnly: reportCompletionPath?.manual_review_only,
     reportCompletionMissingReportCount: reportCompletionPath?.missing_report_count ?? 0,
     reportCompletionNeedsReviewCount: reportCompletionPath?.needs_review_count ?? 0,
@@ -1483,6 +1484,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     resultIngestionDuplicateCount: resultIngestionContract?.duplicate_report_count ?? 0,
     resultIngestionExecutionEnabled: resultIngestionContract?.execution_enabled,
     resultIngestionForbiddenMetadataCount: resultIngestionContract?.forbidden_metadata_count ?? 0,
+    resultIngestionLinkMismatchCount: resultIngestionContract?.link_mismatch_count ?? 0,
     resultIngestionManualOnly: resultIngestionContract?.manual_review_only,
     resultIngestionMissingLinkCount: resultIngestionContract?.missing_link_count ?? 0,
     resultIngestionMissingSafetyCount: resultIngestionContract?.missing_safety_confirmation_count ?? 0,
@@ -4348,10 +4350,10 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-3" label="report review blockers" tone={status.reportLifecycleBlockedReasons.length ? 'warn' : 'good'} value={status.reportLifecycleBlockedReasons.length ? status.reportLifecycleBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="report contract blockers" tone={status.reportContractBlockedReasons.length ? 'warn' : 'good'} value={status.reportContractBlockedReasons.length ? status.reportContractBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="report completion blockers" tone={status.reportCompletionBlockedReasons.length ? 'warn' : 'good'} value={status.reportCompletionBlockedReasons.length ? status.reportCompletionBlockedReasons.join(', ') : status.reportCompletionPrimaryLabel} />
-      <StatusItem className="md:col-span-3" label="report completion gaps" tone={reportCompletionTone} value={`missing ${status.reportCompletionMissingReportCount} / review ${status.reportCompletionNeedsReviewCount} / rejected ${status.reportCompletionRejectedCount} / contract ${status.reportCompletionContractIncompleteCount} / ingestion ${status.reportCompletionIngestionBlockedCount} / duplicates ${status.reportCompletionDuplicateCount}`} />
+      <StatusItem className="md:col-span-3" label="report completion gaps" tone={reportCompletionTone} value={`missing ${status.reportCompletionMissingReportCount} / review ${status.reportCompletionNeedsReviewCount} / rejected ${status.reportCompletionRejectedCount} / contract ${status.reportCompletionContractIncompleteCount} / ingestion ${status.reportCompletionIngestionBlockedCount} / mismatch ${status.reportCompletionLinkMismatchCount} / duplicates ${status.reportCompletionDuplicateCount}`} />
       <StatusItem className="md:col-span-3" label="report queue reason" tone={reportReviewQueueTone} value={status.reportReviewQueueBlockedReasons.length ? status.reportReviewQueueBlockedReasons.join(', ') : status.reportReviewQueuePrimaryReason} />
       <StatusItem className="md:col-span-3" label="result ingestion blockers" tone={status.resultIngestionBlockedReasons.length ? 'warn' : 'good'} value={status.resultIngestionBlockedReasons.length ? status.resultIngestionBlockedReasons.join(', ') : status.resultIngestionPrimaryLabel} />
-      <StatusItem className="md:col-span-3" label="result ingestion gaps" tone={resultIngestionTone} value={`duplicates ${status.resultIngestionDuplicateCount} / unlinked ${status.resultIngestionMissingLinkCount} / redaction ${status.resultIngestionUnsafeRedactionCount} / metadata ${status.resultIngestionForbiddenMetadataCount} / safety ${status.resultIngestionMissingSafetyCount}`} />
+      <StatusItem className="md:col-span-3" label="result ingestion gaps" tone={resultIngestionTone} value={`duplicates ${status.resultIngestionDuplicateCount} / unlinked ${status.resultIngestionMissingLinkCount} / mismatch ${status.resultIngestionLinkMismatchCount} / redaction ${status.resultIngestionUnsafeRedactionCount} / metadata ${status.resultIngestionForbiddenMetadataCount} / safety ${status.resultIngestionMissingSafetyCount}`} />
       <StatusItem className="md:col-span-3" label="stop/cancel blockers" tone={status.stopControlBlockedReasons.length ? 'warn' : 'good'} value={status.stopControlBlockedReasons.length ? status.stopControlBlockedReasons.join(', ') : status.stopControlPrimaryLabel} />
       <StatusItem className="md:col-span-3" label="write-capable tool paths" tone={status.toolPermissionWritePaths.length ? 'warn' : 'good'} value={status.toolPermissionWritePaths.length ? status.toolPermissionWritePaths.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="scoped PR blockers" tone={status.scopedPrBlockedReasons.length ? 'warn' : 'good'} value={status.scopedPrBlockedReasons.length ? status.scopedPrBlockedReasons.join(', ') : 'none'} />

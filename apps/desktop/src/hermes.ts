@@ -613,6 +613,7 @@ export interface MissionControlResultIngestionContractItem {
   manual_review_required?: boolean
   recommended_action?: string
   redaction_status?: string
+  report_link_mismatch?: boolean
   report_id?: string
   review_status?: string
   run_id?: string
@@ -635,6 +636,7 @@ export interface MissionControlResultIngestionContract {
   forbidden_metadata_count?: number
   ingestion_ready_count?: number
   items?: MissionControlResultIngestionContractItem[]
+  link_mismatch_count?: number
   manual_review_only?: boolean
   missing_link_count?: number
   missing_safety_confirmation_count?: number
@@ -669,6 +671,7 @@ export interface MissionControlReportCompletionPathItem {
   report_contract_complete?: boolean
   report_id?: string
   report_link_status?: string
+  report_link_mismatch?: boolean
   report_review_status?: string
   result_ingestion_ready?: boolean
   safety_confirmation_present?: boolean
@@ -688,6 +691,7 @@ export interface MissionControlReportCompletionPath {
   execution_enabled?: boolean
   ingestion_blocked_count?: number
   items?: MissionControlReportCompletionPathItem[]
+  link_mismatch_count?: number
   manual_review_only?: boolean
   missing_report_count?: number
   needs_review_count?: number

@@ -862,6 +862,88 @@ def test_record_sourced_workspace_status_projects_result_ingestion_contract(tmp_
     assert "Result ingestion: 1 ready, 1 blocked." in operator_packet["plain_language_summary"]
 
 
+def test_record_sourced_workspace_status_blocks_mismatched_worker_report_link(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        WorkerNodeRunRecord(
+            worker_run_id="worker-run-1",
+            parent_run_id="run-parent",
+            project_id="project-hermes-mission-control",
+            worker_identity="codex",
+            worker_host_label="laptop-codex",
+            status="blocked",
+            objective="Prepare scoped PR evidence.",
+            report_id="report-worker",
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-worker",
+            run_id="other-worker-run",
+            project_id="project-hermes-mission-control",
+            status="accepted",
+            summary="Accepted report attached to the wrong worker run.",
+            result="Prepared scoped PR evidence.",
+            risks=("none beyond focused evidence",),
+            changed_files=("mission_control/workspace_status_records.py",),
+            tests=("mission_control status tests passed",),
+            next_recommended_lane="Jenny reviews the link mismatch.",
+            evidence_refs=("pytest output",),
+            submitted_by="codex",
+            submitted_from="laptop-codex",
+            reviewed_at="2026-06-19T10:00:00Z",
+            reviewed_by="jenny",
+            redaction_status="operator_supplied_redacted",
+            metadata={"safety_confirmation": "No live dispatch, deploy, restart, runtime switch, records, or secrets."},
+        )
+    )
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    mismatch_reason = (
+        "report_id report-worker run_id other-worker-run does not match linked worker_node_run worker-run-1"
+    )
+    worker = status["worker_node_orchestration"]
+    assert worker["active_runs"][0]["report_link_status"] == "linked_report_run_id_mismatch"
+    assert worker["active_runs"][0]["report_link_mismatch"] is True
+    assert worker["active_runs"][0]["report_link_mismatch_reason"] == mismatch_reason
+    assert mismatch_reason in worker["blocked_reasons"]
+
+    queue = status["report_review_queue"]
+    assert queue["queue_count"] == 1
+    assert queue["primary_review_item"]["item_type"] == "report_link_mismatch"
+    assert queue["primary_review_item"]["review_status"] == "accepted"
+    assert queue["primary_review_reason"] == mismatch_reason
+    assert mismatch_reason in queue["blocked_reasons"]
+
+    ingestion = status["result_ingestion_contract"]
+    assert ingestion["ingestion_ready_count"] == 0
+    assert ingestion["blocked_report_count"] == 1
+    assert ingestion["link_mismatch_count"] == 1
+    ingestion_item = {item["report_id"]: item for item in ingestion["items"]}["report-worker"]
+    assert ingestion_item["report_link_mismatch"] is True
+    assert ingestion_item["ingestion_ready"] is False
+    assert mismatch_reason in ingestion["blocked_reasons"]
+
+    completion = status["report_completion_path"]
+    assert completion["terminal_item_count"] == 1
+    assert completion["completion_ready_count"] == 0
+    assert completion["blocked_completion_count"] == 1
+    assert completion["ingestion_blocked_count"] == 1
+    assert completion["link_mismatch_count"] == 1
+    completion_item = completion["items"][0]
+    assert completion_item["report_link_mismatch"] is True
+    assert completion_item["result_ingestion_ready"] is False
+    assert completion_item["completion_ready"] is False
+    assert mismatch_reason in completion["blocked_reasons"]
+
+    operator_packet = status["operator_decision_packet"]
+    assert mismatch_reason in operator_packet["blocked_reasons"]
+    assert mismatch_reason in operator_packet["result_ingestion_blocked_reasons"]
+    assert mismatch_reason in operator_packet["report_completion_blocked_reasons"]
+
+
 def test_record_sourced_workspace_status_projects_report_contract_compliance(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"
     store = JsonlRecordStore(records_path)

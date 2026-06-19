@@ -650,6 +650,7 @@ beforeEach(() => {
           status: 'blocked'
         }
       ],
+      link_mismatch_count: 0,
       manual_review_only: true,
       missing_report_count: 1,
       needs_review_count: 1,
@@ -775,6 +776,7 @@ beforeEach(() => {
           summary: 'Laptop Codex reported scoped PR evidence.'
         }
       ],
+      link_mismatch_count: 0,
       manual_review_only: true,
       missing_link_count: 0,
       missing_safety_confirmation_count: 0,
@@ -1859,13 +1861,13 @@ describe('MissionControlView', () => {
     expect(screen.getByText('report completion blockers')).toBeTruthy()
     expect(screen.getByText('run run-parent-1 has no linked completion report, report_id report-worker still needs Jenny review before completion, report_id report-worker missing completion contract fields: result, evidence, tests, next lane, safety confirmation')).toBeTruthy()
     expect(screen.getByText('report completion gaps')).toBeTruthy()
-    expect(screen.getByText('missing 1 / review 1 / rejected 0 / contract 2 / ingestion 0 / duplicates 0')).toBeTruthy()
+    expect(screen.getByText('missing 1 / review 1 / rejected 0 / contract 2 / ingestion 0 / mismatch 0 / duplicates 0')).toBeTruthy()
     expect(screen.getByText('report queue reason')).toBeTruthy()
     expect(screen.getByText('report_id report-worker still needs Jenny review, report_id report-child still needs Jenny review, run_id run-parent-1 has no linked report')).toBeTruthy()
     expect(screen.getByText('result ingestion blockers')).toBeTruthy()
     expect(screen.getByText('No result ingestion blockers recorded')).toBeTruthy()
     expect(screen.getByText('result ingestion gaps')).toBeTruthy()
-    expect(screen.getByText('duplicates 0 / unlinked 0 / redaction 0 / metadata 0 / safety 0')).toBeTruthy()
+    expect(screen.getByText('duplicates 0 / unlinked 0 / mismatch 0 / redaction 0 / metadata 0 / safety 0')).toBeTruthy()
     expect(screen.getByText('stop/cancel blockers')).toBeTruthy()
     expect(screen.getByText('run run-stopped has no stop_reason, run run-stopped has no linked stop/cancel report')).toBeTruthy()
     expect(screen.getByText('child-agent status')).toBeTruthy()

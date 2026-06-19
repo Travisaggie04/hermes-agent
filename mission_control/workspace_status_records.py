@@ -1247,25 +1247,32 @@ def _report_review_queue_payload(
     for report in reports:
         review_status = _linked_report_review_status(report)
         duplicate = report.report_id in duplicate_report_ids
-        if review_status != "needs_review" and not duplicate:
-            continue
         linked = _report_review_linked_record(
             report=report,
             runs=runs,
             child_runs=child_runs,
             worker_runs=worker_runs,
         )
+        link_mismatch_reason = _report_link_mismatch_reason(report, linked)
+        if review_status != "needs_review" and not duplicate and not link_mismatch_reason:
+            continue
         reasons = []
         if review_status == "needs_review":
             reasons.append(f"report_id {report.report_id} still needs Jenny review")
         if duplicate:
             reasons.append(f"report_id {report.report_id} has multiple append-only records")
+        if link_mismatch_reason:
+            reasons.append(link_mismatch_reason)
         reason = "; ".join(reasons)
         blocked_reasons.extend(reasons)
         items.append(
             _report_review_queue_item(
                 item_id=f"report:{report.report_id}",
-                item_type="report_needs_review",
+                item_type=(
+                    "report_link_mismatch"
+                    if link_mismatch_reason and review_status != "needs_review" and not duplicate
+                    else "report_needs_review"
+                ),
                 priority=_report_review_priority(linked, duplicate=duplicate),
                 report_id=report.report_id,
                 run_id=report.run_id,
@@ -1419,6 +1426,7 @@ def _result_ingestion_contract_payload(
             child_runs=child_runs,
             worker_runs=worker_runs,
         )
+        link_mismatch_reason = _report_link_mismatch_reason(report, linked)
         metadata = report.metadata if isinstance(report.metadata, dict) else {}
         forbidden_metadata_keys = _result_ingestion_forbidden_metadata_keys(metadata)
         safety_confirmation_present = _result_ingestion_safety_confirmation_present(metadata)
@@ -1430,6 +1438,8 @@ def _result_ingestion_contract_payload(
             item_reasons.append(f"report_id {report.report_id} has multiple append-only records")
         if not linked.get("linked_record_type") or not linked.get("linked_record_id"):
             item_reasons.append(f"report_id {report.report_id} is not linked to a run, child, or worker record")
+        if link_mismatch_reason:
+            item_reasons.append(link_mismatch_reason)
         if redaction_status not in RESULT_INGESTION_ACCEPTED_REDACTION_STATUSES:
             item_reasons.append(f"report_id {report.report_id} redaction_status {redaction_status} is not accepted")
         if forbidden_metadata_keys:
@@ -1447,6 +1457,7 @@ def _result_ingestion_contract_payload(
                 "run_id": report.run_id,
                 "linked_record_type": linked.get("linked_record_type", ""),
                 "linked_record_id": linked.get("linked_record_id", ""),
+                "report_link_mismatch": bool(link_mismatch_reason),
                 "status": report.status or "received",
                 "review_status": review_status,
                 "summary": report.summary,
@@ -1485,6 +1496,7 @@ def _result_ingestion_contract_payload(
         "blocked_report_count": len(blocked_items),
         "duplicate_report_count": len(duplicate_report_ids),
         "missing_link_count": sum(1 for item in items if not item.get("linked_record_type")),
+        "link_mismatch_count": sum(1 for item in items if item.get("report_link_mismatch") is True),
         "unsafe_redaction_count": sum(
             1
             for item in items
@@ -1739,6 +1751,7 @@ def _report_completion_path_payload(
             and item.get("result_ingestion_ready") is not True
         ),
         "duplicate_report_count": sum(1 for item in items if item.get("duplicate_report") is True),
+        "link_mismatch_count": sum(1 for item in items if item.get("report_link_mismatch") is True),
         "blocked": bool(unique_blocked_reasons),
         "blocked_reasons": unique_blocked_reasons,
         "primary_item": primary_item,
@@ -1767,12 +1780,22 @@ def _report_completion_path_item(
     forbidden_metadata_keys = _result_ingestion_forbidden_metadata_keys(metadata) if report else []
     safety_confirmation_present = _result_ingestion_safety_confirmation_present(metadata) if report else False
     duplicate_report = report_id in duplicate_report_ids if report_id else False
+    link_mismatch_reason = (
+        _report_link_mismatch_reason(
+            report,
+            {"linked_record_type": record_type, "linked_record_id": record_id},
+        )
+        if report
+        else ""
+    )
     blocked_reasons: list[str] = []
 
     if report is None:
         blocked_reasons.append(f"{record_type} {record_id} has no linked completion report")
     elif duplicate_report:
         blocked_reasons.append(f"report_id {report_id} has multiple append-only records")
+    if link_mismatch_reason:
+        blocked_reasons.append(link_mismatch_reason)
 
     if report is not None and review_status != "accepted":
         if review_status in {"rejected", "superseded"}:
@@ -1797,6 +1820,7 @@ def _report_completion_path_item(
     result_ingestion_ready = (
         report is not None
         and not duplicate_report
+        and not link_mismatch_reason
         and redaction_status in RESULT_INGESTION_ACCEPTED_REDACTION_STATUSES
         and not forbidden_metadata_keys
         and safety_confirmation_present
@@ -1815,6 +1839,7 @@ def _report_completion_path_item(
         "contract_missing_fields": contract_missing_fields,
         "result_ingestion_ready": result_ingestion_ready,
         "duplicate_report": duplicate_report,
+        "report_link_mismatch": bool(link_mismatch_reason),
         "redaction_status": redaction_status,
         "safety_confirmation_present": safety_confirmation_present,
         "forbidden_metadata_keys": forbidden_metadata_keys,
@@ -1855,6 +1880,20 @@ def _report_review_linked_record(
         if report.report_id in run.report_ids:
             return {"linked_record_type": "run", "linked_record_id": run.run_id}
     return {"linked_record_type": "", "linked_record_id": ""}
+
+
+def _report_link_mismatch_reason(report: ReportRecord | None, linked: dict[str, str]) -> str:
+    if report is None:
+        return ""
+    report_run_id = _safe_text(report.run_id)
+    linked_record_id = _safe_text(linked.get("linked_record_id"))
+    if not report_run_id or not linked_record_id or report_run_id == linked_record_id:
+        return ""
+    linked_record_type = _safe_text(linked.get("linked_record_type")) or "record"
+    return (
+        f"report_id {report.report_id} run_id {report_run_id} "
+        f"does not match linked {linked_record_type} {linked_record_id}"
+    )
 
 
 def _report_review_priority(linked: dict[str, str], *, duplicate: bool) -> int:
@@ -2909,8 +2948,16 @@ def _orchestration_payload(
     report = report or reports_by_run_id.get(record_id)
     if report:
         review_status = _linked_report_review_status(report)
+        link_mismatch_reason = _report_link_mismatch_reason(
+            report,
+            {"linked_record_type": _payload_record_type(id_field), "linked_record_id": record_id},
+        )
         payload["report_id"] = report_id or report.report_id
-        payload["report_link_status"] = "linked_report_found"
+        payload["report_link_status"] = (
+            "linked_report_run_id_mismatch" if link_mismatch_reason else "linked_report_found"
+        )
+        payload["report_link_mismatch"] = bool(link_mismatch_reason)
+        payload["report_link_mismatch_reason"] = link_mismatch_reason
         payload["linked_report"] = _linked_report_payload(report, review_status=review_status)
         payload["linked_report_status"] = report.status or "received"
         payload["linked_report_review_status"] = review_status
@@ -2922,6 +2969,14 @@ def _orchestration_payload(
     else:
         payload["report_link_status"] = "no_report_id_recorded"
     return payload
+
+
+def _payload_record_type(id_field: str) -> str:
+    if id_field == "worker_run_id":
+        return "worker_node_run"
+    if id_field == "child_run_id":
+        return "child_run"
+    return "run"
 
 
 def _linked_report_payload(report: ReportRecord, *, review_status: str) -> dict[str, Any]:
@@ -2966,6 +3021,11 @@ def _projection_report_blocked_reasons(
         link_status = str(payload.get("report_link_status") or "")
         if report_id and link_status == "linked_report_missing":
             reasons.append(f"{id_field} {record_id} links missing report_id {report_id}")
+        if report_id and link_status == "linked_report_run_id_mismatch":
+            reasons.append(
+                _safe_text(payload.get("report_link_mismatch_reason"))
+                or f"report_id {report_id} run_id does not match {id_field} {record_id}"
+            )
         if report_id and payload.get("linked_report_review_status") == "needs_review":
             reasons.append(f"report_id {report_id} still needs review")
     return reasons
