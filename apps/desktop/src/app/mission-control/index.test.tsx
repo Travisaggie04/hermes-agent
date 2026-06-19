@@ -141,12 +141,14 @@ beforeEach(() => {
         'Allowed actions: read approved context, report evidence.',
         'Forbidden actions: dispatch, mutate records, no live delegation activation, no live session sending.',
         'Report contract: Report evidence, result, blockers, safety confirmation, and the next suggested review step.',
+        'Handoff readiness: blocked until child-agent blockers are cleared.',
         'Manual delegation preview only; execution and dispatch remain disabled.'
       ],
       manual_handoff_only: true,
-      manual_handoff_prompt: 'Child agent: jenny-child.\nObjective: Inspect bounded Mission Control context.\nAllowed actions: read approved context, report evidence.\nForbidden actions: dispatch, mutate records, no live delegation activation, no live session sending.\nReport contract: Report evidence, result, blockers, safety confirmation, and the next suggested review step.\nManual delegation preview only; execution and dispatch remain disabled.',
+      manual_handoff_prompt: 'Child agent: jenny-child.\nObjective: Inspect bounded Mission Control context.\nAllowed actions: read approved context, report evidence.\nForbidden actions: dispatch, mutate records, no live delegation activation, no live session sending.\nReport contract: Report evidence, result, blockers, safety confirmation, and the next suggested review step.\nHandoff readiness: blocked until child-agent blockers are cleared.\nManual delegation preview only; execution and dispatch remain disabled.',
       objective: 'Inspect bounded Mission Control context.',
       parent_run_id: 'run-parent-1',
+      ready_for_handoff: false,
       report_contract: 'Report evidence, result, blockers, safety confirmation, and the next suggested review step.',
       report_id: 'report-child',
       report_review_status: 'needs_review',
@@ -298,6 +300,7 @@ beforeEach(() => {
         'run run-stopped has no linked stop/cancel report'
       ],
       child_instruction_available: true,
+      child_instruction_ready_for_handoff: false,
       dispatch_enabled: false,
       display_only: true,
       dry_run_only: true,
@@ -313,7 +316,7 @@ beforeEach(() => {
       next_safe_action_id: 'review_runtime_provenance_blockers',
       next_safe_action_label: 'Review runtime provenance blockers',
       next_safe_action_reason: 'gateway git metadata is broken',
-      plain_language_summary: 'Operator state: report review required. Approval required: yes. Runtime provenance: GATEWAY_UNTRUSTED. Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked. Worker presence: unknown. Execution mode: worker_node_preview; execution disabled. Execution packet preview: worker_node, eligible false; execution disabled. Next safe action: Review runtime provenance blockers. Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review. Result ingestion: 1 ready, 0 blocked. Report contract completeness: 0 complete, 1 incomplete. Report completion path: 0 ready, 2 blocked. Stop/cancel control: 1 item, blocked true. Worker instruction: preview available but blocked; laptop Codex dispatch remains disabled. Child instruction: manual delegation preview only; execution remains disabled. Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation.',
+      plain_language_summary: 'Operator state: report review required. Approval required: yes. Runtime provenance: GATEWAY_UNTRUSTED. Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked. Worker presence: unknown. Execution mode: worker_node_preview; execution disabled. Execution packet preview: worker_node, eligible false; execution disabled. Next safe action: Review runtime provenance blockers. Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review. Result ingestion: 1 ready, 0 blocked. Report contract completeness: 0 complete, 1 incomplete. Report completion path: 0 ready, 2 blocked. Stop/cancel control: 1 item, blocked true. Worker instruction: preview available but blocked; laptop Codex dispatch remains disabled. Child instruction: preview available but blocked; execution remains disabled. Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation.',
       recommended_operator_instruction: 'Jenny reviews Laptop Codex reported scoped PR evidence. before issuing another worker instruction.',
       report_contract_blocked_reasons: ['report_id report-worker missing contract fields: result, evidence, tests, next lane, safety confirmation'],
       report_contract_incomplete_count: 1,
@@ -351,7 +354,7 @@ beforeEach(() => {
         'Report completion path: 0 ready, 2 blocked.',
         'Stop/cancel control: 1 item, blocked true.',
         'Worker instruction: preview available but blocked; laptop Codex dispatch remains disabled.',
-        'Child instruction: manual delegation preview only; execution remains disabled.',
+        'Child instruction: preview available but blocked; execution remains disabled.',
         'Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation.'
       ],
       top_report_review_item_id: 'report:report-worker',
@@ -1794,6 +1797,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText(/Operator state: report review required/)).toBeTruthy()
     expect(screen.getByText(/Approval required: yes/)).toBeTruthy()
     expect(screen.getByText(/Worker instruction: preview available but blocked/)).toBeTruthy()
+    expect(screen.getByText(/Child instruction: preview available but blocked/)).toBeTruthy()
     expect(screen.getByText('operator blockers')).toBeTruthy()
     expect(screen.getByText('gateway git metadata is broken, report_id report-worker still needs Jenny review, worker node offline, worker-node presence_status is not recorded, runtime provenance is not clean, worker-node presence is not confirmed online, report_id report-worker missing contract fields: result, evidence, tests, next lane, safety confirmation, run run-stopped has no stop_reason, run run-stopped has no linked stop/cancel report')).toBeTruthy()
     expect(screen.getByText('execution mode blockers')).toBeTruthy()
@@ -1861,9 +1865,10 @@ describe('MissionControlView', () => {
     expect(screen.getByText('child-agent report')).toBeTruthy()
     expect(screen.getByText('linked report found / needs review / report-child')).toBeTruthy()
     expect(screen.getByText('child instruction preview')).toBeTruthy()
-    expect(screen.getByText('available yes / manual handoff yes')).toBeTruthy()
+    expect(screen.getAllByText('available yes / handoff ready no / manual yes').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('child instruction prompt')).toBeTruthy()
     expect(screen.getByText(/Child agent: jenny-child/)).toBeTruthy()
+    expect(screen.getByText(/Handoff readiness: blocked until child-agent blockers are cleared/)).toBeTruthy()
     expect(screen.getByText('laptop Codex worker-node')).toBeTruthy()
     expect(screen.getByText('laptop-codex / blocked')).toBeTruthy()
     expect(screen.getByText('worker-node objective')).toBeTruthy()
@@ -1871,7 +1876,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('worker-node report')).toBeTruthy()
     expect(screen.getByText('required / linked report found / accepted / report-worker')).toBeTruthy()
     expect(screen.getByText('worker instruction preview')).toBeTruthy()
-    expect(screen.getByText('available yes / handoff ready no / manual yes')).toBeTruthy()
+    expect(screen.getAllByText('available yes / handoff ready no / manual yes').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('worker instruction prompt')).toBeTruthy()
     expect(screen.getByText(/Worker: codex on laptop-codex/)).toBeTruthy()
     expect(screen.getByText(/Codex must independently enforce repo\/worktree/)).toBeTruthy()

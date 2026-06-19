@@ -747,6 +747,7 @@ export interface MissionControlOperatorDecisionPacket {
   blocked?: boolean
   blocked_reasons?: string[]
   child_instruction_available?: boolean
+  child_instruction_ready_for_handoff?: boolean
   dispatch_enabled?: boolean
   display_only?: boolean
   execution_mode_blocked_reasons?: string[]
@@ -1051,6 +1052,7 @@ export interface MissionControlChildAgentInstructionPreview {
   manual_handoff_prompt?: string
   objective?: string
   parent_run_id?: string
+  ready_for_handoff?: boolean
   report_contract?: string
   report_id?: string
   report_review_status?: string

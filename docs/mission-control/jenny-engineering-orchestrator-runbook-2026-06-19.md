@@ -300,6 +300,9 @@ The child-agent instruction preview mirrors the laptop Codex worker preview for
 planned delegation. It gives Jenny a manual prompt with child-agent identity,
 objective, allowed actions, forbidden actions, and report requirements. It does
 not start delegation, send a session, mutate records, or enable dispatch.
+Mission Control also separates child-agent "preview available" from "handoff
+ready" so an unresolved child report or blocker cannot be mistaken for a safe
+next delegation instruction.
 
 ## Mission Control Reading Guide
 

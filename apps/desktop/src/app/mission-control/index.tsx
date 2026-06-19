@@ -1327,6 +1327,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     childInstructionExecutionEnabled: childInstruction?.execution_enabled,
     childInstructionManualHandoffOnly: childInstruction?.manual_handoff_only,
     childInstructionPrompt: childInstruction?.manual_handoff_prompt ?? 'No child-agent instruction preview recorded.',
+    childInstructionReadyForHandoff: childInstruction?.ready_for_handoff,
     childInstructionWorkerDispatchEnabled: childInstruction?.worker_dispatch_enabled,
     deploymentGapState: status.deployment_gap?.state ?? 'unknown',
     deploymentNeeded: status.deployment_gap?.dashboard_deploy_needed ?? false,
@@ -4321,7 +4322,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="child-agent status" tone={childLockTone} value={`${status.childActiveCount} active / latest ${labelText(status.childLatestStatus)}`} />
       <StatusItem className="md:col-span-2" label="child-agent objective" value={status.childLatestObjective || status.childLatestAgent} />
       <StatusItem label="child-agent report" tone={status.childReportId && status.childReportReviewStatus !== 'needs_review' ? 'good' : 'warn'} value={`${labelText(status.childReportLinkStatus)} / ${labelText(status.childReportReviewStatus)}${status.childReportId ? ` / ${status.childReportId}` : ''}`} />
-      <StatusItem label="child instruction preview" tone={childInstructionTone} value={`available ${yesNo(status.childInstructionAvailable)} / manual handoff ${yesNo(status.childInstructionManualHandoffOnly)}`} />
+      <StatusItem label="child instruction preview" tone={childInstructionTone} value={`available ${yesNo(status.childInstructionAvailable)} / handoff ready ${yesNo(status.childInstructionReadyForHandoff)} / manual ${yesNo(status.childInstructionManualHandoffOnly)}`} />
       <StatusItem className="md:col-span-2" label="child instruction prompt" tone={childInstructionTone} value={status.childInstructionPrompt} />
       <StatusItem label="laptop Codex worker-node" tone={workerLockTone} value={`${status.workerHostLabel} / ${labelText(status.workerLatestStatus)}`} />
       <StatusItem className="md:col-span-2" label="worker-node objective" value={status.workerLatestObjective || `${status.workerIdentity} has no assigned objective recorded`} />

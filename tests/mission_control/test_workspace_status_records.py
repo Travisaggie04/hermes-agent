@@ -268,6 +268,7 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
     assert child_instruction["dry_run_only"] is True
     assert child_instruction["manual_handoff_only"] is True
     assert child_instruction["available"] is True
+    assert child_instruction["ready_for_handoff"] is False
     assert child_instruction["blocked"] is True
     assert child_instruction["child_run_id"] == "child-run-1"
     assert child_instruction["agent_identity"] == "jenny-child"
@@ -277,6 +278,7 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
     assert "no live delegation activation" in child_instruction["forbidden_actions"]
     assert "report_id report-child still needs review" in child_instruction["blocked_reasons"]
     assert "Manual delegation preview only" in child_instruction["manual_handoff_prompt"]
+    assert "Handoff readiness: blocked until child-agent blockers are cleared." in child_instruction["manual_handoff_prompt"]
     assert "Report contract:" in child_instruction["manual_handoff_prompt"]
 
     instruction = status["worker_node_instruction_preview"]
@@ -733,6 +735,8 @@ def test_record_sourced_workspace_status_projects_report_review_queue(tmp_path):
     assert operator_packet["state"] == "report_review_required"
     assert operator_packet["worker_instruction_available"] is True
     assert operator_packet["worker_instruction_ready_for_handoff"] is False
+    assert operator_packet["child_instruction_available"] is True
+    assert operator_packet["child_instruction_ready_for_handoff"] is False
     assert operator_packet["report_review_queue_count"] == 3
     assert operator_packet["top_report_review_item_id"] == "report:report-worker"
     assert operator_packet["top_report_review_label"] == "Laptop Codex reported scoped PR evidence."
@@ -741,6 +745,7 @@ def test_record_sourced_workspace_status_projects_report_review_queue(tmp_path):
     )
     assert "Approval required: yes." in operator_packet["plain_language_summary"]
     assert "Worker instruction: preview available but blocked; laptop Codex dispatch remains disabled." in operator_packet["plain_language_summary"]
+    assert "Child instruction: preview available but blocked; execution remains disabled." in operator_packet["plain_language_summary"]
     assert "Top report review: Laptop Codex reported scoped PR evidence." in operator_packet["plain_language_summary"]
     assert "worker activation" in operator_packet["plain_language_summary"]
     assert "report_id report-worker still needs Jenny review" in operator_packet["blocked_reasons"]

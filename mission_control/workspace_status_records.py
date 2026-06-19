@@ -2502,12 +2502,19 @@ def _child_agent_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
     report_contract = (
         "Report evidence, result, blockers, safety confirmation, and the next suggested review step."
     )
+    unique_blocked_reasons = _unique_reasons(blocked_reasons)
+    ready_for_handoff = bool(child_record) and not unique_blocked_reasons
     instruction_lines = [
         f"Child agent: {agent_identity}.",
         f"Objective: {objective or 'No objective recorded.'}",
         f"Allowed actions: {_joined_or_none(allowed_actions)}.",
         f"Forbidden actions: {_joined_or_none(effective_forbidden_actions)}.",
         f"Report contract: {report_contract}",
+        (
+            "Handoff readiness: ready for manual review copy."
+            if ready_for_handoff
+            else "Handoff readiness: blocked until child-agent blockers are cleared."
+        ),
         "Manual delegation preview only; execution and dispatch remain disabled.",
     ]
     return {
@@ -2523,8 +2530,9 @@ def _child_agent_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
         "dry_run_only": True,
         "manual_handoff_only": True,
         "available": bool(child_record),
-        "blocked": bool(blocked_reasons),
-        "blocked_reasons": _unique_reasons(blocked_reasons),
+        "ready_for_handoff": ready_for_handoff,
+        "blocked": bool(unique_blocked_reasons),
+        "blocked_reasons": unique_blocked_reasons,
         "child_run_id": _safe_text(child_record.get("child_run_id")),
         "parent_run_id": _safe_text(child_record.get("parent_run_id")),
         "agent_identity": agent_identity,
@@ -2661,9 +2669,12 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             f"{'ready for manual handoff' if worker_instruction_ready else 'preview available but blocked'}; "
             "laptop Codex dispatch remains disabled."
         )
+    child_instruction_ready = child_instruction.get("ready_for_handoff") is True
     if child_instruction.get("available") is True:
         summary_lines.append(
-            "Child instruction: manual delegation preview only; execution remains disabled."
+            "Child instruction: "
+            f"{'ready for manual handoff' if child_instruction_ready else 'preview available but blocked'}; "
+            "execution remains disabled."
         )
     summary_lines.append(
         "Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation."
@@ -2723,6 +2734,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         "worker_instruction_available": worker_instruction.get("available") is True,
         "worker_instruction_ready_for_handoff": worker_instruction_ready,
         "child_instruction_available": child_instruction.get("available") is True,
+        "child_instruction_ready_for_handoff": child_instruction_ready,
         "summary_lines": summary_lines,
         "plain_language_summary": " ".join(summary_lines),
         "recommended_operator_instruction": _safe_text(recommended_instruction, max_chars=800),
