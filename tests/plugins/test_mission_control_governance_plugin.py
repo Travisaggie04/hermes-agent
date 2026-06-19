@@ -4911,6 +4911,60 @@ def test_workspace_status_preview_flags_accepted_live_ahead_of_deployed_dashboar
     assert plugin_api.record_store_path().exists() is False
 
 
+def test_workspace_status_preview_flags_source_default_head_drift(plugin_api, client):
+    head = "8ef64e370a51bc19e97fec1526f5bb3d42025a09"
+    default_head = "fe18ce20d6044dd91d115286e949366477a8706b"
+    runtime = {
+        "path": "/home/jenny/.hermes/hermes-runtime-current",
+        "exists": True,
+        "git_healthy": True,
+        "head": head,
+        "dirty_files": [],
+        "untracked_files": [],
+        "error": "",
+    }
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace-status/preview",
+        json={
+            "accepted_baseline": {
+                "head": head,
+                "runtime_path": "/home/jenny/.hermes/hermes-runtime-current",
+            },
+            "rollback_baseline": {
+                "head": head,
+                "runtime_path": "/home/jenny/.hermes/hermes-runtime-rollback",
+                "clean": True,
+            },
+            "source_control": {
+                "accepted_live_head": head,
+                "default_branch_head": default_head,
+            },
+            "dashboard_runtime": runtime,
+            "gateway_runtime": runtime,
+            "rollback_runtime": {**runtime, "path": "/home/jenny/.hermes/hermes-runtime-rollback"},
+            "safety": {"dispatch_in_gateway": False},
+            "lane": {"active_lane_count": 0, "max_active_lane": 1, "declared_baseline_head": head},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    provenance = payload["runtime_provenance"]
+    warnings = set(payload["stale_context"]["warnings"])
+    assert payload["stored"] is False
+    assert payload["source"] == "caller_supplied_workspace_status_preview"
+    assert payload["source_control"]["default_branch_head"] == default_head
+    assert provenance["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
+    assert provenance["primary_status"] == "SOURCE_DEFAULT_DRIFT"
+    assert provenance["default_branch_head"] == default_head
+    assert "SOURCE_DEFAULT_DRIFT" in provenance["statuses"]
+    assert "source HEAD does not match default branch HEAD" in provenance["autonomy_blocked_reasons"]
+    assert "SOURCE_DEFAULT_DRIFT" in warnings
+    assert "source HEAD does not match default branch HEAD" in warnings
+    assert plugin_api.record_store_path().exists() is False
+
+
 def test_runtime_provenance_preview_is_inert_and_stores_nothing(plugin_api, client):
     head = "8ef64e370a51bc19e97fec1526f5bb3d42025a09"
     runtime = {
@@ -4947,6 +5001,50 @@ def test_runtime_provenance_preview_is_inert_and_stores_nothing(plugin_api, clie
     assert payload["session_send_enabled"] is False
     assert payload["primary_status"] == "CLEAN_AND_ALIGNED"
     assert payload["autonomy_blocked"] is False
+    assert plugin_api.record_store_path().exists() is False
+
+
+def test_runtime_provenance_preview_blocks_source_default_head_drift(plugin_api, client):
+    head = "8ef64e370a51bc19e97fec1526f5bb3d42025a09"
+    default_head = "fe18ce20d6044dd91d115286e949366477a8706b"
+    runtime = {
+        "path": "/home/jenny/.hermes/hermes-runtime-current",
+        "exists": True,
+        "git_healthy": True,
+        "head": head,
+        "dirty_files": [],
+        "untracked_files": [],
+        "error": "",
+    }
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/runtime-provenance/preview",
+        json={
+            "source": {"head": head, "default_branch_head": default_head},
+            "accepted_baseline": runtime,
+            "dashboard_runtime": runtime,
+            "gateway_runtime": runtime,
+            "rollback_runtime": runtime,
+            "dispatch_in_gateway": False,
+            "active_lane_count": 0,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "caller_supplied_runtime_provenance_preview"
+    assert payload["stored"] is False
+    assert payload["display_only"] is True
+    assert payload["dry_run_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
+    assert payload["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
+    assert payload["primary_status"] == "SOURCE_DEFAULT_DRIFT"
+    assert payload["default_branch_head"] == default_head
+    assert "SOURCE_DEFAULT_DRIFT" in payload["statuses"]
+    assert "source HEAD does not match default branch HEAD" in payload["autonomy_blocked_reasons"]
     assert plugin_api.record_store_path().exists() is False
 
 
