@@ -17,6 +17,19 @@ from mission_control.workspace_status_records import (
 )
 
 
+def _assert_inert_projection(payload: dict[str, object]) -> None:
+    assert payload["display_only"] is True
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["would_execute"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
+    assert payload["stored"] is False
+    assert payload["dry_run_only"] is True
+
+
 def test_record_sourced_workspace_status_uses_latest_baseline_and_idle_when_no_runs(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"
     store = JsonlRecordStore(records_path)
@@ -53,6 +66,7 @@ def test_record_sourced_workspace_status_uses_latest_baseline_and_idle_when_no_r
     assert status["control_plane_records"]["active_run_count"] == 0
     assert status["record_store"]["status"] == "ok"
     assert "accepted_baseline_source_missing" not in status["stale_context"]["warnings"]
+    _assert_inert_projection(status["control_plane_lifecycle"])
 
 
 def test_record_sourced_workspace_status_projects_real_active_runs_and_approvals(tmp_path):
@@ -1647,6 +1661,7 @@ def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_
     status = build_workspace_status_from_records(records_path=records_path)
 
     lifecycle = status["report_lifecycle"]
+    _assert_inert_projection(lifecycle)
     assert lifecycle["display_only"] is True
     assert lifecycle["trusted_for_execution"] is False
     assert lifecycle["execution_enabled"] is False
@@ -1837,6 +1852,7 @@ def test_record_sourced_workspace_status_projects_approval_and_run_lifecycle_blo
     )
 
     approvals = status["approval_lifecycle"]
+    _assert_inert_projection(approvals)
     assert approvals["display_only"] is True
     assert approvals["execution_enabled"] is False
     assert approvals["dispatch_enabled"] is False
@@ -1867,6 +1883,7 @@ def test_record_sourced_workspace_status_projects_approval_and_run_lifecycle_blo
     assert "run_id run-expired references unavailable approval_id approval-expired" in approvals["blocked_reasons"]
 
     runs = status["run_lifecycle"]
+    _assert_inert_projection(runs)
     assert runs["display_only"] is True
     assert runs["execution_enabled"] is False
     assert runs["dispatch_enabled"] is False

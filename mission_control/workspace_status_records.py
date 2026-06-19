@@ -87,6 +87,18 @@ LIVE_EXECUTION_FLAG_NAMES = (
     "session_send_enabled",
     "worker_dispatch_enabled",
 )
+INERT_PROJECTION_FLAGS = {
+    "display_only": True,
+    "trusted_for_execution": False,
+    "inert_context_only": True,
+    "would_execute": False,
+    "execution_enabled": False,
+    "dispatch_enabled": False,
+    "session_send_enabled": False,
+    "worker_dispatch_enabled": False,
+    "stored": False,
+    "dry_run_only": True,
+}
 
 
 def default_record_store_path() -> Path:
@@ -494,6 +506,7 @@ def _control_plane_lifecycle_payload(
     active_mutation_lane_count: int,
 ) -> dict[str, Any]:
     return {
+        **INERT_PROJECTION_FLAGS,
         "source": "mission_control_records_jsonl",
         "latest_approvals_by_id": _latest_by_id(approvals, "approval_id"),
         "latest_runs_by_id": _latest_by_id(runs, "run_id"),
@@ -570,13 +583,8 @@ def _approval_lifecycle_payload(
         blocked_reasons.append(f"run_id {run_id} references unavailable approval_id {approval_id}")
 
     return {
+        **INERT_PROJECTION_FLAGS,
         "source": "ApprovalRecord",
-        "display_only": True,
-        "trusted_for_execution": False,
-        "execution_enabled": False,
-        "dispatch_enabled": False,
-        "session_send_enabled": False,
-        "worker_dispatch_enabled": False,
         "append_only_projection": True,
         "approval_count": len(approvals),
         "raw_approval_count": len(raw_approvals),
@@ -644,13 +652,8 @@ def _run_lifecycle_payload(
         blocked_reasons.append(f"run_id {run_id} links missing report ids: {', '.join(missing_report_ids)}")
 
     return {
+        **INERT_PROJECTION_FLAGS,
         "source": "RunRecord",
-        "display_only": True,
-        "trusted_for_execution": False,
-        "execution_enabled": False,
-        "dispatch_enabled": False,
-        "session_send_enabled": False,
-        "worker_dispatch_enabled": False,
         "append_only_projection": True,
         "run_count": len(runs),
         "raw_run_count": len(raw_runs),
@@ -727,13 +730,8 @@ def _report_lifecycle_payload(
         blocked_reasons.append(f"report_id {report_id} still needs review")
 
     return {
+        **INERT_PROJECTION_FLAGS,
         "source": "ReportRecord",
-        "display_only": True,
-        "trusted_for_execution": False,
-        "execution_enabled": False,
-        "dispatch_enabled": False,
-        "session_send_enabled": False,
-        "worker_dispatch_enabled": False,
         "append_only_projection": True,
         "report_count": len(reports),
         "raw_report_count": len(raw_reports),
