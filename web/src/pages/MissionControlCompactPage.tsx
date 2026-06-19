@@ -354,6 +354,26 @@ interface WorkspaceStatus {
     runs_with_missing_approval_record?: Record<string, string>;
     runs_with_unavailable_approval?: Record<string, string>;
   };
+  child_agent_instruction_preview?: CompactExecutionLockSource & {
+    agent_identity?: string;
+    available?: boolean;
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    child_run_id?: string;
+    manual_handoff_only?: boolean;
+    manual_handoff_prompt?: string;
+    objective?: string;
+    ready_for_handoff?: boolean;
+    report_id?: string;
+    report_link_status?: string;
+    report_review_status?: string;
+  };
+  child_agent_orchestration?: CompactExecutionLockSource & {
+    active_count?: number;
+    active_runs?: Array<Record<string, unknown>>;
+    blocked_reasons?: string[];
+    latest_by_id?: Record<string, Record<string, unknown>>;
+  };
   deployment_gap?: { accepted_live_head?: string; dashboard_deploy_needed?: boolean; deployed_head?: string; latest_merged_pr?: string; state?: string };
   execution_mode_classification?: CompactExecutionLockSource & {
     blocked?: boolean;
@@ -439,6 +459,16 @@ interface WorkspaceStatus {
     would_execute?: boolean;
     worker_dispatch_enabled?: boolean;
     worker_enabled?: boolean;
+  };
+  orchestration_run_graph?: CompactExecutionLockSource & {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    child_run_node_count?: number;
+    edge_count?: number;
+    node_count?: number;
+    report_node_count?: number;
+    run_node_count?: number;
+    worker_node_run_count?: number;
   };
   report_completion_path?: {
     blocked?: boolean;
@@ -1934,6 +1964,13 @@ function safetySummary(status: WorkspaceStatus): string {
 
 function firstReason(values: string[] | undefined, fallback: string): string {
   return values?.find(value => value.trim()) ?? fallback;
+}
+
+function compactRecordText(record: Record<string, unknown> | undefined, field: string): string {
+  const value = record?.[field];
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return "";
 }
 
 function compactStateLabel(value: string | undefined, fallback = "unknown"): string {
@@ -4162,6 +4199,9 @@ function CompactHermesHealthDashboard({
   const readiness = status.orchestration_readiness;
   const approvalLifecycle = status.approval_lifecycle;
   const runLifecycle = status.run_lifecycle;
+  const childProjection = status.child_agent_orchestration;
+  const childInstruction = status.child_agent_instruction_preview;
+  const runGraph = status.orchestration_run_graph;
   const workerInstruction = status.worker_node_instruction_preview;
   const workerPresence = status.worker_node_presence;
   const resultIngestion = status.result_ingestion_contract;
@@ -4204,6 +4244,9 @@ function CompactHermesHealthDashboard({
   const nextSafeActionLockReasons = compactExecutionLockReasons("Safe next actions", nextSafeActions);
   const approvalLifecycleLockReasons = compactExecutionLockReasons("Approval lifecycle", approvalLifecycle);
   const runLifecycleLockReasons = compactExecutionLockReasons("Run lifecycle", runLifecycle);
+  const runGraphLockReasons = compactExecutionLockReasons("Orchestration run graph", runGraph);
+  const childProjectionLockReasons = compactExecutionLockReasons("Child agent", childProjection);
+  const childInstructionLockReasons = compactExecutionLockReasons("Child handoff", childInstruction);
   const executionModeLockReasons = compactExecutionLockReasons("Execution mode", executionMode);
   const executionPacketLockReasons = compactExecutionLockReasons("Execution packet", executionPacket);
   const executionPacketBodyLockReasons = compactExecutionLockReasons("Execution packet body", executionPacket?.packet);
@@ -4229,6 +4272,9 @@ function CompactHermesHealthDashboard({
     ...nextSafeActionLockReasons,
     ...approvalLifecycleLockReasons,
     ...runLifecycleLockReasons,
+    ...runGraphLockReasons,
+    ...childProjectionLockReasons,
+    ...childInstructionLockReasons,
     ...executionModeLockReasons,
     ...executionPacketLockReasons,
     ...executionPacketBodyLockReasons,
@@ -4246,6 +4292,9 @@ function CompactHermesHealthDashboard({
     operatorPacket?.blocked ? firstReason(operatorPacket.blocked_reasons, "Operator decision packet is blocked") : "",
     approvalLifecycle?.blocked ? firstReason(approvalLifecycle.blocked_reasons, "Approval lifecycle needs review") : "",
     runLifecycle?.blocked ? firstReason(runLifecycle.blocked_reasons, "Run lifecycle needs review") : "",
+    runGraph?.blocked ? firstReason(runGraph.blocked_reasons, "Orchestration run graph needs review") : "",
+    childProjection?.blocked_reasons?.length ? firstReason(childProjection.blocked_reasons, "Child-agent projection needs review") : "",
+    childInstruction?.blocked ? firstReason(childInstruction.blocked_reasons, "Child handoff preview needs review") : "",
     executionMode?.blocked ? firstReason(executionMode.blocked_reasons, "Execution mode preview is blocked") : "",
     executionPacket?.blocked_reasons?.length ? firstReason(executionPacket.blocked_reasons, "Execution packet preview is blocked") : "",
     readiness?.blocked_reasons?.length ? firstReason(readiness.blocked_reasons, "Orchestration readiness is blocked") : "",
@@ -4266,6 +4315,21 @@ function CompactHermesHealthDashboard({
   const runLifecycleTone: CompactHealthTone = runLifecycleLockReasons.length
     ? "bad"
     : runLifecycle?.blocked || runGapCount
+      ? "warn"
+      : "good";
+  const runGraphTone: CompactHealthTone = runGraphLockReasons.length
+    ? "bad"
+    : !runGraph || runGraph.blocked || runGraph.blocked_reasons?.length
+      ? "warn"
+      : "good";
+  const childProjectionTone: CompactHealthTone = childProjectionLockReasons.length
+    ? "bad"
+    : childProjection?.blocked_reasons?.length
+      ? "warn"
+      : "good";
+  const childInstructionTone: CompactHealthTone = childInstructionLockReasons.length
+    ? "bad"
+    : childInstruction?.blocked_reasons?.length || childInstruction?.ready_for_handoff !== true
       ? "warn"
       : "good";
   const executionPreviewTone: CompactHealthTone = [
@@ -4354,6 +4418,27 @@ function CompactHermesHealthDashboard({
     firstReason(runLifecycle?.blocked_reasons, ""),
     `Run gaps: duplicates ${runLifecycle?.duplicate_run_ids?.length ?? 0}, missing reports ${runLifecycle?.terminal_runs_missing_report?.length ?? 0}, stale links ${runTerminalMissingLinkedCount}.`,
   ].find(Boolean), 260);
+  const childRecord = childProjection?.active_runs?.[0] ?? Object.values(childProjection?.latest_by_id ?? {})[0];
+  const childLatestStatus = compactRecordText(childRecord, "status") || "none";
+  const childLatestObjective = compactRecordText(childRecord, "objective") || compactRecordText(childRecord, "agent_identity") || "no child agent recorded";
+  const childLatestReport = compactRecordText(childRecord, "report_id") || "none";
+  const childLatestReportReview = compactRecordText(childRecord, "linked_report_review_status") || compactRecordText(childRecord, "report_review_status") || "not reviewed";
+  const runGraphDetail = compactText([
+    ...runGraphLockReasons,
+    firstReason(runGraph?.blocked_reasons, ""),
+    `Run graph: runs ${runGraph?.run_node_count ?? 0}, child ${runGraph?.child_run_node_count ?? 0}, worker ${runGraph?.worker_node_run_count ?? 0}, reports ${runGraph?.report_node_count ?? 0}.`,
+  ].find(Boolean), 260);
+  const childProjectionDetail = compactText([
+    ...childProjectionLockReasons,
+    firstReason(childProjection?.blocked_reasons, ""),
+    childLatestObjective,
+  ].find(Boolean), 260);
+  const childInstructionDetail = compactText([
+    ...childInstructionLockReasons,
+    firstReason(childInstruction?.blocked_reasons, ""),
+    childInstruction?.manual_handoff_prompt,
+    "No child-agent instruction preview recorded.",
+  ].find(Boolean), 260);
   const reportLifecycleDetail = compactText([
     ...reportLifecycleLockReasons,
     firstReason(reportLifecycle?.blocked_reasons, ""),
@@ -4418,6 +4503,30 @@ function CompactHermesHealthDashboard({
           label="Run gaps"
           tone={runGapCount ? "warn" : "good"}
           value={`duplicates ${runLifecycle?.duplicate_run_ids?.length ?? 0} / missing reports ${runLifecycle?.terminal_runs_missing_report?.length ?? 0} / stale links ${runTerminalMissingLinkedCount}`}
+        />
+        <CompactHealthTile
+          detail={runGraphDetail}
+          label="Run graph"
+          tone={runGraphTone}
+          value={`nodes ${runGraph?.node_count ?? 0} / edges ${runGraph?.edge_count ?? 0}`}
+        />
+        <CompactHealthTile
+          detail={childProjectionDetail}
+          label="Child agent"
+          tone={childProjectionTone}
+          value={`${childProjection?.active_count ?? 0} active / latest ${compactStateLabel(childLatestStatus, "none")}`}
+        />
+        <CompactHealthTile
+          detail={`report ${childLatestReport} / review ${compactStateLabel(childLatestReportReview, "not reviewed")}`}
+          label="Child report"
+          tone={childProjection?.blocked_reasons?.length ? "warn" : "good"}
+          value={childLatestReport}
+        />
+        <CompactHealthTile
+          detail={childInstructionDetail}
+          label="Child handoff"
+          tone={childInstructionTone}
+          value={`available ${childInstruction?.available ? "yes" : "no"} / handoff ${childInstruction?.ready_for_handoff ? "yes" : "no"} / manual ${childInstruction?.manual_handoff_only === false ? "no" : "yes"}`}
         />
         <CompactHealthTile
           detail={compactOperatorSummary(status)}
