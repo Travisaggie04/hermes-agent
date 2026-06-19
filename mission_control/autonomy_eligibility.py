@@ -152,6 +152,16 @@ _PROTECTED_CAPABILITY_KEYS = {
     "worker_dispatch_enabled",
 }
 
+_PREVIEW_DISABLED_FLAG_REASONS = {
+    "would_execute": "would_execute must remain false in previews",
+    "would_dispatch": "would_dispatch must remain false in previews",
+    "would_session_send": "would_session_send must remain false in previews",
+    "execution_enabled": "execution_enabled must remain false",
+    "dispatch_enabled": "dispatch_enabled must remain false",
+    "session_send_enabled": "session_send_enabled must remain false",
+    "worker_dispatch_enabled": "worker_dispatch_enabled must remain false",
+}
+
 _PATH_WRITE_CAPABILITY_KEYS = (
     "write_capable",
     "write_capable_tools",
@@ -672,6 +682,7 @@ def evaluate_read_only_autonomy_eligibility(observed_state: dict[str, Any] | Non
     _check_lane(run, lane, blocked)
     _check_forbidden_actions(run, lane, blocked)
     _check_capabilities(capabilities, blocked)
+    _check_preview_disabled_flags(blocked, state, run, lane)
 
     if _safe_int(state.get("active_mutation_lane_count")) > 0:
         _add(blocked, "active mutation lane count must be 0")
@@ -729,6 +740,7 @@ def evaluate_scoped_pr_lane_eligibility(observed_state: dict[str, Any] | None = 
     _check_pr_scope(approval, lane, blocked)
     _check_pr_forbidden_actions(run, lane, blocked)
     _check_pr_capabilities(capabilities, blocked)
+    _check_preview_disabled_flags(blocked, state, run, lane)
 
     active_mutation_lane_count = _safe_int(state.get("active_mutation_lane_count"))
     if active_mutation_lane_count > 1:
@@ -865,6 +877,14 @@ def _evaluate_worker_node_packet_preview(state: dict[str, Any]) -> dict[str, Any
         _add(blocked, "worker execution must stay disabled")
     if _safe_bool(worker_node.get("session_send_enabled")) or _safe_bool(state.get("session_send_enabled")):
         _add(blocked, "session sending must stay disabled")
+    _check_preview_disabled_flags(
+        blocked,
+        state,
+        run,
+        lane,
+        worker_node,
+        keys=("dispatch_enabled", "would_execute", "would_dispatch", "would_session_send"),
+    )
     if _safe_bool(report_contract.get("required")) is not True:
         _add(blocked, "worker-node report contract is required")
     if _safe_bool(report_contract.get("tests_required")) is not True:
@@ -1229,6 +1249,17 @@ def _check_pr_capabilities(capabilities: dict[str, Any], blocked: list[str]) -> 
     for key in _PR_BLOCKED_CAPABILITY_KEYS:
         if _safe_bool(capabilities.get(key)):
             _add(blocked, f"capability {key} must be disabled")
+
+
+def _check_preview_disabled_flags(
+    blocked: list[str],
+    *sections: dict[str, Any],
+    keys: tuple[str, ...] | None = None,
+) -> None:
+    flag_keys = keys or tuple(_PREVIEW_DISABLED_FLAG_REASONS)
+    for key in flag_keys:
+        if any(_safe_bool(section.get(key)) for section in sections if isinstance(section, dict)):
+            _add(blocked, _PREVIEW_DISABLED_FLAG_REASONS[key])
 
 
 def _check_pr_scope(approval: dict[str, Any], lane: dict[str, Any], blocked: list[str]) -> None:

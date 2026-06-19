@@ -630,6 +630,50 @@ def test_execution_packet_preview_is_never_an_execution_path():
     assert result["worker_dispatch_enabled"] is False
 
 
+def test_execution_packet_preview_rejects_requested_live_action_flags():
+    cases = [
+        _eligible_preview_payload(
+            mode="read_only",
+            dispatch_enabled=True,
+            execution_enabled=True,
+            session_send_enabled=True,
+            worker_dispatch_enabled=True,
+            would_dispatch=True,
+            would_execute=True,
+            would_session_send=True,
+        ),
+        _eligible_pr_preview_payload(
+            mode="scoped_pr",
+            dispatch_enabled=True,
+            execution_enabled=True,
+            session_send_enabled=True,
+            worker_dispatch_enabled=True,
+            would_dispatch=True,
+            would_execute=True,
+            would_session_send=True,
+        ),
+    ]
+
+    for payload in cases:
+        result = build_execution_packet_preview(payload)
+
+        assert result["eligible"] is False
+        assert "would_execute must remain false in previews" in result["blocked_reasons"]
+        assert "would_dispatch must remain false in previews" in result["blocked_reasons"]
+        assert "would_session_send must remain false in previews" in result["blocked_reasons"]
+        assert "execution_enabled must remain false" in result["blocked_reasons"]
+        assert "dispatch_enabled must remain false" in result["blocked_reasons"]
+        assert "session_send_enabled must remain false" in result["blocked_reasons"]
+        assert "worker_dispatch_enabled must remain false" in result["blocked_reasons"]
+        assert result["would_execute"] is False
+        assert result["would_dispatch"] is False
+        assert result["would_session_send"] is False
+        assert result["execution_enabled"] is False
+        assert result["dispatch_enabled"] is False
+        assert result["session_send_enabled"] is False
+        assert result["worker_dispatch_enabled"] is False
+
+
 def test_worker_node_execution_packet_preview_wraps_scoped_pr_without_dispatch():
     result = build_execution_packet_preview(
         _eligible_pr_preview_payload(
@@ -706,6 +750,10 @@ def test_worker_node_execution_packet_blocks_dispatch_and_missing_report_review(
         _eligible_pr_preview_payload(
             mode="worker_node",
             report_contract={"required": True, "tests_required": True, "review_required": False},
+            dispatch_enabled=True,
+            would_dispatch=True,
+            would_execute=True,
+            would_session_send=True,
             worker_node={
                 "parent_run_id": "run-pr-1",
                 "objective": "Prepare a bounded scoped PR.",
@@ -718,6 +766,10 @@ def test_worker_node_execution_packet_blocks_dispatch_and_missing_report_review(
     assert result["eligible"] is False
     assert "worker dispatch must stay disabled" in result["blocked_reasons"]
     assert "worker execution must stay disabled" in result["blocked_reasons"]
+    assert "dispatch_enabled must remain false" in result["blocked_reasons"]
+    assert "would_execute must remain false in previews" in result["blocked_reasons"]
+    assert "would_dispatch must remain false in previews" in result["blocked_reasons"]
+    assert "would_session_send must remain false in previews" in result["blocked_reasons"]
     assert "worker-node report review is required" in result["blocked_reasons"]
     assert "worker-node presence is not confirmed online" in result["blocked_reasons"]
     assert result["worker_dispatch_enabled"] is False
