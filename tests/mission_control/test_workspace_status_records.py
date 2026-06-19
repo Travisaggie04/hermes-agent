@@ -1297,6 +1297,17 @@ def test_record_sourced_workspace_status_projects_stop_cancel_control(tmp_path):
         )
     )
     store.append(
+        RunRecord(
+            run_id="run-cancelled-mismatch",
+            project_id="project-hermes-mission-control",
+            lane_type="read_only_inspection",
+            title="Cancelled run with mismatched report",
+            status="cancelled",
+            stop_reason="Operator cancelled after mismatch.",
+            report_ids=("report-stop-mismatch",),
+        )
+    )
+    store.append(
         ChildRunRecord(
             child_run_id="child-stopped",
             parent_run_id="run-parent",
@@ -1329,9 +1340,23 @@ def test_record_sourced_workspace_status_projects_stop_cancel_control(tmp_path):
             summary="Child stopped after reporting enough evidence.",
         )
     )
+    store.append(
+        ReportRecord(
+            report_id="report-stop-mismatch",
+            run_id="other-run",
+            project_id="project-hermes-mission-control",
+            status="accepted",
+            summary="Accepted stop report attached to the wrong run.",
+            reviewed_at="2026-06-19T12:10:00Z",
+            reviewed_by="jenny",
+        )
+    )
 
     status = build_workspace_status_from_records(records_path=records_path)
 
+    mismatch_reason = (
+        "report_id report-stop-mismatch run_id other-run does not match linked run run-cancelled-mismatch"
+    )
     stop_control = status["orchestration_stop_control"]
     assert stop_control["source"] == "mission_control_orchestration_stop_control_v1"
     assert stop_control["display_only"] is True
@@ -1344,19 +1369,24 @@ def test_record_sourced_workspace_status_projects_stop_cancel_control(tmp_path):
     assert stop_control["stored"] is False
     assert stop_control["dry_run_only"] is True
     assert stop_control["manual_review_only"] is True
-    assert stop_control["stop_cancel_count"] == 3
+    assert stop_control["stop_cancel_count"] == 4
     assert stop_control["active_stop_count"] == 1
-    assert stop_control["terminal_stop_count"] == 2
-    assert stop_control["needs_report_count"] == 2
+    assert stop_control["terminal_stop_count"] == 3
+    assert stop_control["needs_report_count"] == 3
+    assert stop_control["link_mismatch_count"] == 1
     assert stop_control["needs_review_count"] == 1
     assert stop_control["blocked"] is True
     assert "run run-stopping is stopping and needs manual stop confirmation" in stop_control["blocked_reasons"]
     assert "run run-stopping has no linked stop/cancel report" in stop_control["blocked_reasons"]
     assert "report_id report-child-stop still needs Jenny review" in stop_control["blocked_reasons"]
+    assert mismatch_reason in stop_control["blocked_reasons"]
     assert "worker_node_run worker-cancelled has no stop_reason" in stop_control["blocked_reasons"]
     assert "worker_node_run worker-cancelled has no linked stop/cancel report" in stop_control["blocked_reasons"]
 
     items = {item["item_id"]: item for item in stop_control["items"]}
+    assert items["run:run-cancelled-mismatch"]["report_link_status"] == "linked_report_run_id_mismatch"
+    assert items["run:run-cancelled-mismatch"]["report_link_mismatch"] is True
+    assert items["run:run-cancelled-mismatch"]["report_link_mismatch_reason"] == mismatch_reason
     assert items["child_run:child-stopped"]["report_link_status"] == "linked_report_found"
     assert items["child_run:child-stopped"]["report_review_status"] == "needs_review"
     assert items["worker_node_run:worker-cancelled"]["report_link_status"] == "missing_linked_report"
@@ -1364,12 +1394,14 @@ def test_record_sourced_workspace_status_projects_stop_cancel_control(tmp_path):
     next_safe_actions = status["next_safe_actions"]
     action_ids = {action["action_id"] for action in next_safe_actions["actions"]}
     assert "review_stop_cancel_control" in action_ids
+    assert mismatch_reason in next_safe_actions["blocked_reasons"]
     assert "worker_node_run worker-cancelled has no stop_reason" in next_safe_actions["blocked_reasons"]
 
     operator_packet = status["operator_decision_packet"]
-    assert operator_packet["stop_cancel_count"] == 3
+    assert operator_packet["stop_cancel_count"] == 4
+    assert mismatch_reason in operator_packet["stop_cancel_blocked_reasons"]
     assert "worker_node_run worker-cancelled has no stop_reason" in operator_packet["stop_cancel_blocked_reasons"]
-    assert "Stop/cancel control: 3 items, blocked true." in operator_packet["plain_language_summary"]
+    assert "Stop/cancel control: 4 items, blocked true." in operator_packet["plain_language_summary"]
     assert operator_packet["jenny_review_required"] is True
 
 

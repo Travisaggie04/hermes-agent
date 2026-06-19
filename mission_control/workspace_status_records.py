@@ -2051,6 +2051,7 @@ def _orchestration_stop_control_payload(
         "active_stop_count": sum(1 for item in items if item.get("status") == "stopping"),
         "terminal_stop_count": sum(1 for item in items if item.get("status") in {"stopped", "cancelled"}),
         "needs_report_count": sum(1 for item in items if item.get("report_link_status") != "linked_report_found"),
+        "link_mismatch_count": sum(1 for item in items if item.get("report_link_mismatch") is True),
         "needs_review_count": sum(1 for item in items if item.get("report_review_status") == "needs_review"),
         "primary_item": primary_item,
         "primary_item_id": _safe_text(primary_item.get("item_id")),
@@ -2085,7 +2086,17 @@ def _stop_control_item(
 ) -> dict[str, Any]:
     report_id = report.report_id if report else ""
     report_review_status = _linked_report_review_status(report) if report else "missing"
-    report_link_status = "linked_report_found" if report else "missing_linked_report"
+    link_mismatch_reason = _report_link_mismatch_reason(
+        report,
+        {"linked_record_type": record_type, "linked_record_id": record_id},
+    )
+    report_link_status = (
+        "linked_report_run_id_mismatch"
+        if link_mismatch_reason
+        else "linked_report_found"
+        if report
+        else "missing_linked_report"
+    )
     label = f"{record_type} {record_id} {status}"
     return {
         "item_id": f"{record_type}:{record_id}",
@@ -2098,6 +2109,8 @@ def _stop_control_item(
         "stopped_at": _safe_text(stopped_at),
         "report_id": report_id,
         "report_link_status": report_link_status,
+        "report_link_mismatch": bool(link_mismatch_reason),
+        "report_link_mismatch_reason": link_mismatch_reason,
         "report_review_status": report_review_status,
         "manual_review_required": True,
         "recommended_action": (
@@ -2117,7 +2130,12 @@ def _stop_control_blockers(item: dict[str, Any]) -> list[str]:
         blockers.append(f"{record_type} {record_id} is stopping and needs manual stop confirmation")
     if status in {"stopped", "cancelled"} and not _safe_text(item.get("stop_reason")):
         blockers.append(f"{record_type} {record_id} has no stop_reason")
-    if item.get("report_link_status") != "linked_report_found":
+    if item.get("report_link_mismatch") is True:
+        blockers.append(
+            _safe_text(item.get("report_link_mismatch_reason"))
+            or f"report_id {report_id} run_id does not match {record_type} {record_id}"
+        )
+    elif item.get("report_link_status") != "linked_report_found":
         blockers.append(f"{record_type} {record_id} has no linked stop/cancel report")
     if report_id and item.get("report_review_status") == "needs_review":
         blockers.append(f"report_id {report_id} still needs Jenny review")

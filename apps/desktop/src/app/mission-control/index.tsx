@@ -1566,6 +1566,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     stopControlDisplayOnly: stopControl?.display_only,
     stopControlExecutionEnabled: stopControl?.execution_enabled,
     stopControlManualOnly: stopControl?.manual_review_only,
+    stopControlLinkMismatchCount: stopControl?.link_mismatch_count ?? 0,
     stopControlNeedsReportCount: stopControl?.needs_report_count ?? 0,
     stopControlNeedsReviewCount: stopControl?.needs_review_count ?? 0,
     stopControlPrimaryLabel:
@@ -4409,7 +4410,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="report completion" tone={reportCompletionTone} value={`ready ${status.reportCompletionReadyCount} / blocked ${status.reportCompletionBlockedCount} / terminal ${status.reportCompletionTerminalCount}`} />
       <StatusItem label="report review queue" tone={reportReviewQueueTone} value={`items ${status.reportReviewQueueCount} / needs review ${status.reportReviewQueueNeedsReviewCount} / missing ${status.reportReviewQueueMissingCount} / mismatch ${status.reportReviewQueueLinkMismatchCount}`} />
       <StatusItem label="result ingestion" tone={resultIngestionTone} value={`ready ${status.resultIngestionReadyCount} / blocked ${status.resultIngestionBlockedCount} / reports ${status.resultIngestionReportCount}`} />
-      <StatusItem label="stop/cancel control" tone={stopControlTone} value={`items ${status.stopControlCount} / stopping ${status.stopControlActiveCount} / terminal ${status.stopControlTerminalCount}`} />
+      <StatusItem label="stop/cancel control" tone={stopControlTone} value={`items ${status.stopControlCount} / stopping ${status.stopControlActiveCount} / terminal ${status.stopControlTerminalCount} / mismatch ${status.stopControlLinkMismatchCount}`} />
       <StatusItem className="md:col-span-2" label="top report review" tone={reportReviewQueueTone} value={status.reportReviewQueuePrimaryLabel} />
       <StatusItem className="md:col-span-2" label="accepted runtime" value={status.runtime} />
       <StatusItem label="accepted-live head" value={status.head.slice(0, 12)} />

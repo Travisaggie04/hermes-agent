@@ -823,6 +823,7 @@ beforeEach(() => {
           stopped_at: ''
         }
       ],
+      link_mismatch_count: 0,
       manual_review_only: true,
       needs_report_count: 1,
       needs_review_count: 0,
@@ -1859,7 +1860,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('result ingestion')).toBeTruthy()
     expect(screen.getByText('ready 1 / blocked 0 / reports 1')).toBeTruthy()
     expect(screen.getByText('stop/cancel control')).toBeTruthy()
-    expect(screen.getByText('items 1 / stopping 0 / terminal 1')).toBeTruthy()
+    expect(screen.getByText('items 1 / stopping 0 / terminal 1 / mismatch 0')).toBeTruthy()
     expect(screen.getByText('top report review')).toBeTruthy()
     expect(screen.getByText('Laptop Codex reported scoped PR evidence.')).toBeTruthy()
     expect(screen.getByText('report review blockers')).toBeTruthy()

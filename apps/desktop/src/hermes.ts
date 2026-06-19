@@ -723,6 +723,8 @@ export interface MissionControlOrchestrationStopControlItem {
   record_id?: string
   record_type?: string
   report_id?: string
+  report_link_mismatch?: boolean
+  report_link_mismatch_reason?: string
   report_link_status?: string
   report_review_status?: string
   status?: string
@@ -739,6 +741,7 @@ export interface MissionControlOrchestrationStopControl {
   dry_run_only?: boolean
   execution_enabled?: boolean
   items?: MissionControlOrchestrationStopControlItem[]
+  link_mismatch_count?: number
   manual_review_only?: boolean
   needs_report_count?: number
   needs_review_count?: number
