@@ -257,6 +257,7 @@
       "Inert safety flags:",
       "- display_only=true",
       "- dry_run_only=true",
+      "- would_execute=false",
       "- execution_enabled=false",
       "- dispatch_in_gateway=false",
       "- model_routing=false",
@@ -1200,6 +1201,7 @@
     const safetyLocks = [
       "display_only=true",
       "dry_run_only=true",
+      "would_execute=false",
       "execution_enabled=false",
       "dispatch_in_gateway=false",
       "model_routing=false",
@@ -1359,6 +1361,7 @@
     const safetyLocks = [
       "display_only=true",
       "dry_run_only=true",
+      "would_execute=false",
       "execution_enabled=false",
       "dispatch_in_gateway=false",
       "model_routing=false",
