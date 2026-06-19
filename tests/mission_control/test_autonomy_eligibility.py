@@ -838,6 +838,7 @@ def test_execution_packet_preview_rejects_stringy_live_action_flags():
             mode="scoped_pr",
             dispatch_enabled="true",
             execution_enabled="yes",
+            send_to_jenny_enabled="enabled",
             session_send_enabled="on",
             worker_dispatch_enabled=1,
             would_dispatch="1",
@@ -858,6 +859,7 @@ def test_execution_packet_preview_rejects_stringy_live_action_flags():
     assert "would_session_send must remain false in previews" in result["blocked_reasons"]
     assert "execution_enabled must remain false" in result["blocked_reasons"]
     assert "dispatch_enabled must remain false" in result["blocked_reasons"]
+    assert "send_to_jenny_enabled must remain false" in result["blocked_reasons"]
     assert "session_send_enabled must remain false" in result["blocked_reasons"]
     assert "worker_dispatch_enabled must remain false" in result["blocked_reasons"]
     assert "merge is not allowed in scoped PR lanes" in result["blocked_reasons"]

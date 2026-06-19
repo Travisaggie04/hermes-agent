@@ -139,6 +139,7 @@ All current execution scaffolding must remain disabled:
 - `would_execute: false`
 - `execution_enabled: false`
 - `dispatch_enabled: false`
+- `send_to_jenny_enabled: false`
 - `session_send_enabled: false`
 - `worker_dispatch_enabled: false`
 
@@ -348,7 +349,8 @@ The execution packet preview is the canonical bounded work-packet view. It
 wraps the active approval, run, scope, report contract, and worker-node
 contract into one advisory packet. It may say blocked or preview-ready, but it
 always keeps `would_execute`, `execution_enabled`, `dispatch_enabled`,
-`session_send_enabled`, and `worker_dispatch_enabled` false. A worker-node
+`send_to_jenny_enabled`, `session_send_enabled`, and
+`worker_dispatch_enabled` false. A worker-node
 packet also requires explicit online worker presence before it can be
 preview-ready, and its worker-node contract carries the same Codex
 engineering safety-hardness requirement as the manual handoff prompt.

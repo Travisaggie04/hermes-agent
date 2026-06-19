@@ -178,6 +178,7 @@ _PREVIEW_DISABLED_FLAG_REASONS = {
     "would_session_send": "would_session_send must remain false in previews",
     "execution_enabled": "execution_enabled must remain false",
     "dispatch_enabled": "dispatch_enabled must remain false",
+    "send_to_jenny_enabled": "send_to_jenny_enabled must remain false",
     "session_send_enabled": "session_send_enabled must remain false",
     "worker_dispatch_enabled": "worker_dispatch_enabled must remain false",
 }
@@ -191,6 +192,7 @@ INERT_PREVIEW_FLAGS = {
     "would_session_send": False,
     "execution_enabled": False,
     "dispatch_enabled": False,
+    "send_to_jenny_enabled": False,
     "session_send_enabled": False,
     "worker_dispatch_enabled": False,
     "stored": False,
