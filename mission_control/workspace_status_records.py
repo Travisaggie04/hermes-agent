@@ -35,6 +35,7 @@ PENDING_APPROVAL_STATUSES = {"proposed"}
 AVAILABLE_APPROVAL_STATUSES = {"approved"}
 APPROVAL_TERMINAL_STATUSES = {"cancelled", "consumed", "expired", "rejected", "revoked"}
 REPORT_OPEN_STATUSES = {"received", "needs_review"}
+REPORT_REVIEWED_STATUSES = {"reviewed"}
 REPORT_TERMINAL_STATUSES = {"accepted", "rejected", "superseded"}
 RUN_REPORT_REQUIRED_STATUSES = {"completed", "failed", "blocked", "stopped", "cancelled"}
 RUN_TERMINAL_STATUSES = {"completed", "failed", "blocked", "stopped", "cancelled"}
@@ -456,14 +457,15 @@ def _report_lifecycle_payload(
     reviewed_report_ids: list[str] = []
     for report in reports:
         status = str(report.status or "received")
+        reviewed = status in REPORT_REVIEWED_STATUSES or bool(report.reviewed_at or report.reviewed_by)
         status_counts[status] = status_counts.get(status, 0) + 1
         if report.run_id:
             reports_by_run_id.setdefault(report.run_id, []).append(report.report_id)
-        if status in REPORT_OPEN_STATUSES or (status not in REPORT_TERMINAL_STATUSES and not report.reviewed_at):
+        if status in REPORT_OPEN_STATUSES or (status not in REPORT_TERMINAL_STATUSES and not reviewed):
             open_report_ids.append(report.report_id)
         if status in REPORT_TERMINAL_STATUSES:
             terminal_report_ids.append(report.report_id)
-        if report.reviewed_at or report.reviewed_by or status == "reviewed":
+        if reviewed:
             reviewed_report_ids.append(report.report_id)
 
     duplicate_report_ids = _duplicate_record_ids(raw_reports, "report_id")
@@ -648,7 +650,7 @@ def _linked_report_review_status(report: ReportRecord) -> str:
     status = str(report.status or "received")
     if status in REPORT_TERMINAL_STATUSES:
         return status
-    if status == "reviewed" or report.reviewed_at or report.reviewed_by:
+    if status in REPORT_REVIEWED_STATUSES or report.reviewed_at or report.reviewed_by:
         return "reviewed"
     return "needs_review"
 

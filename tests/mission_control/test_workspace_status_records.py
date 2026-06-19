@@ -267,6 +267,15 @@ def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_
     )
     store.append(
         ReportRecord(
+            report_id="report-reviewed-status",
+            run_id="run-reviewed-status",
+            project_id="project-hermes-mission-control",
+            status="reviewed",
+            summary="Reviewed report without timestamp.",
+        )
+    )
+    store.append(
+        ReportRecord(
             report_id="report-duplicate",
             run_id="run-with-report",
             project_id="project-hermes-mission-control",
@@ -285,19 +294,20 @@ def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_
     assert lifecycle["session_send_enabled"] is False
     assert lifecycle["worker_dispatch_enabled"] is False
     assert lifecycle["append_only_projection"] is True
-    assert lifecycle["raw_report_count"] == 3
-    assert lifecycle["report_count"] == 2
-    assert lifecycle["status_counts"] == {"accepted": 1, "needs_review": 1}
+    assert lifecycle["raw_report_count"] == 4
+    assert lifecycle["report_count"] == 3
+    assert lifecycle["status_counts"] == {"accepted": 1, "needs_review": 1, "reviewed": 1}
     assert lifecycle["duplicate_report_ids"] == ["report-duplicate"]
     assert lifecycle["open_report_ids"] == ["report-duplicate"]
     assert lifecycle["terminal_report_ids"] == ["report-accepted"]
-    assert lifecycle["reviewed_report_ids"] == ["report-accepted"]
+    assert lifecycle["reviewed_report_ids"] == ["report-accepted", "report-reviewed-status"]
     assert lifecycle["runs_missing_report"] == ["run-reportless"]
     assert lifecycle["runs_with_missing_linked_report_ids"] == {
         "run-missing-linked-report": ["report-missing"]
     }
     assert lifecycle["reports_by_run_id"] == {
         "run-reviewed": ["report-accepted"],
+        "run-reviewed-status": ["report-reviewed-status"],
         "run-with-report": ["report-duplicate"],
     }
     assert lifecycle["blocked"] is True
