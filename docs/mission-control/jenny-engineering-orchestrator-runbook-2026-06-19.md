@@ -188,6 +188,13 @@ was found and whether Jenny has reviewed, accepted, rejected, or superseded it.
 Missing or unreviewed linked reports remain display-only blockers; they do not
 enable worker dispatch or execution.
 
+Mission Control also projects a next-safe-action summary from the same backend
+truth. This row tells Travis the first manual review step Jenny should take,
+such as reviewing provenance, approval, run, report, worker-node, child-agent,
+or tool-permission blockers. The projection is advisory only: it is
+display-only, not stored as an approval, and keeps work execution, bridge
+sending, and worker-node dispatch disabled.
+
 ## Mission Control Reading Guide
 
 - Runtime provenance: source and runtime trust.
@@ -206,6 +213,8 @@ enable worker dispatch or execution.
   report chains.
 - Report lifecycle: report inbox/review state, duplicate IDs, missing reports,
   stale report links, and exact review blockers.
+- Next safe action: the highest-priority manual review or preview-preparation
+  step; it does not enable execution.
 
 If a row says blocked, Travis should read the blocker first instead of trying
 to force the action.

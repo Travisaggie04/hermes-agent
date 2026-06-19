@@ -502,6 +502,36 @@ export interface MissionControlReportLifecycle {
   worker_dispatch_enabled?: boolean
 }
 
+export interface MissionControlNextSafeAction {
+  action_id?: string
+  blocked_until?: string
+  label?: string
+  manual_only?: boolean
+  priority?: number
+  reason?: string
+  requires_approval?: boolean
+}
+
+export interface MissionControlNextSafeActions {
+  action_count?: number
+  actions?: MissionControlNextSafeAction[]
+  blocked?: boolean
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  primary_action?: MissionControlNextSafeAction
+  primary_action_id?: string
+  primary_action_label?: string
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
+}
+
 export interface MissionControlProjectSession {
   cwd?: null | string
   durable_session_id?: string
@@ -891,6 +921,7 @@ export interface MissionControlWorkspaceStatus {
   }
   deployment_gap?: { dashboard_deploy_needed?: boolean; deployed_head?: string; accepted_live_head?: string; latest_merged_pr?: string; state?: string }
   lane?: { active_lane_count?: number; max_active_lane?: number }
+  next_safe_actions?: MissionControlNextSafeActions
   read_only_autonomy_eligibility?: {
     blocked_reasons?: string[]
     bridge_permissions?: { permission_classification?: string; read_only_safe?: boolean; reasons?: string[] }

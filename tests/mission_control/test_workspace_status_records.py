@@ -509,3 +509,23 @@ def test_record_sourced_workspace_status_projects_approval_and_run_lifecycle_blo
         "run_id run-terminal-stale-report links missing report ids: report-missing"
         in runs["blocked_reasons"]
     )
+
+    next_safe_actions = status["next_safe_actions"]
+    assert next_safe_actions["display_only"] is True
+    assert next_safe_actions["trusted_for_execution"] is False
+    assert next_safe_actions["would_execute"] is False
+    assert next_safe_actions["execution_enabled"] is False
+    assert next_safe_actions["dispatch_enabled"] is False
+    assert next_safe_actions["session_send_enabled"] is False
+    assert next_safe_actions["worker_dispatch_enabled"] is False
+    assert next_safe_actions["stored"] is False
+    assert next_safe_actions["dry_run_only"] is True
+    assert next_safe_actions["blocked"] is True
+    assert next_safe_actions["primary_action_id"] == next_safe_actions["actions"][0]["action_id"]
+    action_ids = {action["action_id"] for action in next_safe_actions["actions"]}
+    assert "review_approval_lifecycle_blockers" in action_ids
+    assert "review_run_lifecycle_blockers" in action_ids
+    assert "review_report_lifecycle_blockers" in action_ids
+    assert "approval_id approval-duplicate has multiple append-only records" in next_safe_actions["blocked_reasons"]
+    assert "terminal run_id run-terminal-missing-report has no linked report" in next_safe_actions["blocked_reasons"]
+    assert "run_id run-terminal-missing-report has no linked report" in next_safe_actions["blocked_reasons"]

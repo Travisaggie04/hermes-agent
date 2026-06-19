@@ -139,6 +139,43 @@ beforeEach(() => {
       state: 'merged_not_deployed'
     },
     lane: { active_lane_count: 0 },
+    next_safe_actions: {
+      action_count: 1,
+      actions: [
+        {
+          action_id: 'review_runtime_provenance_blockers',
+          blocked_until: 'runtime provenance is clean and aligned',
+          label: 'Review runtime provenance blockers',
+          manual_only: true,
+          priority: 10,
+          reason: 'gateway git metadata is broken',
+          requires_approval: false
+        }
+      ],
+      blocked: true,
+      blocked_reasons: ['gateway git metadata is broken', 'run_id run-parent-1 references unavailable approval_id approval-old'],
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      primary_action: {
+        action_id: 'review_runtime_provenance_blockers',
+        blocked_until: 'runtime provenance is clean and aligned',
+        label: 'Review runtime provenance blockers',
+        manual_only: true,
+        priority: 10,
+        reason: 'gateway git metadata is broken',
+        requires_approval: false
+      },
+      primary_action_id: 'review_runtime_provenance_blockers',
+      primary_action_label: 'Review runtime provenance blockers',
+      session_send_enabled: false,
+      source: 'mission_control_next_safe_actions_v1',
+      stored: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      would_execute: false
+    },
     read_only_autonomy_eligibility: {
       blocked_reasons: ['runtime provenance is not clean', 'gateway git metadata is broken'],
       bridge_permissions: {
@@ -1080,6 +1117,12 @@ describe('MissionControlView', () => {
     expect(screen.getByText('manual only')).toBeTruthy()
     expect(screen.getByText('lifecycle projection')).toBeTruthy()
     expect(screen.getByText('append-only yes / active mutation lanes 0')).toBeTruthy()
+    expect(screen.getByText('next safe action')).toBeTruthy()
+    expect(screen.getByText('Review runtime provenance blockers')).toBeTruthy()
+    expect(screen.getByText('next action mode')).toBeTruthy()
+    expect(screen.getByText('display-only yes / actions 1')).toBeTruthy()
+    expect(screen.getByText('next action reasons')).toBeTruthy()
+    expect(screen.getByText('gateway git metadata is broken, run_id run-parent-1 references unavailable approval_id approval-old')).toBeTruthy()
     expect(screen.getByText('approval lifecycle')).toBeTruthy()
     expect(screen.getByText('available 1 / pending 1 / expired 1')).toBeTruthy()
     expect(screen.getByText('approval gaps')).toBeTruthy()

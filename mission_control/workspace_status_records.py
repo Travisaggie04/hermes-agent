@@ -232,6 +232,7 @@ def build_workspace_status_from_records(
         "active_child_run_count": len(active_child_runs),
         "active_worker_node_run_count": len(active_worker_runs),
     }
+    status["next_safe_actions"] = _next_safe_actions_payload(status)
     return status
 
 
@@ -519,6 +520,200 @@ def _report_lifecycle_payload(
     }
 
 
+def _next_safe_actions_payload(status: dict[str, Any]) -> dict[str, Any]:
+    actions: list[dict[str, Any]] = []
+    blocked_reasons: list[str] = []
+
+    def extend_blockers(values: list[str]) -> None:
+        blocked_reasons.extend(values)
+
+    def add_action(
+        *,
+        action_id: str,
+        label: str,
+        reason: str,
+        blocked_until: str,
+        priority: int,
+        requires_approval: bool = False,
+    ) -> None:
+        if any(action.get("action_id") == action_id for action in actions):
+            return
+        actions.append(
+            {
+                "action_id": action_id,
+                "label": label,
+                "reason": reason,
+                "priority": priority,
+                "requires_approval": requires_approval,
+                "manual_only": True,
+                "blocked_until": blocked_until,
+            }
+        )
+
+    runtime_provenance = _mapping(status.get("runtime_provenance"))
+    provenance_reasons = _text_list(runtime_provenance.get("autonomy_blocked_reasons"))
+    if runtime_provenance.get("autonomy_blocked") is True or provenance_reasons:
+        extend_blockers(provenance_reasons)
+        add_action(
+            action_id="review_runtime_provenance_blockers",
+            label="Review runtime provenance blockers",
+            reason=_first_reason(provenance_reasons, "Mission Control cannot prove runtime/source truth is clean."),
+            blocked_until="runtime provenance is clean and aligned",
+            priority=10,
+        )
+
+    approval_lifecycle = _mapping(status.get("approval_lifecycle"))
+    approval_reasons = _text_list(approval_lifecycle.get("blocked_reasons"))
+    if approval_lifecycle.get("blocked") is True or approval_reasons:
+        extend_blockers(approval_reasons)
+        add_action(
+            action_id="review_approval_lifecycle_blockers",
+            label="Review approval lifecycle blockers",
+            reason=_first_reason(approval_reasons, "Approval records are incomplete or unavailable."),
+            blocked_until="approval chain is exact, available, and append-only consistent",
+            priority=20,
+        )
+
+    run_lifecycle = _mapping(status.get("run_lifecycle"))
+    run_reasons = _text_list(run_lifecycle.get("blocked_reasons"))
+    if run_lifecycle.get("blocked") is True or run_reasons:
+        extend_blockers(run_reasons)
+        add_action(
+            action_id="review_run_lifecycle_blockers",
+            label="Review run lifecycle blockers",
+            reason=_first_reason(run_reasons, "Run records are incomplete or unsafe for orchestration."),
+            blocked_until="run lifecycle is consistent and mutation lanes obey the one-lane rule",
+            priority=30,
+        )
+
+    report_lifecycle = _mapping(status.get("report_lifecycle"))
+    report_reasons = _text_list(report_lifecycle.get("blocked_reasons"))
+    if report_lifecycle.get("blocked") is True or report_reasons:
+        extend_blockers(report_reasons)
+        add_action(
+            action_id="review_report_lifecycle_blockers",
+            label="Review report lifecycle blockers",
+            reason=_first_reason(report_reasons, "Reports are missing, duplicated, stale, or waiting for review."),
+            blocked_until="required reports are linked and reviewed",
+            priority=40,
+        )
+
+    worker_projection = _mapping(status.get("worker_node_orchestration"))
+    worker_reasons = _text_list(worker_projection.get("blocked_reasons"))
+    if worker_reasons:
+        extend_blockers(worker_reasons)
+        add_action(
+            action_id="review_worker_node_blockers",
+            label="Review laptop Codex worker-node blockers",
+            reason=_first_reason(worker_reasons, "The laptop Codex worker-node is not ready for a reviewed report loop."),
+            blocked_until="worker-node status and report contract are clear",
+            priority=50,
+        )
+
+    child_projection = _mapping(status.get("child_agent_orchestration"))
+    child_reasons = _text_list(child_projection.get("blocked_reasons"))
+    if child_reasons:
+        extend_blockers(child_reasons)
+        add_action(
+            action_id="review_child_agent_blockers",
+            label="Review child-agent blockers",
+            reason=_first_reason(child_reasons, "Child-agent records need review before delegation can be trusted."),
+            blocked_until="child-agent reports and blockers are reviewed",
+            priority=60,
+        )
+
+    tool_permissions = _mapping(status.get("tool_permission_classification"))
+    tool_reasons = _text_list(tool_permissions.get("blocked_reasons"))
+    write_capable_path_ids = _text_list(tool_permissions.get("write_capable_path_ids"))
+    if tool_reasons or write_capable_path_ids or tool_permissions.get("read_only_safe") is False:
+        extend_blockers(tool_reasons)
+        extend_blockers([f"write-capable tool path: {path_id}" for path_id in write_capable_path_ids])
+        add_action(
+            action_id="review_tool_permission_blockers",
+            label="Review write-capable tool paths",
+            reason=_first_reason(
+                [*tool_reasons, *write_capable_path_ids],
+                "A bridge or tool path is not safe for read-only autonomy.",
+            ),
+            blocked_until="tool paths are manual-only or read-only safe",
+            priority=70,
+        )
+
+    read_only_eligibility = _mapping(status.get("read_only_autonomy_eligibility"))
+    read_only_reasons = _text_list(read_only_eligibility.get("blocked_reasons"))
+    if read_only_eligibility.get("eligible") is False and read_only_reasons:
+        extend_blockers(read_only_reasons)
+        add_action(
+            action_id="review_read_only_autonomy_blockers",
+            label="Review read-only autonomy blockers",
+            reason=_first_reason(read_only_reasons, "Read-only autonomy is not preview-ready."),
+            blocked_until="read-only preview eligibility is satisfied",
+            priority=80,
+        )
+
+    scoped_pr_eligibility = _mapping(status.get("scoped_pr_lane_eligibility"))
+    scoped_pr_reasons = _text_list(scoped_pr_eligibility.get("blocked_reasons"))
+    if scoped_pr_eligibility.get("eligible") is False and scoped_pr_reasons:
+        extend_blockers(scoped_pr_reasons)
+        add_action(
+            action_id="review_scoped_pr_lane_blockers",
+            label="Review scoped PR lane blockers",
+            reason=_first_reason(scoped_pr_reasons, "Scoped PR creation is not preview-ready."),
+            blocked_until="scoped PR preview eligibility is satisfied",
+            priority=90,
+        )
+
+    unique_blocked_reasons = _unique_reasons(blocked_reasons)
+    if not actions and scoped_pr_eligibility.get("eligible") is True:
+        add_action(
+            action_id="prepare_scoped_pr_preview",
+            label="Prepare a scoped PR preview packet",
+            reason="Scoped PR eligibility is preview-ready; keep implementation and review manual.",
+            blocked_until="human approval and PR review are complete",
+            priority=100,
+            requires_approval=True,
+        )
+    if not actions and read_only_eligibility.get("eligible") is True:
+        add_action(
+            action_id="prepare_read_only_preview",
+            label="Prepare a supervised read-only preview packet",
+            reason="Read-only eligibility is preview-ready; keep work packet execution disabled.",
+            blocked_until="human approval confirms the exact read-only packet",
+            priority=110,
+            requires_approval=True,
+        )
+    if not actions:
+        add_action(
+            action_id="keep_preview_only_and_wait_for_approval",
+            label="Keep Mission Control preview-only and wait for exact approval",
+            reason="No executable action is enabled by this projection.",
+            blocked_until="Travis approves a bounded next lane",
+            priority=120,
+            requires_approval=True,
+        )
+
+    primary_action = actions[0] if actions else {}
+    return {
+        "source": "mission_control_next_safe_actions_v1",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "stored": False,
+        "dry_run_only": True,
+        "blocked": bool(unique_blocked_reasons),
+        "blocked_reasons": unique_blocked_reasons,
+        "action_count": len(actions),
+        "primary_action": primary_action,
+        "primary_action_id": str(primary_action.get("action_id") or ""),
+        "primary_action_label": str(primary_action.get("label") or ""),
+        "actions": actions,
+    }
+
+
 def _latest_by_id(records: tuple[Any, ...], field_name: str) -> dict[str, dict[str, Any]]:
     return {
         record_id: record.to_dict()
@@ -701,6 +896,20 @@ def _unique_reasons(values: list[str]) -> list[str]:
         if text and text not in output:
             output.append(text)
     return output
+
+
+def _mapping(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _text_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [_safe_text(item) for item in value if _safe_text(item)]
+
+
+def _first_reason(values: list[str], fallback: str) -> str:
+    return values[0] if values else fallback
 
 
 def _approval_is_expired(approval: ApprovalRecord, *, now: str = "") -> bool:
