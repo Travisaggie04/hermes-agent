@@ -600,6 +600,47 @@ export interface MissionControlReportContractCompliance {
   would_execute?: boolean
 }
 
+export interface MissionControlOrchestrationStopControlItem {
+  item_id?: string
+  label?: string
+  manual_review_required?: boolean
+  parent_run_id?: string
+  recommended_action?: string
+  record_id?: string
+  record_type?: string
+  report_id?: string
+  report_link_status?: string
+  report_review_status?: string
+  status?: string
+  stop_reason?: string
+  stopped_at?: string
+}
+
+export interface MissionControlOrchestrationStopControl {
+  active_stop_count?: number
+  blocked?: boolean
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  items?: MissionControlOrchestrationStopControlItem[]
+  manual_review_only?: boolean
+  needs_report_count?: number
+  needs_review_count?: number
+  primary_item?: MissionControlOrchestrationStopControlItem
+  primary_item_id?: string
+  primary_item_label?: string
+  session_send_enabled?: boolean
+  source?: string
+  stop_cancel_count?: number
+  stored?: boolean
+  terminal_stop_count?: number
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
+}
+
 export interface MissionControlOperatorDecisionPacket {
   approval_required?: boolean
   blocked?: boolean
@@ -630,6 +671,9 @@ export interface MissionControlOperatorDecisionPacket {
   source?: string
   state?: string
   stored?: boolean
+  stop_cancel_blocked_reasons?: string[]
+  stop_cancel_count?: number
+  stop_cancel_primary_item_id?: string
   summary_lines?: string[]
   top_report_review_item_id?: string
   top_report_review_label?: string
@@ -1304,6 +1348,7 @@ export interface MissionControlWorkspaceStatus {
   operator_decision_packet?: MissionControlOperatorDecisionPacket
   orchestration_readiness?: MissionControlOrchestrationReadiness
   orchestration_run_graph?: MissionControlOrchestrationRunGraph
+  orchestration_stop_control?: MissionControlOrchestrationStopControl
   read_only_autonomy_eligibility?: {
     blocked_reasons?: string[]
     bridge_permissions?: { permission_classification?: string; read_only_safe?: boolean; reasons?: string[] }

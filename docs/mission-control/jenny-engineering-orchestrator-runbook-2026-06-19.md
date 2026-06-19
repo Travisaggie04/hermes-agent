@@ -254,6 +254,13 @@ parent runs, missing report IDs, stale report links, and reports tied to
 unknown run IDs remain blockers until Jenny can review or repair the append-only
 records.
 
+The stop/cancel control row reviews any stopping, stopped, or cancelled parent,
+child-agent, or laptop Codex worker-node run. A stopped or cancelled item still
+needs a stop reason, a linked final report, and Jenny review before another
+instruction depends on it. A stopping item remains blocked until a human
+confirms the stop state. This is only a review surface; it does not send stop
+signals, cancel work, dispatch agents, or mutate records.
+
 The child-agent instruction preview mirrors the laptop Codex worker preview for
 planned delegation. It gives Jenny a manual prompt with child-agent identity,
 objective, allowed actions, forbidden actions, and report requirements. It does
@@ -287,6 +294,8 @@ not start delegation, send a session, mutate records, or enable dispatch.
   report, reason, missing report links, and worker/child report context.
 - Report contract compliance: whether reports include required result fields
   before Jenny accepts or relies on them.
+- Stop/cancel control: whether stopping, stopped, or cancelled runs have a
+  reason, final report, and Jenny review.
 - Next safe action: the highest-priority manual review or preview-preparation
   step; it does not enable execution.
 - Operator decision packet: a plain-language packet for Travis showing state,

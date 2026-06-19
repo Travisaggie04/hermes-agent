@@ -1253,6 +1253,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
   const reportLifecycle = status.report_lifecycle
   const reportContractCompliance = status.report_contract_compliance
   const reportReviewQueue = status.report_review_queue
+  const stopControl = status.orchestration_stop_control
   const nextSafeActions = status.next_safe_actions
   const nextSafePrimaryAction = nextSafeActions?.primary_action
   const executionModeClassification = status.execution_mode_classification
@@ -1452,6 +1453,21 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     reportReviewQueueWorkerDispatchEnabled: reportReviewQueue?.worker_dispatch_enabled,
     reportReviewedCount: reportLifecycle?.reviewed_report_ids?.length ?? 0,
     reportTerminalCount: reportLifecycle?.terminal_report_ids?.length ?? 0,
+    stopControlActiveCount: stopControl?.active_stop_count ?? 0,
+    stopControlBlocked: stopControl?.blocked,
+    stopControlBlockedReasons: stopControl?.blocked_reasons ?? [],
+    stopControlCount: stopControl?.stop_cancel_count ?? 0,
+    stopControlDisplayOnly: stopControl?.display_only,
+    stopControlExecutionEnabled: stopControl?.execution_enabled,
+    stopControlManualOnly: stopControl?.manual_review_only,
+    stopControlNeedsReportCount: stopControl?.needs_report_count ?? 0,
+    stopControlNeedsReviewCount: stopControl?.needs_review_count ?? 0,
+    stopControlPrimaryLabel:
+      stopControl?.primary_item_label ??
+      stopControl?.primary_item?.label ??
+      'No stopped or cancelled work recorded',
+    stopControlTerminalCount: stopControl?.terminal_stop_count ?? 0,
+    stopControlWorkerDispatchEnabled: stopControl?.worker_dispatch_enabled,
     runActiveCount: runLifecycle?.active_run_ids?.length ?? 0,
     runBlockedReasons: runLifecycle?.blocked_reasons ?? [],
     runDuplicateCount: runLifecycle?.duplicate_run_ids?.length ?? 0,
@@ -4150,6 +4166,14 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
         ? 'warn'
         : 'good'
       : 'warn'
+  const stopControlTone =
+    status.stopControlExecutionEnabled === false &&
+    status.stopControlWorkerDispatchEnabled === false &&
+    status.stopControlManualOnly === true
+      ? status.stopControlBlocked || status.stopControlCount
+        ? 'warn'
+        : 'good'
+      : 'warn'
   const nextSafeActionTone =
     status.nextSafeActionExecutionEnabled === false &&
     status.nextSafeActionDispatchEnabled === false &&
@@ -4223,6 +4247,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="report gaps" tone={status.reportDuplicateCount || status.reportMissingRunCount || status.reportMissingLinkedCount ? 'warn' : 'good'} value={`duplicates ${status.reportDuplicateCount} / missing ${status.reportMissingRunCount} / stale links ${status.reportMissingLinkedCount}`} />
       <StatusItem label="report contract" tone={reportContractTone} value={`reports ${status.reportContractReportCount} / complete ${status.reportContractCompleteCount} / incomplete ${status.reportContractIncompleteCount}`} />
       <StatusItem label="report review queue" tone={reportReviewQueueTone} value={`items ${status.reportReviewQueueCount} / needs review ${status.reportReviewQueueNeedsReviewCount} / missing ${status.reportReviewQueueMissingCount}`} />
+      <StatusItem label="stop/cancel control" tone={stopControlTone} value={`items ${status.stopControlCount} / stopping ${status.stopControlActiveCount} / terminal ${status.stopControlTerminalCount}`} />
       <StatusItem className="md:col-span-2" label="top report review" tone={reportReviewQueueTone} value={status.reportReviewQueuePrimaryLabel} />
       <StatusItem className="md:col-span-2" label="accepted runtime" value={status.runtime} />
       <StatusItem label="accepted-live head" value={status.head.slice(0, 12)} />
@@ -4256,6 +4281,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-3" label="report review blockers" tone={status.reportLifecycleBlockedReasons.length ? 'warn' : 'good'} value={status.reportLifecycleBlockedReasons.length ? status.reportLifecycleBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="report contract blockers" tone={status.reportContractBlockedReasons.length ? 'warn' : 'good'} value={status.reportContractBlockedReasons.length ? status.reportContractBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="report queue reason" tone={reportReviewQueueTone} value={status.reportReviewQueueBlockedReasons.length ? status.reportReviewQueueBlockedReasons.join(', ') : status.reportReviewQueuePrimaryReason} />
+      <StatusItem className="md:col-span-3" label="stop/cancel blockers" tone={status.stopControlBlockedReasons.length ? 'warn' : 'good'} value={status.stopControlBlockedReasons.length ? status.stopControlBlockedReasons.join(', ') : status.stopControlPrimaryLabel} />
       <StatusItem className="md:col-span-3" label="write-capable tool paths" tone={status.toolPermissionWritePaths.length ? 'warn' : 'good'} value={status.toolPermissionWritePaths.length ? status.toolPermissionWritePaths.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="scoped PR blockers" tone={status.scopedPrBlockedReasons.length ? 'warn' : 'good'} value={status.scopedPrBlockedReasons.length ? status.scopedPrBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="child-agent blockers" tone={status.childBlockedReasons.length ? 'warn' : 'good'} value={status.childBlockedReasons.length ? status.childBlockedReasons.join(', ') : 'none'} />

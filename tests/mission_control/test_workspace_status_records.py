@@ -817,6 +817,95 @@ def test_record_sourced_workspace_status_projects_report_contract_compliance(tmp
     assert "Report contract completeness: 1 complete, 1 incomplete." in operator_packet["plain_language_summary"]
 
 
+def test_record_sourced_workspace_status_projects_stop_cancel_control(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        RunRecord(
+            run_id="run-stopping",
+            project_id="project-hermes-mission-control",
+            lane_type="read_only_inspection",
+            title="Stopping run",
+            status="stopping",
+        )
+    )
+    store.append(
+        ChildRunRecord(
+            child_run_id="child-stopped",
+            parent_run_id="run-parent",
+            project_id="project-hermes-mission-control",
+            agent_identity="jenny-child",
+            status="stopped",
+            objective="Stop child safely.",
+            stopped_at="2026-06-19T12:05:00Z",
+            stop_reason="Operator stopped after evidence was enough.",
+            report_id="report-child-stop",
+        )
+    )
+    store.append(
+        WorkerNodeRunRecord(
+            worker_run_id="worker-cancelled",
+            parent_run_id="run-parent",
+            project_id="project-hermes-mission-control",
+            worker_identity="codex",
+            worker_host_label="laptop-codex",
+            status="cancelled",
+            objective="Prepare scoped PR evidence.",
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-child-stop",
+            run_id="child-stopped",
+            project_id="project-hermes-mission-control",
+            status="received",
+            summary="Child stopped after reporting enough evidence.",
+        )
+    )
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    stop_control = status["orchestration_stop_control"]
+    assert stop_control["source"] == "mission_control_orchestration_stop_control_v1"
+    assert stop_control["display_only"] is True
+    assert stop_control["trusted_for_execution"] is False
+    assert stop_control["would_execute"] is False
+    assert stop_control["execution_enabled"] is False
+    assert stop_control["dispatch_enabled"] is False
+    assert stop_control["session_send_enabled"] is False
+    assert stop_control["worker_dispatch_enabled"] is False
+    assert stop_control["stored"] is False
+    assert stop_control["dry_run_only"] is True
+    assert stop_control["manual_review_only"] is True
+    assert stop_control["stop_cancel_count"] == 3
+    assert stop_control["active_stop_count"] == 1
+    assert stop_control["terminal_stop_count"] == 2
+    assert stop_control["needs_report_count"] == 2
+    assert stop_control["needs_review_count"] == 1
+    assert stop_control["blocked"] is True
+    assert "run run-stopping is stopping and needs manual stop confirmation" in stop_control["blocked_reasons"]
+    assert "run run-stopping has no linked stop/cancel report" in stop_control["blocked_reasons"]
+    assert "report_id report-child-stop still needs Jenny review" in stop_control["blocked_reasons"]
+    assert "worker_node_run worker-cancelled has no stop_reason" in stop_control["blocked_reasons"]
+    assert "worker_node_run worker-cancelled has no linked stop/cancel report" in stop_control["blocked_reasons"]
+
+    items = {item["item_id"]: item for item in stop_control["items"]}
+    assert items["child_run:child-stopped"]["report_link_status"] == "linked_report_found"
+    assert items["child_run:child-stopped"]["report_review_status"] == "needs_review"
+    assert items["worker_node_run:worker-cancelled"]["report_link_status"] == "missing_linked_report"
+
+    next_safe_actions = status["next_safe_actions"]
+    action_ids = {action["action_id"] for action in next_safe_actions["actions"]}
+    assert "review_stop_cancel_control" in action_ids
+    assert "worker_node_run worker-cancelled has no stop_reason" in next_safe_actions["blocked_reasons"]
+
+    operator_packet = status["operator_decision_packet"]
+    assert operator_packet["stop_cancel_count"] == 3
+    assert "worker_node_run worker-cancelled has no stop_reason" in operator_packet["stop_cancel_blocked_reasons"]
+    assert "Stop/cancel control: 3 items, blocked true." in operator_packet["plain_language_summary"]
+    assert operator_packet["jenny_review_required"] is True
+
+
 def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"
     store = JsonlRecordStore(records_path)

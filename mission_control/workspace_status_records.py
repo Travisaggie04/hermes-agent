@@ -40,6 +40,7 @@ REPORT_TERMINAL_STATUSES = {"accepted", "rejected", "superseded"}
 RUN_REPORT_REQUIRED_STATUSES = {"completed", "failed", "blocked", "stopped", "cancelled"}
 RUN_TERMINAL_STATUSES = {"completed", "failed", "blocked", "stopped", "cancelled"}
 RUN_STOP_CANCEL_STATUSES = {"stopping", "stopped", "cancelled"}
+ORCHESTRATION_STOP_CANCEL_STATUSES = {"stopping", "stopped", "cancelled"}
 WORKER_NODE_PRESENCE_STALE_SECONDS = 15 * 60
 MUTATION_LANE_TYPES = {
     "implementation",
@@ -271,6 +272,12 @@ def build_workspace_status_from_records(
         runs=recent_runs,
         child_runs=recent_child_runs,
         worker_runs=recent_worker_runs,
+    )
+    status["orchestration_stop_control"] = _orchestration_stop_control_payload(
+        runs=recent_runs,
+        child_runs=recent_child_runs,
+        worker_runs=recent_worker_runs,
+        reports=recent_reports,
     )
     status["next_safe_actions"] = _next_safe_actions_payload(status)
     status["orchestration_readiness"] = _orchestration_readiness_payload(status)
@@ -795,6 +802,18 @@ def _next_safe_actions_payload(status: dict[str, Any]) -> dict[str, Any]:
             reason=_first_reason(report_contract_reasons, "One or more reports are missing required result fields."),
             blocked_until="reports include summary, result, evidence, risks/blockers, tests, next lane, and safety confirmation",
             priority=47,
+        )
+
+    stop_control = _mapping(status.get("orchestration_stop_control"))
+    stop_control_reasons = _text_list(stop_control.get("blocked_reasons"))
+    if stop_control.get("blocked") is True or stop_control_reasons:
+        extend_blockers(stop_control_reasons)
+        add_action(
+            action_id="review_stop_cancel_control",
+            label="Review stop/cancel control",
+            reason=_first_reason(stop_control_reasons, "A stopped or cancelled run needs manual review."),
+            blocked_until="stopped/cancelled runs have a stop reason, linked report, and Jenny review",
+            priority=48,
         )
 
     worker_projection = _mapping(status.get("worker_node_orchestration"))
@@ -1469,6 +1488,176 @@ def _report_review_queue_item(
     }
 
 
+def _orchestration_stop_control_payload(
+    *,
+    runs: tuple[RunRecord, ...],
+    child_runs: tuple[ChildRunRecord, ...],
+    worker_runs: tuple[WorkerNodeRunRecord, ...],
+    reports: tuple[ReportRecord, ...],
+) -> dict[str, Any]:
+    reports_by_id, reports_by_run_id = _report_lookup_maps(reports)
+    items: list[dict[str, Any]] = []
+    blocked_reasons: list[str] = []
+
+    for run in runs:
+        status = _safe_text(run.status) or "requested"
+        if status not in RUN_STOP_CANCEL_STATUSES:
+            continue
+        report = _record_stop_report(
+            record_id=run.run_id,
+            report_ids=run.report_ids,
+            reports_by_id=reports_by_id,
+            reports_by_run_id=reports_by_run_id,
+        )
+        item = _stop_control_item(
+            record_type="run",
+            record_id=run.run_id,
+            parent_run_id="",
+            status=status,
+            stop_reason=run.stop_reason,
+            stopped_at=run.stopped_at,
+            report=report,
+        )
+        items.append(item)
+        blocked_reasons.extend(_stop_control_blockers(item))
+
+    for child in child_runs:
+        status = _safe_text(child.status) or "requested"
+        if status not in ORCHESTRATION_STOP_CANCEL_STATUSES:
+            continue
+        report = _record_stop_report(
+            record_id=child.child_run_id,
+            report_ids=(child.report_id,),
+            reports_by_id=reports_by_id,
+            reports_by_run_id=reports_by_run_id,
+        )
+        item = _stop_control_item(
+            record_type="child_run",
+            record_id=child.child_run_id,
+            parent_run_id=child.parent_run_id,
+            status=status,
+            stop_reason=child.stop_reason or child.failure_reason,
+            stopped_at=child.stopped_at,
+            report=report,
+        )
+        items.append(item)
+        blocked_reasons.extend(_stop_control_blockers(item))
+
+    for worker in worker_runs:
+        status = _safe_text(worker.status) or "requested"
+        if status not in ORCHESTRATION_STOP_CANCEL_STATUSES:
+            continue
+        report = _record_stop_report(
+            record_id=worker.worker_run_id,
+            report_ids=(worker.report_id,),
+            reports_by_id=reports_by_id,
+            reports_by_run_id=reports_by_run_id,
+        )
+        item = _stop_control_item(
+            record_type="worker_node_run",
+            record_id=worker.worker_run_id,
+            parent_run_id=worker.parent_run_id,
+            status=status,
+            stop_reason=worker.stop_reason or worker.failure_reason,
+            stopped_at=worker.stopped_at,
+            report=report,
+        )
+        items.append(item)
+        blocked_reasons.extend(_stop_control_blockers(item))
+
+    unique_blocked_reasons = _unique_reasons(blocked_reasons)
+    primary_item = items[0] if items else {}
+    return {
+        "source": "mission_control_orchestration_stop_control_v1",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "stored": False,
+        "dry_run_only": True,
+        "manual_review_only": True,
+        "blocked": bool(unique_blocked_reasons),
+        "blocked_reasons": unique_blocked_reasons,
+        "stop_cancel_count": len(items),
+        "active_stop_count": sum(1 for item in items if item.get("status") == "stopping"),
+        "terminal_stop_count": sum(1 for item in items if item.get("status") in {"stopped", "cancelled"}),
+        "needs_report_count": sum(1 for item in items if item.get("report_link_status") != "linked_report_found"),
+        "needs_review_count": sum(1 for item in items if item.get("report_review_status") == "needs_review"),
+        "primary_item": primary_item,
+        "primary_item_id": _safe_text(primary_item.get("item_id")),
+        "primary_item_label": _safe_text(primary_item.get("label")),
+        "items": items,
+    }
+
+
+def _record_stop_report(
+    *,
+    record_id: str,
+    report_ids: tuple[str, ...],
+    reports_by_id: dict[str, ReportRecord],
+    reports_by_run_id: dict[str, ReportRecord],
+) -> ReportRecord | None:
+    for report_id in report_ids:
+        report = reports_by_id.get(report_id)
+        if report is not None:
+            return report
+    return reports_by_run_id.get(record_id)
+
+
+def _stop_control_item(
+    *,
+    record_type: str,
+    record_id: str,
+    parent_run_id: str,
+    status: str,
+    stop_reason: str,
+    stopped_at: str,
+    report: ReportRecord | None,
+) -> dict[str, Any]:
+    report_id = report.report_id if report else ""
+    report_review_status = _linked_report_review_status(report) if report else "missing"
+    report_link_status = "linked_report_found" if report else "missing_linked_report"
+    label = f"{record_type} {record_id} {status}"
+    return {
+        "item_id": f"{record_type}:{record_id}",
+        "record_type": record_type,
+        "record_id": record_id,
+        "parent_run_id": parent_run_id,
+        "status": status,
+        "label": label,
+        "stop_reason": _safe_text(stop_reason, max_chars=800),
+        "stopped_at": _safe_text(stopped_at),
+        "report_id": report_id,
+        "report_link_status": report_link_status,
+        "report_review_status": report_review_status,
+        "manual_review_required": True,
+        "recommended_action": (
+            "Jenny reviews stop reason, final report, blockers, and safety confirmation "
+            "before assigning follow-up work."
+        ),
+    }
+
+
+def _stop_control_blockers(item: dict[str, Any]) -> list[str]:
+    record_type = _safe_text(item.get("record_type"))
+    record_id = _safe_text(item.get("record_id"))
+    status = _safe_text(item.get("status"))
+    report_id = _safe_text(item.get("report_id"))
+    blockers: list[str] = []
+    if status == "stopping":
+        blockers.append(f"{record_type} {record_id} is stopping and needs manual stop confirmation")
+    if status in {"stopped", "cancelled"} and not _safe_text(item.get("stop_reason")):
+        blockers.append(f"{record_type} {record_id} has no stop_reason")
+    if item.get("report_link_status") != "linked_report_found":
+        blockers.append(f"{record_type} {record_id} has no linked stop/cancel report")
+    if report_id and item.get("report_review_status") == "needs_review":
+        blockers.append(f"report_id {report_id} still needs Jenny review")
+    return blockers
+
+
 def _worker_node_presence_payload(
     *,
     worker_runs: tuple[WorkerNodeRunRecord, ...],
@@ -1946,6 +2135,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     readiness = _mapping(status.get("orchestration_readiness"))
     report_queue = _mapping(status.get("report_review_queue"))
     report_contract = _mapping(status.get("report_contract_compliance"))
+    stop_control = _mapping(status.get("orchestration_stop_control"))
     worker_presence = _mapping(status.get("worker_node_presence"))
     worker_instruction = _mapping(status.get("worker_node_instruction_preview"))
     child_instruction = _mapping(status.get("child_agent_instruction_preview"))
@@ -1954,6 +2144,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
 
     queue_count = _safe_int(report_queue.get("queue_count"))
     incomplete_report_contract_count = _safe_int(report_contract.get("incomplete_report_count"))
+    stop_cancel_count = _safe_int(stop_control.get("stop_cancel_count"))
     readiness_states = _mapping(readiness.get("states"))
     next_label = _safe_text(next_safe_actions.get("primary_action_label"), max_chars=800)
     next_reason = _safe_text(
@@ -1976,6 +2167,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             *_text_list(readiness.get("blocked_reasons")),
             *_text_list(report_queue.get("blocked_reasons")),
             *_text_list(report_contract.get("blocked_reasons")),
+            *_text_list(stop_control.get("blocked_reasons")),
             *_text_list(worker_presence.get("blocked_reasons")),
             *_text_list(execution_mode.get("blocked_reasons")),
             *_text_list(execution_packet.get("blocked_reasons")),
@@ -2026,6 +2218,12 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             f"{_safe_int(report_contract.get('complete_report_count'))} complete, "
             f"{incomplete_report_contract_count} incomplete."
         )
+    if stop_cancel_count:
+        summary_lines.append(
+            "Stop/cancel control: "
+            f"{stop_cancel_count} item{'s' if stop_cancel_count != 1 else ''}, "
+            f"blocked {str(stop_control.get('blocked') is True).lower()}."
+        )
     if worker_instruction.get("available") is True:
         summary_lines.append(
             "Worker instruction: manual handoff only; laptop Codex dispatch remains disabled."
@@ -2056,7 +2254,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         "state": state,
         "execution_ready": False,
         "approval_required": True,
-        "jenny_review_required": queue_count > 0,
+        "jenny_review_required": queue_count > 0 or stop_cancel_count > 0,
         "next_safe_action_id": _safe_text(next_safe_actions.get("primary_action_id")),
         "next_safe_action_label": next_label,
         "next_safe_action_reason": next_reason,
@@ -2064,6 +2262,9 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         "report_contract_incomplete_count": incomplete_report_contract_count,
         "report_contract_blocked_reasons": _text_list(report_contract.get("blocked_reasons")),
         "report_contract_primary_item_id": _safe_text(report_contract.get("primary_item_id")),
+        "stop_cancel_count": stop_cancel_count,
+        "stop_cancel_blocked_reasons": _text_list(stop_control.get("blocked_reasons")),
+        "stop_cancel_primary_item_id": _safe_text(stop_control.get("primary_item_id")),
         "execution_mode_family": execution_mode_family,
         "execution_mode_blocked_reasons": _text_list(execution_mode.get("blocked_reasons")),
         "execution_packet_mode": execution_packet_mode,
