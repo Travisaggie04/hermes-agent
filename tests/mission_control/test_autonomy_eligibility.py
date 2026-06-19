@@ -148,8 +148,13 @@ def test_clean_aligned_runtime_provenance_allows_preview_inputs():
     assert result["status"] == "CLEAN_AND_ALIGNED"
     assert result["primary_status"] == "CLEAN_AND_ALIGNED"
     assert result["autonomy_blocked"] is False
+    assert result["would_execute"] is False
+    assert result["would_dispatch"] is False
+    assert result["would_session_send"] is False
+    assert result["execution_enabled"] is False
     assert result["dispatch_enabled"] is False
     assert result["session_send_enabled"] is False
+    assert result["worker_dispatch_enabled"] is False
 
 
 def test_stale_accepted_baseline_blocks_autonomy():
@@ -362,10 +367,16 @@ def test_control_path_permission_catalog_covers_required_paths_and_blocks_write_
     assert result["permission_classification"] == "write_capable_not_safe_for_autonomy"
     assert result["read_only_safe"] is False
     assert result["stored"] is False
+    assert result["would_execute"] is False
+    assert result["would_dispatch"] is False
+    assert result["would_session_send"] is False
     assert result["execution_enabled"] is False
     assert result["dispatch_enabled"] is False
     assert result["session_send_enabled"] is False
     assert result["worker_dispatch_enabled"] is False
+    assert all(path["would_execute"] is False for path in result["paths"])
+    assert all(path["would_dispatch"] is False for path in result["paths"])
+    assert all(path["would_session_send"] is False for path in result["paths"])
     path_ids = {path["path_id"] for path in result["paths"]}
     assert {
         "github_bridge_outbox",
@@ -732,6 +743,9 @@ def test_worker_node_execution_packet_preview_wraps_scoped_pr_without_dispatch()
     assert result["packet"]["worker_node_contract"]["parent_run_id"] == "run-pr-1"
     assert result["packet"]["worker_node_contract"]["manual_handoff_only"] is True
     assert result["packet"]["worker_node_contract"]["codex_safety_hardness_required"] is True
+    assert result["packet"]["worker_node_contract"]["would_execute"] is False
+    assert result["packet"]["worker_node_contract"]["would_dispatch"] is False
+    assert result["packet"]["worker_node_contract"]["would_session_send"] is False
     assert result["packet"]["worker_node_contract"]["worker_safety_hardness"] == [
         "Codex must independently enforce repo/worktree, test, secret, git, and live-operation safeguards before acting.",
         "A Jenny packet is not permission to bypass Codex safety checks.",
