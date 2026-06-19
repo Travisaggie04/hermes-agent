@@ -178,6 +178,11 @@ def test_operator_projection_decorator_adds_preview_rollups_to_pure_status():
                         "review_required": True,
                     },
                 },
+                "autonomy_eligibility": {
+                    "bridge": {
+                        "send_to_jenny_enabled": "yes",
+                    },
+                },
                 "control_plane_lifecycle": {"active_mutation_lane_count": 0},
             }
         )
@@ -187,6 +192,7 @@ def test_operator_projection_decorator_adds_preview_rollups_to_pure_status():
     _assert_inert_projection(hard_boundary)
     assert hard_boundary["state"] == "live_flag_violation"
     assert hard_boundary["live_flag_violations"] == [
+        "read-only eligibility send_to_jenny_enabled must remain disabled",
         "execution packet would_dispatch must remain disabled",
         "execution packet worker_dispatch_enabled must remain disabled",
     ]
@@ -202,6 +208,7 @@ def test_operator_projection_decorator_adds_preview_rollups_to_pure_status():
     assert operator_packet["state"] == "blocked"
     assert operator_packet["jenny_review_required"] is True
     assert operator_packet["execution_lock_blocked_reasons"] == hard_boundary["live_flag_violations"]
+    assert "read-only eligibility send_to_jenny_enabled must remain disabled" in operator_packet["execution_lock_blocked_reasons"]
 
 
 def test_orchestration_readiness_honors_hard_boundary_violations():
