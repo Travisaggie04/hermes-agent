@@ -359,6 +359,8 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "CompactHermesHealthDashboard",
         "operator_decision_packet",
         "execution_lock_blocked_reasons?: string[]",
+        "would_dispatch?: boolean",
+        "would_session_send?: boolean",
         "orchestration_readiness",
         "worker_node_presence",
         "result_ingestion_contract",

@@ -1524,6 +1524,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     nextSafePrimaryReason: nextSafePrimaryAction?.reason ?? nextSafeActionReasons[0] ?? 'No executable action is enabled by this projection.',
     operatorPacketApprovalRequired: operatorDecisionPacket?.approval_required,
     operatorPacketBlockedReasons: operatorDecisionPacket?.blocked_reasons ?? [],
+    operatorPacketDispatchEnabled: operatorDecisionPacket?.dispatch_enabled,
     operatorPacketDisplayOnly: operatorDecisionPacket?.display_only,
     operatorPacketExecutionModeBlockedReasons: operatorDecisionPacket?.execution_mode_blocked_reasons ?? [],
     operatorPacketExecutionModeFamily: operatorDecisionPacket?.execution_mode_family ?? 'unknown',
@@ -1544,8 +1545,12 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     operatorPacketCompletionLinkMismatchCount: operatorDecisionPacket?.report_completion_link_mismatch_count ?? 0,
     operatorPacketStopLinkMismatchCount: operatorDecisionPacket?.stop_cancel_link_mismatch_count ?? 0,
     operatorPacketReportQueueCount: operatorDecisionPacket?.report_review_queue_count ?? 0,
+    operatorPacketSessionSendEnabled: operatorDecisionPacket?.session_send_enabled,
     operatorPacketState: operatorDecisionPacket?.state ?? 'unknown',
     operatorPacketSummary: operatorDecisionPacket?.plain_language_summary ?? 'No operator decision packet recorded.',
+    operatorPacketWouldDispatch: operatorDecisionPacket?.would_dispatch,
+    operatorPacketWouldExecute: operatorDecisionPacket?.would_execute,
+    operatorPacketWouldSessionSend: operatorDecisionPacket?.would_session_send,
     operatorPacketWorkerDispatchEnabled: operatorDecisionPacket?.worker_dispatch_enabled,
     operatorPacketWorkerOnline: operatorDecisionPacket?.worker_online,
     operatorPacketWorkerPresenceState: operatorDecisionPacket?.worker_presence_state ?? 'unknown',
@@ -4473,8 +4478,15 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
         : 'good'
       : 'warn'
   const operatorPacketTone =
-    status.operatorPacketExecutionEnabled === false &&
-    status.operatorPacketWorkerDispatchEnabled === false &&
+    allFalse([
+      status.operatorPacketExecutionEnabled,
+      status.operatorPacketDispatchEnabled,
+      status.operatorPacketSessionSendEnabled,
+      status.operatorPacketWorkerDispatchEnabled,
+      status.operatorPacketWouldExecute,
+      status.operatorPacketWouldDispatch,
+      status.operatorPacketWouldSessionSend
+    ]) &&
     status.operatorPacketManualOnly === true &&
     status.operatorPacketExecutionReady === false
       ? status.operatorPacketBlockedReasons.length || status.operatorPacketExecutionLockBlockedReasons.length || status.operatorPacketJennyReviewRequired
@@ -4567,6 +4579,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="next action mode" tone={nextSafeActionTone} value={`display-only ${yesNo(status.nextSafeActionDisplayOnly)} / actions ${status.nextSafeActionCount}`} />
       <StatusItem label="operator packet" tone={operatorPacketTone} value={`${labelText(status.operatorPacketState)} / approval required ${yesNo(status.operatorPacketApprovalRequired)} / display-only ${yesNo(status.operatorPacketDisplayOnly)}`} />
       <StatusItem label="operator review gates" tone={operatorPacketTone} value={`Jenny review ${yesNo(status.operatorPacketJennyReviewRequired)} / execution-ready ${yesNo(status.operatorPacketExecutionReady)} / worker dispatch ${yesNo(status.operatorPacketWorkerDispatchEnabled)}`} />
+      <StatusItem label="operator packet locks" tone={operatorPacketTone} value={`execute ${yesNo(status.operatorPacketExecutionEnabled)} / dispatch ${yesNo(status.operatorPacketDispatchEnabled)} / session ${yesNo(status.operatorPacketSessionSendEnabled)} / worker ${yesNo(status.operatorPacketWorkerDispatchEnabled)} / would dispatch ${yesNo(status.operatorPacketWouldDispatch)} / would session ${yesNo(status.operatorPacketWouldSessionSend)}`} />
       <StatusItem className="md:col-span-2" label="operator next instruction" tone={operatorPacketTone} value={status.operatorPacketNextInstruction} />
       <StatusItem label="operator report links" tone={status.operatorPacketLinkMismatchCount ? 'warn' : 'good'} value={`mismatch ${status.operatorPacketLinkMismatchCount} / queue ${status.operatorPacketQueueLinkMismatchCount} / ingestion ${status.operatorPacketIngestionLinkMismatchCount} / completion ${status.operatorPacketCompletionLinkMismatchCount} / stop ${status.operatorPacketStopLinkMismatchCount}`} />
       <StatusItem className="md:col-span-2" label="orchestration readiness" tone={readinessTone} value={`read-only ${labelText(status.readinessReadOnlyState)} / scoped PR ${labelText(status.readinessScopedPrState)}`} />

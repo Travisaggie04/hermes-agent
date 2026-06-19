@@ -818,7 +818,9 @@ export interface MissionControlOperatorDecisionPacket {
   worker_last_seen_at?: string
   worker_online?: boolean
   worker_presence_state?: string
+  would_dispatch?: boolean
   would_execute?: boolean
+  would_session_send?: boolean
 }
 
 export interface MissionControlExecutionModeClassification {

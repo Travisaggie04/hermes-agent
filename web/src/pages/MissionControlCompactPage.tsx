@@ -389,7 +389,9 @@ interface WorkspaceStatus {
     recommended_operator_instruction?: string;
     session_send_enabled?: boolean;
     state?: string;
+    would_dispatch?: boolean;
     would_execute?: boolean;
+    would_session_send?: boolean;
     worker_dispatch_enabled?: boolean;
     worker_enabled?: boolean;
   };

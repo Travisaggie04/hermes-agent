@@ -411,7 +411,9 @@ beforeEach(() => {
       worker_last_seen_at: '',
       worker_online: false,
       worker_presence_state: 'unknown',
-      would_execute: false
+      would_dispatch: false,
+      would_execute: false,
+      would_session_send: false
     },
     orchestration_readiness: {
       blocked: true,
@@ -1851,6 +1853,8 @@ describe('MissionControlView', () => {
     expect(screen.getByText('report review required / approval required yes / display-only yes')).toBeTruthy()
     expect(screen.getByText('operator review gates')).toBeTruthy()
     expect(screen.getByText('Jenny review yes / execution-ready no / worker dispatch no')).toBeTruthy()
+    expect(screen.getByText('operator packet locks')).toBeTruthy()
+    expect(screen.getByText('execute no / dispatch no / session no / worker no / would dispatch no / would session no')).toBeTruthy()
     expect(screen.getByText('operator next instruction')).toBeTruthy()
     expect(screen.getByText('Jenny reviews Laptop Codex reported scoped PR evidence. before issuing another worker instruction.')).toBeTruthy()
     expect(screen.getByText('operator report links')).toBeTruthy()

@@ -52,6 +52,9 @@ Jenny packet as permission to bypass Codex safety checks.
   nested packet cannot quietly look executable while the wrapper says
   preview-only. The operator execution locks row shows the backend's
   `execution_lock_blocked_reasons` rollup from the operator decision packet.
+  The operator packet locks row shows the operator packet's own execution,
+  dispatch, session-send, worker-dispatch, `would_dispatch`, and
+  `would_session_send` flags, which should all read `no`.
 - Jenny and GitHub bridge status payloads explicitly report session-send and
   worker-dispatch as disabled, so control surfaces can fail closed on those
   backend flags instead of guessing.
@@ -406,6 +409,10 @@ next delegation instruction.
 - Operator decision packet: a plain-language packet for Travis showing state,
   whether approval is required, next instruction, top report review, blockers,
   and hard locks.
+- Operator packet locks: the operator packet's direct execution, dispatch,
+  session-send, worker-dispatch, and would-send flags. These should all be
+  `no`; any `yes` means Mission Control must treat the operator packet as
+  unsafe review evidence.
 - Operator execution locks: the operator packet's backend rollup of nested
   packet-body or worker-contract execution locks. `none` is the expected safe
   value; any reason here means Travis should treat the packet as blocked review
