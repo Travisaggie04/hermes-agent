@@ -1280,6 +1280,9 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     childLatestAgent: projectionRecordText(childRecord, 'agent_identity') || 'no child agent recorded',
     childLatestObjective: projectionRecordText(childRecord, 'objective'),
     childLatestStatus: projectionRecordText(childRecord, 'status') || 'none',
+    childReportId: projectionRecordText(childRecord, 'report_id'),
+    childReportLinkStatus: projectionRecordText(childRecord, 'report_link_status') || 'no report id recorded',
+    childReportReviewStatus: projectionRecordText(childRecord, 'linked_report_review_status') || 'not reviewed',
     deploymentGapState: status.deployment_gap?.state ?? 'unknown',
     deploymentNeeded: status.deployment_gap?.dashboard_deploy_needed ?? false,
     deployedHead: status.deployment_gap?.deployed_head ?? status.accepted_baseline?.head ?? 'unknown',
@@ -1322,7 +1325,8 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     workerLatestStatus: projectionRecordText(workerRecord, 'status') || 'none',
     workerReportContractStatus: projectionRecordText(workerRecord, 'report_contract_status') || 'not reported',
     workerReportId: projectionRecordText(workerRecord, 'report_id'),
-    workerReportReviewStatus: projectionRecordText(workerRecord, 'report_review_status') || 'not reviewed'
+    workerReportLinkStatus: projectionRecordText(workerRecord, 'report_link_status') || 'no report id recorded',
+    workerReportReviewStatus: projectionRecordText(workerRecord, 'linked_report_review_status') || projectionRecordText(workerRecord, 'report_review_status') || 'not reviewed'
   }
 }
 
@@ -3943,9 +3947,10 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="latest merged PR" value={status.latestMergedPr || 'unknown'} />
       <StatusItem label="child-agent status" tone={childLockTone} value={`${status.childActiveCount} active / latest ${labelText(status.childLatestStatus)}`} />
       <StatusItem className="md:col-span-2" label="child-agent objective" value={status.childLatestObjective || status.childLatestAgent} />
+      <StatusItem label="child-agent report" tone={status.childReportId && status.childReportReviewStatus !== 'needs_review' ? 'good' : 'warn'} value={`${labelText(status.childReportLinkStatus)} / ${labelText(status.childReportReviewStatus)}${status.childReportId ? ` / ${status.childReportId}` : ''}`} />
       <StatusItem label="laptop Codex worker-node" tone={workerLockTone} value={`${status.workerHostLabel} / ${labelText(status.workerLatestStatus)}`} />
       <StatusItem className="md:col-span-2" label="worker-node objective" value={status.workerLatestObjective || `${status.workerIdentity} has no assigned objective recorded`} />
-      <StatusItem label="worker-node report" tone={status.workerReportId ? 'good' : 'warn'} value={`${status.workerReportContractStatus} / ${status.workerReportReviewStatus}${status.workerReportId ? ` / ${status.workerReportId}` : ''}`} />
+      <StatusItem label="worker-node report" tone={status.workerReportId && status.workerReportReviewStatus !== 'needs_review' ? 'good' : 'warn'} value={`${status.workerReportContractStatus} / ${labelText(status.workerReportLinkStatus)} / ${labelText(status.workerReportReviewStatus)}${status.workerReportId ? ` / ${status.workerReportId}` : ''}`} />
       <StatusItem className="md:col-span-2" label="worker-node blockers" tone={status.workerBlockedReasons.length ? 'warn' : 'good'} value={status.workerBlockedReasons.length ? status.workerBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="desktop app install" tone="warn" value="separate laptop worker-node update; bottom-bar version is not changed by accepted-live/dashboard deploy" />
       <StatusItem className="md:col-span-3" label="autonomy blockers" tone={status.autonomyBlockedReasons.length || status.provenanceReasons.length ? 'warn' : 'good'} value={[...status.provenanceReasons, ...status.autonomyBlockedReasons].length ? [...status.provenanceReasons, ...status.autonomyBlockedReasons].join(', ') : 'none'} />

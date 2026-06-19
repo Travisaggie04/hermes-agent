@@ -163,7 +163,8 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
             status="blocked",
             objective="Prepare a scoped PR.",
             blocked_reasons=("worker node offline",),
-            report_contract_status="missing",
+            report_contract_status="present",
+            report_id="report-worker",
         )
     )
     store.append(
@@ -175,6 +176,17 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
             summary="Child run reported evidence.",
         )
     )
+    store.append(
+        ReportRecord(
+            report_id="report-worker",
+            run_id="worker-run-1",
+            project_id="project-hermes-mission-control",
+            status="accepted",
+            summary="Worker node reported PR evidence.",
+            reviewed_at="2026-06-19T11:00:00Z",
+            reviewed_by="jenny",
+        )
+    )
 
     status = build_workspace_status_from_records(records_path=records_path)
 
@@ -182,9 +194,19 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
     worker = status["worker_node_orchestration"]
     assert child["active_count"] == 1
     assert child["active_runs"][0]["child_run_id"] == "child-run-1"
+    assert child["active_runs"][0]["report_link_status"] == "linked_report_found"
+    assert child["active_runs"][0]["linked_report_status"] == "received"
+    assert child["active_runs"][0]["linked_report_review_status"] == "needs_review"
+    assert child["active_runs"][0]["linked_report_summary"] == "Child run reported evidence."
+    assert child["blocked_reasons"] == ["report_id report-child still needs review"]
     assert child["dispatch_enabled"] is False
     assert worker["active_count"] == 1
     assert worker["active_runs"][0]["worker_host_label"] == "laptop-codex"
+    assert worker["active_runs"][0]["report_link_status"] == "linked_report_found"
+    assert worker["active_runs"][0]["linked_report_status"] == "accepted"
+    assert worker["active_runs"][0]["linked_report_review_status"] == "accepted"
+    assert worker["active_runs"][0]["report_review_status"] == "accepted"
+    assert worker["active_runs"][0]["linked_report_summary"] == "Worker node reported PR evidence."
     assert worker["blocked_reasons"] == ["worker node offline"]
     assert worker["worker_dispatch_enabled"] is False
     assert status["control_plane_records"]["active_child_run_count"] == 1

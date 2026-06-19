@@ -167,18 +167,23 @@ def build_workspace_status_from_records(
 
     active_child_runs = tuple(record for record in recent_child_runs if record.status in ACTIVE_ORCHESTRATION_STATUSES)
     active_worker_runs = tuple(record for record in recent_worker_runs if record.status in ACTIVE_ORCHESTRATION_STATUSES)
+    reports_by_id, reports_by_run_id = _report_lookup_maps(recent_reports)
 
     status = build_workspace_status(status_input)
     status["child_agent_orchestration"] = _orchestration_projection(
         records=recent_child_runs,
         active_records=active_child_runs,
         id_field="child_run_id",
+        reports_by_id=reports_by_id,
+        reports_by_run_id=reports_by_run_id,
         source="ChildRunRecord",
     )
     status["worker_node_orchestration"] = _orchestration_projection(
         records=recent_worker_runs,
         active_records=active_worker_runs,
         id_field="worker_run_id",
+        reports_by_id=reports_by_id,
+        reports_by_run_id=reports_by_run_id,
         source="WorkerNodeRunRecord",
     )
     status["control_plane_lifecycle"] = status_input["control_plane_lifecycle"]
@@ -351,13 +356,46 @@ def _duplicate_record_ids(records: tuple[Any, ...], field_name: str) -> list[str
     return [record_id for record_id, count in counts.items() if count > 1]
 
 
+def _report_lookup_maps(
+    reports: tuple[ReportRecord, ...],
+) -> tuple[dict[str, ReportRecord], dict[str, ReportRecord]]:
+    reports_by_id: dict[str, ReportRecord] = {}
+    reports_by_run_id: dict[str, ReportRecord] = {}
+    for report in reports:
+        if report.report_id:
+            reports_by_id[report.report_id] = report
+        if report.run_id:
+            reports_by_run_id[report.run_id] = report
+    return reports_by_id, reports_by_run_id
+
+
 def _orchestration_projection(
     *,
     records: tuple[Any, ...],
     active_records: tuple[Any, ...],
     id_field: str,
+    reports_by_id: dict[str, ReportRecord],
+    reports_by_run_id: dict[str, ReportRecord],
     source: str,
 ) -> dict[str, Any]:
+    record_payloads = tuple(
+        _orchestration_payload(
+            record,
+            id_field=id_field,
+            reports_by_id=reports_by_id,
+            reports_by_run_id=reports_by_run_id,
+        )
+        for record in records
+    )
+    active_payloads = tuple(
+        _orchestration_payload(
+            record,
+            id_field=id_field,
+            reports_by_id=reports_by_id,
+            reports_by_run_id=reports_by_run_id,
+        )
+        for record in active_records
+    )
     return {
         "source": source,
         "display_only": True,
@@ -367,10 +405,91 @@ def _orchestration_projection(
         "session_send_enabled": False,
         "worker_dispatch_enabled": False,
         "active_count": len(active_records),
-        "latest_by_id": _latest_by_id(records, id_field),
-        "active_runs": [record.to_dict() for record in active_records],
-        "blocked_reasons": _projection_blocked_reasons(active_records),
+        "latest_by_id": _latest_payloads_by_id(record_payloads, id_field),
+        "active_runs": list(active_payloads),
+        "blocked_reasons": _unique_reasons(
+            [
+                *_projection_blocked_reasons(active_records),
+                *_projection_report_blocked_reasons(active_payloads, id_field),
+            ]
+        ),
     }
+
+
+def _orchestration_payload(
+    record: Any,
+    *,
+    id_field: str,
+    reports_by_id: dict[str, ReportRecord],
+    reports_by_run_id: dict[str, ReportRecord],
+) -> dict[str, Any]:
+    payload = record.to_dict()
+    record_id = str(payload.get(id_field) or "")
+    report_id = str(payload.get("report_id") or "")
+    report = reports_by_id.get(report_id) if report_id else None
+    report = report or reports_by_run_id.get(record_id)
+    if report:
+        review_status = _linked_report_review_status(report)
+        payload["report_id"] = report_id or report.report_id
+        payload["report_link_status"] = "linked_report_found"
+        payload["linked_report"] = _linked_report_payload(report, review_status=review_status)
+        payload["linked_report_status"] = report.status or "received"
+        payload["linked_report_review_status"] = review_status
+        payload["linked_report_summary"] = report.summary
+        if not payload.get("report_review_status"):
+            payload["report_review_status"] = review_status
+    elif report_id:
+        payload["report_link_status"] = "linked_report_missing"
+    else:
+        payload["report_link_status"] = "no_report_id_recorded"
+    return payload
+
+
+def _linked_report_payload(report: ReportRecord, *, review_status: str) -> dict[str, Any]:
+    return {
+        "report_id": report.report_id,
+        "run_id": report.run_id,
+        "status": report.status or "received",
+        "review_status": review_status,
+        "summary": report.summary,
+        "reviewed_at": report.reviewed_at,
+        "reviewed_by": report.reviewed_by,
+    }
+
+
+def _linked_report_review_status(report: ReportRecord) -> str:
+    status = str(report.status or "received")
+    if status in REPORT_TERMINAL_STATUSES:
+        return status
+    if status == "reviewed" or report.reviewed_at or report.reviewed_by:
+        return "reviewed"
+    return "needs_review"
+
+
+def _latest_payloads_by_id(payloads: tuple[dict[str, Any], ...], field_name: str) -> dict[str, dict[str, Any]]:
+    output: dict[str, dict[str, Any]] = {}
+    for payload in payloads:
+        record_id = str(payload.get(field_name) or "")
+        if record_id:
+            output.pop(record_id, None)
+            output[record_id] = payload
+    return output
+
+
+def _projection_report_blocked_reasons(
+    payloads: tuple[dict[str, Any], ...],
+    id_field: str,
+) -> list[str]:
+    reasons: list[str] = []
+    for payload in payloads:
+        record_id = str(payload.get(id_field) or "")
+        report_id = str(payload.get("report_id") or "")
+        link_status = str(payload.get("report_link_status") or "")
+        if report_id and link_status == "linked_report_missing":
+            reasons.append(f"{id_field} {record_id} links missing report_id {report_id}")
+        if report_id and payload.get("linked_report_review_status") == "needs_review":
+            reasons.append(f"report_id {report_id} still needs review")
+    return reasons
 
 
 def _projection_blocked_reasons(records: tuple[Any, ...]) -> list[str]:
@@ -384,6 +503,15 @@ def _projection_blocked_reasons(records: tuple[Any, ...]) -> list[str]:
         if failure_reason and failure_reason not in reasons:
             reasons.append(failure_reason)
     return reasons
+
+
+def _unique_reasons(values: list[str]) -> list[str]:
+    output: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if text and text not in output:
+            output.append(text)
+    return output
 
 
 def _merge_status_input(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:

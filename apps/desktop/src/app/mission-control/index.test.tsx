@@ -86,12 +86,17 @@ beforeEach(() => {
         {
           agent_identity: 'jenny-child',
           child_run_id: 'child-run-1',
+          linked_report_review_status: 'needs_review',
+          linked_report_status: 'received',
+          linked_report_summary: 'Child reported evidence.',
           objective: 'Inspect bounded Mission Control context.',
           parent_run_id: 'run-parent-1',
+          report_id: 'report-child',
+          report_link_status: 'linked_report_found',
           status: 'running'
         }
       ],
-      blocked_reasons: [],
+      blocked_reasons: ['report_id report-child still needs review'],
       dispatch_enabled: false,
       display_only: true,
       execution_enabled: false,
@@ -216,6 +221,11 @@ beforeEach(() => {
           blocked_reasons: ['worker node offline'],
           objective: 'Prepare bounded scoped PR packet.',
           parent_run_id: 'run-parent-1',
+          linked_report_review_status: 'accepted',
+          linked_report_status: 'accepted',
+          linked_report_summary: 'Worker node reported evidence.',
+          report_id: 'report-worker',
+          report_link_status: 'linked_report_found',
           report_contract_status: 'required',
           report_review_status: 'waiting',
           status: 'blocked',
@@ -1039,18 +1049,22 @@ describe('MissionControlView', () => {
     expect(screen.getByText('1 active / latest running')).toBeTruthy()
     expect(screen.getByText('child-agent objective')).toBeTruthy()
     expect(screen.getByText('Inspect bounded Mission Control context.')).toBeTruthy()
+    expect(screen.getByText('child-agent report')).toBeTruthy()
+    expect(screen.getByText('linked report found / needs review / report-child')).toBeTruthy()
     expect(screen.getByText('laptop Codex worker-node')).toBeTruthy()
     expect(screen.getByText('laptop-codex / blocked')).toBeTruthy()
     expect(screen.getByText('worker-node objective')).toBeTruthy()
     expect(screen.getByText('Prepare bounded scoped PR packet.')).toBeTruthy()
     expect(screen.getByText('worker-node report')).toBeTruthy()
-    expect(screen.getByText('required / waiting')).toBeTruthy()
+    expect(screen.getByText('required / linked report found / accepted / report-worker')).toBeTruthy()
     expect(screen.getByText('worker-node blockers')).toBeTruthy()
     expect(screen.getByText('worker node offline')).toBeTruthy()
     expect(screen.getByText('scoped PR blockers')).toBeTruthy()
     expect(screen.getByText('exact approved ApprovalRecord is required')).toBeTruthy()
     expect(screen.getByText('autonomy blockers')).toBeTruthy()
     expect(screen.getAllByText(/gateway git metadata is broken/).length).toBeGreaterThan(0)
+    expect(screen.getByText('child-agent blockers')).toBeTruthy()
+    expect(screen.getByText('report_id report-child still needs review')).toBeTruthy()
     expect(screen.getByText(/Desktop can be current while phone\/web waits for a safe dashboard-only update/)).toBeTruthy()
     expect(screen.getByText('accepted-live head')).toBeTruthy()
     expect(screen.getByText('0f87620038d2')).toBeTruthy()

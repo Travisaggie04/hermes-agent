@@ -319,6 +319,11 @@ export interface MissionControlChildRunRecord {
   objective?: string
   parent_run_id: string
   project_id?: string
+  linked_report?: MissionControlLinkedReport
+  linked_report_review_status?: string
+  linked_report_status?: string
+  linked_report_summary?: string
+  report_link_status?: string
   report_id?: string
   result_record_id?: string
   status?: string
@@ -339,6 +344,11 @@ export interface MissionControlWorkerNodeRunRecord {
   objective?: string
   parent_run_id: string
   project_id?: string
+  linked_report?: MissionControlLinkedReport
+  linked_report_review_status?: string
+  linked_report_status?: string
+  linked_report_summary?: string
+  report_link_status?: string
   report_contract_status?: string
   report_id?: string
   report_review_status?: string
@@ -351,6 +361,16 @@ export interface MissionControlWorkerNodeRunRecord {
   worker_identity?: string
   worker_kind?: string
   worker_run_id: string
+}
+
+export interface MissionControlLinkedReport {
+  report_id?: string
+  review_status?: string
+  reviewed_at?: string
+  reviewed_by?: string
+  run_id?: string
+  status?: string
+  summary?: string
 }
 
 export interface MissionControlOrchestrationProjection<T> {
