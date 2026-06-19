@@ -159,6 +159,9 @@ Worker-node readiness now requires append-only evidence that the laptop Codex
 worker is explicitly online and recently seen. Missing, unrecognized, offline,
 or stale presence records block the worker-node lane. This is record-based
 truth only; Mission Control does not ping the laptop or activate a worker.
+Every worker-node packet also requires a report contract with tests/checks and
+human review, because laptop Codex is an engineering worker node and Jenny
+must receive verifiable evidence before depending on the result.
 
 Current state target: preview-ready tracking, not execution-ready.
 

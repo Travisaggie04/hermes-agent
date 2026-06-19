@@ -867,6 +867,8 @@ def _evaluate_worker_node_packet_preview(state: dict[str, Any]) -> dict[str, Any
         _add(blocked, "session sending must stay disabled")
     if _safe_bool(report_contract.get("required")) is not True:
         _add(blocked, "worker-node report contract is required")
+    if _safe_bool(report_contract.get("tests_required")) is not True:
+        _add(blocked, "worker-node tests/checks are required")
     if _safe_bool(report_contract.get("review_required")) is not True:
         _add(blocked, "worker-node report review is required")
     if not _safe_text(worker_node.get("objective") or run.get("objective") or lane.get("objective")):

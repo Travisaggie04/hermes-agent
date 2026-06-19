@@ -675,6 +675,32 @@ def test_worker_node_execution_packet_preview_wraps_scoped_pr_without_dispatch()
     assert result["worker_dispatch_enabled"] is False
 
 
+def test_worker_node_execution_packet_requires_tests_contract():
+    result = build_execution_packet_preview(
+        _eligible_preview_payload(
+            mode="worker_node",
+            report_contract={"required": True, "tests_required": False, "review_required": True},
+            worker_node={
+                "parent_run_id": "run-read-only-1",
+                "worker_identity": "codex",
+                "worker_host_label": "laptop-codex",
+                "worker_kind": "laptop_codex",
+                "lane_mode": "read_only_inspection",
+                "objective": "Inspect bounded evidence.",
+                "presence_status": "online",
+            },
+        )
+    )
+
+    assert result["eligible"] is False
+    assert "worker-node tests/checks are required" in result["blocked_reasons"]
+    assert result["would_execute"] is False
+    assert result["execution_enabled"] is False
+    assert result["dispatch_enabled"] is False
+    assert result["session_send_enabled"] is False
+    assert result["worker_dispatch_enabled"] is False
+
+
 def test_worker_node_execution_packet_blocks_dispatch_and_missing_report_review():
     result = build_execution_packet_preview(
         _eligible_pr_preview_payload(
