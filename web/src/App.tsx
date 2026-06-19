@@ -83,6 +83,7 @@ import WebhooksPage from "@/pages/WebhooksPage";
 import SystemPage from "@/pages/SystemPage";
 import ChatPage from "@/pages/ChatPage";
 import MissionControlCompactPage from "@/pages/MissionControlCompactPage";
+import JennyMobilePage from "@/pages/JennyMobilePage";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { useI18n } from "@/i18n";
@@ -130,6 +131,7 @@ const BUILTIN_ROUTES_CORE: Record<string, ComponentType> = {
   "/": RootRedirect,
   "/mission-control": MissionControlRedirect,
   "/mission-control-compact": MissionControlCompactPage,
+  "/jenny-mobile": JennyMobilePage,
   "/sessions": SessionsPage,
   "/analytics": AnalyticsPage,
   "/models": ModelsPage,
@@ -372,7 +374,9 @@ export default function App() {
   const normalizedPath = pathname.replace(/\/$/, "") || "/";
   const isChatRoute = normalizedPath === "/chat";
   const isCompactChatRoute = normalizedPath === "/mission-control-compact";
-  const isChatLikeRoute = isChatRoute || isCompactChatRoute;
+  const isJennyMobileRoute = normalizedPath === "/jenny-mobile";
+  const isBodyScrollChatRoute = isCompactChatRoute || isJennyMobileRoute;
+  const isChatLikeRoute = isChatRoute || isCompactChatRoute || isJennyMobileRoute;
   const embeddedChat = isDashboardEmbeddedChatEnabled();
 
   // `dashboard.show_token_analytics` gates the Analytics nav item.  The
@@ -480,16 +484,16 @@ export default function App() {
       data-layout-variant={layoutVariant}
       className={cn(
         "flex flex-col bg-black text-text-primary antialiased",
-        isCompactChatRoute
+        isBodyScrollChatRoute
           ? "min-h-dvh overflow-x-hidden overflow-y-visible"
           : "h-dvh max-h-dvh min-h-0 overflow-hidden",
       )}
     >
-      <SelectionSwitcher />
-      <Backdrop />
-      <PluginSlot name="backdrop" />
+      {!isJennyMobileRoute && <SelectionSwitcher />}
+      {!isJennyMobileRoute && <Backdrop />}
+      {!isJennyMobileRoute && <PluginSlot name="backdrop" />}
 
-      <header
+      {!isJennyMobileRoute && <header
         className={cn(
           "lg:hidden fixed top-0 left-0 right-0 z-40 min-h-14",
           "flex items-center gap-2 px-4 py-2",
@@ -520,7 +524,7 @@ export default function App() {
         >
           {t.app.brand}
         </Typography>
-      </header>
+      </header>}
 
       {mobileOpen && (
         <Button
@@ -534,17 +538,18 @@ export default function App() {
         />
       )}
 
-      <PluginSlot name="header-banner" />
+      {!isJennyMobileRoute && <PluginSlot name="header-banner" />}
 
       <div className={cn(
-        "flex min-w-0 flex-1 flex-col pt-14 lg:pt-0",
-        isCompactChatRoute ? "overflow-visible" : "min-h-0 overflow-hidden",
+        "flex min-w-0 flex-1 flex-col",
+        isJennyMobileRoute ? "pt-0" : "pt-14 lg:pt-0",
+        isBodyScrollChatRoute ? "overflow-visible" : "min-h-0 overflow-hidden",
       )}>
         <div className={cn(
           "flex min-w-0 flex-1",
-          isCompactChatRoute ? "overflow-visible" : "min-h-0",
+          isBodyScrollChatRoute ? "overflow-visible" : "min-h-0",
         )}>
-          <aside
+          {!isJennyMobileRoute && <aside
             id="app-sidebar"
             aria-label={t.app.navigation}
             className={cn(
@@ -717,20 +722,22 @@ export default function App() {
               <AuthWidget />
               <SidebarFooter status={sidebarStatus} />
             </div>
-          </aside>
+          </aside>}
 
           <PageHeaderProvider pluginTabs={pluginTabMeta}>
             <div
               className={cn(
                 "relative z-2 flex min-w-0 min-h-0 flex-1 flex-col",
-                "px-3 sm:px-6",
-                isChatLikeRoute
+                isJennyMobileRoute ? "px-0" : "px-3 sm:px-6",
+                isJennyMobileRoute
+                  ? "pb-0 pt-0"
+                  : isChatLikeRoute
                   ? "pb-0 pt-1 sm:pt-2 lg:pt-4"
                   : "pt-2 sm:pt-4 lg:pt-6",
                 isDocsRoute && "min-h-0 flex-1",
               )}
             >
-              <PluginSlot name="pre-main" />
+              {!isJennyMobileRoute && <PluginSlot name="pre-main" />}
               <div
                 className={cn(
                   "w-full min-w-0",
@@ -780,13 +787,13 @@ export default function App() {
                     </div>
                   ))}
               </div>
-              <PluginSlot name="post-main" />
+              {!isJennyMobileRoute && <PluginSlot name="post-main" />}
             </div>
           </PageHeaderProvider>
         </div>
       </div>
 
-      <PluginSlot name="overlay" />
+      {!isJennyMobileRoute && <PluginSlot name="overlay" />}
     </div>
   );
 }

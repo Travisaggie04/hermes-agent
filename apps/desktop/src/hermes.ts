@@ -1038,11 +1038,40 @@ export function createMissionControlJennyBridgeResponse(
   })
 }
 
+const SESSION_PROJECT_LINK_TEXT_LIMITS: Partial<Record<keyof MissionControlSessionProjectLinkCreatePayload, number>> = {
+  confidence: 80,
+  cwd_snapshot: 240,
+  lineage_root_id: 160,
+  linked_by: 120,
+  profile: 80,
+  project_id: 120,
+  session_id: 160,
+  source: 80,
+  status: 40,
+  title_snapshot: 240
+}
+
+function compactSessionProjectLinkPayload(
+  payload: MissionControlSessionProjectLinkCreatePayload
+): MissionControlSessionProjectLinkCreatePayload {
+  const compacted = { ...payload }
+  for (const [key, maxChars] of Object.entries(SESSION_PROJECT_LINK_TEXT_LIMITS) as Array<[
+    keyof MissionControlSessionProjectLinkCreatePayload,
+    number
+  ]>) {
+    const value = compacted[key]
+    if (typeof value === 'string' && value.length > maxChars) {
+      compacted[key] = `${value.slice(0, Math.max(0, maxChars - 3)).trim()}...` as never
+    }
+  }
+  return compacted
+}
+
 export function createMissionControlSessionProjectLink(
   payload: MissionControlSessionProjectLinkCreatePayload
 ): Promise<MissionControlSessionProjectLinkCreateResponse> {
   return window.hermesDesktop.api<MissionControlSessionProjectLinkCreateResponse>({
-    body: payload,
+    body: compactSessionProjectLinkPayload(payload),
     method: 'POST',
     path: `${MISSION_CONTROL_API}/workspace/session-project-links/create`
   })
