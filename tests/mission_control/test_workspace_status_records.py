@@ -308,3 +308,194 @@ def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_
         in lifecycle["blocked_reasons"]
     )
     assert "report_id report-duplicate still needs review" in lifecycle["blocked_reasons"]
+
+
+def test_record_sourced_workspace_status_projects_approval_and_run_lifecycle_blockers(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        ApprovalRecord(
+            approval_id="approval-duplicate",
+            project_id="project-hermes-mission-control",
+            action_class="read_only_inspection",
+            approval_scope="project-hermes read-only inspection",
+            status="proposed",
+        )
+    )
+    store.append(
+        ApprovalRecord(
+            approval_id="approval-duplicate",
+            project_id="project-hermes-mission-control",
+            action_class="read_only_inspection",
+            approval_scope="project-hermes read-only inspection",
+            status="approved",
+            expires_at="2026-06-20T00:00:00Z",
+        )
+    )
+    store.append(
+        ApprovalRecord(
+            approval_id="approval-valid",
+            project_id="project-hermes-mission-control",
+            action_class="read_only_inspection",
+            approval_scope="project-hermes read-only inspection",
+            status="approved",
+            expires_at="2026-06-20T00:00:00Z",
+        )
+    )
+    store.append(
+        ApprovalRecord(
+            approval_id="approval-expired",
+            project_id="project-hermes-mission-control",
+            action_class="read_only_inspection",
+            approval_scope="project-hermes read-only inspection",
+            status="approved",
+            expires_at="2026-06-18T00:00:00Z",
+        )
+    )
+    store.append(
+        ApprovalRecord(
+            approval_id="approval-consumed",
+            project_id="project-hermes-mission-control",
+            action_class="read_only_inspection",
+            approval_scope="project-hermes read-only inspection",
+            status="approved",
+            consumed_at="2026-06-19T08:00:00Z",
+            expires_at="2026-06-20T00:00:00Z",
+        )
+    )
+    store.append(
+        ApprovalRecord(
+            approval_id="approval-rejected",
+            project_id="project-hermes-mission-control",
+            action_class="read_only_inspection",
+            approval_scope="project-hermes read-only inspection",
+            status="rejected",
+        )
+    )
+    store.append(
+        ApprovalRecord(
+            approval_id="approval-pending",
+            project_id="project-hermes-mission-control",
+            action_class="read_only_inspection",
+            approval_scope="project-hermes read-only inspection",
+            status="proposed",
+        )
+    )
+    for run_id, approval_id, lane_type in (
+        ("run-valid", "approval-valid", "read_only_inspection"),
+        ("run-expired", "approval-expired", "read_only_inspection"),
+        ("run-consumed", "approval-consumed", "read_only_inspection"),
+        ("run-rejected", "approval-rejected", "read_only_inspection"),
+        ("run-missing-record", "approval-missing", "read_only_inspection"),
+        ("run-mutation-a", "approval-valid", "implementation"),
+        ("run-mutation-b", "approval-valid", "pr_creation"),
+    ):
+        store.append(
+            RunRecord(
+                run_id=run_id,
+                project_id="project-hermes-mission-control",
+                approval_id=approval_id,
+                lane_type=lane_type,
+                status="running",
+            )
+        )
+    store.append(
+        RunRecord(
+            run_id="run-no-approval",
+            project_id="project-hermes-mission-control",
+            lane_type="read_only_inspection",
+            status="running",
+        )
+    )
+    store.append(
+        RunRecord(
+            run_id="run-terminal-missing-report",
+            project_id="project-hermes-mission-control",
+            lane_type="read_only_inspection",
+            status="completed",
+        )
+    )
+    store.append(
+        RunRecord(
+            run_id="run-terminal-stale-report",
+            project_id="project-hermes-mission-control",
+            lane_type="read_only_inspection",
+            status="completed",
+            report_ids=("report-missing",),
+        )
+    )
+    store.append(
+        RunRecord(
+            run_id="run-stopped",
+            project_id="project-hermes-mission-control",
+            lane_type="read_only_inspection",
+            status="stopped",
+            report_ids=("report-stopped",),
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-stopped",
+            run_id="run-stopped",
+            project_id="project-hermes-mission-control",
+            status="accepted",
+        )
+    )
+
+    status = build_workspace_status_from_records(
+        {"now": "2026-06-19T12:00:00Z"},
+        records_path=records_path,
+    )
+
+    approvals = status["approval_lifecycle"]
+    assert approvals["display_only"] is True
+    assert approvals["execution_enabled"] is False
+    assert approvals["dispatch_enabled"] is False
+    assert approvals["session_send_enabled"] is False
+    assert approvals["worker_dispatch_enabled"] is False
+    assert approvals["append_only_projection"] is True
+    assert approvals["raw_approval_count"] == 7
+    assert approvals["approval_count"] == 6
+    assert set(approvals["available_approval_ids"]) == {"approval-duplicate", "approval-valid"}
+    assert approvals["pending_approval_ids"] == ["approval-pending"]
+    assert approvals["expired_approval_ids"] == ["approval-expired"]
+    assert approvals["consumed_approval_ids"] == ["approval-consumed"]
+    assert approvals["rejected_or_cancelled_approval_ids"] == ["approval-rejected"]
+    assert approvals["duplicate_approval_ids"] == ["approval-duplicate"]
+    assert approvals["runs_missing_approval_id"] == ["run-no-approval"]
+    assert approvals["runs_with_missing_approval_record"] == {
+        "run-missing-record": "approval-missing"
+    }
+    assert approvals["runs_with_unavailable_approval"] == {
+        "run-consumed": "approval-consumed",
+        "run-expired": "approval-expired",
+        "run-rejected": "approval-rejected",
+    }
+    assert approvals["blocked"] is True
+    assert "approval_id approval-duplicate has multiple append-only records" in approvals["blocked_reasons"]
+    assert "active run_id run-no-approval has no approval_id" in approvals["blocked_reasons"]
+    assert "run_id run-missing-record references missing approval_id approval-missing" in approvals["blocked_reasons"]
+    assert "run_id run-expired references unavailable approval_id approval-expired" in approvals["blocked_reasons"]
+
+    runs = status["run_lifecycle"]
+    assert runs["display_only"] is True
+    assert runs["execution_enabled"] is False
+    assert runs["dispatch_enabled"] is False
+    assert runs["session_send_enabled"] is False
+    assert runs["worker_dispatch_enabled"] is False
+    assert runs["append_only_projection"] is True
+    assert runs["active_mutation_lane_count"] == 2
+    assert runs["one_active_mutation_lane_rule_passed"] is False
+    assert set(runs["active_mutation_run_ids"]) == {"run-mutation-a", "run-mutation-b"}
+    assert set(runs["stop_cancel_run_ids"]) == {"run-stopped"}
+    assert "run-terminal-missing-report" in runs["terminal_runs_missing_report"]
+    assert runs["terminal_runs_with_missing_linked_report_ids"] == {
+        "run-terminal-stale-report": ["report-missing"]
+    }
+    assert runs["blocked"] is True
+    assert "active mutation lane count exceeds one" in runs["blocked_reasons"]
+    assert "terminal run_id run-terminal-missing-report has no linked report" in runs["blocked_reasons"]
+    assert (
+        "run_id run-terminal-stale-report links missing report ids: report-missing"
+        in runs["blocked_reasons"]
+    )

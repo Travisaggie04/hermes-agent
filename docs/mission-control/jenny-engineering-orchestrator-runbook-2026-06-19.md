@@ -168,6 +168,13 @@ report should answer the contract:
 Reports are append-only. A later report can supersede or correct an earlier
 one, but it should not overwrite history.
 
+Mission Control projects approval and run lifecycle summaries from append-only
+records. The approval lifecycle row shows available, pending, and expired
+approvals. Approval gaps call out duplicate approvals, consumed approvals, and
+runs tied to unavailable approval records. The run lifecycle row shows active,
+terminal, and stop/cancel runs. Run gaps call out duplicate runs, terminal runs
+without reports, stale report links, and the one-active-mutation-lane rule.
+
 Mission Control now projects a report lifecycle summary from append-only
 records. The report lifecycle row shows open, reviewed, and terminal report
 counts. The report gaps row shows duplicate report IDs, completed runs with no
@@ -193,6 +200,10 @@ enable worker dispatch or execution.
   report status.
 - Lifecycle projection: latest-by-ID approvals, runs, and reports from
   append-only records.
+- Approval lifecycle: available, pending, expired, consumed, rejected, missing,
+  and unavailable approval chains.
+- Run lifecycle: active, terminal, stop/cancel, mutation-lane, and missing
+  report chains.
 - Report lifecycle: report inbox/review state, duplicate IDs, missing reports,
   stale report links, and exact review blockers.
 

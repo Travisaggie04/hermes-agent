@@ -80,6 +80,26 @@ beforeEach(() => {
       head: '9f8863c0bf28dc0b7da702480b9b3337b983e7e8',
       runtime_path: '/home/jenny/.hermes/hermes-runtime-project-seed-9f8863c'
     },
+    approval_lifecycle: {
+      append_only_projection: true,
+      available_approval_ids: ['approval-live'],
+      blocked: true,
+      blocked_reasons: ['run_id run-parent-1 references unavailable approval_id approval-old'],
+      consumed_approval_ids: [],
+      dispatch_enabled: false,
+      display_only: true,
+      duplicate_approval_ids: [],
+      execution_enabled: false,
+      expired_approval_ids: ['approval-old'],
+      pending_approval_ids: ['approval-pending'],
+      rejected_or_cancelled_approval_ids: [],
+      runs_missing_approval_id: [],
+      runs_with_missing_approval_record: {},
+      runs_with_unavailable_approval: { 'run-parent-1': 'approval-old' },
+      session_send_enabled: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false
+    },
     child_agent_orchestration: {
       active_count: 1,
       active_runs: [
@@ -179,6 +199,27 @@ beforeEach(() => {
       runs_with_missing_linked_report_ids: {},
       session_send_enabled: false,
       terminal_report_ids: [],
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false
+    },
+    run_lifecycle: {
+      active_mutation_lane_count: 0,
+      active_mutation_run_ids: [],
+      active_run_ids: ['run-parent-1'],
+      append_only_projection: true,
+      blocked: true,
+      blocked_reasons: ['terminal run_id run-reportless has no linked report'],
+      dispatch_enabled: false,
+      display_only: true,
+      duplicate_run_ids: [],
+      execution_enabled: false,
+      one_active_mutation_lane_rule_passed: true,
+      run_count: 3,
+      session_send_enabled: false,
+      stop_cancel_run_ids: ['run-stopped'],
+      terminal_run_ids: ['run-reportless', 'run-stopped'],
+      terminal_runs_missing_report: ['run-reportless'],
+      terminal_runs_with_missing_linked_report_ids: {},
       trusted_for_execution: false,
       worker_dispatch_enabled: false
     },
@@ -1039,6 +1080,14 @@ describe('MissionControlView', () => {
     expect(screen.getByText('manual only')).toBeTruthy()
     expect(screen.getByText('lifecycle projection')).toBeTruthy()
     expect(screen.getByText('append-only yes / active mutation lanes 0')).toBeTruthy()
+    expect(screen.getByText('approval lifecycle')).toBeTruthy()
+    expect(screen.getByText('available 1 / pending 1 / expired 1')).toBeTruthy()
+    expect(screen.getByText('approval gaps')).toBeTruthy()
+    expect(screen.getByText('duplicates 0 / consumed 0 / unavailable runs 1')).toBeTruthy()
+    expect(screen.getByText('run lifecycle')).toBeTruthy()
+    expect(screen.getByText('active 1 / terminal 2 / stop-cancel 1')).toBeTruthy()
+    expect(screen.getByText('run gaps')).toBeTruthy()
+    expect(screen.getByText('duplicates 0 / missing reports 1 / stale links 0')).toBeTruthy()
     expect(screen.getByText('report lifecycle')).toBeTruthy()
     expect(screen.getByText('open 1 / reviewed 0 / terminal 0')).toBeTruthy()
     expect(screen.getByText('report gaps')).toBeTruthy()
@@ -1063,6 +1112,10 @@ describe('MissionControlView', () => {
     expect(screen.getByText('exact approved ApprovalRecord is required')).toBeTruthy()
     expect(screen.getByText('autonomy blockers')).toBeTruthy()
     expect(screen.getAllByText(/gateway git metadata is broken/).length).toBeGreaterThan(0)
+    expect(screen.getByText('approval blockers')).toBeTruthy()
+    expect(screen.getByText('run_id run-parent-1 references unavailable approval_id approval-old')).toBeTruthy()
+    expect(screen.getByText('run blockers')).toBeTruthy()
+    expect(screen.getByText('terminal run_id run-reportless has no linked report')).toBeTruthy()
     expect(screen.getByText('child-agent blockers')).toBeTruthy()
     expect(screen.getByText('report_id report-child still needs review')).toBeTruthy()
     expect(screen.getByText(/Desktop can be current while phone\/web waits for a safe dashboard-only update/)).toBeTruthy()

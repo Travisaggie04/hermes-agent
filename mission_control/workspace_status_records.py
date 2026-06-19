@@ -7,6 +7,7 @@ latest append-only Mission Control records.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -32,9 +33,12 @@ ACTIVE_RUN_STATUSES = {"requested", "preflight_passed", "running", "stopping"}
 ACTIVE_ORCHESTRATION_STATUSES = {"requested", "assigned", "preflight_passed", "running", "stopping", "blocked"}
 PENDING_APPROVAL_STATUSES = {"proposed"}
 AVAILABLE_APPROVAL_STATUSES = {"approved"}
+APPROVAL_TERMINAL_STATUSES = {"cancelled", "consumed", "expired", "rejected", "revoked"}
 REPORT_OPEN_STATUSES = {"received", "needs_review"}
 REPORT_TERMINAL_STATUSES = {"accepted", "rejected", "superseded"}
 RUN_REPORT_REQUIRED_STATUSES = {"completed", "failed", "blocked", "stopped", "cancelled"}
+RUN_TERMINAL_STATUSES = {"completed", "failed", "blocked", "stopped", "cancelled"}
+RUN_STOP_CANCEL_STATUSES = {"stopping", "stopped", "cancelled"}
 MUTATION_LANE_TYPES = {
     "implementation",
     "pr_creation",
@@ -103,6 +107,8 @@ def build_workspace_status_from_records(
             store_error = type(exc).__name__
             latest_baseline = {}
             latest_handoff = {}
+            recent_runs_raw = ()
+            recent_approvals_raw = ()
             recent_runs = ()
             recent_approvals = ()
             recent_reports = ()
@@ -112,6 +118,8 @@ def build_workspace_status_from_records(
     else:
         latest_baseline = {}
         latest_handoff = {}
+        recent_runs_raw = ()
+        recent_approvals_raw = ()
         recent_runs = ()
         recent_approvals = ()
         recent_reports = ()
@@ -187,6 +195,18 @@ def build_workspace_status_from_records(
         source="WorkerNodeRunRecord",
     )
     status["control_plane_lifecycle"] = status_input["control_plane_lifecycle"]
+    status["approval_lifecycle"] = _approval_lifecycle_payload(
+        approvals=recent_approvals,
+        raw_approvals=recent_approvals_raw,
+        runs=recent_runs,
+        now=_safe_text(status_input.get("now")),
+    )
+    status["run_lifecycle"] = _run_lifecycle_payload(
+        runs=recent_runs,
+        raw_runs=recent_runs_raw,
+        reports=recent_reports,
+        active_mutation_lane_count=len(active_mutation_runs),
+    )
     status["report_lifecycle"] = _report_lifecycle_payload(
         reports=recent_reports,
         raw_reports=recent_reports_raw,
@@ -253,6 +273,173 @@ def _control_plane_lifecycle_payload(
         "latest_reports_by_id": _latest_by_id(reports, "report_id"),
         "active_mutation_lane_count": active_mutation_lane_count,
         "append_only_projection": True,
+    }
+
+
+def _approval_lifecycle_payload(
+    *,
+    approvals: tuple[ApprovalRecord, ...],
+    raw_approvals: tuple[ApprovalRecord, ...],
+    runs: tuple[RunRecord, ...],
+    now: str = "",
+) -> dict[str, Any]:
+    status_counts: dict[str, int] = {}
+    available_approval_ids: list[str] = []
+    expired_approval_ids: list[str] = []
+    consumed_approval_ids: list[str] = []
+    rejected_or_cancelled_approval_ids: list[str] = []
+    pending_approval_ids: list[str] = []
+    terminal_approval_ids: list[str] = []
+    for approval in approvals:
+        status = str(approval.status or "proposed")
+        status_counts[status] = status_counts.get(status, 0) + 1
+        expired = _approval_is_expired(approval, now=now)
+        consumed = bool(approval.consumed_at) or status == "consumed"
+        rejected_or_cancelled = status in {"cancelled", "rejected", "revoked"}
+        if status in PENDING_APPROVAL_STATUSES:
+            pending_approval_ids.append(approval.approval_id)
+        if expired:
+            expired_approval_ids.append(approval.approval_id)
+        if consumed:
+            consumed_approval_ids.append(approval.approval_id)
+        if rejected_or_cancelled:
+            rejected_or_cancelled_approval_ids.append(approval.approval_id)
+        if expired or consumed or status in APPROVAL_TERMINAL_STATUSES:
+            terminal_approval_ids.append(approval.approval_id)
+        if status in AVAILABLE_APPROVAL_STATUSES and not expired and not consumed:
+            available_approval_ids.append(approval.approval_id)
+
+    approvals_by_id = {approval.approval_id: approval for approval in approvals if approval.approval_id}
+    unavailable_approval_ids = (
+        set(expired_approval_ids)
+        | set(consumed_approval_ids)
+        | set(rejected_or_cancelled_approval_ids)
+    )
+    runs_by_approval_id: dict[str, list[str]] = {}
+    runs_missing_approval_id: list[str] = []
+    runs_with_missing_approval_record: dict[str, str] = {}
+    runs_with_unavailable_approval: dict[str, str] = {}
+    for run in runs:
+        if run.status not in ACTIVE_RUN_STATUSES:
+            continue
+        if not run.approval_id:
+            runs_missing_approval_id.append(run.run_id)
+            continue
+        runs_by_approval_id.setdefault(run.approval_id, []).append(run.run_id)
+        if run.approval_id not in approvals_by_id:
+            runs_with_missing_approval_record[run.run_id] = run.approval_id
+        elif run.approval_id in unavailable_approval_ids:
+            runs_with_unavailable_approval[run.run_id] = run.approval_id
+
+    duplicate_approval_ids = _duplicate_record_ids(raw_approvals, "approval_id")
+    blocked_reasons: list[str] = []
+    for approval_id in duplicate_approval_ids:
+        blocked_reasons.append(f"approval_id {approval_id} has multiple append-only records")
+    for run_id in runs_missing_approval_id:
+        blocked_reasons.append(f"active run_id {run_id} has no approval_id")
+    for run_id, approval_id in runs_with_missing_approval_record.items():
+        blocked_reasons.append(f"run_id {run_id} references missing approval_id {approval_id}")
+    for run_id, approval_id in runs_with_unavailable_approval.items():
+        blocked_reasons.append(f"run_id {run_id} references unavailable approval_id {approval_id}")
+
+    return {
+        "source": "ApprovalRecord",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "append_only_projection": True,
+        "approval_count": len(approvals),
+        "raw_approval_count": len(raw_approvals),
+        "status_counts": status_counts,
+        "available_approval_ids": available_approval_ids,
+        "pending_approval_ids": pending_approval_ids,
+        "expired_approval_ids": expired_approval_ids,
+        "consumed_approval_ids": consumed_approval_ids,
+        "rejected_or_cancelled_approval_ids": rejected_or_cancelled_approval_ids,
+        "terminal_approval_ids": terminal_approval_ids,
+        "duplicate_approval_ids": duplicate_approval_ids,
+        "runs_by_approval_id": runs_by_approval_id,
+        "runs_missing_approval_id": runs_missing_approval_id,
+        "runs_with_missing_approval_record": runs_with_missing_approval_record,
+        "runs_with_unavailable_approval": runs_with_unavailable_approval,
+        "blocked": bool(blocked_reasons),
+        "blocked_reasons": blocked_reasons,
+    }
+
+
+def _run_lifecycle_payload(
+    *,
+    runs: tuple[RunRecord, ...],
+    raw_runs: tuple[RunRecord, ...],
+    reports: tuple[ReportRecord, ...],
+    active_mutation_lane_count: int,
+) -> dict[str, Any]:
+    status_counts: dict[str, int] = {}
+    active_run_ids: list[str] = []
+    active_mutation_run_ids: list[str] = []
+    terminal_run_ids: list[str] = []
+    stop_cancel_run_ids: list[str] = []
+    runs_by_status: dict[str, list[str]] = {}
+    report_ids = {report.report_id for report in reports}
+    reports_by_run_id = {report.run_id for report in reports if report.run_id}
+    terminal_runs_missing_report: list[str] = []
+    terminal_runs_with_missing_linked_report_ids: dict[str, list[str]] = {}
+    for run in runs:
+        status = str(run.status or "requested")
+        status_counts[status] = status_counts.get(status, 0) + 1
+        runs_by_status.setdefault(status, []).append(run.run_id)
+        if status in ACTIVE_RUN_STATUSES:
+            active_run_ids.append(run.run_id)
+        if status in ACTIVE_RUN_STATUSES and (run.lane_type in MUTATION_LANE_TYPES or run.dispatch_state is True):
+            active_mutation_run_ids.append(run.run_id)
+        if status in RUN_TERMINAL_STATUSES:
+            terminal_run_ids.append(run.run_id)
+        if status in RUN_STOP_CANCEL_STATUSES:
+            stop_cancel_run_ids.append(run.run_id)
+        if status in RUN_REPORT_REQUIRED_STATUSES and not run.report_ids and run.run_id not in reports_by_run_id:
+            terminal_runs_missing_report.append(run.run_id)
+        missing_report_ids = [report_id for report_id in run.report_ids if report_id not in report_ids]
+        if status in RUN_REPORT_REQUIRED_STATUSES and missing_report_ids:
+            terminal_runs_with_missing_linked_report_ids[run.run_id] = missing_report_ids
+
+    duplicate_run_ids = _duplicate_record_ids(raw_runs, "run_id")
+    blocked_reasons: list[str] = []
+    for run_id in duplicate_run_ids:
+        blocked_reasons.append(f"run_id {run_id} has multiple append-only records")
+    if active_mutation_lane_count > 1:
+        blocked_reasons.append("active mutation lane count exceeds one")
+    for run_id in terminal_runs_missing_report:
+        blocked_reasons.append(f"terminal run_id {run_id} has no linked report")
+    for run_id, missing_report_ids in terminal_runs_with_missing_linked_report_ids.items():
+        blocked_reasons.append(f"run_id {run_id} links missing report ids: {', '.join(missing_report_ids)}")
+
+    return {
+        "source": "RunRecord",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "append_only_projection": True,
+        "run_count": len(runs),
+        "raw_run_count": len(raw_runs),
+        "status_counts": status_counts,
+        "runs_by_status": runs_by_status,
+        "active_run_ids": active_run_ids,
+        "active_mutation_run_ids": active_mutation_run_ids,
+        "active_mutation_lane_count": active_mutation_lane_count,
+        "one_active_mutation_lane_rule_passed": active_mutation_lane_count <= 1,
+        "terminal_run_ids": terminal_run_ids,
+        "stop_cancel_run_ids": stop_cancel_run_ids,
+        "duplicate_run_ids": duplicate_run_ids,
+        "terminal_runs_missing_report": terminal_runs_missing_report,
+        "terminal_runs_with_missing_linked_report_ids": terminal_runs_with_missing_linked_report_ids,
+        "blocked": bool(blocked_reasons),
+        "blocked_reasons": blocked_reasons,
     }
 
 
@@ -512,6 +699,35 @@ def _unique_reasons(values: list[str]) -> list[str]:
         if text and text not in output:
             output.append(text)
     return output
+
+
+def _approval_is_expired(approval: ApprovalRecord, *, now: str = "") -> bool:
+    if not approval.expires_at:
+        return False
+    parsed_expires_at = _parse_datetime(approval.expires_at)
+    if parsed_expires_at is None:
+        return True
+    parsed_now = _parse_datetime(now) if now else datetime.now(timezone.utc)
+    return parsed_now is None or parsed_expires_at <= parsed_now
+
+
+def _parse_datetime(value: str | None) -> datetime | None:
+    text = _safe_text(value)
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _safe_text(value: Any, *, max_chars: int = 240) -> str:
+    if value is None:
+        return ""
+    return str(value).strip().replace("\x00", "")[:max_chars]
 
 
 def _merge_status_input(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:

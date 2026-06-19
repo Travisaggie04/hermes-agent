@@ -426,6 +426,59 @@ export interface MissionControlToolPermissionClassification {
   write_capable_path_ids?: string[]
 }
 
+export interface MissionControlApprovalLifecycle {
+  append_only_projection?: boolean
+  approval_count?: number
+  available_approval_ids?: string[]
+  blocked?: boolean
+  blocked_reasons?: string[]
+  consumed_approval_ids?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  duplicate_approval_ids?: string[]
+  execution_enabled?: boolean
+  expired_approval_ids?: string[]
+  pending_approval_ids?: string[]
+  raw_approval_count?: number
+  rejected_or_cancelled_approval_ids?: string[]
+  runs_by_approval_id?: Record<string, string[]>
+  runs_missing_approval_id?: string[]
+  runs_with_missing_approval_record?: Record<string, string>
+  runs_with_unavailable_approval?: Record<string, string>
+  session_send_enabled?: boolean
+  source?: string
+  status_counts?: Record<string, number>
+  terminal_approval_ids?: string[]
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+}
+
+export interface MissionControlRunLifecycle {
+  active_mutation_lane_count?: number
+  active_mutation_run_ids?: string[]
+  active_run_ids?: string[]
+  append_only_projection?: boolean
+  blocked?: boolean
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  duplicate_run_ids?: string[]
+  execution_enabled?: boolean
+  one_active_mutation_lane_rule_passed?: boolean
+  raw_run_count?: number
+  run_count?: number
+  runs_by_status?: Record<string, string[]>
+  session_send_enabled?: boolean
+  source?: string
+  status_counts?: Record<string, number>
+  stop_cancel_run_ids?: string[]
+  terminal_run_ids?: string[]
+  terminal_runs_missing_report?: string[]
+  terminal_runs_with_missing_linked_report_ids?: Record<string, string[]>
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+}
+
 export interface MissionControlReportLifecycle {
   append_only_projection?: boolean
   blocked?: boolean
@@ -826,6 +879,7 @@ export interface MissionControlJennyBridgeResponseCreateResponse {
 
 export interface MissionControlWorkspaceStatus {
   accepted_baseline?: { head?: string; runtime_path?: string }
+  approval_lifecycle?: MissionControlApprovalLifecycle
   child_agent_orchestration?: MissionControlOrchestrationProjection<MissionControlChildRunRecord>
   control_plane_lifecycle?: {
     active_mutation_lane_count?: number
@@ -876,6 +930,7 @@ export interface MissionControlWorkspaceStatus {
   safety?: { dispatch_in_gateway?: boolean; send_to_jenny_enabled?: boolean }
   stale_context?: { warnings?: string[] }
   report_lifecycle?: MissionControlReportLifecycle
+  run_lifecycle?: MissionControlRunLifecycle
   tool_permission_classification?: MissionControlToolPermissionClassification
   worker_node_orchestration?: MissionControlOrchestrationProjection<MissionControlWorkerNodeRunRecord>
 }
