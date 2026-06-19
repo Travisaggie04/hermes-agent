@@ -80,6 +80,13 @@ MUTATION_LANE_TYPES = {
     "queue_mutation",
     "worker_timer_enablement",
 }
+LIVE_EXECUTION_FLAG_NAMES = (
+    "would_execute",
+    "execution_enabled",
+    "dispatch_enabled",
+    "session_send_enabled",
+    "worker_dispatch_enabled",
+)
 
 
 def default_record_store_path() -> Path:
@@ -2404,13 +2411,16 @@ def _worker_node_readiness(
 ) -> dict[str, Any]:
     blocked_reasons = _text_list(worker_projection.get("blocked_reasons"))
     blocked_reasons.extend(_text_list(worker_presence.get("blocked_reasons")))
-    enabled_flags = [
-        flag
-        for flag in ("execution_enabled", "dispatch_enabled", "session_send_enabled", "worker_dispatch_enabled")
-        if worker_projection.get(flag) is True or worker_presence.get(flag) is True
-    ]
-    blocked_reasons.extend(f"{flag} must remain disabled" for flag in enabled_flags)
     latest_by_id = _mapping(worker_projection.get("latest_by_id"))
+    active_runs = worker_projection.get("active_runs")
+    active_run_payloads = active_runs if isinstance(active_runs, list) else []
+    enabled_flags = _enabled_live_flag_names(
+        worker_projection,
+        worker_presence,
+        *latest_by_id.values(),
+        *active_run_payloads,
+    )
+    blocked_reasons.extend(f"{flag} must remain disabled" for flag in enabled_flags)
     active_count = worker_projection.get("active_count")
     has_worker_record = bool(latest_by_id) or (isinstance(active_count, int) and active_count > 0)
     if not has_worker_record:
@@ -2485,8 +2495,10 @@ def _worker_node_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
         )
     if report_id and report_review_status == "needs_review":
         blocked_reasons.append(f"report_id {report_id} still needs Jenny review")
-    if worker_record.get("worker_dispatch_enabled") is True:
-        blocked_reasons.append("worker dispatch must stay disabled")
+    blocked_reasons.extend(
+        f"{flag} must remain disabled"
+        for flag in _enabled_live_flag_names(worker_projection, worker_record, worker_presence)
+    )
 
     allowed_actions = _text_list(worker_record.get("allowed_actions"))
     recorded_forbidden_actions = _text_list(worker_record.get("forbidden_actions"))
@@ -2602,9 +2614,10 @@ def _child_agent_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
         )
     if report_id and report_review_status == "needs_review":
         blocked_reasons.append(f"report_id {report_id} still needs review")
-    for flag in ("execution_enabled", "dispatch_enabled", "session_send_enabled", "worker_dispatch_enabled"):
-        if child_projection.get(flag) is True or child_record.get(flag) is True:
-            blocked_reasons.append(f"{flag} must remain disabled")
+    blocked_reasons.extend(
+        f"{flag} must remain disabled"
+        for flag in _enabled_live_flag_names(child_projection, child_record)
+    )
 
     allowed_actions = _text_list(child_record.get("allowed_actions"))
     recorded_forbidden_actions = _text_list(child_record.get("forbidden_actions"))
@@ -3021,6 +3034,7 @@ def _orchestration_projection(
         "source": source,
         "display_only": True,
         "trusted_for_execution": False,
+        "would_execute": False,
         "execution_enabled": False,
         "dispatch_enabled": False,
         "session_send_enabled": False,
@@ -3158,6 +3172,15 @@ def _unique_reasons(values: list[str]) -> list[str]:
 
 def _mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _enabled_live_flag_names(*payloads: Any) -> list[str]:
+    mapped_payloads = [_mapping(payload) for payload in payloads]
+    enabled: list[str] = []
+    for flag in LIVE_EXECUTION_FLAG_NAMES:
+        if any(payload.get(flag) is True for payload in mapped_payloads):
+            enabled.append(flag)
+    return enabled
 
 
 def _text_list(value: Any) -> list[str]:

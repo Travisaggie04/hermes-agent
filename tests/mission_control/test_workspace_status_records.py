@@ -9,7 +9,12 @@ from mission_control.records import (
     RunRecord,
     WorkerNodeRunRecord,
 )
-from mission_control.workspace_status_records import build_workspace_status_from_records
+from mission_control.workspace_status_records import (
+    _child_agent_instruction_preview,
+    _orchestration_readiness_payload,
+    _worker_node_instruction_preview,
+    build_workspace_status_from_records,
+)
 
 
 def test_record_sourced_workspace_status_uses_latest_baseline_and_idle_when_no_runs(tmp_path):
@@ -203,6 +208,7 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
     assert child["active_runs"][0]["linked_report_review_status"] == "needs_review"
     assert child["active_runs"][0]["linked_report_summary"] == "Child run reported evidence."
     assert child["blocked_reasons"] == ["report_id report-child still needs review"]
+    assert child["would_execute"] is False
     assert child["dispatch_enabled"] is False
     assert worker["active_count"] == 1
     assert worker["active_runs"][0]["worker_host_label"] == "laptop-codex"
@@ -212,6 +218,7 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
     assert worker["active_runs"][0]["report_review_status"] == "accepted"
     assert worker["active_runs"][0]["linked_report_summary"] == "Worker node reported PR evidence."
     assert worker["blocked_reasons"] == ["worker node offline"]
+    assert worker["would_execute"] is False
     assert worker["worker_dispatch_enabled"] is False
     assert status["control_plane_records"]["active_child_run_count"] == 1
     assert status["control_plane_records"]["active_worker_node_run_count"] == 1
@@ -410,6 +417,94 @@ def test_record_sourced_workspace_status_blocks_worker_node_when_presence_unknow
     next_safe_actions = status["next_safe_actions"]
     action_ids = {action["action_id"] for action in next_safe_actions["actions"]}
     assert "review_worker_node_presence" in action_ids
+
+
+def test_orchestration_readiness_and_instruction_previews_block_would_execute_flags():
+    status = {
+        "read_only_autonomy_eligibility": {
+            "eligible": True,
+            "would_execute": False,
+            "execution_enabled": False,
+            "dispatch_enabled": False,
+            "session_send_enabled": False,
+            "worker_dispatch_enabled": False,
+        },
+        "scoped_pr_lane_eligibility": {
+            "eligible": True,
+            "would_execute": False,
+            "would_commit": False,
+            "would_create_pr": False,
+            "execution_enabled": False,
+            "dispatch_enabled": False,
+            "session_send_enabled": False,
+            "worker_dispatch_enabled": False,
+            "merge_enabled": False,
+            "deploy_enabled": False,
+            "runtime_switch_enabled": False,
+        },
+        "next_safe_actions": {},
+        "worker_node_presence": {
+            "online": True,
+            "presence_state": "online",
+            "would_execute": True,
+        },
+        "worker_node_orchestration": {
+            "active_count": 1,
+            "would_execute": True,
+            "latest_by_id": {
+                "worker-run-unsafe": {
+                    "worker_run_id": "worker-run-unsafe",
+                    "parent_run_id": "run-parent",
+                    "worker_identity": "codex",
+                    "worker_host_label": "laptop-codex",
+                    "objective": "Prepare scoped evidence.",
+                    "would_execute": True,
+                    "report_review_status": "accepted",
+                }
+            },
+            "active_runs": [
+                {
+                    "worker_run_id": "worker-run-unsafe",
+                    "parent_run_id": "run-parent",
+                    "worker_identity": "codex",
+                    "worker_host_label": "laptop-codex",
+                    "objective": "Prepare scoped evidence.",
+                    "would_execute": True,
+                    "report_review_status": "accepted",
+                }
+            ],
+            "blocked_reasons": [],
+        },
+        "child_agent_orchestration": {
+            "active_count": 1,
+            "would_execute": True,
+            "active_runs": [
+                {
+                    "child_run_id": "child-run-unsafe",
+                    "parent_run_id": "run-parent",
+                    "agent_identity": "jenny-child",
+                    "objective": "Inspect bounded context.",
+                    "would_execute": True,
+                }
+            ],
+            "blocked_reasons": [],
+        },
+    }
+
+    readiness = _orchestration_readiness_payload(status)["laptop_codex_worker_node"]
+    assert readiness["state"] == "blocked"
+    assert readiness["preview_ready"] is False
+    assert "would_execute must remain disabled" in readiness["blocked_reasons"]
+
+    worker_instruction = _worker_node_instruction_preview(status)
+    assert worker_instruction["ready_for_handoff"] is False
+    assert worker_instruction["blocked"] is True
+    assert "would_execute must remain disabled" in worker_instruction["blocked_reasons"]
+
+    child_instruction = _child_agent_instruction_preview(status)
+    assert child_instruction["ready_for_handoff"] is False
+    assert child_instruction["blocked"] is True
+    assert "would_execute must remain disabled" in child_instruction["blocked_reasons"]
 
 
 def test_record_sourced_workspace_status_projects_execution_packet_preview(tmp_path):
