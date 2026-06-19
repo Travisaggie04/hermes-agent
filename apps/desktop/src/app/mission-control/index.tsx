@@ -1526,6 +1526,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     reportReviewQueueExecutionEnabled: reportReviewQueue?.execution_enabled,
     reportReviewQueueManualOnly: reportReviewQueue?.manual_review_only,
     reportReviewQueueMissingCount: reportReviewQueue?.missing_report_count ?? 0,
+    reportReviewQueueLinkMismatchCount: reportReviewQueue?.link_mismatch_count ?? 0,
     reportReviewQueueNeedsReviewCount: reportReviewQueue?.needs_review_count ?? 0,
     reportReviewQueuePrimaryId: reportReviewQueue?.primary_review_item_id ?? '',
     reportReviewQueuePrimaryLabel:
@@ -4406,7 +4407,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="report gaps" tone={status.reportDuplicateCount || status.reportOverwriteConflictCount || status.reportMissingRunCount || status.reportMissingLinkedCount ? 'warn' : 'good'} value={`duplicates ${status.reportDuplicateCount} / overwrite conflicts ${status.reportOverwriteConflictCount} / missing ${status.reportMissingRunCount} / stale links ${status.reportMissingLinkedCount}`} />
       <StatusItem label="report contract" tone={reportContractTone} value={`reports ${status.reportContractReportCount} / complete ${status.reportContractCompleteCount} / incomplete ${status.reportContractIncompleteCount}`} />
       <StatusItem label="report completion" tone={reportCompletionTone} value={`ready ${status.reportCompletionReadyCount} / blocked ${status.reportCompletionBlockedCount} / terminal ${status.reportCompletionTerminalCount}`} />
-      <StatusItem label="report review queue" tone={reportReviewQueueTone} value={`items ${status.reportReviewQueueCount} / needs review ${status.reportReviewQueueNeedsReviewCount} / missing ${status.reportReviewQueueMissingCount}`} />
+      <StatusItem label="report review queue" tone={reportReviewQueueTone} value={`items ${status.reportReviewQueueCount} / needs review ${status.reportReviewQueueNeedsReviewCount} / missing ${status.reportReviewQueueMissingCount} / mismatch ${status.reportReviewQueueLinkMismatchCount}`} />
       <StatusItem label="result ingestion" tone={resultIngestionTone} value={`ready ${status.resultIngestionReadyCount} / blocked ${status.resultIngestionBlockedCount} / reports ${status.resultIngestionReportCount}`} />
       <StatusItem label="stop/cancel control" tone={stopControlTone} value={`items ${status.stopControlCount} / stopping ${status.stopControlActiveCount} / terminal ${status.stopControlTerminalCount}`} />
       <StatusItem className="md:col-span-2" label="top report review" tone={reportReviewQueueTone} value={status.reportReviewQueuePrimaryLabel} />

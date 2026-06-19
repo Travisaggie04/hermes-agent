@@ -1289,6 +1289,7 @@ def _report_review_queue_payload(
                 blockers=report.blockers,
                 risks=report.risks,
                 tests=report.tests,
+                report_link_mismatch=bool(link_mismatch_reason),
             )
         )
 
@@ -1396,6 +1397,7 @@ def _report_review_queue_payload(
         "queue_count": len(items),
         "needs_review_count": sum(1 for item in items if item.get("review_status") == "needs_review"),
         "missing_report_count": sum(1 for item in items if item.get("review_status") == "missing_report"),
+        "link_mismatch_count": sum(1 for item in items if item.get("report_link_mismatch") is True),
         "duplicate_report_count": len(duplicate_report_ids),
         "blocked": bool(items or unique_blocked_reasons),
         "blocked_reasons": unique_blocked_reasons,
@@ -1926,6 +1928,7 @@ def _report_review_queue_item(
     blockers: tuple[str, ...] = (),
     risks: tuple[str, ...] = (),
     tests: tuple[str, ...] = (),
+    report_link_mismatch: bool = False,
 ) -> dict[str, Any]:
     return {
         "item_id": _safe_text(item_id),
@@ -1946,6 +1949,7 @@ def _report_review_queue_item(
         "blockers": [_safe_text(item) for item in blockers if _safe_text(item)],
         "risks": [_safe_text(item) for item in risks if _safe_text(item)],
         "tests": [_safe_text(item) for item in tests if _safe_text(item)],
+        "report_link_mismatch": report_link_mismatch,
         "manual_only": True,
     }
 

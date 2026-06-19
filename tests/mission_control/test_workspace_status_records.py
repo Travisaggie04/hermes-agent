@@ -689,6 +689,7 @@ def test_record_sourced_workspace_status_projects_report_review_queue(tmp_path):
     assert queue["queue_count"] == 3
     assert queue["needs_review_count"] == 2
     assert queue["missing_report_count"] == 1
+    assert queue["link_mismatch_count"] == 0
     assert queue["duplicate_report_count"] == 0
     assert queue["blocked"] is True
     assert queue["primary_review_item_id"] == "report:report-worker"
@@ -912,7 +913,9 @@ def test_record_sourced_workspace_status_blocks_mismatched_worker_report_link(tm
 
     queue = status["report_review_queue"]
     assert queue["queue_count"] == 1
+    assert queue["link_mismatch_count"] == 1
     assert queue["primary_review_item"]["item_type"] == "report_link_mismatch"
+    assert queue["primary_review_item"]["report_link_mismatch"] is True
     assert queue["primary_review_item"]["review_status"] == "accepted"
     assert queue["primary_review_reason"] == mismatch_reason
     assert mismatch_reason in queue["blocked_reasons"]
@@ -990,6 +993,11 @@ def test_child_agent_instruction_preview_blocks_projected_report_link_mismatch(t
     assert child["active_runs"][0]["report_link_mismatch"] is True
     assert child["active_runs"][0]["report_link_mismatch_reason"] == mismatch_reason
     assert mismatch_reason in child["blocked_reasons"]
+
+    queue = status["report_review_queue"]
+    assert queue["queue_count"] == 1
+    assert queue["link_mismatch_count"] == 1
+    assert queue["primary_review_item"]["report_link_mismatch"] is True
 
     instruction = status["child_agent_instruction_preview"]
     assert instruction["available"] is True

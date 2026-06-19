@@ -524,6 +524,7 @@ export interface MissionControlReportReviewQueueItem {
   priority?: number
   reason?: string
   recommended_action?: string
+  report_link_mismatch?: boolean
   report_id?: string
   review_status?: string
   risks?: string[]
@@ -544,6 +545,7 @@ export interface MissionControlReportReviewQueue {
   duplicate_report_count?: number
   execution_enabled?: boolean
   items?: MissionControlReportReviewQueueItem[]
+  link_mismatch_count?: number
   manual_review_only?: boolean
   missing_report_count?: number
   needs_review_count?: number

@@ -731,6 +731,7 @@ beforeEach(() => {
         }
       ],
       manual_review_only: true,
+      link_mismatch_count: 0,
       missing_report_count: 1,
       needs_review_count: 2,
       primary_review_item: {
@@ -1854,7 +1855,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('report completion')).toBeTruthy()
     expect(screen.getByText('ready 0 / blocked 2 / terminal 2')).toBeTruthy()
     expect(screen.getByText('report review queue')).toBeTruthy()
-    expect(screen.getByText('items 3 / needs review 2 / missing 1')).toBeTruthy()
+    expect(screen.getByText('items 3 / needs review 2 / missing 1 / mismatch 0')).toBeTruthy()
     expect(screen.getByText('result ingestion')).toBeTruthy()
     expect(screen.getByText('ready 1 / blocked 0 / reports 1')).toBeTruthy()
     expect(screen.getByText('stop/cancel control')).toBeTruthy()
@@ -2551,6 +2552,7 @@ describe('MissionControlView', () => {
     })
     status.child_agent_orchestration.blocked_reasons = [childMismatch]
     status.worker_node_orchestration.blocked_reasons = [workerMismatch]
+    status.report_review_queue.link_mismatch_count = 2
     getMissionControlWorkspaceStatus.mockResolvedValueOnce(status)
 
     await renderMissionControl()
@@ -2565,6 +2567,7 @@ describe('MissionControlView', () => {
     expect(workerReport.textContent).toContain('required / linked report run id mismatch / accepted / mismatch yes')
     expect(workerReport.textContent).toContain(workerMismatch)
     expect(workerReport.className).toContain('text-amber')
+    expect(screen.getByText('items 3 / needs review 2 / missing 1 / mismatch 2')).toBeTruthy()
   })
 
   it('restores Jenny working status from bridge audit records after refresh', async () => {
