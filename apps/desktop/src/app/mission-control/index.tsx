@@ -1254,6 +1254,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
   const nextSafeActions = status.next_safe_actions
   const nextSafePrimaryAction = nextSafeActions?.primary_action
   const orchestrationReadiness = status.orchestration_readiness
+  const workerInstruction = status.worker_node_instruction_preview
   const childRecord = latestProjectionRecord(status.child_agent_orchestration) as Record<string, unknown> | null
   const workerRecord = latestProjectionRecord(status.worker_node_orchestration) as Record<string, unknown> | null
   const childBlockedReasons = uniqueTextList([
@@ -1381,6 +1382,13 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     workerExecutionEnabled: status.worker_node_orchestration?.execution_enabled,
     workerHostLabel: projectionRecordText(workerRecord, 'worker_host_label') || 'laptop-codex',
     workerIdentity: projectionRecordText(workerRecord, 'worker_identity') || 'codex',
+    workerInstructionAvailable: workerInstruction?.available,
+    workerInstructionBlockedReasons: workerInstruction?.blocked_reasons ?? [],
+    workerInstructionDisplayOnly: workerInstruction?.display_only,
+    workerInstructionExecutionEnabled: workerInstruction?.execution_enabled,
+    workerInstructionManualHandoffOnly: workerInstruction?.manual_handoff_only,
+    workerInstructionPrompt: workerInstruction?.manual_handoff_prompt ?? 'No worker-node instruction preview recorded.',
+    workerInstructionWorkerDispatchEnabled: workerInstruction?.worker_dispatch_enabled,
     workerLatestObjective: projectionRecordText(workerRecord, 'objective'),
     workerLatestStatus: projectionRecordText(workerRecord, 'status') || 'none',
     workerReportContractStatus: projectionRecordText(workerRecord, 'report_contract_status') || 'not reported',
@@ -4005,6 +4013,14 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
         ? 'warn'
         : 'good'
       : 'warn'
+  const workerInstructionTone =
+    status.workerInstructionExecutionEnabled === false &&
+    status.workerInstructionWorkerDispatchEnabled === false &&
+    status.workerInstructionManualHandoffOnly === true
+      ? status.workerInstructionBlockedReasons.length
+        ? 'warn'
+        : 'good'
+      : 'warn'
   return (
     <div className="grid gap-3 rounded-xl border border-border/70 bg-background/40 p-4 md:grid-cols-3">
       <StatusItem label="Runtime Worktree Guard" tone={status.guard === 'pass' ? 'good' : 'warn'} value={status.guard} />
@@ -4038,7 +4054,10 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="laptop Codex worker-node" tone={workerLockTone} value={`${status.workerHostLabel} / ${labelText(status.workerLatestStatus)}`} />
       <StatusItem className="md:col-span-2" label="worker-node objective" value={status.workerLatestObjective || `${status.workerIdentity} has no assigned objective recorded`} />
       <StatusItem label="worker-node report" tone={status.workerReportId && status.workerReportReviewStatus !== 'needs_review' ? 'good' : 'warn'} value={`${status.workerReportContractStatus} / ${labelText(status.workerReportLinkStatus)} / ${labelText(status.workerReportReviewStatus)}${status.workerReportId ? ` / ${status.workerReportId}` : ''}`} />
+      <StatusItem label="worker instruction preview" tone={workerInstructionTone} value={`available ${yesNo(status.workerInstructionAvailable)} / manual handoff ${yesNo(status.workerInstructionManualHandoffOnly)}`} />
       <StatusItem className="md:col-span-2" label="worker-node blockers" tone={status.workerBlockedReasons.length ? 'warn' : 'good'} value={status.workerBlockedReasons.length ? status.workerBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="worker instruction prompt" tone={workerInstructionTone} value={status.workerInstructionPrompt} />
+      <StatusItem className="md:col-span-3" label="worker instruction blockers" tone={status.workerInstructionBlockedReasons.length ? 'warn' : 'good'} value={status.workerInstructionBlockedReasons.length ? status.workerInstructionBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="desktop app install" tone="warn" value="separate laptop worker-node update; bottom-bar version is not changed by accepted-live/dashboard deploy" />
       <StatusItem className="md:col-span-3" label="next action reasons" tone={status.nextSafeActionReasons.length ? 'warn' : 'good'} value={status.nextSafeActionReasons.length ? status.nextSafeActionReasons.join(', ') : status.nextSafePrimaryReason} />
       <StatusItem className="md:col-span-3" label="orchestration summary" tone={readinessTone} value={status.orchestrationReadinessSummary} />

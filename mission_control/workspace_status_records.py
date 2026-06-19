@@ -234,6 +234,7 @@ def build_workspace_status_from_records(
     }
     status["next_safe_actions"] = _next_safe_actions_payload(status)
     status["orchestration_readiness"] = _orchestration_readiness_payload(status)
+    status["worker_node_instruction_preview"] = _worker_node_instruction_preview(status)
     return status
 
 
@@ -858,6 +859,81 @@ def _readiness_line(label: str, payload: dict[str, Any]) -> str:
     return f"{label} is blocked: {reason}."
 
 
+def _worker_node_instruction_preview(status: dict[str, Any]) -> dict[str, Any]:
+    worker_projection = _mapping(status.get("worker_node_orchestration"))
+    worker_record = _latest_projection_payload(worker_projection)
+    blocked_reasons: list[str] = []
+    if not worker_record:
+        blocked_reasons.append("no laptop Codex worker-node run is recorded")
+    objective = _safe_text(worker_record.get("objective"), max_chars=800)
+    if worker_record and not objective:
+        blocked_reasons.append("worker-node objective is required")
+    blocked_reasons.extend(_text_list(worker_record.get("blocked_reasons")))
+    if worker_record.get("worker_dispatch_enabled") is True:
+        blocked_reasons.append("worker dispatch must stay disabled")
+
+    allowed_actions = _text_list(worker_record.get("allowed_actions"))
+    recorded_forbidden_actions = _text_list(worker_record.get("forbidden_actions"))
+    effective_forbidden_actions = _unique_reasons(
+        [
+            *recorded_forbidden_actions,
+            "no live deploy",
+            "no restart",
+            "no runtime switch",
+            "no live record/state/config mutation",
+            "no secrets inspection or output",
+            "no worker dispatch activation",
+        ]
+    )
+    worker_identity = _safe_text(worker_record.get("worker_identity")) or "codex"
+    worker_host_label = _safe_text(worker_record.get("worker_host_label")) or "laptop-codex"
+    report_contract = (
+        "Report changed files, tests/checks, result, blockers, safety confirmation, "
+        "and the next suggested chunk."
+    )
+    instruction_lines = [
+        f"Worker: {worker_identity} on {worker_host_label}.",
+        f"Objective: {objective or 'No objective recorded.'}",
+        f"Allowed actions: {_joined_or_none(allowed_actions)}.",
+        f"Forbidden actions: {_joined_or_none(effective_forbidden_actions)}.",
+        f"Report contract: {report_contract}",
+        "Manual handoff only; execution and worker dispatch remain disabled.",
+    ]
+    return {
+        "source": "mission_control_worker_node_instruction_preview_v1",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "stored": False,
+        "dry_run_only": True,
+        "manual_handoff_only": True,
+        "available": bool(worker_record),
+        "blocked": bool(blocked_reasons),
+        "blocked_reasons": _unique_reasons(blocked_reasons),
+        "worker_run_id": _safe_text(worker_record.get("worker_run_id")),
+        "parent_run_id": _safe_text(worker_record.get("parent_run_id")),
+        "worker_identity": worker_identity,
+        "worker_host_label": worker_host_label,
+        "objective": objective,
+        "assigned_packet_id": _safe_text(worker_record.get("assigned_packet_id")),
+        "assigned_packet_summary": _safe_text(worker_record.get("assigned_packet_summary"), max_chars=800),
+        "allowed_actions": allowed_actions,
+        "forbidden_actions": effective_forbidden_actions,
+        "report_contract": report_contract,
+        "report_id": _safe_text(worker_record.get("report_id")),
+        "report_review_status": _safe_text(
+            worker_record.get("linked_report_review_status")
+            or worker_record.get("report_review_status")
+        ),
+        "instruction_lines": instruction_lines,
+        "manual_handoff_prompt": "\n".join(instruction_lines),
+    }
+
+
 def _latest_by_id(records: tuple[Any, ...], field_name: str) -> dict[str, dict[str, Any]]:
     return {
         record_id: record.to_dict()
@@ -1054,6 +1130,19 @@ def _text_list(value: Any) -> list[str]:
 
 def _first_reason(values: list[str], fallback: str) -> str:
     return values[0] if values else fallback
+
+
+def _latest_projection_payload(projection: dict[str, Any]) -> dict[str, Any]:
+    active_runs = projection.get("active_runs")
+    if isinstance(active_runs, list) and active_runs:
+        return _mapping(active_runs[-1])
+    latest_by_id = _mapping(projection.get("latest_by_id"))
+    latest_payloads = list(latest_by_id.values())
+    return _mapping(latest_payloads[-1]) if latest_payloads else {}
+
+
+def _joined_or_none(values: list[str]) -> str:
+    return ", ".join(values) if values else "none recorded"
 
 
 def _approval_is_expired(approval: ApprovalRecord, *, now: str = "") -> bool:

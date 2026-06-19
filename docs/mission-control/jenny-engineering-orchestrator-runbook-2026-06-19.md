@@ -201,6 +201,12 @@ worker-node. A state may be blocked or preview-ready, but this lane still keeps
 execution-ready false. Travis should treat preview-ready as "safe to prepare a
 manual packet for review," not "safe to run automatically."
 
+The worker-node instruction preview turns the latest laptop Codex worker record
+into a manual handoff prompt. It states the worker, objective, allowed actions,
+hard forbidden actions, and report contract. It is useful copy for Jenny or
+Travis to review, but it does not contact the laptop, start a worker, or enable
+execution.
+
 ## Mission Control Reading Guide
 
 - Runtime provenance: source and runtime trust.
@@ -223,6 +229,8 @@ manual packet for review," not "safe to run automatically."
   step; it does not enable execution.
 - Orchestration readiness: blocked or preview-ready state for supervised
   read-only autonomy, scoped PR creation, and laptop Codex worker-node.
+- Worker instruction preview: a manual Codex handoff prompt with objective,
+  allowed actions, forbidden actions, and report requirements.
 
 If a row says blocked, Travis should read the blocker first instead of trying
 to force the action.

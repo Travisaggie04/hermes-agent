@@ -573,6 +573,37 @@ export interface MissionControlOrchestrationReadiness {
   would_execute?: boolean
 }
 
+export interface MissionControlWorkerNodeInstructionPreview {
+  allowed_actions?: string[]
+  assigned_packet_id?: string
+  assigned_packet_summary?: string
+  available?: boolean
+  blocked?: boolean
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  forbidden_actions?: string[]
+  instruction_lines?: string[]
+  manual_handoff_only?: boolean
+  manual_handoff_prompt?: string
+  objective?: string
+  parent_run_id?: string
+  report_contract?: string
+  report_id?: string
+  report_review_status?: string
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  worker_host_label?: string
+  worker_identity?: string
+  worker_run_id?: string
+  would_execute?: boolean
+}
+
 export interface MissionControlProjectSession {
   cwd?: null | string
   durable_session_id?: string
@@ -1005,6 +1036,7 @@ export interface MissionControlWorkspaceStatus {
   report_lifecycle?: MissionControlReportLifecycle
   run_lifecycle?: MissionControlRunLifecycle
   tool_permission_classification?: MissionControlToolPermissionClassification
+  worker_node_instruction_preview?: MissionControlWorkerNodeInstructionPreview
   worker_node_orchestration?: MissionControlOrchestrationProjection<MissionControlWorkerNodeRunRecord>
 }
 

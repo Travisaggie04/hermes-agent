@@ -162,6 +162,8 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
             worker_host_label="laptop-codex",
             status="blocked",
             objective="Prepare a scoped PR.",
+            allowed_actions=("edit scoped files", "run focused tests"),
+            forbidden_actions=("deploy", "restart", "runtime switch"),
             blocked_reasons=("worker node offline",),
             report_contract_status="present",
             report_id="report-worker",
@@ -211,6 +213,30 @@ def test_record_sourced_workspace_status_projects_child_and_worker_node_runs(tmp
     assert worker["worker_dispatch_enabled"] is False
     assert status["control_plane_records"]["active_child_run_count"] == 1
     assert status["control_plane_records"]["active_worker_node_run_count"] == 1
+
+    instruction = status["worker_node_instruction_preview"]
+    assert instruction["display_only"] is True
+    assert instruction["trusted_for_execution"] is False
+    assert instruction["would_execute"] is False
+    assert instruction["execution_enabled"] is False
+    assert instruction["dispatch_enabled"] is False
+    assert instruction["session_send_enabled"] is False
+    assert instruction["worker_dispatch_enabled"] is False
+    assert instruction["stored"] is False
+    assert instruction["dry_run_only"] is True
+    assert instruction["manual_handoff_only"] is True
+    assert instruction["available"] is True
+    assert instruction["blocked"] is True
+    assert instruction["worker_run_id"] == "worker-run-1"
+    assert instruction["worker_identity"] == "codex"
+    assert instruction["worker_host_label"] == "laptop-codex"
+    assert instruction["objective"] == "Prepare a scoped PR."
+    assert instruction["allowed_actions"] == ["edit scoped files", "run focused tests"]
+    assert "deploy" in instruction["forbidden_actions"]
+    assert "no live deploy" in instruction["forbidden_actions"]
+    assert "worker node offline" in instruction["blocked_reasons"]
+    assert "Manual handoff only" in instruction["manual_handoff_prompt"]
+    assert "Report contract:" in instruction["manual_handoff_prompt"]
 
 
 def test_record_sourced_workspace_status_projects_report_lifecycle_blockers(tmp_path):

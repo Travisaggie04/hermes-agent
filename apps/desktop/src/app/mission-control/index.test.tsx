@@ -392,6 +392,43 @@ beforeEach(() => {
       execution_enabled: false,
       trusted_for_execution: false,
       worker_dispatch_enabled: false
+    },
+    worker_node_instruction_preview: {
+      allowed_actions: ['edit scoped files', 'run focused tests'],
+      assigned_packet_id: 'packet-worker-1',
+      assigned_packet_summary: 'Prepare scoped PR evidence.',
+      available: true,
+      blocked: true,
+      blocked_reasons: ['worker node offline'],
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      forbidden_actions: ['deploy', 'restart', 'runtime switch', 'no live deploy', 'no worker dispatch activation'],
+      instruction_lines: [
+        'Worker: codex on laptop-codex.',
+        'Objective: Prepare bounded scoped PR packet.',
+        'Allowed actions: edit scoped files, run focused tests.',
+        'Forbidden actions: deploy, restart, runtime switch, no live deploy, no worker dispatch activation.',
+        'Report contract: Report changed files, tests/checks, result, blockers, safety confirmation, and the next suggested chunk.',
+        'Manual handoff only; execution and worker dispatch remain disabled.'
+      ],
+      manual_handoff_only: true,
+      manual_handoff_prompt: 'Worker: codex on laptop-codex.\nObjective: Prepare bounded scoped PR packet.\nAllowed actions: edit scoped files, run focused tests.\nForbidden actions: deploy, restart, runtime switch, no live deploy, no worker dispatch activation.\nReport contract: Report changed files, tests/checks, result, blockers, safety confirmation, and the next suggested chunk.\nManual handoff only; execution and worker dispatch remain disabled.',
+      objective: 'Prepare bounded scoped PR packet.',
+      parent_run_id: 'run-parent-1',
+      report_contract: 'Report changed files, tests/checks, result, blockers, safety confirmation, and the next suggested chunk.',
+      report_id: 'report-worker',
+      report_review_status: 'accepted',
+      session_send_enabled: false,
+      source: 'mission_control_worker_node_instruction_preview_v1',
+      stored: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      worker_host_label: 'laptop-codex',
+      worker_identity: 'codex',
+      worker_run_id: 'worker-run-1',
+      would_execute: false
     }
   })
   createMissionControlReport.mockResolvedValue({
@@ -1227,8 +1264,13 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Prepare bounded scoped PR packet.')).toBeTruthy()
     expect(screen.getByText('worker-node report')).toBeTruthy()
     expect(screen.getByText('required / linked report found / accepted / report-worker')).toBeTruthy()
+    expect(screen.getByText('worker instruction preview')).toBeTruthy()
+    expect(screen.getByText('available yes / manual handoff yes')).toBeTruthy()
+    expect(screen.getByText('worker instruction prompt')).toBeTruthy()
+    expect(screen.getByText(/Worker: codex on laptop-codex/)).toBeTruthy()
+    expect(screen.getByText('worker instruction blockers')).toBeTruthy()
     expect(screen.getByText('worker-node blockers')).toBeTruthy()
-    expect(screen.getByText('worker node offline')).toBeTruthy()
+    expect(screen.getAllByText('worker node offline').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('scoped PR blockers')).toBeTruthy()
     expect(screen.getByText('exact approved ApprovalRecord is required')).toBeTruthy()
     expect(screen.getByText('autonomy blockers')).toBeTruthy()
