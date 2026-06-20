@@ -410,7 +410,9 @@ def _runtime_provenance_input(
     )
     source_control_facts = _runtime_fact_section(
         {
-            "head": source_control.get("accepted_live_head", ""),
+            "head": source_control.get("accepted_live_head", "")
+            or accepted_record.get("head", "")
+            or accepted.get("head", ""),
             "default_branch_head": source_control.get("default_branch_head", ""),
             "latest_merged_pr": source_control.get("latest_merged_pr", ""),
             "merged_prs_after_accepted_baseline": source_control.get(
