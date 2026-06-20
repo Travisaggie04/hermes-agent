@@ -260,6 +260,9 @@ def run_once_if_trusted(
         blockers=tuple(status.get("operator_decision_packet", {}).get("blocked_reasons", ())[:8])
         if isinstance(status.get("operator_decision_packet"), dict)
         else (),
+        tests=(
+            "guarded read-only status-report backend trusted one-run packet and appended only approved records",
+        ),
         next_recommended_lane="Review this first execution-tested read-only report before enabling any broader execution.",
         evidence_refs=("workspace status projection", "accepted baseline record", "runtime provenance projection"),
         submitted_by="jenny-supervised-read-only",
