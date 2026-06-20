@@ -859,15 +859,29 @@ export interface MissionControlExecutionModeClassification {
 }
 
 export interface MissionControlExecutionLockFields {
+  daemon_enabled?: boolean
   dispatch_enabled?: boolean
+  dispatch_in_gateway?: boolean
+  dispatch_state?: boolean | string
   display_only?: boolean
   dry_run_only?: boolean
   execution_enabled?: boolean
+  execution_ready?: boolean
   inert_context_only?: boolean
+  live_operations_enabled?: boolean
+  model_routing_enabled?: boolean
+  payment_enabled?: boolean
+  queue_mutation_enabled?: boolean
+  send_to_jenny_enabled?: boolean
   session_send_enabled?: boolean
+  social_enabled?: boolean
   stored?: boolean
+  timer_enabled?: boolean
   trusted_for_execution?: boolean
+  waha_enabled?: boolean
   worker_dispatch_enabled?: boolean
+  worker_enabled?: boolean
+  workers_enabled?: boolean
   would_dispatch?: boolean
   would_execute?: boolean
   would_session_send?: boolean
