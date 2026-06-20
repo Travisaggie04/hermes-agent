@@ -149,6 +149,67 @@ def _eligible_preview_payload(**overrides):
     return payload
 
 
+def _eligible_one_run_status_report_payload(**overrides):
+    approval_id = "approval-read-only-status-1"
+    run_id = "run-read-only-status-1"
+    report_id = "report-read-only-status-contract-1"
+    payload = _eligible_preview_payload(
+        mode="read_only",
+        approval={
+            "approval_id": approval_id,
+            "run_id": run_id,
+            "status": "approved",
+            "approval_mode": "one_time",
+            "approval_scope": "project-hermes-mission-control:supervised_read_only_status_report",
+            "action_class": "supervised_read_only_status_report",
+            "approved_actions": ("run exactly one supervised read-only Mission Control status report",),
+            "forbidden_actions": _forbidden_actions(),
+            "expires_at": "2099-01-01T00:00:00Z",
+            "consumed_at": "",
+        },
+        run={
+            "run_id": run_id,
+            "project_id": "project-hermes-mission-control",
+            "approval_id": approval_id,
+            "lane_type": "supervised_read_only_status_report",
+            "status": "requested",
+            "execution_mode": "one_run_read_only",
+            "dispatch_state": False,
+            "forbidden_actions": _forbidden_actions(),
+            "metadata": {
+                "one_run_only": True,
+                "execution_enabled": False,
+                "dispatch_enabled": False,
+                "session_send_enabled": False,
+                "worker_dispatch_enabled": False,
+            },
+        },
+        lane={
+            "lane_type": "supervised_read_only_status_report",
+            "forbidden_actions": _forbidden_actions(),
+        },
+        report={
+            "report_id": report_id,
+            "run_id": run_id,
+            "approval_id": approval_id,
+            "project_id": "project-hermes-mission-control",
+            "status": "reviewed",
+            "report_kind": "supervised_read_only_status_report_contract",
+            "summary": "One-run read-only status-report contract.",
+            "result": "Contract only; no Jenny execution occurred.",
+            "risks": ("Execution remains limited to one read-only status report.",),
+            "tests": ("trusted one-run packet gate",),
+            "next_recommended_lane": "Run the guarded backend status-report path once.",
+            "evidence_refs": ("accepted runtime head",),
+            "metadata": {"no_jenny_execution": True, "jenny_executed": False},
+        },
+        report_inbox_ready=True,
+        report_record_ready=True,
+    )
+    payload.update(overrides)
+    return payload
+
+
 def _eligible_pr_preview_payload(**overrides):
     payload = {
         "runtime_provenance": evaluate_runtime_provenance(_clean_runtime_state()),
@@ -973,6 +1034,102 @@ def test_read_only_execution_packet_allows_manual_bridge_with_read_only_safe_pac
     assert result["dispatch_enabled"] is False
     assert result["session_send_enabled"] is False
     assert result["worker_dispatch_enabled"] is False
+
+
+def test_trusted_read_only_one_run_status_packet_stays_narrow_and_non_dispatching():
+    result = build_execution_packet_preview(_eligible_one_run_status_report_payload())
+
+    assert result["eligible"] is True
+    assert result["blocked_reasons"] == []
+    assert result["display_only"] is True
+    assert result["trusted_for_execution"] is True
+    assert result["one_run_authorized"] is True
+    assert result["one_run_authorization_scope"] == "supervised_read_only_status_report"
+    assert result["would_execute"] is False
+    assert result["execution_enabled"] is False
+    assert result["dispatch_enabled"] is False
+    assert result["session_send_enabled"] is False
+    assert result["worker_dispatch_enabled"] is False
+    packet = result["packet"]
+    assert packet["mode"] == "read_only"
+    assert packet["one_run_authorized"] is True
+    assert packet["status_report_only"] is True
+    assert packet["uses_bridge"] is False
+    assert packet["uses_dispatch"] is False
+    assert packet["uses_session_send"] is False
+    assert packet["uses_worker_dispatch"] is False
+    assert packet["uses_write_tools"] is False
+    assert packet["would_execute"] is False
+    assert packet["execution_enabled"] is False
+    assert packet["dispatch_enabled"] is False
+    assert packet["session_send_enabled"] is False
+    assert packet["worker_dispatch_enabled"] is False
+
+
+def test_trusted_read_only_one_run_status_packet_blocks_duplicate_approval_id():
+    result = build_execution_packet_preview(
+        _eligible_one_run_status_report_payload(
+            approval_record_count_for_id=2,
+            approval_id_duplicated=True,
+            duplicate_approval_ids=["approval-read-only-status-1"],
+        )
+    )
+
+    assert result["eligible"] is False
+    assert result["trusted_for_execution"] is False
+    assert result["one_run_authorized"] is False
+    assert "approval_id approval-read-only-status-1 is duplicated and ambiguous" in result["blocked_reasons"]
+    assert result["would_execute"] is False
+    assert result["execution_enabled"] is False
+
+
+def test_trusted_read_only_one_run_status_packet_requires_exact_report_link():
+    result = build_execution_packet_preview(
+        _eligible_one_run_status_report_payload(
+            report={
+                "report_id": "report-read-only-status-contract-1",
+                "run_id": "run-other",
+                "approval_id": "approval-read-only-status-1",
+                "project_id": "project-hermes-mission-control",
+                "status": "reviewed",
+                "report_kind": "supervised_read_only_status_report_contract",
+                "metadata": {"no_jenny_execution": True, "jenny_executed": False},
+            }
+        )
+    )
+
+    assert result["eligible"] is False
+    assert result["trusted_for_execution"] is False
+    assert "read-only status report contract must link to the exact RunRecord" in result["blocked_reasons"]
+    assert result["would_execute"] is False
+    assert result["execution_enabled"] is False
+
+
+def test_trusted_read_only_one_run_status_packet_requires_fresh_bound_run():
+    result = build_execution_packet_preview(
+        _eligible_one_run_status_report_payload(
+            approval={
+                "approval_id": "approval-read-only-status-1",
+                "run_id": "run-other",
+                "status": "approved",
+                "approval_mode": "one_time",
+                "approval_scope": "project-hermes-mission-control:supervised_read_only_status_report",
+                "action_class": "supervised_read_only_status_report",
+                "approved_actions": ("run exactly one supervised read-only Mission Control status report",),
+                "forbidden_actions": _forbidden_actions(),
+                "expires_at": "2099-01-01T00:00:00Z",
+                "consumed_at": "",
+            },
+            run_record_count_for_id=2,
+        )
+    )
+
+    assert result["eligible"] is False
+    assert result["trusted_for_execution"] is False
+    assert "one-run approval must be bound to the exact RunRecord" in result["blocked_reasons"]
+    assert "one-run RunRecord id has prior append-only updates; create a fresh run_id" in result["blocked_reasons"]
+    assert result["would_execute"] is False
+    assert result["execution_enabled"] is False
 
 
 def test_read_only_execution_packet_requires_explicit_read_only_safe_tool_profile():

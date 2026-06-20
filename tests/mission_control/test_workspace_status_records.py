@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from mission_control.records import (
     AcceptedBaselineRecord,
     ApprovalRecord,
@@ -9,6 +11,7 @@ from mission_control.records import (
     RunRecord,
     WorkerNodeRunRecord,
 )
+from mission_control.read_only_status_report import build_record_set, run_once_if_trusted
 from mission_control.workspace_status import build_workspace_status
 from mission_control.workspace_status_records import (
     _child_agent_instruction_preview,
@@ -335,6 +338,165 @@ def test_record_sourced_read_only_preview_records_make_supervised_preview_ready(
         status["read_only_preview_report_contract"],
     ):
         _assert_execution_disabled(projection)
+
+
+def test_record_sourced_one_run_status_report_allows_unique_renewal_after_historical_duplicate(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(_reconciled_baseline_record())
+    store.append(
+        ApprovalRecord(
+            approval_id="approval-old-duplicate",
+            project_id="project-hermes-mission-control",
+            action_class="read_only_inspection",
+            approval_scope="project-hermes historical read-only preview",
+            status="proposed",
+        )
+    )
+    store.append(
+        ApprovalRecord(
+            approval_id="approval-old-duplicate",
+            project_id="project-hermes-mission-control",
+            action_class="read_only_inspection",
+            approval_scope="project-hermes historical read-only preview",
+            status="approved",
+            expires_at="2099-01-01T00:00:00Z",
+        )
+    )
+    record_set = build_record_set(
+        head=HEAD,
+        runtime_path="/runtime/accepted",
+        suffix="fresh",
+        now=datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc),
+    )
+    for record in (record_set.approval, record_set.run, record_set.report_contract):
+        store.append(record)
+
+    status = build_workspace_status_from_records(
+        {"now": "2026-06-19T12:05:00Z"},
+        records_path=records_path,
+    )
+
+    approvals = status["approval_lifecycle"]
+    assert approvals["duplicate_approval_ids"] == ["approval-old-duplicate"]
+    assert approvals["active_duplicate_approval_ids"] == []
+    assert approvals["historical_duplicate_approval_ids"] == ["approval-old-duplicate"]
+    assert "approval_id approval-old-duplicate has multiple append-only records" not in approvals["blocked_reasons"]
+    read_only = status["read_only_autonomy_eligibility"]
+    assert read_only["eligible"] is True
+    assert read_only["blocked_reasons"] == []
+    packet = status["execution_packet_preview"]
+    assert packet["eligible"] is True
+    assert packet["trusted_for_execution"] is True
+    assert packet["one_run_authorized"] is True
+    assert packet["packet"]["mode"] == "read_only"
+    assert packet["packet"]["one_run_authorized"] is True
+    assert packet["packet"]["status_report_only"] is True
+    assert packet["packet"]["uses_dispatch"] is False
+    assert packet["packet"]["uses_session_send"] is False
+    assert packet["packet"]["uses_worker_dispatch"] is False
+    assert packet["would_execute"] is False
+    assert packet["execution_enabled"] is False
+    assert packet["dispatch_enabled"] is False
+    assert packet["session_send_enabled"] is False
+    assert packet["worker_dispatch_enabled"] is False
+
+
+def test_record_sourced_one_run_status_report_blocks_active_duplicate_approval(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(_reconciled_baseline_record())
+    record_set = build_record_set(
+        head=HEAD,
+        runtime_path="/runtime/accepted",
+        suffix="duplicate",
+        now=datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc),
+    )
+    store.append(record_set.approval)
+    store.append(
+        ApprovalRecord(
+            approval_id=record_set.approval.approval_id,
+            project_id="project-hermes-mission-control",
+            run_id=record_set.run.run_id,
+            action_class="supervised_read_only_status_report",
+            approval_scope="project-hermes-mission-control:supervised_read_only_status_report",
+            approved_actions=("run exactly one supervised read-only Mission Control status report",),
+            forbidden_actions=_forbidden_actions(),
+            status="approved",
+            approval_mode="one_time",
+            approved_at="2026-06-19T12:01:00Z",
+            expires_at="2099-01-01T00:00:00Z",
+            baseline_runtime_path="/runtime/accepted",
+            baseline_head=HEAD,
+        )
+    )
+    store.append(record_set.run)
+    store.append(record_set.report_contract)
+
+    status = build_workspace_status_from_records(
+        {"now": "2026-06-19T12:05:00Z"},
+        records_path=records_path,
+    )
+
+    assert status["approval_lifecycle"]["active_duplicate_approval_ids"] == [
+        record_set.approval.approval_id
+    ]
+    read_only = status["read_only_autonomy_eligibility"]
+    assert read_only["eligible"] is False
+    assert (
+        f"approval_id {record_set.approval.approval_id} is duplicated and ambiguous"
+        in read_only["blocked_reasons"]
+    )
+    packet = status["execution_packet_preview"]
+    assert packet["eligible"] is False
+    assert packet["trusted_for_execution"] is False
+    assert packet["one_run_authorized"] is False
+    assert packet["would_execute"] is False
+    assert packet["execution_enabled"] is False
+
+
+def test_guarded_read_only_status_report_runs_once_and_closes_run(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(_reconciled_baseline_record())
+    record_set = build_record_set(
+        head=HEAD,
+        runtime_path="/runtime/accepted",
+        suffix="runonce",
+        now=datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc),
+    )
+    for record in (record_set.approval, record_set.run, record_set.report_contract):
+        store.append(record)
+    before = build_workspace_status_from_records(
+        {"now": "2026-06-19T12:05:00Z"},
+        records_path=records_path,
+    )
+    assert before["execution_packet_preview"]["trusted_for_execution"] is True
+
+    result = run_once_if_trusted(
+        records_path=records_path,
+        now=datetime(2026, 6, 19, 12, 6, tzinfo=timezone.utc),
+    )
+
+    assert result["started"] is True
+    assert result["completed"] is True
+    assert result["run_id"] == record_set.run.run_id
+    assert result["approval_id"] == record_set.approval.approval_id
+    assert result["report_id"].startswith("report-pr402-supervised-read-only-status-result-")
+    assert "Accepted runtime/head: /runtime/accepted" in result["status_report"]
+    after = build_workspace_status_from_records(
+        {"now": "2026-06-19T12:07:00Z"},
+        records_path=records_path,
+    )
+    latest_run = after["control_plane_lifecycle"]["latest_runs_by_id"][record_set.run.run_id]
+    assert latest_run["status"] == "completed"
+    assert latest_run["result_record_ids"] == [result["report_id"]]
+    assert after["run_lifecycle"]["append_only_run_update_ids"] == [record_set.run.run_id]
+    assert after["run_lifecycle"]["run_update_conflict_ids"] == []
+    assert after["control_plane_records"]["active_run_count"] == 0
+    assert after["execution_packet_preview"]["trusted_for_execution"] is False
+    assert after["execution_packet_preview"]["would_execute"] is False
+    assert after["execution_packet_preview"]["execution_enabled"] is False
 
 
 def test_record_sourced_read_only_preview_requires_explicit_report_contract(tmp_path):
@@ -2661,6 +2823,8 @@ def test_record_sourced_workspace_status_projects_approval_and_run_lifecycle_blo
     assert approvals["consumed_approval_ids"] == ["approval-consumed"]
     assert approvals["rejected_or_cancelled_approval_ids"] == ["approval-rejected"]
     assert approvals["duplicate_approval_ids"] == ["approval-duplicate"]
+    assert approvals["active_duplicate_approval_ids"] == []
+    assert approvals["historical_duplicate_approval_ids"] == ["approval-duplicate"]
     assert approvals["runs_missing_approval_id"] == ["run-no-approval"]
     assert approvals["runs_with_missing_approval_record"] == {
         "run-missing-record": "approval-missing"
@@ -2671,7 +2835,7 @@ def test_record_sourced_workspace_status_projects_approval_and_run_lifecycle_blo
         "run-rejected": "approval-rejected",
     }
     assert approvals["blocked"] is True
-    assert "approval_id approval-duplicate has multiple append-only records" in approvals["blocked_reasons"]
+    assert "approval_id approval-duplicate has multiple append-only records" not in approvals["blocked_reasons"]
     assert "active run_id run-no-approval has no approval_id" in approvals["blocked_reasons"]
     assert "run_id run-missing-record references missing approval_id approval-missing" in approvals["blocked_reasons"]
     assert "run_id run-expired references unavailable approval_id approval-expired" in approvals["blocked_reasons"]
@@ -2717,7 +2881,7 @@ def test_record_sourced_workspace_status_projects_approval_and_run_lifecycle_blo
     assert "review_approval_lifecycle_blockers" in action_ids
     assert "review_run_lifecycle_blockers" in action_ids
     assert "review_report_lifecycle_blockers" in action_ids
-    assert "approval_id approval-duplicate has multiple append-only records" in next_safe_actions["blocked_reasons"]
+    assert "approval_id approval-duplicate has multiple append-only records" not in next_safe_actions["blocked_reasons"]
     assert "terminal run_id run-terminal-missing-report has no linked report" in next_safe_actions["blocked_reasons"]
     assert "run_id run-terminal-missing-report has no linked report" in next_safe_actions["blocked_reasons"]
 
