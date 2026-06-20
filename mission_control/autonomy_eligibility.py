@@ -19,6 +19,7 @@ _STATUS_PRIORITY = (
     "BROKEN_GIT_METADATA",
     "GATEWAY_UNTRUSTED",
     "MISSING_RUNTIME_PATH",
+    "UNRECORDED_RUNTIME",
     "DIRTY_RUNTIME",
     "SOURCE_DEFAULT_DRIFT",
     "DASHBOARD_GATEWAY_DRIFT",
@@ -468,6 +469,9 @@ def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) ->
     ):
         summary = _runtime_summary(name, runtime)
         runtimes[name] = summary
+        if summary["unrecorded"]:
+            _add(statuses, "UNRECORDED_RUNTIME")
+            _add(blocked_reasons, f"{name} runtime facts are unrecorded")
         if summary["missing_path"]:
             _add(statuses, "MISSING_RUNTIME_PATH")
             _add(blocked_reasons, f"{name} runtime path is missing or absent")
@@ -1436,9 +1440,27 @@ def _runtime_summary(name: str, runtime: dict[str, Any]) -> dict[str, Any]:
     untracked_files = tuple(_safe_text(item) for item in _as_list(runtime.get("untracked_files")) if _safe_text(item))
     status_short = tuple(_safe_text(item) for item in _as_list(runtime.get("status_short")) if _safe_text(item))
     error = _safe_text(runtime.get("error"), max_chars=300)
-    dirty = bool(dirty_files or untracked_files)
-    broken = git_healthy is False or bool(error)
-    missing_path = not path or exists is False
+    unrecorded = (
+        runtime.get("unrecorded") is True
+        or runtime.get("recorded") is False
+        or _safe_text(runtime.get("state")).lower() == "unrecorded"
+    )
+    dirty_from_status = any(line and not line.startswith("##") for line in status_short)
+    dirty = runtime.get("dirty") is True or bool(dirty_files or untracked_files or dirty_from_status)
+    broken = runtime.get("broken_git_metadata") is True or git_healthy is False or bool(error)
+    missing_path = not unrecorded and (runtime.get("missing_path") is True or not path or exists is False)
+    if unrecorded:
+        state = "unrecorded"
+    elif missing_path:
+        state = "missing"
+    elif broken:
+        state = "broken_git_metadata"
+    elif dirty:
+        state = "dirty"
+    elif path:
+        state = "clean"
+    else:
+        state = "unknown"
     return {
         "name": name,
         "path": path,
@@ -1452,6 +1474,8 @@ def _runtime_summary(name: str, runtime: dict[str, Any]) -> dict[str, Any]:
         "dirty": dirty,
         "broken_git_metadata": broken,
         "missing_path": missing_path,
+        "unrecorded": unrecorded,
+        "state": state,
     }
 
 

@@ -62,6 +62,33 @@ _FORBIDDEN_KEYS = {
     "canonical_packet_json",
 }
 
+_RUNTIME_TEXT_KEYS = {
+    "branch",
+    "error",
+    "latest_merged_pr",
+    "path",
+    "runtime_path",
+    "state",
+    "status",
+}
+_RUNTIME_SHA_KEYS = {"default_branch_head", "head"}
+_RUNTIME_BOOL_KEYS = {
+    "broken_git_metadata",
+    "clean",
+    "dirty",
+    "exists",
+    "git_healthy",
+    "missing_path",
+    "recorded",
+    "unrecorded",
+}
+_RUNTIME_LIST_KEYS = {
+    "dirty_files",
+    "merged_prs_after_accepted_baseline",
+    "status_short",
+    "untracked_files",
+}
+
 _DEFAULT_STATUS: dict[str, Any] = {
     "accepted_baseline": {
         "runtime_path": "/home/jenny/.hermes/hermes-runtime-approvalhash-775f493",
@@ -309,6 +336,7 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
     warnings.extend(read_only_autonomy_eligibility.get("blocked_reasons", ()))
 
     warnings = _dedupe_bounded(warnings)
+    runtime_summaries = _section(runtime_provenance, "runtimes")
     return {
         "workspace_id": "mission_control_operating_workspace_v1",
         **INERT_WORKSPACE_FLAGS,
@@ -324,6 +352,10 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         "pr_gate": pr_gate,
         "deployment": deployment,
         "source_control": source_control,
+        "source_runtime": _source_runtime_status(runtime_provenance),
+        "dashboard_runtime": _section(runtime_summaries, "dashboard"),
+        "gateway_runtime": _section(runtime_summaries, "gateway"),
+        "rollback_runtime": _section(runtime_summaries, "rollback"),
         "deployment_gap": deployment_gap,
         "runtime_worktree_guard": runtime_guard,
         "runtime_provenance": runtime_provenance,
@@ -352,15 +384,43 @@ def _runtime_provenance_input(
     lane: dict[str, Any],
 ) -> dict[str, Any]:
     section = _section(source, "runtime_provenance")
+    source_runtime = _runtime_input_from_sections(
+        _section(accepted_record, "source_runtime"),
+        _section(source, "source_runtime"),
+        _section(section, "source"),
+    )
+    dashboard_runtime = _runtime_input_from_sections(
+        _section(accepted_record, "dashboard_runtime"),
+        _section(source, "dashboard_runtime"),
+        _section(section, "dashboard_runtime"),
+        mark_unrecorded=accepted_record.get("present") is True,
+    )
+    gateway_runtime = _runtime_input_from_sections(
+        _section(accepted_record, "gateway_runtime"),
+        _section(source, "gateway_runtime"),
+        _section(section, "gateway_runtime"),
+        mark_unrecorded=accepted_record.get("present") is True,
+    )
+    rollback_runtime = _runtime_input_from_sections(
+        _section(accepted_record, "rollback_runtime"),
+        _section(source, "rollback_runtime"),
+        _section(section, "rollback_runtime"),
+    )
+    source_control_facts = _runtime_fact_section(
+        {
+            "head": source_control.get("accepted_live_head", ""),
+            "default_branch_head": source_control.get("default_branch_head", ""),
+            "latest_merged_pr": source_control.get("latest_merged_pr", ""),
+            "merged_prs_after_accepted_baseline": source_control.get(
+                "merged_prs_after_accepted_baseline",
+                (),
+            ),
+        }
+    )
     return {
         "source": _merge_dicts(
-            _section(section, "source"),
-            {
-                "head": source_control.get("accepted_live_head", ""),
-                "default_branch_head": source_control.get("default_branch_head", ""),
-                "latest_merged_pr": source_control.get("latest_merged_pr", ""),
-                "merged_prs_after_accepted_baseline": source_control.get("merged_prs_after_accepted_baseline", ()),
-            },
+            source_runtime,
+            source_control_facts,
         ),
         "accepted_baseline": _merge_dicts(
             _section(section, "accepted_baseline"),
@@ -370,10 +430,10 @@ def _runtime_provenance_input(
                 "head": accepted.get("head", ""),
             },
         ),
-        "dashboard_runtime": _section(section, "dashboard_runtime") or _section(source, "dashboard_runtime"),
-        "gateway_runtime": _section(section, "gateway_runtime") or _section(source, "gateway_runtime"),
+        "dashboard_runtime": dashboard_runtime,
+        "gateway_runtime": gateway_runtime,
         "rollback_runtime": _merge_dicts(
-            _section(section, "rollback_runtime") or _section(source, "rollback_runtime"),
+            rollback_runtime,
             {
                 "path": rollback.get("runtime_path", ""),
                 "head": rollback.get("head", ""),
@@ -461,6 +521,10 @@ def _accepted_baseline_record_section(section: dict[str, Any]) -> dict[str, Any]
         "active_kanban": _safe_int(section.get("active_kanban"), default=0),
         "max_active_lane": _safe_int(section.get("max_active_lane"), default=1) or 1,
         "issue": _safe_text(section.get("issue")),
+        "source_runtime": _runtime_fact_section(section.get("source_runtime")),
+        "dashboard_runtime": _runtime_fact_section(section.get("dashboard_runtime")),
+        "gateway_runtime": _runtime_fact_section(section.get("gateway_runtime")),
+        "rollback_runtime": _runtime_fact_section(section.get("rollback_runtime")),
         "display_only": True,
         "would_execute": False,
         "dry_run_only": True,
@@ -725,6 +789,68 @@ def _source_control_section(section: dict[str, Any], *, defaults: dict[str, Any]
         "default_branch_head": _safe_sha(merged.get("default_branch_head")),
         "latest_merged_pr": _safe_text(merged.get("latest_merged_pr"), max_chars=20),
         "merged_prs_after_accepted_baseline": _dedupe_bounded(merged.get("merged_prs_after_accepted_baseline") or ()),
+    }
+
+
+def _runtime_fact_section(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    section: dict[str, Any] = {}
+    for key in sorted(_RUNTIME_TEXT_KEYS):
+        if key in value:
+            max_chars = 240 if key in {"path", "runtime_path"} else MAX_TEXT_CHARS
+            text = _safe_text(value.get(key), max_chars=max_chars)
+            if text:
+                section[key] = text
+    for key in sorted(_RUNTIME_SHA_KEYS):
+        if key in value:
+            sha = _safe_sha(value.get(key))
+            if sha:
+                section[key] = sha
+    for key in sorted(_RUNTIME_BOOL_KEYS):
+        if key in value:
+            safe_bool = _safe_optional_bool(value.get(key))
+            if safe_bool is not None:
+                section[key] = safe_bool
+    for key in sorted(_RUNTIME_LIST_KEYS):
+        if key in value:
+            items = _dedupe_bounded(value.get(key) or ())
+            if items:
+                section[key] = items
+    return section
+
+
+def _runtime_input_from_sections(
+    *sections: dict[str, Any],
+    mark_unrecorded: bool = False,
+) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    for section in sections:
+        facts = _runtime_fact_section(section)
+        if facts:
+            merged = _merge_dicts(merged, facts)
+    if not merged and mark_unrecorded:
+        return {"recorded": False, "state": "unrecorded"}
+    return merged
+
+
+def _source_runtime_status(runtime_provenance: dict[str, Any]) -> dict[str, Any]:
+    source_head = _safe_sha(runtime_provenance.get("source_head"))
+    default_branch_head = _safe_sha(runtime_provenance.get("default_branch_head"))
+    state = "unrecorded"
+    if source_head and default_branch_head and source_head != default_branch_head:
+        state = "drift"
+    elif source_head:
+        state = "recorded"
+    return {
+        **INERT_WORKSPACE_FLAGS,
+        "state": state,
+        "head": source_head,
+        "default_branch_head": default_branch_head,
+        "latest_merged_pr": _safe_text(runtime_provenance.get("latest_merged_pr"), max_chars=20),
+        "merged_prs_after_accepted_baseline": _dedupe_bounded(
+            runtime_provenance.get("merged_prs_after_accepted_baseline") or ()
+        ),
     }
 
 
