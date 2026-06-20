@@ -161,9 +161,11 @@ All current execution scaffolding must remain disabled:
 `hard_boundary_contract` is the first-class status object for the current
 do-not-do list. It is display-only, never trusted for execution, and only marks
 itself blocked when a live execution, dispatch, send-to-Jenny, session-send, or
-worker flag is actually enabled inside a projection, or when a sanitized preview
-reports that a caller tried to enable one of those flags before Mission Control
-forced the returned flags back to false. `/workspace-status/preview` also returns this
+worker flag is actually enabled inside a projection. It also blocks live safety
+flags such as `dispatch_in_gateway`, `dispatch_state`, worker/timer/daemon
+enablement, Waha/social/payment enablement, queue mutation, and model routing.
+It also blocks when a sanitized preview reports that a caller tried to enable
+one of those flags before Mission Control forced the returned flags back to false. `/workspace-status/preview` also returns this
 contract, next-safe actions, orchestration readiness, instruction previews, and
 the operator decision packet with `stored: false`, so caller-supplied previews
 show the same operator-facing truth as the main workspace status without
@@ -467,9 +469,11 @@ next delegation instruction.
   evidence, not as a handoff.
 - Projection execution locks: a broad Desktop rollup of accidental execution,
   dispatch, send-to-Jenny, session-send, worker-dispatch, `would_dispatch`, or
-  `would_session_send` flags across status projections. `none` is the expected
-  safe value. Truthy strings or numbers count as unsafe here because Mission
-  Control should fail closed on loose API payloads.
+  `would_session_send` flags across status projections, including the workspace
+  safety flags for `dispatch_in_gateway`, worker/timer/daemon, Waha/social,
+  payment, queue mutation, and model routing. `none` is the expected safe value.
+  Truthy strings or numbers count as unsafe here because Mission Control should
+  fail closed on loose API payloads.
 - Orchestration readiness: blocked or preview-ready state for supervised
   read-only autonomy, scoped PR creation, and laptop Codex worker-node.
 - Worker instruction preview: a manual Codex handoff prompt with objective,
@@ -531,6 +535,9 @@ After each code-side change:
 4. Run broader checks when the change touches shared contracts.
 5. Confirm Mission Control still shows disabled execution, dispatch,
    send-to-Jenny, session sending, and worker dispatch.
+   Also confirm `hard_boundary_contract` blocks any true safety flags for
+   `dispatch_in_gateway`, worker/timer/daemon, Waha/social/payment, queue
+   mutation, and model routing.
    Preview endpoints such as `/workspace-status/preview` must also return the
    `hard_boundary_contract`, `next_safe_actions`, `orchestration_readiness`,
    instruction previews, and `operator_decision_packet`, keep `stored: false`,
