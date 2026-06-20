@@ -5684,11 +5684,26 @@ def test_child_and_worker_node_run_records_stay_inert(plugin_api, client):
             "worker_run_id": "worker-run-1",
             "parent_run_id": "run-parent-1",
             "project_id": "project-hermes-mission-control",
+            "worker_id": "codex-worker-laptop",
+            "worker_type": "codex",
+            "display_name": "Laptop Codex worker-node",
             "worker_identity": "codex",
             "worker_host_label": "laptop-codex",
             "objective": "Prepare a scoped PR.",
             "blocked_reasons": ["worker node offline"],
             "status": "blocked",
+            "presence_status": "offline",
+            "last_heartbeat_at": "2026-06-19T12:00:00Z",
+            "worker_version": "codex-desktop-1.2.3",
+            "capabilities_advertised": ["read-only repo inspection"],
+            "capabilities_allowed": ["manual handoff preview"],
+            "capabilities_blocked": ["mutation worker execution"],
+            "project_scope": ["project-hermes-mission-control"],
+            "lane_scope": ["read_only_status"],
+            "max_concurrent_read_only_lanes": 1,
+            "max_concurrent_mutation_lanes": 1,
+            "source_of_truth": "WorkerNodeRunRecord",
+            "safety_notes": ["dispatch disabled"],
             "worker_dispatch_enabled": True,
             "worker_enabled": True,
             "workers_enabled": True,
@@ -5720,7 +5735,21 @@ def test_child_and_worker_node_run_records_stay_inert(plugin_api, client):
     assert worker_payload["dispatch_enabled"] is False
     assert worker_payload["session_send_enabled"] is False
     assert worker_payload["worker_dispatch_enabled"] is False
+    assert worker_payload["worker_node_run"]["worker_id"] == "codex-worker-laptop"
+    assert worker_payload["worker_node_run"]["worker_type"] == "codex"
+    assert worker_payload["worker_node_run"]["display_name"] == "Laptop Codex worker-node"
     assert worker_payload["worker_node_run"]["worker_host_label"] == "laptop-codex"
+    assert worker_payload["worker_node_run"]["presence_status"] == "offline"
+    assert worker_payload["worker_node_run"]["last_heartbeat_at"] == "2026-06-19T12:00:00Z"
+    assert worker_payload["worker_node_run"]["capabilities_advertised"] == ["read-only repo inspection"]
+    assert worker_payload["worker_node_run"]["capabilities_allowed"] == ["manual handoff preview"]
+    assert worker_payload["worker_node_run"]["capabilities_blocked"] == ["mutation worker execution"]
+    assert worker_payload["worker_node_run"]["project_scope"] == ["project-hermes-mission-control"]
+    assert worker_payload["worker_node_run"]["lane_scope"] == ["read_only_status"]
+    assert worker_payload["worker_node_run"]["max_concurrent_read_only_lanes"] == 1
+    assert worker_payload["worker_node_run"]["max_concurrent_mutation_lanes"] == 1
+    assert worker_payload["worker_node_run"]["source_of_truth"] == "WorkerNodeRunRecord"
+    assert worker_payload["worker_node_run"]["safety_notes"] == ["dispatch disabled"]
     assert worker_payload["worker_node_run"]["worker_dispatch_enabled"] is False
     assert worker_payload["worker_node_run"]["metadata"]["worker_dispatch_enabled"] is False
     _assert_inert_record_metadata(worker_payload["worker_node_run"]["metadata"])

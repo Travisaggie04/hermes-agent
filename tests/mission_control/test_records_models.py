@@ -1119,6 +1119,9 @@ def test_worker_node_run_record_round_trips_laptop_codex_state_and_forces_disabl
         worker_run_id="worker-run-1",
         parent_run_id="run-parent-1",
         project_id="project-hermes-mission-control",
+        worker_id="codex-worker-laptop",
+        worker_type="codex",
+        display_name="Laptop Codex worker-node",
         worker_identity="codex",
         worker_host_label="laptop-codex",
         worker_kind="laptop_codex",
@@ -1133,9 +1136,19 @@ def test_worker_node_run_record_round_trips_laptop_codex_state_and_forces_disabl
         report_review_status="needs_review",
         report_contract_status="incomplete",
         presence_status="online",
+        last_heartbeat_at="2026-06-19T12:00:00Z",
         last_seen_at="2026-06-19T12:00:00Z",
         worker_version="codex-desktop-1.2.3",
         capability_summary="repo-local engineering worker with guarded shell and patch tools",
+        capabilities_advertised=("read-only repo inspection", "mutation lane patching"),
+        capabilities_allowed=("manual handoff preview",),
+        capabilities_blocked=("mutation lane patching",),
+        project_scope=("project-hermes-mission-control",),
+        lane_scope=("read_only_status",),
+        max_concurrent_read_only_lanes=1,
+        max_concurrent_mutation_lanes=1,
+        source_of_truth="WorkerNodeRunRecord",
+        safety_notes=("dispatch disabled",),
         worker_dispatch_enabled=True,
         metadata={
             "execution_enabled": True,
@@ -1155,14 +1168,50 @@ def test_worker_node_run_record_round_trips_laptop_codex_state_and_forces_disabl
     data = record.to_dict()
 
     assert data["worker_run_id"] == "worker-run-1"
+    assert data["worker_id"] == "codex-worker-laptop"
+    assert data["worker_type"] == "codex"
+    assert data["display_name"] == "Laptop Codex worker-node"
     assert data["worker_host_label"] == "laptop-codex"
     assert data["blocked_reasons"] == ["worker node offline"]
     assert data["presence_status"] == "online"
+    assert data["last_heartbeat_at"] == "2026-06-19T12:00:00Z"
     assert data["last_seen_at"] == "2026-06-19T12:00:00Z"
     assert data["worker_version"] == "codex-desktop-1.2.3"
     assert data["capability_summary"] == "repo-local engineering worker with guarded shell and patch tools"
+    assert data["capabilities_advertised"] == ["read-only repo inspection", "mutation lane patching"]
+    assert data["capabilities_allowed"] == ["manual handoff preview"]
+    assert data["capabilities_blocked"] == ["mutation lane patching"]
+    assert data["project_scope"] == ["project-hermes-mission-control"]
+    assert data["lane_scope"] == ["read_only_status"]
+    assert data["max_concurrent_read_only_lanes"] == 1
+    assert data["max_concurrent_mutation_lanes"] == 1
+    assert data["source_of_truth"] == "WorkerNodeRunRecord"
+    assert data["safety_notes"] == ["dispatch disabled"]
     assert data["worker_dispatch_enabled"] is False
     assert data["metadata"]["display_only"] is True
     _assert_inert_execution_metadata(data["metadata"])
     assert WorkerNodeRunRecord.from_dict(data) == record
     assert RECORD_TYPES["WorkerNodeRunRecord"] is WorkerNodeRunRecord
+
+
+def test_worker_node_run_record_defaults_codex_registration_fields_for_legacy_dict():
+    record = WorkerNodeRunRecord.from_dict(
+        {
+            "worker_run_id": "worker-run-legacy-shape",
+            "parent_run_id": "run-parent-1",
+            "worker_identity": "codex",
+            "worker_kind": "laptop_codex",
+            "last_seen_at": "2026-06-19T12:00:00Z",
+        }
+    )
+
+    data = record.to_dict()
+
+    assert data["worker_id"] == "worker-run-legacy-shape"
+    assert data["worker_type"] == "codex"
+    assert data["display_name"] == "codex on laptop-codex"
+    assert data["last_heartbeat_at"] == "2026-06-19T12:00:00Z"
+    assert data["capabilities_advertised"] == []
+    assert data["max_concurrent_read_only_lanes"] == 0
+    assert data["worker_dispatch_enabled"] is False
+    _assert_inert_execution_metadata(data["metadata"])

@@ -190,6 +190,22 @@ HARD_BOUNDARY_SEPARATE_APPROVAL_ACTIONS = (
     "deploy/restart/runtime switch",
     "PR merge",
 )
+WORKER_NODE_BASE_DISPATCH_BLOCKERS = (
+    "Codex worker-node dispatch is disabled",
+    "dispatch/session-send remains disabled",
+    "worker execution requires a separate explicit operator approval",
+)
+WORKER_NODE_BASE_BLOCKED_CAPABILITIES = (
+    "worker dispatch",
+    "session-send",
+    "mutation worker execution",
+    "live operations",
+    "scoped PR creation",
+)
+WORKER_NODE_MANUAL_ALLOWED_CAPABILITIES = (
+    "status display",
+    "manual handoff preview",
+)
 
 
 def default_record_store_path() -> Path:
@@ -2749,6 +2765,67 @@ def _stop_control_blockers(item: dict[str, Any]) -> list[str]:
     return blockers
 
 
+def _worker_node_list_field(worker_payload: dict[str, Any], field_name: str) -> list[str]:
+    values = _text_list(worker_payload.get(field_name))
+    if values:
+        return values
+    return _text_list(_mapping(worker_payload.get("metadata")).get(field_name))
+
+
+def _worker_node_project_scope(worker_payload: dict[str, Any]) -> list[str]:
+    project_scope = _worker_node_list_field(worker_payload, "project_scope")
+    project_id = _safe_text(worker_payload.get("project_id"))
+    if project_id and not project_scope:
+        project_scope = [project_id]
+    return _unique_reasons(project_scope)
+
+
+def _worker_node_lane_scope(worker_payload: dict[str, Any]) -> list[str]:
+    return _unique_reasons(_worker_node_list_field(worker_payload, "lane_scope"))
+
+
+def _worker_node_is_legacy_hermes(worker_payload: dict[str, Any]) -> bool:
+    values = [
+        _safe_text(worker_payload.get("worker_type")).lower(),
+        _safe_text(worker_payload.get("worker_identity")).lower(),
+        _safe_text(worker_payload.get("worker_kind")).lower(),
+        _safe_text(worker_payload.get("worker_host_label")).lower(),
+    ]
+    legacy_markers = {"hermes", "laptop_hermes", "laptop-hermes"}
+    return any(value in legacy_markers or value.startswith("hermes_") for value in values)
+
+
+def _worker_node_is_codex(worker_payload: dict[str, Any]) -> bool:
+    if _worker_node_is_legacy_hermes(worker_payload):
+        return False
+    worker_type = _safe_text(worker_payload.get("worker_type")).lower()
+    worker_identity = _safe_text(worker_payload.get("worker_identity")).lower()
+    worker_kind = _safe_text(worker_payload.get("worker_kind")).lower()
+    return worker_type == "codex" or worker_identity == "codex" or "codex" in worker_kind
+
+
+def _worker_node_mentions_any(values: list[str], markers: tuple[str, ...]) -> bool:
+    lowered_values = [value.lower() for value in values]
+    return any(any(marker in value for marker in markers) for value in lowered_values)
+
+
+def _worker_node_next_safe_action(*, registered: bool, online: bool) -> str:
+    if not registered:
+        return (
+            "Register a real Codex worker-node out of band and record a fresh heartbeat; "
+            "do not enable worker dispatch."
+        )
+    if not online:
+        return (
+            "Bring the registered Codex worker-node online out of band and record a fresh heartbeat; "
+            "dispatch remains disabled."
+        )
+    return (
+        "Review the online worker-node readiness record manually; a separate explicit lane is required "
+        "before any worker dispatch or execution."
+    )
+
+
 def _worker_node_presence_payload(
     *,
     worker_runs: tuple[WorkerNodeRunRecord, ...],
@@ -2758,39 +2835,58 @@ def _worker_node_presence_payload(
     latest_worker = active_worker_runs[-1] if active_worker_runs else worker_runs[-1] if worker_runs else None
     blocked_reasons: list[str] = []
     presence_state = "missing"
-    last_seen_age_seconds: int | None = None
+    heartbeat_status = "missing"
+    heartbeat_age_seconds: int | None = None
     worker_payload: dict[str, Any] = latest_worker.to_dict() if latest_worker else {}
+    registered = latest_worker is not None and _worker_node_is_codex(worker_payload)
+    legacy_hermes_record = latest_worker is not None and _worker_node_is_legacy_hermes(worker_payload)
+    last_heartbeat_at = _safe_text(worker_payload.get("last_heartbeat_at") or worker_payload.get("last_seen_at"))
 
     if latest_worker is None:
         blocked_reasons.append("no laptop Codex worker-node run is recorded")
+    elif not registered:
+        presence_state = "legacy_hermes_record" if legacy_hermes_record else "unknown"
+        blocked_reasons.append("latest worker-node record is not a Codex worker-node registration")
+        heartbeat_status = "missing"
     else:
         presence_status = _safe_text(getattr(latest_worker, "presence_status", "")).lower()
-        last_seen_at = _safe_text(getattr(latest_worker, "last_seen_at", ""))
-        parsed_last_seen = _parse_datetime(last_seen_at)
+        parsed_heartbeat = _parse_datetime(last_heartbeat_at)
         parsed_now = _parse_datetime(now) if now else datetime.now(timezone.utc)
         if not presence_status:
             presence_state = "unknown"
             blocked_reasons.append("worker-node presence_status is not recorded")
+            heartbeat_status = "missing" if not last_heartbeat_at else "unknown"
         elif presence_status not in {"online", "offline"}:
             presence_state = "unknown"
             blocked_reasons.append(f"worker-node presence_status {presence_status} is not recognized")
+            heartbeat_status = "unknown"
         elif presence_status == "offline":
             presence_state = "offline"
             blocked_reasons.append("worker-node presence_status is offline")
+            heartbeat_status = "offline"
         else:
-            if parsed_last_seen is None:
+            if parsed_heartbeat is None:
                 presence_state = "unknown"
-                blocked_reasons.append("worker-node last_seen_at is required to prove online presence")
+                blocked_reasons.append("worker-node last_heartbeat_at is required to prove online presence")
+                heartbeat_status = "missing"
             elif parsed_now is None:
                 presence_state = "unknown"
                 blocked_reasons.append("current time is unavailable for worker-node presence freshness")
+                heartbeat_status = "unknown"
             else:
-                last_seen_age_seconds = max(0, int((parsed_now - parsed_last_seen).total_seconds()))
-                if last_seen_age_seconds > WORKER_NODE_PRESENCE_STALE_SECONDS:
+                heartbeat_age_seconds = max(0, int((parsed_now - parsed_heartbeat).total_seconds()))
+                if heartbeat_age_seconds > WORKER_NODE_PRESENCE_STALE_SECONDS:
                     presence_state = "stale"
-                    blocked_reasons.append("worker-node last_seen_at is stale")
+                    blocked_reasons.append("worker-node last_heartbeat_at is stale")
+                    heartbeat_status = "stale"
                 else:
                     presence_state = "online"
+                    heartbeat_status = "fresh"
+
+    capabilities_advertised = _worker_node_list_field(worker_payload, "capabilities_advertised")
+    capability_summary = _safe_text(worker_payload.get("capability_summary"), max_chars=800)
+    if capability_summary and not capabilities_advertised:
+        capabilities_advertised = [capability_summary]
 
     return {
         **INERT_PROJECTION_FLAGS,
@@ -2805,20 +2901,47 @@ def _worker_node_presence_payload(
         "stored": False,
         "dry_run_only": True,
         "presence_state": presence_state,
-        "online": presence_state == "online",
+        "registered": registered,
+        "online": registered and presence_state == "online",
         "blocked": bool(blocked_reasons),
         "blocked_reasons": _unique_reasons(blocked_reasons),
+        "worker_id": _safe_text(worker_payload.get("worker_id") or worker_payload.get("worker_run_id")),
         "worker_run_id": _safe_text(worker_payload.get("worker_run_id")),
         "parent_run_id": _safe_text(worker_payload.get("parent_run_id")),
+        "worker_type": _safe_text(worker_payload.get("worker_type")) or "codex",
+        "display_name": _safe_text(worker_payload.get("display_name")) or "Codex worker-node",
         "worker_identity": _safe_text(worker_payload.get("worker_identity")) or "codex",
         "worker_host_label": _safe_text(worker_payload.get("worker_host_label")) or "laptop-codex",
         "worker_kind": _safe_text(worker_payload.get("worker_kind")) or "laptop_codex",
         "presence_status": _safe_text(worker_payload.get("presence_status")),
+        "last_heartbeat_at": last_heartbeat_at,
+        "heartbeat_status": heartbeat_status,
+        "heartbeat_age_seconds": heartbeat_age_seconds,
         "last_seen_at": _safe_text(worker_payload.get("last_seen_at")),
-        "last_seen_age_seconds": last_seen_age_seconds,
+        "last_seen_age_seconds": heartbeat_age_seconds,
         "stale_after_seconds": WORKER_NODE_PRESENCE_STALE_SECONDS,
         "worker_version": _safe_text(worker_payload.get("worker_version")),
-        "capability_summary": _safe_text(worker_payload.get("capability_summary"), max_chars=800),
+        "capability_summary": capability_summary,
+        "capabilities_advertised": _unique_reasons(capabilities_advertised),
+        "capabilities_allowed": _unique_reasons(_worker_node_list_field(worker_payload, "capabilities_allowed")),
+        "capabilities_blocked": _unique_reasons(_worker_node_list_field(worker_payload, "capabilities_blocked")),
+        "project_scope": _worker_node_project_scope(worker_payload),
+        "lane_scope": _worker_node_lane_scope(worker_payload),
+        "advertised_max_concurrent_read_only_lanes": _safe_int(
+            worker_payload.get("max_concurrent_read_only_lanes")
+        ),
+        "advertised_max_concurrent_mutation_lanes": _safe_int(
+            worker_payload.get("max_concurrent_mutation_lanes")
+        ),
+        "source_of_truth": _safe_text(worker_payload.get("source_of_truth")) or "missing: no WorkerNodeRunRecord",
+        "updated_at": _safe_text(
+            worker_payload.get("updated_at")
+            or last_heartbeat_at
+            or worker_payload.get("last_seen_at")
+            or worker_payload.get("created_at")
+        ),
+        "safety_notes": _unique_reasons(_worker_node_list_field(worker_payload, "safety_notes")),
+        "legacy_hermes_worker_node_record": legacy_hermes_record,
         "active_worker_node_run_count": len(active_worker_runs),
         "recorded_worker_node_run_count": len(worker_runs),
     }
@@ -2831,8 +2954,21 @@ def _codex_worker_node_status_payload(status: dict[str, Any]) -> dict[str, Any]:
     recorded_count = _safe_int(presence.get("recorded_worker_node_run_count"))
     active_count = _safe_int(presence.get("active_worker_node_run_count"))
     worker_run_id = _safe_text(presence.get("worker_run_id"))
-    registered = recorded_count > 0 or bool(worker_run_id)
-    online = presence.get("online") is True
+    registered = presence.get("registered") is True
+    online = registered and presence.get("online") is True
+    capabilities_advertised = _text_list(presence.get("capabilities_advertised"))
+    capabilities_allowed_record = _text_list(presence.get("capabilities_allowed"))
+    capabilities_blocked_record = _text_list(presence.get("capabilities_blocked"))
+    advertised_max_read_only = _safe_int(presence.get("advertised_max_concurrent_read_only_lanes"))
+    advertised_max_mutation = _safe_int(presence.get("advertised_max_concurrent_mutation_lanes"))
+    read_only_capable = _worker_node_mentions_any(
+        capabilities_advertised + capabilities_allowed_record,
+        ("read-only", "read only", "read", "inspect", "status", "report"),
+    )
+    mutation_advertised = advertised_max_mutation > 0 or _worker_node_mentions_any(
+        capabilities_advertised + capabilities_allowed_record,
+        ("mutation", "mutate", "write", "commit", "pull request", "pr creation", "live operation"),
+    )
     blockers = _unique_reasons(
         [
             *_text_list(presence.get("blocked_reasons")),
@@ -2840,14 +2976,57 @@ def _codex_worker_node_status_payload(status: dict[str, Any]) -> dict[str, Any]:
             *_text_list(readiness.get("blocked_reasons")),
         ]
     )
+    if presence.get("legacy_hermes_worker_node_record") is True:
+        blockers.append("legacy Hermes worker-node record is deprecated and not a Codex registration")
     if not registered:
         state = "missing"
+        readiness_state = "MISSING"
     elif not online:
         state = "offline"
+        readiness_state = "REGISTERED_OFFLINE"
+    elif mutation_advertised:
+        state = "registered_online_mutation_blocked"
+        readiness_state = "REGISTERED_ONLINE_MUTATION_BLOCKED"
     elif blockers:
         state = "blocked"
+        readiness_state = "REGISTERED_ONLINE_BLOCKED"
+    elif read_only_capable:
+        state = "registered_online_read_only_capable"
+        readiness_state = "REGISTERED_ONLINE_READ_ONLY_CAPABLE"
     else:
-        state = "registered_online_preview_only"
+        state = "registered_online_blocked"
+        readiness_state = "REGISTERED_ONLINE_BLOCKED"
+
+    dispatch_blockers = _unique_reasons(
+        [
+            *WORKER_NODE_BASE_DISPATCH_BLOCKERS,
+            *((["Codex worker-node is not registered"] if not registered else [])),
+            *((["Codex worker-node heartbeat is not fresh"] if registered and not online else [])),
+            *blockers,
+        ]
+    )
+    capabilities_blocked = _unique_reasons(
+        [
+            *capabilities_blocked_record,
+            *WORKER_NODE_BASE_BLOCKED_CAPABILITIES,
+            *((["read-only worker execution until a fresh heartbeat is recorded"] if not online else [])),
+        ]
+    )
+    capabilities_allowed = _unique_reasons(
+        [
+            *capabilities_allowed_record,
+            *WORKER_NODE_MANUAL_ALLOWED_CAPABILITIES,
+        ]
+    )
+    safety_notes = _unique_reasons(
+        [
+            *_text_list(presence.get("safety_notes")),
+            "registered does not imply online",
+            "online does not imply dispatch_allowed",
+            "read-only capability does not allow worker execution while dispatch is disabled",
+            "mutation worker execution remains blocked",
+        ]
+    )
 
     return {
         **INERT_PROJECTION_FLAGS,
@@ -2867,24 +3046,49 @@ def _codex_worker_node_status_payload(status: dict[str, Any]) -> dict[str, Any]:
         "dry_run_only": True,
         "manual_handoff_only": True,
         "state": state,
+        "readiness_state": readiness_state,
+        "dispatch_state": "DISPATCH_DISABLED",
         "registered": registered,
         "online": online,
         "active_worker_node_run_count": active_count,
         "recorded_worker_node_run_count": recorded_count,
+        "worker_id": _safe_text(presence.get("worker_id")),
         "worker_run_id": worker_run_id,
+        "worker_type": _safe_text(presence.get("worker_type")) or "codex",
+        "display_name": _safe_text(presence.get("display_name")) or "Codex worker-node",
         "worker_identity": _safe_text(presence.get("worker_identity")) or "codex",
         "worker_host_label": _safe_text(presence.get("worker_host_label")) or "laptop-codex",
         "worker_kind": _safe_text(presence.get("worker_kind")) or "laptop_codex",
         "presence_state": _safe_text(presence.get("presence_state")) or "unknown",
+        "presence_status": _safe_text(presence.get("presence_status")),
+        "last_heartbeat_at": _safe_text(presence.get("last_heartbeat_at")),
+        "heartbeat_age_seconds": presence.get("heartbeat_age_seconds"),
         "last_seen_at": _safe_text(presence.get("last_seen_at")),
-        "heartbeat_status": "fresh" if online else _safe_text(presence.get("presence_state")) or "unknown",
+        "heartbeat_status": _safe_text(presence.get("heartbeat_status")) or ("fresh" if online else "missing"),
         "capability_summary": _safe_text(presence.get("capability_summary"), max_chars=800),
+        "capabilities_advertised": capabilities_advertised,
+        "capabilities_allowed": capabilities_allowed,
+        "capabilities_blocked": capabilities_blocked,
+        "project_scope": _text_list(presence.get("project_scope")),
+        "lane_scope": _text_list(presence.get("lane_scope")),
+        "max_concurrent_read_only_lanes": 0,
+        "max_concurrent_mutation_lanes": 0,
+        "advertised_max_concurrent_read_only_lanes": advertised_max_read_only,
+        "advertised_max_concurrent_mutation_lanes": advertised_max_mutation,
+        "source_of_truth": _safe_text(presence.get("source_of_truth")) or "missing: no WorkerNodeRunRecord",
+        "updated_at": _safe_text(presence.get("updated_at")),
+        "safety_notes": safety_notes,
+        "read_only_capable": read_only_capable,
+        "read_only_worker_execution_allowed": False,
+        "mutation_worker_execution_allowed": False,
         "dispatch_allowed": False,
+        "dispatch_blockers": dispatch_blockers,
         "dispatch_blocked_until": "separate explicit operator approval and a fresh worker-node readiness record",
         "update_lane": "manual_external_codex_worker_node_update_only",
         "external_update_triggered": False,
         "old_hermes_worker_node_deprecated": True,
         "old_hermes_worker_node_status": "deprecated_not_an_executor",
+        "next_safe_action": _worker_node_next_safe_action(registered=registered, online=online),
         "blocked": True,
         "blocked_reasons": _unique_reasons(
             blockers
@@ -3184,7 +3388,7 @@ def _worker_node_readiness(
     )
     blocked_reasons.extend(f"{flag} must remain disabled" for flag in enabled_flags)
     active_count = worker_projection.get("active_count")
-    has_worker_record = bool(latest_by_id) or (isinstance(active_count, int) and active_count > 0)
+    has_worker_record = worker_presence.get("registered") is True
     if not has_worker_record:
         blocked_reasons.append("no laptop Codex worker-node run is recorded")
     if has_worker_record and worker_presence.get("online") is not True:
@@ -3198,10 +3402,20 @@ def _worker_node_readiness(
         else "blocked"
     )
     unique_blocked_reasons = _unique_reasons(blocked_reasons)
+    if state == "preview_ready":
+        readiness_state = "REGISTERED_ONLINE_READ_ONLY_CAPABLE"
+    elif not has_worker_record:
+        readiness_state = "MISSING"
+    elif worker_presence.get("online") is not True:
+        readiness_state = "REGISTERED_OFFLINE"
+    else:
+        readiness_state = "UNKNOWN_BLOCKED"
     return {
         **INERT_PROJECTION_FLAGS,
         "state": state,
         "recorded": has_worker_record,
+        "registered": has_worker_record,
+        "readiness_state": readiness_state,
         "presence_state": _safe_text(worker_presence.get("presence_state")) or "unknown",
         "online": worker_presence.get("online") is True,
         "active_count": active_count if isinstance(active_count, int) else 0,

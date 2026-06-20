@@ -19,6 +19,16 @@ def _dict(value: Any) -> dict[str, Any]:
     return dict(value)
 
 
+def _nonnegative_int(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, parsed)
+
+
 def _inert_execution_metadata(value: Any) -> dict[str, Any]:
     metadata = _dict(value)
     metadata.update(
@@ -1364,6 +1374,9 @@ class WorkerNodeRunRecord:
     worker_run_id: str
     parent_run_id: str
     project_id: str = ""
+    worker_id: str = ""
+    worker_type: str = "codex"
+    display_name: str = ""
     worker_identity: str = "codex"
     worker_host_label: str = "laptop-codex"
     worker_kind: str = "laptop_codex"
@@ -1383,18 +1396,65 @@ class WorkerNodeRunRecord:
     stopped_at: str = ""
     stop_reason: str = ""
     presence_status: str = ""
+    last_heartbeat_at: str = ""
     last_seen_at: str = ""
     worker_version: str = ""
     capability_summary: str = ""
+    capabilities_advertised: tuple[str, ...] = ()
+    capabilities_allowed: tuple[str, ...] = ()
+    capabilities_blocked: tuple[str, ...] = ()
+    project_scope: tuple[str, ...] = ()
+    lane_scope: tuple[str, ...] = ()
+    max_concurrent_read_only_lanes: int = 0
+    max_concurrent_mutation_lanes: int = 0
+    source_of_truth: str = "WorkerNodeRunRecord"
+    safety_notes: tuple[str, ...] = ()
     worker_dispatch_enabled: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
 
     record_type: ClassVar[str] = "WorkerNodeRunRecord"
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "worker_id", str(self.worker_id or self.worker_run_id))
+        object.__setattr__(self, "worker_type", str(self.worker_type or "codex"))
+        object.__setattr__(
+            self,
+            "display_name",
+            str(self.display_name or f"{self.worker_identity or 'codex'} on {self.worker_host_label or 'laptop-codex'}"),
+        )
         object.__setattr__(self, "allowed_actions", tuple(str(item) for item in _tuple(self.allowed_actions)))
         object.__setattr__(self, "forbidden_actions", tuple(str(item) for item in _tuple(self.forbidden_actions)))
         object.__setattr__(self, "blocked_reasons", tuple(str(item) for item in _tuple(self.blocked_reasons)))
+        object.__setattr__(self, "last_heartbeat_at", str(self.last_heartbeat_at or self.last_seen_at))
+        object.__setattr__(
+            self,
+            "capabilities_advertised",
+            tuple(str(item) for item in _tuple(self.capabilities_advertised)),
+        )
+        object.__setattr__(
+            self,
+            "capabilities_allowed",
+            tuple(str(item) for item in _tuple(self.capabilities_allowed)),
+        )
+        object.__setattr__(
+            self,
+            "capabilities_blocked",
+            tuple(str(item) for item in _tuple(self.capabilities_blocked)),
+        )
+        object.__setattr__(self, "project_scope", tuple(str(item) for item in _tuple(self.project_scope)))
+        object.__setattr__(self, "lane_scope", tuple(str(item) for item in _tuple(self.lane_scope)))
+        object.__setattr__(
+            self,
+            "max_concurrent_read_only_lanes",
+            _nonnegative_int(self.max_concurrent_read_only_lanes),
+        )
+        object.__setattr__(
+            self,
+            "max_concurrent_mutation_lanes",
+            _nonnegative_int(self.max_concurrent_mutation_lanes),
+        )
+        object.__setattr__(self, "source_of_truth", str(self.source_of_truth or "WorkerNodeRunRecord"))
+        object.__setattr__(self, "safety_notes", tuple(str(item) for item in _tuple(self.safety_notes)))
         object.__setattr__(self, "worker_dispatch_enabled", False)
         metadata = _inert_execution_metadata(self.metadata)
         metadata.update(
@@ -1409,6 +1469,9 @@ class WorkerNodeRunRecord:
             "worker_run_id": self.worker_run_id,
             "parent_run_id": self.parent_run_id,
             "project_id": self.project_id,
+            "worker_id": self.worker_id,
+            "worker_type": self.worker_type,
+            "display_name": self.display_name,
             "worker_identity": self.worker_identity,
             "worker_host_label": self.worker_host_label,
             "worker_kind": self.worker_kind,
@@ -1428,9 +1491,19 @@ class WorkerNodeRunRecord:
             "stopped_at": self.stopped_at,
             "stop_reason": self.stop_reason,
             "presence_status": self.presence_status,
+            "last_heartbeat_at": self.last_heartbeat_at,
             "last_seen_at": self.last_seen_at,
             "worker_version": self.worker_version,
             "capability_summary": self.capability_summary,
+            "capabilities_advertised": list(self.capabilities_advertised),
+            "capabilities_allowed": list(self.capabilities_allowed),
+            "capabilities_blocked": list(self.capabilities_blocked),
+            "project_scope": list(self.project_scope),
+            "lane_scope": list(self.lane_scope),
+            "max_concurrent_read_only_lanes": self.max_concurrent_read_only_lanes,
+            "max_concurrent_mutation_lanes": self.max_concurrent_mutation_lanes,
+            "source_of_truth": self.source_of_truth,
+            "safety_notes": list(self.safety_notes),
             "worker_dispatch_enabled": False,
             "metadata": dict(self.metadata),
         }
@@ -1441,6 +1514,9 @@ class WorkerNodeRunRecord:
             worker_run_id=_required(data, "worker_run_id"),
             parent_run_id=_required(data, "parent_run_id"),
             project_id=data.get("project_id", ""),
+            worker_id=data.get("worker_id", ""),
+            worker_type=data.get("worker_type", "codex"),
+            display_name=data.get("display_name", ""),
             worker_identity=data.get("worker_identity", "codex"),
             worker_host_label=data.get("worker_host_label", "laptop-codex"),
             worker_kind=data.get("worker_kind", "laptop_codex"),
@@ -1460,9 +1536,19 @@ class WorkerNodeRunRecord:
             stopped_at=data.get("stopped_at", ""),
             stop_reason=data.get("stop_reason", ""),
             presence_status=data.get("presence_status", ""),
+            last_heartbeat_at=data.get("last_heartbeat_at", ""),
             last_seen_at=data.get("last_seen_at", ""),
             worker_version=data.get("worker_version", ""),
             capability_summary=data.get("capability_summary", ""),
+            capabilities_advertised=data.get("capabilities_advertised") or (),
+            capabilities_allowed=data.get("capabilities_allowed") or (),
+            capabilities_blocked=data.get("capabilities_blocked") or (),
+            project_scope=data.get("project_scope") or (),
+            lane_scope=data.get("lane_scope") or (),
+            max_concurrent_read_only_lanes=data.get("max_concurrent_read_only_lanes", 0),
+            max_concurrent_mutation_lanes=data.get("max_concurrent_mutation_lanes", 0),
+            source_of_truth=data.get("source_of_truth", "WorkerNodeRunRecord"),
+            safety_notes=data.get("safety_notes") or (),
             worker_dispatch_enabled=False,
             metadata=data.get("metadata") or {},
         )
