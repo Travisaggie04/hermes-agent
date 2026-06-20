@@ -125,30 +125,45 @@ interface GitHubBridgeStatus {
   last_status?: string;
   manual_start_only?: boolean;
   model_routing_enabled?: boolean;
+  payment_enabled?: boolean;
   pending_count?: number;
   pending_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
   recent_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
   response_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
   send_to_jenny_enabled?: boolean;
   session_send_enabled?: boolean;
+  social_enabled?: boolean;
   status_records?: Array<WrappedRecord<GitHubBridgeStatusRecord> | GitHubBridgeStatusRecord>;
   timer_enabled?: boolean;
+  queue_mutation_enabled?: boolean;
   visible_pending_count?: number;
   visible_pending_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
+  waha_enabled?: boolean;
   worker_dispatch_enabled?: boolean;
   would_execute?: boolean;
   worker_enabled?: boolean;
+  workers_enabled?: boolean;
 }
 
 interface MobileExecutionLockSource {
+  daemon_enabled?: unknown;
   dispatch_enabled?: unknown;
+  dispatch_in_gateway?: unknown;
+  dispatch_state?: unknown;
   execution_enabled?: unknown;
   execution_ready?: unknown;
   live_operations_enabled?: unknown;
+  model_routing_enabled?: unknown;
+  payment_enabled?: unknown;
+  queue_mutation_enabled?: unknown;
   send_to_jenny_enabled?: unknown;
   session_send_enabled?: unknown;
+  social_enabled?: unknown;
+  timer_enabled?: unknown;
+  waha_enabled?: unknown;
   worker_dispatch_enabled?: unknown;
   worker_enabled?: unknown;
+  workers_enabled?: unknown;
   would_dispatch?: unknown;
   would_execute?: unknown;
   would_session_send?: unknown;
@@ -210,6 +225,7 @@ interface MobileWorkspaceStatus {
     };
   };
   report_lifecycle?: MobileReportLifecycle;
+  safety?: MobileExecutionLockSource;
   worker_node_instruction_preview?: MobileWorkerNodeInstructionPreview;
   worker_node_orchestration?: MobileWorkerNodeOrchestration;
   worker_node_presence?: MobileWorkerNodePresence;
@@ -516,10 +532,15 @@ function mobileBridgeSafety(status: GitHubBridgeStatus | undefined): MobileBridg
       ["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"],
       ["would_execute", "would_execute must remain false"],
       ["worker_enabled", "worker_enabled must remain false"],
+      ["workers_enabled", "workers_enabled must remain false"],
       ["timer_enabled", "timer_enabled must remain false"],
       ["daemon_enabled", "daemon_enabled must remain false"],
       ["discord_automation_enabled", "discord_automation_enabled must remain false"],
       ["model_routing_enabled", "model_routing_enabled must remain false"],
+      ["payment_enabled", "payment_enabled must remain false"],
+      ["queue_mutation_enabled", "queue_mutation_enabled must remain false"],
+      ["social_enabled", "social_enabled must remain false"],
+      ["waha_enabled", "waha_enabled must remain false"],
     ];
     for (const [flag, reason] of liveFlags) {
       if (mobileLiveFlagEnabled(status[flag])) reasons.push(reason);
@@ -544,13 +565,22 @@ function mobileExecutionLockReasons(label: string, source?: MobileExecutionLockS
     ["would_dispatch", "would_dispatch must remain false"],
     ["would_session_send", "would_session_send must remain false"],
     ["dispatch_enabled", "dispatch_enabled must remain false"],
+    ["dispatch_in_gateway", "dispatch_in_gateway must remain false"],
+    ["dispatch_state", "dispatch_state must remain false"],
     ["execution_enabled", "execution_enabled must remain false"],
     ["execution_ready", "execution_ready must remain false"],
     ["live_operations_enabled", "live_operations_enabled must remain false"],
+    ["model_routing_enabled", "model_routing_enabled must remain false"],
+    ["payment_enabled", "payment_enabled must remain false"],
+    ["queue_mutation_enabled", "queue_mutation_enabled must remain false"],
     ["send_to_jenny_enabled", "send_to_jenny_enabled must remain false"],
     ["session_send_enabled", "session_send_enabled must remain false"],
+    ["social_enabled", "social_enabled must remain false"],
+    ["timer_enabled", "timer_enabled must remain false"],
+    ["waha_enabled", "waha_enabled must remain false"],
     ["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"],
     ["worker_enabled", "worker_enabled must remain false"],
+    ["workers_enabled", "workers_enabled must remain false"],
   ];
   return flags
     .filter(([flag]) => mobileLiveFlagEnabled(source[flag]))
@@ -587,6 +617,7 @@ function mobileWorkspaceSafety(status: MobileWorkspaceStatus | null): MobileBrid
   reasons.push(...(operatorPacket?.execution_lock_blocked_reasons ?? []));
   reasons.push(...mobileExecutionLockReasons("operator_decision_packet", operatorPacket));
   reasons.push(...mobileExecutionLockReasons("orchestration_readiness", status?.orchestration_readiness));
+  reasons.push(...mobileExecutionLockReasons("workspace safety", status?.safety));
   reasons.push(...mobileExecutionLockReasons("report_lifecycle", status?.report_lifecycle));
   reasons.push(...mobileExecutionLockReasons("worker_node_presence", status?.worker_node_presence));
   reasons.push(...mobileExecutionLockReasons("worker_node_orchestration", status?.worker_node_orchestration));

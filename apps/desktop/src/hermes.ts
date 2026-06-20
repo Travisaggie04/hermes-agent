@@ -1384,6 +1384,7 @@ export interface MissionControlGitHubBridgeStatusResponse {
   foreground_watch_supported?: boolean
   foreground_watch_running?: boolean
   model_routing_enabled?: boolean
+  payment_enabled?: boolean
   pending_count?: number
   project_id?: string
   visible_pending_count?: number
@@ -1394,12 +1395,16 @@ export interface MissionControlGitHubBridgeStatusResponse {
   response_messages?: Array<MissionControlRecordEnvelope<MissionControlGitHubBridgeMessageRecord>>
   send_to_jenny_enabled?: boolean
   session_send_enabled?: boolean
+  social_enabled?: boolean
   status_records?: Array<MissionControlRecordEnvelope<MissionControlGitHubBridgeMailboxStatusRecord>>
   stored?: boolean
   timer_enabled?: boolean
+  queue_mutation_enabled?: boolean
+  waha_enabled?: boolean
   worker_dispatch_enabled?: boolean
   would_execute?: boolean
   worker_enabled?: boolean
+  workers_enabled?: boolean
 }
 
 export interface MissionControlAsyncAgentStatusResponse {
@@ -1415,18 +1420,23 @@ export interface MissionControlAsyncAgentStatusResponse {
   manual_copy_only?: boolean
   manual_start_only?: boolean
   model_routing_enabled?: boolean
+  payment_enabled?: boolean
   policy_summary?: string
+  queue_mutation_enabled?: boolean
   recommended_next_lane?: string
   send_to_jenny_enabled?: boolean
   session_send_enabled?: boolean
+  social_enabled?: boolean
   stored?: boolean
   sync_delegate_task_available?: boolean
   sync_delegate_task_durable?: boolean
   timer_enabled?: boolean
   trusted_for_execution?: boolean
+  waha_enabled?: boolean
   would_execute?: boolean
   worker_dispatch_enabled?: boolean
   worker_enabled?: boolean
+  workers_enabled?: boolean
 }
 
 export interface MissionControlGitHubBridgeRequestCreatePayload {
@@ -1647,7 +1657,20 @@ export interface MissionControlWorkspaceStatus {
   }
   runtime_worktree_guard?: { decision_state?: string; reason?: string }
   rollback_baseline?: MissionControlWorkspaceBaseline
-  safety?: { dispatch_in_gateway?: boolean; send_to_jenny_enabled?: boolean }
+  safety?: {
+    daemon_enabled?: unknown
+    dispatch_in_gateway?: unknown
+    dispatch_state?: unknown
+    model_routing_enabled?: unknown
+    payment_enabled?: unknown
+    queue_mutation_enabled?: unknown
+    send_to_jenny_enabled?: unknown
+    social_enabled?: unknown
+    timer_enabled?: unknown
+    waha_enabled?: unknown
+    worker_enabled?: unknown
+    workers_enabled?: unknown
+  }
   stale_context?: { warnings?: string[] }
   report_lifecycle?: MissionControlReportLifecycle
   report_contract_compliance?: MissionControlReportContractCompliance

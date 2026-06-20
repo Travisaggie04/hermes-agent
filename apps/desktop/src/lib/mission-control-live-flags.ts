@@ -8,9 +8,14 @@ const ASYNC_AGENT_LIVE_FLAGS: Array<keyof MissionControlAsyncAgentStatusResponse
   'session_send_enabled',
   'worker_dispatch_enabled',
   'worker_enabled',
+  'workers_enabled',
   'timer_enabled',
   'daemon_enabled',
   'model_routing_enabled',
+  'payment_enabled',
+  'queue_mutation_enabled',
+  'social_enabled',
+  'waha_enabled',
   'trusted_for_execution',
   'would_execute'
 ]

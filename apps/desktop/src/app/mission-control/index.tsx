@@ -947,10 +947,15 @@ function missionControlGitHubBridgeSafety(
       ['session_send_enabled', 'session_send_enabled must remain false'],
       ['worker_dispatch_enabled', 'worker_dispatch_enabled must remain false'],
       ['worker_enabled', 'worker_enabled must remain false'],
+      ['workers_enabled', 'workers_enabled must remain false'],
       ['timer_enabled', 'timer_enabled must remain false'],
       ['daemon_enabled', 'daemon_enabled must remain false'],
       ['discord_automation_enabled', 'discord_automation_enabled must remain false'],
-      ['model_routing_enabled', 'model_routing_enabled must remain false']
+      ['model_routing_enabled', 'model_routing_enabled must remain false'],
+      ['payment_enabled', 'payment_enabled must remain false'],
+      ['queue_mutation_enabled', 'queue_mutation_enabled must remain false'],
+      ['social_enabled', 'social_enabled must remain false'],
+      ['waha_enabled', 'waha_enabled must remain false']
     ]
     for (const [flag, reason] of liveFlags) {
       if (liveFlagEnabled(status[flag])) {
@@ -1386,14 +1391,27 @@ function reportLinkValue({
 }
 
 type ExecutionLockSource = {
+  daemon_enabled?: unknown
   dispatch_enabled?: boolean
+  dispatch_in_gateway?: unknown
+  dispatch_state?: unknown
   execution_enabled?: boolean
+  execution_ready?: unknown
+  live_operations_enabled?: unknown
+  model_routing_enabled?: unknown
+  payment_enabled?: unknown
+  queue_mutation_enabled?: unknown
   send_to_jenny_enabled?: boolean
   session_send_enabled?: boolean
+  social_enabled?: unknown
+  timer_enabled?: unknown
+  waha_enabled?: unknown
   would_dispatch?: boolean
   would_execute?: boolean
   would_session_send?: boolean
   worker_dispatch_enabled?: boolean
+  worker_enabled?: unknown
+  workers_enabled?: unknown
 }
 
 const EXECUTION_LOCK_FLAGS: Array<[keyof ExecutionLockSource, string]> = [
@@ -1402,9 +1420,21 @@ const EXECUTION_LOCK_FLAGS: Array<[keyof ExecutionLockSource, string]> = [
   ['would_session_send', 'would_session_send must remain false'],
   ['execution_enabled', 'execution_enabled must remain false'],
   ['dispatch_enabled', 'dispatch_enabled must remain false'],
+  ['dispatch_in_gateway', 'dispatch_in_gateway must remain false'],
+  ['dispatch_state', 'dispatch_state must remain false'],
+  ['execution_ready', 'execution_ready must remain false'],
+  ['live_operations_enabled', 'live_operations_enabled must remain false'],
+  ['model_routing_enabled', 'model_routing_enabled must remain false'],
+  ['payment_enabled', 'payment_enabled must remain false'],
+  ['queue_mutation_enabled', 'queue_mutation_enabled must remain false'],
   ['send_to_jenny_enabled', 'send_to_jenny_enabled must remain false'],
   ['session_send_enabled', 'session_send_enabled must remain false'],
-  ['worker_dispatch_enabled', 'worker_dispatch_enabled must remain false']
+  ['social_enabled', 'social_enabled must remain false'],
+  ['timer_enabled', 'timer_enabled must remain false'],
+  ['waha_enabled', 'waha_enabled must remain false'],
+  ['worker_dispatch_enabled', 'worker_dispatch_enabled must remain false'],
+  ['worker_enabled', 'worker_enabled must remain false'],
+  ['workers_enabled', 'workers_enabled must remain false']
 ]
 
 function executionLockReasons(label: string, source?: ExecutionLockSource | null): string[] {
@@ -1490,6 +1520,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     ...executionLockReasons('read-only eligibility', autonomyEligibility),
     ...executionLockReasons('scoped PR eligibility', scopedPrEligibility),
     ...executionLockReasons('tool permissions', toolPermissions),
+    ...executionLockReasons('workspace safety', status.safety as ExecutionLockSource | undefined),
     ...executionLockReasons('approval lifecycle', approvalLifecycle),
     ...executionLockReasons('run lifecycle', runLifecycle),
     ...executionLockReasons('report lifecycle', reportLifecycle),

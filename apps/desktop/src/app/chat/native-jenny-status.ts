@@ -97,10 +97,15 @@ function nativeJennySafetyBlockedReason(status: MissionControlGitHubBridgeStatus
     'worker_dispatch_enabled',
     'would_execute',
     'worker_enabled',
+    'workers_enabled',
     'timer_enabled',
     'daemon_enabled',
     'discord_automation_enabled',
-    'model_routing_enabled'
+    'model_routing_enabled',
+    'payment_enabled',
+    'queue_mutation_enabled',
+    'social_enabled',
+    'waha_enabled'
   ]
 
   return liveFlags.some(flag => nativeJennyLiveFlagEnabled(status[flag])) ? 'live automation controls are not confirmed off' : ''

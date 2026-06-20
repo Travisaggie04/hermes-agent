@@ -258,6 +258,7 @@ interface GitHubBridgeStatus {
   foreground_watch_supported?: boolean;
   foreground_watch_running?: boolean;
   model_routing_enabled?: boolean;
+  payment_enabled?: boolean;
   pending_count?: number;
   visible_pending_count?: number;
   background_pending_count?: number;
@@ -267,11 +268,15 @@ interface GitHubBridgeStatus {
   response_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
   send_to_jenny_enabled?: boolean;
   session_send_enabled?: boolean;
+  social_enabled?: boolean;
   status_records?: Array<WrappedRecord<GitHubBridgeMailboxStatusRecord> | GitHubBridgeMailboxStatusRecord>;
   timer_enabled?: boolean;
+  queue_mutation_enabled?: boolean;
+  waha_enabled?: boolean;
   worker_dispatch_enabled?: boolean;
   would_execute?: boolean;
   worker_enabled?: boolean;
+  workers_enabled?: boolean;
 }
 
 interface CompactBridgeSafety {
@@ -573,7 +578,19 @@ interface WorkspaceStatus {
     terminal_runs_with_missing_linked_report_ids?: Record<string, string[]>;
   };
   runtime_worktree_guard?: { decision_state?: string };
-  safety?: { dispatch_in_gateway?: boolean; model_routing_enabled?: boolean };
+  safety?: {
+    daemon_enabled?: unknown;
+    dispatch_in_gateway?: unknown;
+    dispatch_state?: unknown;
+    model_routing_enabled?: unknown;
+    payment_enabled?: unknown;
+    queue_mutation_enabled?: unknown;
+    social_enabled?: unknown;
+    timer_enabled?: unknown;
+    waha_enabled?: unknown;
+    worker_enabled?: unknown;
+    workers_enabled?: unknown;
+  };
   stale_context?: { warnings?: string[] };
   worker_node_presence?: {
     blocked?: boolean;
@@ -1521,10 +1538,15 @@ function compactGitHubBridgeSafety(status: GitHubBridgeStatus | undefined, works
       ["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"],
       ["would_execute", "would_execute must remain false"],
       ["worker_enabled", "worker_enabled must remain false"],
+      ["workers_enabled", "workers_enabled must remain false"],
       ["timer_enabled", "timer_enabled must remain false"],
       ["daemon_enabled", "daemon_enabled must remain false"],
       ["discord_automation_enabled", "discord_automation_enabled must remain false"],
       ["model_routing_enabled", "model_routing_enabled must remain false"],
+      ["payment_enabled", "payment_enabled must remain false"],
+      ["queue_mutation_enabled", "queue_mutation_enabled must remain false"],
+      ["social_enabled", "social_enabled must remain false"],
+      ["waha_enabled", "waha_enabled must remain false"],
     ];
     for (const [flag, reason] of liveFlags) {
       if (compactLiveFlagEnabled(status[flag])) reasons.push(reason);
@@ -4181,16 +4203,26 @@ function SafetyStrip({ status }: { status: WorkspaceStatus }) {
 type CompactHealthTone = "bad" | "good" | "idle" | "warn";
 
 type CompactExecutionLockSource = {
+  daemon_enabled?: boolean;
   dispatch_enabled?: boolean;
+  dispatch_in_gateway?: boolean;
+  dispatch_state?: boolean;
   execution_enabled?: boolean;
   execution_ready?: boolean;
+  model_routing_enabled?: boolean;
+  payment_enabled?: boolean;
+  queue_mutation_enabled?: boolean;
   send_to_jenny_enabled?: boolean;
   session_send_enabled?: boolean;
+  social_enabled?: boolean;
+  timer_enabled?: boolean;
+  waha_enabled?: boolean;
   would_dispatch?: boolean;
   would_execute?: boolean;
   would_session_send?: boolean;
   worker_dispatch_enabled?: boolean;
   worker_enabled?: boolean;
+  workers_enabled?: boolean;
 };
 
 const COMPACT_EXECUTION_LOCK_FLAGS: Array<[keyof CompactExecutionLockSource, string]> = [
@@ -4198,12 +4230,21 @@ const COMPACT_EXECUTION_LOCK_FLAGS: Array<[keyof CompactExecutionLockSource, str
   ["would_dispatch", "would_dispatch must remain false"],
   ["would_session_send", "would_session_send must remain false"],
   ["dispatch_enabled", "dispatch_enabled must remain false"],
+  ["dispatch_in_gateway", "dispatch_in_gateway must remain false"],
+  ["dispatch_state", "dispatch_state must remain false"],
   ["execution_enabled", "execution_enabled must remain false"],
   ["execution_ready", "execution_ready must remain false"],
+  ["model_routing_enabled", "model_routing_enabled must remain false"],
+  ["payment_enabled", "payment_enabled must remain false"],
+  ["queue_mutation_enabled", "queue_mutation_enabled must remain false"],
   ["send_to_jenny_enabled", "send_to_jenny_enabled must remain false"],
   ["session_send_enabled", "session_send_enabled must remain false"],
+  ["social_enabled", "social_enabled must remain false"],
+  ["timer_enabled", "timer_enabled must remain false"],
+  ["waha_enabled", "waha_enabled must remain false"],
   ["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"],
   ["worker_enabled", "worker_enabled must remain false"],
+  ["workers_enabled", "workers_enabled must remain false"],
 ];
 
 function compactExecutionLockReasons(label: string, source?: CompactExecutionLockSource | null): string[] {
@@ -4220,6 +4261,10 @@ function compactLiveFlagEnabled(value: unknown): boolean {
     return ["1", "true", "yes", "y", "on", "enabled"].includes(value.trim().toLowerCase());
   }
   return false;
+}
+
+function compactWorkspaceSafetyFlagReasons(status: WorkspaceStatus): string[] {
+  return compactExecutionLockReasons("Workspace safety", status.safety as CompactExecutionLockSource | undefined);
 }
 
 function CompactHermesHealthDashboard({
@@ -4323,6 +4368,7 @@ function CompactHermesHealthDashboard({
   const readinessLockReasons = compactExecutionLockReasons("Preview readiness", readiness);
   const workerInstructionLockReasons = compactExecutionLockReasons("Worker handoff", workerInstruction);
   const workerLockReasons = compactExecutionLockReasons("Worker node", workerPresence);
+  const workspaceSafetyFlagReasons = compactWorkspaceSafetyFlagReasons(status);
   const ingestionLockReasons = compactExecutionLockReasons("Result ingestion", resultIngestion);
   const completionLockReasons = compactExecutionLockReasons("Report completion", reportCompletion);
   const reportLifecycleLockReasons = compactExecutionLockReasons("Report lifecycle", reportLifecycle);
@@ -4330,7 +4376,7 @@ function CompactHermesHealthDashboard({
     bridgeError ? `Jenny bridge error: ${bridgeError}` : "",
     guard !== "pass" ? `Runtime guard is ${guard}` : "",
     dispatch !== false ? "Dispatch safety is not confirmed off" : "",
-    compactLiveFlagEnabled(status.safety?.model_routing_enabled) ? "Model routing safety is not confirmed off" : "",
+    ...workspaceSafetyFlagReasons,
     activeLaneCount > 1 ? `${activeLaneCount} active lanes recorded` : "",
     status.deployment_gap?.dashboard_deploy_needed ? "Phone/web dashboard needs a dashboard-only update" : "",
     staleWarnings.length ? `Stale context: ${staleWarnings.join(", ")}` : "",
@@ -4378,7 +4424,8 @@ function CompactHermesHealthDashboard({
   ].filter(Boolean);
   const overallTone: CompactHealthTone = issues.length ? "warn" : "good";
   const bridgeTone: CompactHealthTone = bridgeError ? "bad" : bridgePending ? "warn" : "good";
-  const safetyOk = guard === "pass" && dispatch === false && !compactLiveFlagEnabled(status.safety?.model_routing_enabled) && activeLaneCount <= 1 && staleWarnings.length === 0;
+  const safetyOk = guard === "pass" && dispatch === false && workspaceSafetyFlagReasons.length === 0 && activeLaneCount <= 1 && staleWarnings.length === 0;
+  const workspaceSafetyDetail = workspaceSafetyFlagReasons.length ? workspaceSafetyFlagReasons[0] : "live safety flags disabled";
   const approvalLifecycleTone: CompactHealthTone = approvalLifecycleLockReasons.length
     ? "bad"
     : approvalLifecycle?.blocked || approvalGapCount
@@ -4581,7 +4628,7 @@ function CompactHermesHealthDashboard({
           value={status.deployment_gap?.dashboard_deploy_needed ? "Update waiting" : "Current"}
         />
         <CompactHealthTile
-          detail={`Guard=${guard}; dispatch=${dispatch === false ? "false" : "unknown"}; model routing=${compactLiveFlagEnabled(status.safety?.model_routing_enabled) ? "enabled" : "disabled"}; active lanes=${activeLaneCount}.`}
+          detail={`Guard=${guard}; dispatch=${dispatch === false ? "false" : "unknown"}; ${workspaceSafetyDetail}; active lanes=${activeLaneCount}.`}
           label="Safety locks"
           tone={safetyOk ? "good" : "warn"}
           value={safetyOk ? "Holding" : "Check"}
