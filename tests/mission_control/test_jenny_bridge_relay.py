@@ -9,6 +9,39 @@ from mission_control.records import (
 )
 
 
+INERT_FALSE_FLAGS = (
+    "trusted_for_execution",
+    "would_execute",
+    "would_dispatch",
+    "would_session_send",
+    "dispatch_enabled",
+    "session_send_enabled",
+    "dispatch_in_gateway",
+    "dispatch_state",
+    "execution_enabled",
+    "execution_ready",
+    "live_operations_enabled",
+    "send_to_jenny_enabled",
+    "worker_dispatch_enabled",
+    "worker_enabled",
+    "workers_enabled",
+    "timer_enabled",
+    "daemon_enabled",
+    "waha_enabled",
+    "social_enabled",
+    "payment_enabled",
+    "queue_mutation_enabled",
+    "model_routing_enabled",
+)
+
+
+def _assert_inert_bridge_contract(payload: dict) -> None:
+    assert payload["manual_start_only"] is True
+    assert payload["inert_context_only"] is True
+    for flag in INERT_FALSE_FLAGS:
+        assert payload[flag] is False
+
+
 def test_pending_requests_exclude_answered_bridge_messages(tmp_path):
     path = tmp_path / "records.jsonl"
     store = JsonlRecordStore(path)
@@ -40,20 +73,9 @@ def test_pending_requests_exclude_answered_bridge_messages(tmp_path):
     assert index == 2
     assert response is not None
     assert response.record_type == "JennyBridgeMessageResponseRecord"
-    assert response.metadata["trusted_for_execution"] is False
-    assert response.metadata["inert_context_only"] is True
-    assert response.metadata["would_execute"] is False
-    assert response.metadata["dispatch_enabled"] is False
-    assert response.metadata["session_send_enabled"] is False
-    assert response.metadata["worker_dispatch_enabled"] is False
-    assert response.metadata["send_to_jenny_enabled"] is False
+    _assert_inert_bridge_contract(response.metadata)
     assert status.status == "response_appended"
-    assert status.metadata["trusted_for_execution"] is False
-    assert status.metadata["inert_context_only"] is True
-    assert status.metadata["would_execute"] is False
-    assert status.metadata["worker_dispatch_enabled"] is False
-    assert status.metadata["worker_enabled"] is False
-    assert status.metadata["timer_enabled"] is False
+    _assert_inert_bridge_contract(status.metadata)
 
     assert pending_requests(path) == []
     responses = JsonlRecordStore(path).read_all(JennyBridgeMessageResponseRecord)
@@ -197,15 +219,7 @@ def test_relay_status_reports_manual_flags_and_last_response(tmp_path):
 
     status = relay_status(path)
 
-    assert status["manual_start_only"] is True
-    assert status["trusted_for_execution"] is False
-    assert status["inert_context_only"] is True
-    assert status["would_execute"] is False
-    assert status["dispatch_enabled"] is False
-    assert status["session_send_enabled"] is False
-    assert status["worker_dispatch_enabled"] is False
-    assert status["worker_enabled"] is False
-    assert status["timer_enabled"] is False
+    _assert_inert_bridge_contract(status)
     assert status["pending_count"] == 0
     assert status["last_status"] == "response_appended"
     assert status["last_response_request_id"] == "bridge-request-1"

@@ -40,13 +40,25 @@ INERT_METADATA = {
     "trusted_for_execution": False,
     "inert_context_only": True,
     "would_execute": False,
+    "would_dispatch": False,
+    "would_session_send": False,
     "dispatch_enabled": False,
     "session_send_enabled": False,
+    "dispatch_in_gateway": False,
+    "dispatch_state": False,
     "execution_enabled": False,
+    "execution_ready": False,
+    "live_operations_enabled": False,
+    "send_to_jenny_enabled": False,
     "worker_dispatch_enabled": False,
     "worker_enabled": False,
+    "workers_enabled": False,
     "timer_enabled": False,
     "daemon_enabled": False,
+    "waha_enabled": False,
+    "social_enabled": False,
+    "payment_enabled": False,
+    "queue_mutation_enabled": False,
     "discord_automation_enabled": False,
     "model_routing_enabled": False,
 }
@@ -572,21 +584,7 @@ def github_bridge_status(*, path: Path | None = None, repo: str = "", issue_numb
 
 
 def _inert_response_flags() -> dict[str, bool]:
-    return {
-        "manual_start_only": True,
-        "trusted_for_execution": False,
-        "inert_context_only": True,
-        "would_execute": False,
-        "dispatch_enabled": False,
-        "session_send_enabled": False,
-        "execution_enabled": False,
-        "worker_dispatch_enabled": False,
-        "worker_enabled": False,
-        "timer_enabled": False,
-        "daemon_enabled": False,
-        "discord_automation_enabled": False,
-        "model_routing_enabled": False,
-    }
+    return dict(INERT_METADATA)
 
 
 def _run_gh_api(args: list[str]) -> Any:

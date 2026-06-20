@@ -28,6 +28,40 @@ from mission_control.github_bridge_mailbox import (
 from mission_control.records import GitHubBridgeMailboxStatusRecord, GitHubBridgeMessageRecord, JsonlRecordStore
 
 
+INERT_FALSE_FLAGS = (
+    "trusted_for_execution",
+    "would_execute",
+    "would_dispatch",
+    "would_session_send",
+    "dispatch_enabled",
+    "session_send_enabled",
+    "dispatch_in_gateway",
+    "dispatch_state",
+    "execution_enabled",
+    "execution_ready",
+    "live_operations_enabled",
+    "send_to_jenny_enabled",
+    "worker_dispatch_enabled",
+    "worker_enabled",
+    "workers_enabled",
+    "timer_enabled",
+    "daemon_enabled",
+    "waha_enabled",
+    "social_enabled",
+    "payment_enabled",
+    "queue_mutation_enabled",
+    "discord_automation_enabled",
+    "model_routing_enabled",
+)
+
+
+def _assert_inert_bridge_contract(payload: dict) -> None:
+    assert payload["manual_start_only"] is True
+    assert payload["inert_context_only"] is True
+    for flag in INERT_FALSE_FLAGS:
+        assert payload[flag] is False
+
+
 def _comment(comment_id: int, body: str, created_at: str = "2026-06-13T00:00:00Z") -> dict:
     return {"id": comment_id, "body": body, "created_at": created_at, "user": {"login": "codex"}}
 
@@ -102,14 +136,7 @@ def test_poll_comments_appends_new_messages_and_status_without_duplicates(tmp_pa
     assert result2["new_message_count"] == 0
     assert [message.request_id for message in messages] == ["req-1", "req-2"]
     assert [status.status for status in statuses] == ["poll_completed", "poll_completed"]
-    assert statuses[-1].metadata["manual_start_only"] is True
-    assert statuses[-1].metadata["trusted_for_execution"] is False
-    assert statuses[-1].metadata["inert_context_only"] is True
-    assert statuses[-1].metadata["would_execute"] is False
-    assert statuses[-1].metadata["dispatch_enabled"] is False
-    assert statuses[-1].metadata["session_send_enabled"] is False
-    assert statuses[-1].metadata["worker_dispatch_enabled"] is False
-    assert statuses[-1].metadata["worker_enabled"] is False
+    _assert_inert_bridge_contract(statuses[-1].metadata)
 
 
 def test_poll_github_issue_streams_paginated_comment_pages(tmp_path: Path, monkeypatch):
@@ -195,15 +222,7 @@ def test_pending_projection_excludes_replied_requests(tmp_path: Path):
     assert [item.record.request_id for item in pending] == ["req-open"]
     assert status["pending_count"] == 1
     assert status["last_response_request_id"] == "req-done"
-    assert status["manual_start_only"] is True
-    assert status["trusted_for_execution"] is False
-    assert status["inert_context_only"] is True
-    assert status["would_execute"] is False
-    assert status["dispatch_enabled"] is False
-    assert status["session_send_enabled"] is False
-    assert status["worker_dispatch_enabled"] is False
-    assert status["worker_enabled"] is False
-    assert status["timer_enabled"] is False
+    _assert_inert_bridge_contract(status)
 
 
 def test_status_does_not_report_stale_foreground_watch_as_running(tmp_path: Path):
@@ -504,7 +523,7 @@ def test_send_posts_one_bridge_message_and_records_status(tmp_path: Path, monkey
     assert messages[0].from_agent == "codex"
     assert messages[0].to_agent == "jenny"
     assert statuses[-1].status == "message_posted"
-    assert statuses[-1].metadata["daemon_enabled"] is False
+    _assert_inert_bridge_contract(statuses[-1].metadata)
 
 
 def test_duplicate_send_does_not_post_second_github_comment(tmp_path: Path, monkeypatch):
@@ -687,8 +706,7 @@ def test_latest_summary_uses_default_mailbox_and_lists_pending(tmp_path: Path):
     assert latest["issue_number"] == 79
     assert latest["pending_count"] == 1
     assert latest["pending_messages"][0]["record"]["request_id"] == "req-latest"
-    assert latest["manual_start_only"] is True
-    assert latest["worker_enabled"] is False
+    _assert_inert_bridge_contract(latest)
 
 
 def test_response_comment_body_preserves_small_bridge_format():
@@ -746,7 +764,8 @@ def test_watch_github_issue_foreground_loop_prints_new_pending_and_stops(tmp_pat
     assert any("req-watch" in line and "Watch found me." in line for line in printed)
     assert slept == [2, 2]
     assert statuses[0].mode == "watch_foreground"
-    assert statuses[-1].metadata["worker_enabled"] is False
+    _assert_inert_bridge_contract(statuses[0].metadata)
+    _assert_inert_bridge_contract(statuses[-1].metadata)
 
 
 def test_watch_github_issue_streams_paginated_comment_pages(tmp_path: Path, monkeypatch):
