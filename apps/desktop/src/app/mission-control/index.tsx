@@ -1859,6 +1859,88 @@ function dashboardUpdateNotice(status: ReturnType<typeof summarizeWorkspaceStatu
   return `Desktop can be current while phone/web waits for a safe dashboard-only update.${latest} is merged but not served by the dashboard yet.`
 }
 
+function missionControlAutonomyControlSafety(status: ReturnType<typeof summarizeWorkspaceStatus>): MissionControlBridgeSafety {
+  const reasons: string[] = []
+
+  if (status.autonomyEligible !== true || status.readinessReadOnlyState !== 'preview_ready') {
+    reasons.push(`supervised read-only autonomy blocked: ${status.autonomyBlockedReasons[0] ?? status.provenanceReasons[0] ?? labelText(status.readinessReadOnlyState)}`)
+  }
+  if (status.scopedPrEligible !== true || status.readinessScopedPrState !== 'preview_ready') {
+    reasons.push(`scoped PR creation blocked: ${status.scopedPrBlockedReasons[0] ?? labelText(status.readinessScopedPrState)}`)
+  }
+  if (status.bridgePermission !== 'read_only_safe') {
+    reasons.push(`bridge classification ${status.bridgePermission || 'unknown_blocked'}`)
+  }
+  if (status.scopedPrBridgePermission !== 'read_only_safe') {
+    reasons.push(`scoped PR bridge classification ${status.scopedPrBridgePermission || 'unknown_blocked'}`)
+  }
+  if (status.toolPermissionClassification !== 'read_only_safe' || status.toolPermissionBlockedCount > 0) {
+    reasons.push(`tool safety not proven: ${labelText(status.toolPermissionClassification)} / blocked paths ${status.toolPermissionBlockedCount}`)
+  }
+  if (status.approvalAvailableCount === 0) {
+    reasons.push('missing approved ApprovalRecord')
+  }
+  if (status.runActiveCount + status.runTerminalCount === 0) {
+    reasons.push('missing RunRecord')
+  }
+  if (status.reportRawCount === 0 && status.reportOpenCount + status.reportReviewedCount + status.reportTerminalCount === 0) {
+    reasons.push('missing ReportRecord')
+  }
+  if (status.reportReviewQueueBlocked !== false && status.reportReviewQueueCount === 0) {
+    reasons.push('report inbox/readiness missing')
+  }
+  if (status.hardBoundaryForbiddenActionCount === 0) {
+    reasons.push('mutation classes not explicitly forbidden')
+  }
+  if (status.scopedPrWouldCreatePr !== false) {
+    reasons.push('scoped PR creation would_create_pr must remain false')
+  }
+  if (status.scopedPrWouldCommit !== false) {
+    reasons.push('scoped PR creation would_commit must remain false')
+  }
+
+  const inertFlags: Array<[string, unknown]> = [
+    ['execution_enabled', status.orchestrationReadinessExecutionEnabled],
+    ['dispatch_enabled', status.orchestrationReadinessDispatchEnabled],
+    ['session_send_enabled', status.operatorPacketSessionSendEnabled],
+    ['worker_dispatch_enabled', status.orchestrationReadinessWorkerDispatchEnabled],
+    ['operator execution_enabled', status.operatorPacketExecutionEnabled],
+    ['operator dispatch_enabled', status.operatorPacketDispatchEnabled],
+    ['operator worker_dispatch_enabled', status.operatorPacketWorkerDispatchEnabled],
+    ['hard boundary execution_enabled', status.hardBoundaryExecutionEnabled],
+    ['hard boundary live_operations_enabled', status.hardBoundaryLiveOperationsEnabled],
+    ['execution packet execution_enabled', status.executionPacketExecutionEnabled],
+    ['execution packet dispatch_enabled', status.executionPacketDispatchEnabled],
+    ['execution packet session_send_enabled', status.executionPacketSessionSendEnabled],
+    ['execution packet worker_dispatch_enabled', status.executionPacketWorkerDispatchEnabled]
+  ]
+  for (const [label, value] of inertFlags) {
+    if (value !== false) {
+      reasons.push(`${label} must be explicitly false`)
+    }
+  }
+  if (status.operatorPacketExecutionReady !== false) {
+    reasons.push('operator execution readiness must be explicitly false')
+  }
+  if (status.orchestrationReadinessExecutionReady !== false) {
+    reasons.push('orchestration execution readiness must be explicitly false')
+  }
+  if (status.hardBoundaryDisplayOnly !== true) {
+    reasons.push('hard boundary display-only mode is not confirmed')
+  }
+
+  reasons.push(...status.projectionExecutionLockReasons)
+  reasons.push(...status.operatorPacketExecutionLockBlockedReasons)
+  reasons.push(...status.orchestrationReadinessBlockedReasons)
+
+  const uniqueReasons = uniqueTextList(reasons)
+  return { reasons: uniqueReasons, safe: uniqueReasons.length === 0 }
+}
+
+function missionControlAutonomyBlockedMessage(safety: MissionControlBridgeSafety): string {
+  return `Backend execution disabled: ${safety.reasons[0] ?? 'autonomy preview is not approved'}`
+}
+
 interface ProjectRenderModel {
   artifactLinks: string[]
   blockers: unknown
@@ -2762,6 +2844,12 @@ export function MissionControlView() {
 
       return
     }
+    const autonomySafety = missionControlAutonomyControlSafety(status)
+    if (!autonomySafety.safe) {
+      setProjectRoomMessage(missionControlAutonomyBlockedMessage(autonomySafety))
+
+      return
+    }
 
     const requestId = bridgeRequestId()
     setProjectRoomSaving(true)
@@ -2801,6 +2889,12 @@ export function MissionControlView() {
     const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus, snapshot.workspaceStatus)
     if (!bridgeSafety.safe) {
       setProjectRoomMessage(missionControlBridgeBlockedMessage(bridgeSafety))
+
+      return
+    }
+    const autonomySafety = missionControlAutonomyControlSafety(status)
+    if (!autonomySafety.safe) {
+      setProjectRoomMessage(missionControlAutonomyBlockedMessage(autonomySafety))
 
       return
     }
@@ -2899,6 +2993,12 @@ export function MissionControlView() {
 
       return
     }
+    const autonomySafety = missionControlAutonomyControlSafety(status)
+    if (!autonomySafety.safe) {
+      setProjectRoomMessage(missionControlAutonomyBlockedMessage(autonomySafety))
+
+      return
+    }
 
     setProjectRoomSaving(true)
     setProjectRoomMessage('')
@@ -2926,6 +3026,12 @@ export function MissionControlView() {
     const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus, snapshot.workspaceStatus)
     if (!bridgeSafety.safe) {
       setProjectRoomMessage(missionControlBridgeBlockedMessage(bridgeSafety))
+
+      return
+    }
+    const autonomySafety = missionControlAutonomyControlSafety(status)
+    if (!autonomySafety.safe) {
+      setProjectRoomMessage(missionControlAutonomyBlockedMessage(autonomySafety))
 
       return
     }
@@ -3626,7 +3732,12 @@ function ProjectRoomsWorkspace({
   const latestReviewByResponseId = latestReplyReviewByResponseId(replyReviews)
   const bridgeError = normalizedBridgeError(bridgeStatus, githubBridgeStatus)
   const githubBridgeSafety = missionControlGitHubBridgeSafety(githubBridgeStatus, workspaceStatus)
-  const bridgeActionDisabled = saving || paused || !githubBridgeSafety.safe
+  const workspaceSummary = useMemo(() => summarizeWorkspaceStatus(workspaceStatus), [workspaceStatus])
+  const autonomyControlSafety = missionControlAutonomyControlSafety(workspaceSummary)
+  const controlsLocked = !githubBridgeSafety.safe || !autonomyControlSafety.safe
+  const blockedControlReasons = !githubBridgeSafety.safe ? githubBridgeSafety.reasons : autonomyControlSafety.reasons
+  const blockedControlMessage = !githubBridgeSafety.safe ? missionControlBridgeBlockedMessage(githubBridgeSafety) : missionControlAutonomyBlockedMessage(autonomyControlSafety)
+  const bridgeActionDisabled = saving || paused || controlsLocked
   const hasRunnablePendingMessage = Boolean(projectedVisiblePending ?? latestPending)
   const statusRecords = unwrapRecords(githubBridgeStatus.status_records)
   const statusSourceBridgeMessages = [
@@ -3991,22 +4102,44 @@ function ProjectRoomsWorkspace({
               {missionControlBridgeBlockedMessage(githubBridgeSafety)}
             </p>
           ) : null}
+          {controlsLocked ? (
+            <section aria-label="Desktop Mission Control controls blocked" className="mb-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100" role="status">
+              <p className="font-semibold">Backend execution disabled - autonomy controls locked</p>
+              <p className="mt-1 leading-snug">
+                Runtime provenance can be clean while Jenny send, reply, worker dispatch, scoped PR, merge, deploy, restart, and runtime-switch controls remain locked.
+              </p>
+              <p className="mt-1 font-semibold leading-snug">execution_enabled=false / dispatch_enabled=false / session_send_enabled=false / worker_dispatch_enabled=false</p>
+              <ul className="mt-1 list-disc space-y-1 pl-4">
+                {blockedControlReasons.slice(0, 5).map(reason => <li key={reason}>{reason}</li>)}
+              </ul>
+            </section>
+          ) : null}
           <label className="grid gap-1 text-sm font-medium">
             <span className="sr-only">Message Jenny</span>
             <textarea
               className="min-h-16 rounded-md border border-[#f3ebda]/10 bg-[#0e0b12] px-3 py-2 text-sm text-[#f3ebda] outline-none transition placeholder:text-[#6e6353] focus:border-[#d4a574]/50"
               disabled={paused}
               onChange={event => onRequestChange(event.target.value)}
-              placeholder={paused ? 'This project is on hold until Jenny is stable.' : 'Tell Jenny what you want to discuss or ask her to do next...'}
+              placeholder={paused ? 'This project is on hold until Jenny is stable.' : controlsLocked ? 'Draft only - backend execution disabled' : 'Tell Jenny what you want to discuss or ask her to do next...'}
               value={request}
             />
           </label>
 
           <div className="mt-2 flex justify-end">
-            <button className="rounded-md border border-[#5ab896]/40 bg-[#5ab896]/10 px-5 py-2 text-sm font-semibold text-[#5ab896] hover:bg-[#5ab896]/15 disabled:opacity-60" disabled={bridgeActionDisabled} onClick={onQueueBridge} type="button">
-              {sendButtonLabel}
+            <button
+              aria-label={controlsLocked ? 'Send blocked - backend execution disabled' : sendButtonLabel}
+              className="rounded-md border border-[#5ab896]/40 bg-[#5ab896]/10 px-5 py-2 text-sm font-semibold text-[#5ab896] hover:bg-[#5ab896]/15 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={bridgeActionDisabled}
+              onClick={onQueueBridge}
+              title={controlsLocked ? blockedControlMessage : 'Manual only - no dispatch/session-send'}
+              type="button"
+            >
+              {controlsLocked ? 'Send locked' : sendButtonLabel}
             </button>
           </div>
+          <p className={cn('mt-1 text-xs', controlsLocked ? 'text-amber-200' : 'text-[#a59783]')}>
+            {controlsLocked ? 'Send locked - backend execution disabled; draft text only.' : 'Manual only - no dispatch/session-send/worker dispatch.'}
+          </p>
           <details className="hidden" hidden>
             <summary className="cursor-pointer font-semibold text-[#a59783]">Request options</summary>
             <button className="mt-2 rounded-md border border-[#f3ebda]/10 px-3 py-2 text-sm font-semibold text-[#ddd0bb] hover:bg-[#251d2c] disabled:opacity-60" disabled={saving} onClick={onRefreshBridge} type="button">
@@ -4156,10 +4289,21 @@ function ProjectRoomsWorkspace({
                     Starts a guarded update checklist for the VPS and laptop Hermes worker node. The bottom-bar desktop app version is separate from accepted-live/dashboard deploys. This queues a bridge request only; no runtime switch, restart, or laptop update happens here.
                   </p>
                 </div>
-                <button className="rounded-md border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300" disabled={saving || !githubBridgeSafety.safe} onClick={onQueueHermesUpdate} type="button">
-                  Start Hermes update lane
+                <button
+                  className="rounded-md border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:text-amber-300"
+                  disabled={saving || controlsLocked}
+                  onClick={onQueueHermesUpdate}
+                  title={controlsLocked ? blockedControlMessage : 'Manual only - requires explicit operator action'}
+                  type="button"
+                >
+                  {controlsLocked ? 'Hermes update lane locked' : 'Start Hermes update lane'}
                 </button>
               </div>
+              {controlsLocked ? (
+                <p className="mt-2 rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-200">
+                  Maintenance lane controls locked: {blockedControlMessage}. Manual only; requires explicit operator approval.
+                </p>
+              ) : null}
             </div>
           ) : null}
 
@@ -4172,8 +4316,14 @@ function ProjectRoomsWorkspace({
                     Starts a guarded storage inventory for VPS programming buildup and laptop worker-node posture. This queues a request only; no files are deleted, moved, uploaded, pruned, restarted, or switched.
                   </p>
                 </div>
-                <button className="rounded-md border border-sky-500/40 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/10 disabled:opacity-60 dark:text-sky-300" disabled={saving || !githubBridgeSafety.safe} onClick={onQueueStorageCleanup} type="button">
-                  Start storage cleanup lane
+                <button
+                  className="rounded-md border border-sky-500/40 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:text-sky-300"
+                  disabled={saving || controlsLocked}
+                  onClick={onQueueStorageCleanup}
+                  title={controlsLocked ? blockedControlMessage : 'Manual only - requires explicit operator action'}
+                  type="button"
+                >
+                  {controlsLocked ? 'Storage cleanup lane locked' : 'Start storage cleanup lane'}
                 </button>
               </div>
             </div>

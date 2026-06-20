@@ -672,6 +672,7 @@ export default function App() {
 
             <SidebarSystemActions
               collapsed={isDesktopCollapsed}
+              missionControlActionsLocked={isCompactChatRoute}
               onNavigate={closeMobile}
               status={sidebarStatus}
               tooltipWarmRef={tooltipWarmRef}
@@ -880,6 +881,7 @@ function SidebarNavLink({
 
 function SidebarSystemActions({
   collapsed,
+  missionControlActionsLocked,
   onNavigate,
   status,
   tooltipWarmRef,
@@ -906,8 +908,11 @@ function SidebarSystemActions({
     },
   ];
 
+  const systemActionLockReason =
+    "Blocked in Mission Control. Use the System page with explicit operator approval; backend execution, dispatch, session-send, and worker dispatch are disabled.";
+
   const handleClick = (action: SystemAction) => {
-    if (isBusy) return;
+    if (isBusy || missionControlActionsLocked) return;
     void runAction(action);
     navigate("/sessions");
     onNavigate();
@@ -941,8 +946,9 @@ function SidebarSystemActions({
         {items.map((item) => (
           <SystemActionButton
             key={item.action}
+            blockedReason={missionControlActionsLocked ? systemActionLockReason : undefined}
             collapsed={collapsed}
-            disabled={isBusy && !(pendingAction === item.action || (activeAction === item.action && isRunning))}
+            disabled={missionControlActionsLocked || (isBusy && !(pendingAction === item.action || (activeAction === item.action && isRunning)))}
             tooltipWarmRef={tooltipWarmRef}
             isPending={pendingAction === item.action}
             isRunning={activeAction === item.action && isRunning && pendingAction !== item.action}
@@ -956,6 +962,7 @@ function SidebarSystemActions({
 }
 
 function SystemActionButton({
+  blockedReason,
   collapsed,
   disabled,
   isPending,
@@ -968,7 +975,8 @@ function SystemActionButton({
   const liRef = useRef<HTMLLIElement>(null);
   const [hovered, setHovered] = useState(false);
   const busy = isPending || isActionRunning;
-  const displayLabel = isActionRunning ? runningLabel : label;
+  const displayLabel = isActionRunning ? runningLabel : blockedReason ? `${label} blocked` : label;
+  const visibleSubLabel = blockedReason ? "Backend execution disabled" : "";
 
   return (
     <li
@@ -1010,10 +1018,15 @@ function SystemActionButton({
         )}
 
         <span className={cn(
-          "truncate transition-opacity duration-300",
+          "min-w-0 transition-opacity duration-300",
           collapsed ? "lg:opacity-0" : "lg:opacity-100",
         )}>
-          {displayLabel}
+          <span className="block truncate">{displayLabel}</span>
+          {visibleSubLabel ? (
+            <span className="block truncate text-[0.58rem] normal-case tracking-[0.02em] text-text-disabled">
+              {visibleSubLabel}
+            </span>
+          ) : null}
         </span>
 
         <span
@@ -1031,7 +1044,7 @@ function SystemActionButton({
       </button>
 
       {collapsed && hovered && liRef.current && (
-        <SidebarTooltip anchor={liRef.current} label={displayLabel} warmRef={tooltipWarmRef} />
+        <SidebarTooltip anchor={liRef.current} label={blockedReason ?? displayLabel} warmRef={tooltipWarmRef} />
       )}
     </li>
   );
@@ -1191,6 +1204,7 @@ interface SidebarNavLinkProps {
 
 interface SidebarSystemActionsProps {
   collapsed: boolean;
+  missionControlActionsLocked: boolean;
   onNavigate: () => void;
   status: StatusResponse | null;
   tooltipWarmRef: TooltipWarmRef;
@@ -1203,6 +1217,7 @@ interface SidebarTooltipProps {
 }
 
 interface SystemActionButtonProps {
+  blockedReason?: string;
   collapsed: boolean;
   disabled: boolean;
   isPending: boolean;

@@ -29,6 +29,10 @@ def test_mobile_compact_route_is_registered() -> None:
     assert 'import MissionControlCompactPage from "@/pages/MissionControlCompactPage"' in app
     assert 'const isCompactChatRoute = normalizedPath === "/mission-control-compact";' in app
     assert "const isChatLikeRoute = isChatRoute || isCompactChatRoute || isJennyMobileRoute;" in app
+    assert "missionControlActionsLocked={isCompactChatRoute}" in app
+    assert "Blocked in Mission Control. Use the System page with explicit operator approval" in app
+    assert "blockedReason ? `${label} blocked` : label" in app
+    assert 'blockedReason ? "Backend execution disabled" : ""' in app
     assert 'isCompactChatRoute' in app
     assert '"min-h-dvh overflow-x-hidden overflow-y-visible"' in app
     assert '"h-dvh max-h-dvh min-h-0 overflow-hidden"' in app
@@ -285,7 +289,7 @@ def test_compact_route_has_project_rooms_and_record_draft_controls() -> None:
         "Start Hermes update lane",
         "Start storage cleanup lane",
         "Maintenance lanes",
-        "These only queue guarded Jenny requests. They do not restart, update, delete files, or switch runtimes.",
+        "These only queue guarded Jenny requests when the backend says the preview lane is safe. They do not restart, update, delete files, or switch runtimes.",
         "queueHermesUpdateLane",
         "queueHermesStorageCleanupLane",
         "Hermes update lane request:",
@@ -728,26 +732,56 @@ def test_compact_chat_bridge_controls_fail_closed_on_live_flags() -> None:
         "const uniqueReasons = [...new Set(reasons)];",
         ".filter(([flag]) => compactLiveFlagEnabled(source[flag]))",
         "function compactBridgeBlockedMessage(safety: CompactBridgeSafety): string",
+        "interface CompactBridgePermission extends CompactExecutionLockSource",
+        "blocked_reasons?: string[];",
+        "interface CompactReadinessGate extends CompactExecutionLockSource",
+        "read_only_autonomy_eligibility?: CompactReadinessGate",
+        "scoped_pr_lane_eligibility?: CompactReadinessGate",
+        "tool_permission_classification?: CompactToolPermissionClassification",
+        "function compactPermissionClassification(permission: CompactBridgePermission | undefined): string",
+        "function compactAutonomyLockout(status: WorkspaceStatus | undefined): CompactBridgeSafety",
+        "function compactAutonomyBlockedMessage(safety: CompactBridgeSafety): string",
+        "supervised read-only autonomy blocked",
+        "scoped PR creation blocked",
+        "bridge classification",
+        "Backend execution disabled - autonomy is blocked",
+        "Runtime provenance can be clean while Jenny send, reply, worker dispatch, scoped PR, merge, deploy, restart, and runtime-switch controls remain locked.",
+        "execution_enabled=false / dispatch_enabled=false / session_send_enabled=false / worker_dispatch_enabled=false",
         "const githubBridgeSafety = compactGitHubBridgeSafety(githubBridgeStatus, workspaceStatus);",
-        "const bridgeActionDisabled = busy || paused || !githubBridgeSafety.safe;",
-        "const canRunForegroundReply = !paused && githubBridgeSafety.safe &&",
+        "const autonomyLockout = compactAutonomyLockout(workspaceStatus);",
+        "const controlsLocked = !githubBridgeSafety.safe || !autonomyLockout.safe;",
+        "const bridgeActionDisabled = busy || paused || controlsLocked;",
+        "const canRunForegroundReply = !paused && !controlsLocked &&",
         "disabled={bridgeActionDisabled}",
-        "disabled={busy || !githubBridgeSafety.safe}",
+        "disabled={busy || controlsLocked}",
+        "Send locked",
+        "Get reply locked",
+        "Hermes update lane locked",
+        "Storage cleanup lane locked",
         'CompactField label="GitHub safety"',
         "Manual Jenny bridge blocked:",
+        "Backend execution disabled:",
     ]:
         assert expected in src
 
     for function in [send_fn, run_once_fn, update_lane_fn, cleanup_lane_fn]:
         safety_index = function.index("const bridgeSafety = compactGitHubBridgeSafety(snapshot?.githubBridgeStatus, snapshot?.workspaceStatus);")
         block_index = function.index("if (!bridgeSafety.safe)")
+        autonomy_index = function.index("const autonomyLockout = compactAutonomyLockout(snapshot?.workspaceStatus);")
+        autonomy_block_index = function.index("if (!autonomyLockout.safe)")
         assert safety_index < block_index
+        assert block_index < autonomy_index < autonomy_block_index
         assert "setRoomMessage(compactBridgeBlockedMessage(bridgeSafety));" in function
+        assert "setRoomMessage(compactAutonomyBlockedMessage(autonomyLockout));" in function
 
     assert send_fn.index("if (!bridgeSafety.safe)") < send_fn.index("WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL")
     assert run_once_fn.index("if (!bridgeSafety.safe)") < run_once_fn.index("WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL")
     assert update_lane_fn.index("if (!bridgeSafety.safe)") < update_lane_fn.index("WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL")
     assert cleanup_lane_fn.index("if (!bridgeSafety.safe)") < cleanup_lane_fn.index("WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL")
+    assert send_fn.index("if (!autonomyLockout.safe)") < send_fn.index("WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL")
+    assert run_once_fn.index("if (!autonomyLockout.safe)") < run_once_fn.index("WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL")
+    assert update_lane_fn.index("if (!autonomyLockout.safe)") < update_lane_fn.index("WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL")
+    assert cleanup_lane_fn.index("if (!autonomyLockout.safe)") < cleanup_lane_fn.index("WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL")
 
 
 def test_compact_health_dashboard_fails_closed_on_execution_locks() -> None:
@@ -1061,7 +1095,7 @@ def test_send_dispatch_disabled_and_no_post_session_wiring() -> None:
     ]
     for fragment in forbidden_runtime_fragments:
         if fragment == "session-send":
-            assert src.count(fragment) == 1  # only appears in forbidden-action copy
+            assert "session-send(" not in src
         else:
             assert fragment not in src
 

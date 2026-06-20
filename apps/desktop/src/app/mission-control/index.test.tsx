@@ -2054,7 +2054,13 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Advanced diagnostic records')).toBeTruthy()
     expect(screen.getAllByRole('heading', { name: 'Hermes / Mission Control' }).length).toBeGreaterThan(0)
     expect(screen.getByText('Hermes update lane')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Start Hermes update lane' })).toBeTruthy()
+    expect(screen.getByText('Backend execution disabled - autonomy controls locked')).toBeTruthy()
+    expect(screen.getByText('execution_enabled=false / dispatch_enabled=false / session_send_enabled=false / worker_dispatch_enabled=false')).toBeTruthy()
+    expect(screen.getByText(/Runtime provenance can be clean while Jenny send, reply, worker dispatch, scoped PR, merge, deploy, restart, and runtime-switch controls remain locked/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Send blocked - backend execution disabled' })).toHaveProperty('disabled', true)
+    expect(screen.getByText('Send locked - backend execution disabled; draft text only.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Hermes update lane locked' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Storage cleanup lane locked' })).toHaveProperty('disabled', true)
     expect(screen.getByText(/bottom-bar desktop app version is separate from accepted-live\/dashboard deploys/)).toBeTruthy()
     expect(screen.getAllByText('report contract').length).toBeGreaterThan(0)
     expect(screen.getByText('latest report contract')).toBeTruthy()
@@ -2130,7 +2136,7 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Resume requirements')).toBeTruthy()
     expect(screen.getByText('Jenny challenge review clears the approach')).toBeTruthy()
     expect(screen.getByText('Travis approval is recorded before work resumes')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Send blocked - backend execution disabled' })).toHaveProperty('disabled', true)
     expect(screen.queryByRole('button', { name: 'Ask Jenny to review first' })).toBeNull()
     expect(screen.queryByRole('button', { name: "Get Jenny's reply" })).toBeNull()
     expect(screen.getByRole('button', { name: 'Save challenge draft' })).toHaveProperty('disabled', true)
@@ -2338,7 +2344,7 @@ describe('MissionControlView', () => {
     expect(transcript.queryByText(/Allowed: read approved context/)).toBeNull()
     expect(transcript.queryByText(/Forbidden: no direct session send/)).toBeNull()
 
-    const composer = screen.getByPlaceholderText('Tell Jenny what you want to discuss or ask her to do next...')
+    const composer = screen.getByLabelText('Message Jenny')
     expect(screen.queryByRole('button', { name: 'Use spec-first prompt' })).toBeNull()
     expect((composer as HTMLTextAreaElement).value).toBe('')
     expect(screen.getAllByRole('button', { name: 'Looks good' }).length).toBeGreaterThan(0)
@@ -2379,33 +2385,8 @@ describe('MissionControlView', () => {
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('Recommendation: one-sentence next lane.')
     expect(vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]).toContain('if evidence is missing, say "not proven"')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
-    await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(1))
-    expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        from_agent: 'travis',
-        message: expect.stringContaining('Project room request:'),
-        project_id: 'project-hermes-mission-control',
-        request_id: expect.stringContaining('mission-control-chat-'),
-        to_agent: 'jenny',
-        user_message: 'Make the visible Mission Control page show project rooms on laptop and phone.'
-      })
-    )
-    expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: expect.stringContaining('Request intake:'),
-      })
-    )
-    expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: expect.stringContaining('Structured handoff:')
-      })
-    )
-    expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: expect.stringContaining('Evidence contract:')
-      })
-    )
+    fireEvent.click(screen.getByRole('button', { name: 'Send blocked - backend execution disabled' }))
+    expect(createMissionControlGitHubBridgeRequest).not.toHaveBeenCalled()
     expect(createMissionControlJennyBridgeRequest).not.toHaveBeenCalled()
 
     fireEvent.change(composer, {
@@ -2433,36 +2414,9 @@ describe('MissionControlView', () => {
       })
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start Hermes update lane' }))
-    await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(2))
-    expect(createMissionControlGitHubBridgeRequest).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        from_agent: 'travis',
-        message: expect.stringContaining('Hermes update lane request:'),
-        project_id: 'project-hermes-mission-control',
-        request_id: expect.stringContaining('mission-control-chat-'),
-        to_agent: 'jenny',
-        user_message: expect.stringContaining('Start a safe Hermes update readiness lane')
-      })
-    )
-    expect(createMissionControlGitHubBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('gateway update as a separate explicit lane')
-
-    fireEvent.click(screen.getByRole('button', { name: 'Start storage cleanup lane' }))
-    await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(3))
-    expect(createMissionControlGitHubBridgeRequest).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        from_agent: 'travis',
-        message: expect.stringContaining('Hermes storage cleanup lane request:'),
-        project_id: 'project-hermes-mission-control',
-        request_id: expect.stringContaining('mission-control-chat-'),
-        to_agent: 'jenny',
-        user_message: expect.stringContaining('Start a safe Hermes storage cleanup lane')
-      })
-    )
-    expect(createMissionControlGitHubBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('target of about 50% disk usage')
-    expect(createMissionControlGitHubBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('timestamped dry-run manifest')
-    expect(createMissionControlGitHubBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('Tool & Tally report-builder data')
-    expect(createMissionControlGitHubBridgeRequest.mock.calls.at(-1)?.[0].message).toContain('With explicit cleanup approval')
+    fireEvent.click(screen.getByRole('button', { name: 'Hermes update lane locked' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Storage cleanup lane locked' }))
+    expect(createMissionControlGitHubBridgeRequest).not.toHaveBeenCalled()
     expect(createMissionControlJennyBridgeRequest).not.toHaveBeenCalled()
   })
 
@@ -2475,10 +2429,10 @@ describe('MissionControlView', () => {
     expect(createMissionControlJennyBridgeRequest).not.toHaveBeenCalled()
   })
 
-  it('auto-routes broad project messages to a spec-first Jenny challenge', async () => {
+  it('shows spec-first intake while blocked autonomy keeps Send inert', async () => {
     await renderMissionControl()
 
-    const composer = screen.getByPlaceholderText('Tell Jenny what you want to discuss or ask her to do next...')
+    const composer = screen.getByLabelText('Message Jenny')
     fireEvent.change(composer, { target: { value: 'make Jenny fully functional and autonomous' } })
 
     await waitFor(() => expect((composer as HTMLTextAreaElement).value).toBe('make Jenny fully functional and autonomous'))
@@ -2489,67 +2443,28 @@ describe('MissionControlView', () => {
     expect(screen.getAllByText('Push back on protected actions or broad scope.').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Return the smallest safe lane with evidence and approval needs.').length).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send blocked - backend execution disabled' }))
 
-    await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(1))
-    expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        from_agent: 'travis',
-        message: expect.stringContaining('Spec-first request for Jenny:'),
-        project_id: 'project-hermes-mission-control',
-        to_agent: 'jenny',
-        user_message: 'make Jenny fully functional and autonomous'
-      })
-    )
-    expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: expect.stringContaining('Jenny, do not implement yet. First challenge the request like a senior engineer:')
-      })
-    )
-    expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: expect.not.stringContaining('Project room request:')
-      })
-    )
+    expect(createMissionControlGitHubBridgeRequest).not.toHaveBeenCalled()
     expect(createMissionControlJennyBridgeRequest).not.toHaveBeenCalled()
   })
 
-  it('routes update and install requests through the approval challenge gate', async () => {
+  it('shows approval challenge intake while blocked autonomy keeps Send inert', async () => {
     await renderMissionControl()
 
-    const composer = screen.getByPlaceholderText('Tell Jenny what you want to discuss or ask her to do next...')
+    const composer = screen.getByLabelText('Message Jenny')
     fireEvent.change(composer, { target: { value: 'update Hermes on the VPS and install the laptop worker node' } })
 
     await waitFor(() => expect(screen.getAllByText(/Approval check/).length).toBeGreaterThan(0))
     expect(screen.getAllByText(/Contains protected actions; Jenny should challenge scope and identify approvals before work/).length).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send blocked - backend execution disabled' }))
 
-    await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(1))
-    expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: expect.stringContaining('Current intake: Approval check / Contains protected actions'),
-        user_message: 'update Hermes on the VPS and install the laptop worker node'
-      })
-    )
-    expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: expect.stringContaining('First challenge the request like a senior engineer')
-      })
-    )
-    await waitFor(() => expect(answerMissionControlGitHubBridgeOnce).toHaveBeenCalledWith({
-      confirm_manual_hermes_answer: true,
-      project_id: 'project-hermes-mission-control',
-      request_id: 'github-bridge-request-created'
-    }))
+    expect(createMissionControlGitHubBridgeRequest).not.toHaveBeenCalled()
+    expect(answerMissionControlGitHubBridgeOnce).not.toHaveBeenCalled()
   })
 
-  it('sends a chat message and immediately runs one guarded Jenny reply', async () => {
-    let resolveAnswer: (value: unknown) => void = () => undefined
-    answerMissionControlGitHubBridgeOnce.mockReturnValueOnce(new Promise(resolve => {
-      resolveAnswer = resolve
-    }))
-
+  it('keeps desktop Jenny chat inert while autonomy controls are locked', async () => {
     await renderMissionControl()
 
     fireEvent.change(await screen.findByLabelText('Message Jenny'), { target: { value: 'Please check the chat bridge.' } })
@@ -2558,44 +2473,13 @@ describe('MissionControlView', () => {
     expect(screen.queryByRole('button', { name: /try jenny/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /run jenny/i })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Refresh replies' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
-    await waitFor(() => expect(composer.value).toBe(''))
-    expect((await screen.findAllByText('Jenny is working')).length).toBeGreaterThanOrEqual(1)
-    expect((await screen.findAllByText(/Mission Control sent the latest project message to Jenny/)).length).toBeGreaterThanOrEqual(2)
-    await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        request_id: expect.stringContaining('mission-control-chat-'),
-        user_message: 'Please check the chat bridge.'
-      })
-    ))
-    await waitFor(() => expect(answerMissionControlGitHubBridgeOnce).toHaveBeenCalledTimes(1))
-    expect(answerMissionControlGitHubBridgeOnce).toHaveBeenCalledWith({
-      confirm_manual_hermes_answer: true,
-      project_id: 'project-hermes-mission-control',
-      request_id: 'github-bridge-request-created'
-    })
-    resolveAnswer({
-      answered: true,
-      dispatch_enabled: false,
-      manual_start_only: true,
-      response: {
-        created_at: '2026-06-13T01:07:00Z',
-        from_agent: 'jenny',
-        message: 'Jenny answered the chat request.',
-        project_id: 'project-hermes-mission-control',
-        request_id: 'github-bridge-request-created',
-        status: 'replied',
-        to_agent: 'travis'
-      },
-      send_to_jenny_enabled: false,
-      stored: true,
-      timer_enabled: false,
-      worker_enabled: false
-    })
-    expect(await screen.findByText('Jenny replied to the latest pending project message.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Send blocked - backend execution disabled' }))
+    expect(composer.value).toBe('Please check the chat bridge.')
+    expect(createMissionControlGitHubBridgeRequest).not.toHaveBeenCalled()
+    expect(answerMissionControlGitHubBridgeOnce).not.toHaveBeenCalled()
   })
 
-  it('bounds long desktop Jenny bridge messages before sending', async () => {
+  it('keeps long desktop Jenny bridge messages inert while autonomy controls are locked', async () => {
     await renderMissionControl()
 
     const longRequest = (
@@ -2603,28 +2487,23 @@ describe('MissionControlView', () => {
     ).repeat(45)
 
     fireEvent.change(await screen.findByLabelText('Message Jenny'), { target: { value: longRequest } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send blocked - backend execution disabled' }))
 
-    await waitFor(() => expect(createMissionControlGitHubBridgeRequest).toHaveBeenCalledTimes(1))
-    const payload = createMissionControlGitHubBridgeRequest.mock.calls[0][0] as { message: string; user_message: string }
-    expect(payload.message.length).toBeLessThanOrEqual(1900)
-    expect(payload.user_message.length).toBeLessThanOrEqual(1900)
-    expect(payload.message).toContain('Project room request:')
-    expect(payload.user_message).toContain('Please inspect the current Mission Control bridge')
-    expect(payload.message).not.toContain('bridge field is too large')
+    expect(createMissionControlGitHubBridgeRequest).not.toHaveBeenCalled()
   })
 
-  it('shows plain language when the Jenny bridge is offline', async () => {
+  it('keeps bridge offline errors hidden when blocked autonomy prevents Send', async () => {
     createMissionControlGitHubBridgeRequest.mockRejectedValueOnce(
       new Error("Error invoking remote method 'hermes:api': Error: connect ECONNREFUSED 100.115.125.111:9119")
     )
     await renderMissionControl()
 
     fireEvent.change(await screen.findByLabelText('Message Jenny'), { target: { value: 'test' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send blocked - backend execution disabled' }))
 
-    expect(await screen.findByText('Jenny bridge is offline. Start or reconnect the Hermes gateway, then send the message again.')).toBeTruthy()
+    expect(screen.queryByText('Jenny bridge is offline. Start or reconnect the Hermes gateway, then send the message again.')).toBeNull()
     expect(screen.queryByText(/ECONNREFUSED/)).toBeNull()
+    expect(createMissionControlGitHubBridgeRequest).not.toHaveBeenCalled()
     expect(answerMissionControlGitHubBridgeOnce).not.toHaveBeenCalled()
   })
 
@@ -2826,7 +2705,7 @@ describe('MissionControlView', () => {
 
     await renderMissionControl()
 
-    fireEvent.change(await screen.findByPlaceholderText('Tell Jenny what you want to discuss or ask her to do next...'), {
+    fireEvent.change(await screen.findByLabelText('Message Jenny'), {
       target: { value: 'Start a broad Mission Control lane without a spec.' }
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save read-only lane draft' }))
@@ -2869,7 +2748,7 @@ describe('MissionControlView', () => {
 
     await renderMissionControl()
 
-    fireEvent.change(await screen.findByPlaceholderText('Tell Jenny what you want to discuss or ask her to do next...'), {
+    fireEvent.change(await screen.findByLabelText('Message Jenny'), {
       target: { value: 'Inspect whether Project Rooms are usable now.' }
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save read-only lane draft' }))
@@ -3004,7 +2883,6 @@ describe('MissionControlView', () => {
       'DELETE',
       '9121',
       '/api/sessions/',
-      'session-send',
       'sendSession',
       'localStorage',
       'sessionStorage',
@@ -3052,8 +2930,27 @@ describe('MissionControlView', () => {
       'if (liveFlagEnabled(status[flag]))',
       '.filter(([flag]) => liveFlagEnabled(source[flag]))',
       'function missionControlBridgeBlockedMessage(safety: MissionControlBridgeSafety): string',
+      'function missionControlAutonomyControlSafety(status: ReturnType<typeof summarizeWorkspaceStatus>): MissionControlBridgeSafety',
+      'supervised read-only autonomy blocked:',
+      'scoped PR creation blocked:',
+      'bridge classification ${status.bridgePermission || \'unknown_blocked\'}',
+      'tool safety not proven:',
+      'missing approved ApprovalRecord',
+      'report inbox/readiness missing',
+      'mutation classes not explicitly forbidden',
+      'function missionControlAutonomyBlockedMessage(safety: MissionControlBridgeSafety): string',
+      'Backend execution disabled:',
+      'Backend execution disabled - autonomy controls locked',
+      'execution_enabled=false / dispatch_enabled=false / session_send_enabled=false / worker_dispatch_enabled=false',
+      'Runtime provenance can be clean while Jenny send, reply, worker dispatch, scoped PR, merge, deploy, restart, and runtime-switch controls remain locked.',
+      'Send blocked - backend execution disabled',
+      'Send locked',
+      'Hermes update lane locked',
+      'Storage cleanup lane locked',
       'const githubBridgeSafety = missionControlGitHubBridgeSafety(githubBridgeStatus, workspaceStatus)',
-      'const bridgeActionDisabled = saving || paused || !githubBridgeSafety.safe',
+      'const autonomyControlSafety = missionControlAutonomyControlSafety(workspaceSummary)',
+      'const controlsLocked = !githubBridgeSafety.safe || !autonomyControlSafety.safe',
+      'const bridgeActionDisabled = saving || paused || controlsLocked',
       'disabled={bridgeActionDisabled}',
       'Manual Jenny bridge blocked:'
     ]) {
@@ -3069,11 +2966,18 @@ describe('MissionControlView', () => {
       expect(block).toContain('const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus, snapshot.workspaceStatus)')
       expect(block).toContain('if (!bridgeSafety.safe)')
       expect(block).toContain('setProjectRoomMessage(missionControlBridgeBlockedMessage(bridgeSafety))')
+      expect(block).toContain('const autonomySafety = missionControlAutonomyControlSafety(status)')
+      expect(block).toContain('if (!autonomySafety.safe)')
+      expect(block).toContain('setProjectRoomMessage(missionControlAutonomyBlockedMessage(autonomySafety))')
     }
 
     expect(queue.indexOf('if (!bridgeSafety.safe)')).toBeLessThan(queue.indexOf('createMissionControlGitHubBridgeRequest'))
     expect(runOnce.indexOf('if (!bridgeSafety.safe)')).toBeLessThan(runOnce.indexOf('answerMissionControlGitHubBridgeOnce'))
     expect(updateLane.indexOf('if (!bridgeSafety.safe)')).toBeLessThan(updateLane.indexOf('createMissionControlGitHubBridgeRequest'))
     expect(cleanupLane.indexOf('if (!bridgeSafety.safe)')).toBeLessThan(cleanupLane.indexOf('createMissionControlGitHubBridgeRequest'))
+    expect(queue.indexOf('if (!autonomySafety.safe)')).toBeLessThan(queue.indexOf('createMissionControlGitHubBridgeRequest'))
+    expect(runOnce.indexOf('if (!autonomySafety.safe)')).toBeLessThan(runOnce.indexOf('answerMissionControlGitHubBridgeOnce'))
+    expect(updateLane.indexOf('if (!autonomySafety.safe)')).toBeLessThan(updateLane.indexOf('createMissionControlGitHubBridgeRequest'))
+    expect(cleanupLane.indexOf('if (!autonomySafety.safe)')).toBeLessThan(cleanupLane.indexOf('createMissionControlGitHubBridgeRequest'))
   })
 })
