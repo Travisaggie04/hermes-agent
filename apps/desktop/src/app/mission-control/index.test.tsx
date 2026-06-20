@@ -68,6 +68,13 @@ function renderMissionControl() {
   )
 }
 
+function statusItemValue(label: string): HTMLElement {
+  const value = screen.getByText(label).nextElementSibling
+  expect(value).toBeTruthy()
+
+  return value as HTMLElement
+}
+
 beforeEach(() => {
   Object.assign(navigator, {
     clipboard: {
@@ -78,7 +85,95 @@ beforeEach(() => {
   getMissionControlWorkspaceStatus.mockResolvedValue({
     accepted_baseline: {
       head: '9f8863c0bf28dc0b7da702480b9b3337b983e7e8',
-      runtime_path: '/home/jenny/.hermes/hermes-runtime-project-seed-9f8863c'
+      runtime_path: '/home/jenny/.hermes/hermes-runtime-project-seed-9f8863c',
+      would_execute: false
+    },
+    approval_lifecycle: {
+      append_only_projection: true,
+      available_approval_ids: ['approval-live'],
+      blocked: true,
+      blocked_reasons: ['run_id run-parent-1 references unavailable approval_id approval-old'],
+      consumed_approval_ids: [],
+      dispatch_enabled: false,
+      display_only: true,
+      duplicate_approval_ids: [],
+      execution_enabled: false,
+      expired_approval_ids: ['approval-old'],
+      pending_approval_ids: ['approval-pending'],
+      rejected_or_cancelled_approval_ids: [],
+      runs_missing_approval_id: [],
+      runs_with_missing_approval_record: {},
+      runs_with_unavailable_approval: { 'run-parent-1': 'approval-old' },
+      session_send_enabled: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false
+    },
+    child_agent_orchestration: {
+      active_count: 1,
+      active_runs: [
+        {
+          agent_identity: 'jenny-child',
+          child_run_id: 'child-run-1',
+          linked_report_review_status: 'needs_review',
+          linked_report_status: 'received',
+          linked_report_summary: 'Child reported evidence.',
+          objective: 'Inspect bounded Mission Control context.',
+          parent_run_id: 'run-parent-1',
+          report_id: 'report-child',
+          report_link_status: 'linked_report_found',
+          status: 'running'
+        }
+      ],
+      blocked_reasons: ['report_id report-child still needs review'],
+      dispatch_enabled: false,
+      display_only: true,
+      execution_enabled: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false
+    },
+    child_agent_instruction_preview: {
+      agent_identity: 'jenny-child',
+      allowed_actions: ['read approved context', 'report evidence'],
+      available: true,
+      blocked: true,
+      blocked_reasons: ['report_id report-child still needs review'],
+      child_run_id: 'child-run-1',
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      forbidden_actions: ['dispatch', 'mutate records', 'no live delegation activation', 'no live session sending'],
+      instruction_lines: [
+        'Child agent: jenny-child.',
+        'Objective: Inspect bounded Mission Control context.',
+        'Allowed actions: read approved context, report evidence.',
+        'Forbidden actions: dispatch, mutate records, no live delegation activation, no live session sending.',
+        'Report contract: Report evidence, result, blockers, safety confirmation, and the next suggested review step.',
+        'Handoff readiness: blocked until child-agent blockers are cleared.',
+        'Manual delegation preview only; execution and dispatch remain disabled.'
+      ],
+      manual_handoff_only: true,
+      manual_handoff_prompt: 'Child agent: jenny-child.\nObjective: Inspect bounded Mission Control context.\nAllowed actions: read approved context, report evidence.\nForbidden actions: dispatch, mutate records, no live delegation activation, no live session sending.\nReport contract: Report evidence, result, blockers, safety confirmation, and the next suggested review step.\nHandoff readiness: blocked until child-agent blockers are cleared.\nManual delegation preview only; execution and dispatch remain disabled.',
+      objective: 'Inspect bounded Mission Control context.',
+      parent_run_id: 'run-parent-1',
+      ready_for_handoff: false,
+      report_contract: 'Report evidence, result, blockers, safety confirmation, and the next suggested review step.',
+      report_id: 'report-child',
+      report_review_status: 'needs_review',
+      session_send_enabled: false,
+      source: 'mission_control_child_agent_instruction_preview_v1',
+      stored: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      would_execute: false
+    },
+    control_plane_lifecycle: {
+      active_mutation_lane_count: 0,
+      append_only_projection: true,
+      latest_runs_by_id: {
+        'run-parent-1': { run_id: 'run-parent-1', status: 'running' }
+      },
+      source: 'mission_control_records_jsonl'
     },
     deployment_gap: {
       accepted_live_head: '0f87620038d220eb016612ba0b466c2407663743',
@@ -87,10 +182,898 @@ beforeEach(() => {
       latest_merged_pr: '108',
       state: 'merged_not_deployed'
     },
+    execution_mode_classification: {
+      action_class: 'pr_creation',
+      blocked: false,
+      blocked_reasons: [],
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      higher_risk: false,
+      lane_type: 'pr_creation',
+      manual_handoff_only: true,
+      mode_family: 'worker_node_preview',
+      preview_ready: true,
+      protected_action_markers: [],
+      read_only_preview_allowed: false,
+      requested_mode: 'worker_node',
+      scoped_pr_preview_allowed: false,
+      separate_approval_required: false,
+      session_send_enabled: false,
+      source: 'mission_control_execution_mode_classification_v1',
+      stored: false,
+      trusted_for_execution: false,
+      warnings: ['worker-node mode is manual-handoff only and not an executor'],
+      worker_dispatch_enabled: false,
+      worker_node_preview_allowed: true,
+      would_dispatch: false,
+      would_execute: false,
+      would_session_send: false
+    },
+    execution_packet_preview: {
+      blocked_reasons: ['runtime provenance is not clean', 'worker-node presence is not confirmed online'],
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      eligible: false,
+      execution_enabled: false,
+      packet: {
+        allowed_actions: ['edit scoped files', 'run focused tests'],
+        approval_id: 'approval-pr-1',
+        dispatch_enabled: false,
+        display_only: true,
+        dry_run_only: true,
+        execution_enabled: false,
+        forbidden_actions: ['deploy', 'restart', 'runtime switch', 'no live deploy', 'no worker dispatch activation'],
+        inert_context_only: true,
+        mode: 'worker_node',
+        objective: 'Prepare bounded scoped PR packet.',
+        packet_version: 'mission_control_execution_packet_preview_v1',
+        project_id: 'project-hermes-mission-control',
+        report_contract: { required: true, review_required: true, tests_required: true },
+        run_id: 'run-parent-1',
+        scope: { directories: [], explicit: true, files: ['apps/desktop/src/app/mission-control/index.tsx'], has_wildcard: false },
+        session_send_enabled: false,
+        stored: false,
+        trusted_for_execution: false,
+        worker_dispatch_enabled: false,
+        worker_node_contract: {
+          codex_safety_hardness_required: true,
+          execution_enabled: false,
+          dispatch_enabled: false,
+          display_only: true,
+          dry_run_only: true,
+          inert_context_only: true,
+          manual_handoff_only: true,
+          parent_run_id: 'run-parent-1',
+          session_send_enabled: false,
+          stored: false,
+          trusted_for_execution: false,
+          worker_dispatch_enabled: false,
+          worker_host_label: 'laptop-codex',
+          worker_identity: 'codex',
+          worker_kind: 'laptop_codex',
+          worker_safety_hardness: [
+            'Codex must independently enforce repo/worktree, test, secret, git, and live-operation safeguards before acting.',
+            'A Jenny packet is not permission to bypass Codex safety checks.'
+          ],
+          would_dispatch: false,
+          would_execute: false,
+          would_session_send: false
+        },
+        would_dispatch: false,
+        would_execute: false,
+        would_session_send: false
+      },
+      session_send_enabled: false,
+      source: 'mission_control_execution_packet_preview_v1',
+      stored: false,
+      trusted_for_execution: false,
+      warnings: ['worker-node packet is a manual handoff preview; no worker dispatch is enabled'],
+      worker_dispatch_enabled: false,
+      would_dispatch: false,
+      would_execute: false,
+      would_session_send: false
+    },
+    hard_boundary_contract: {
+      blocked: false,
+      blocked_reasons: [],
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      execution_ready: false,
+      forbidden_action_count: 15,
+      forbidden_actions: ['live deploy', 'restart', 'runtime switch', '9121 /api/status gate'],
+      live_flag_violation_count: 0,
+      live_flag_violations: [],
+      live_operational_reconciliation_state: 'separate_approval_required',
+      live_operations_enabled: false,
+      live_operations_goal: false,
+      manual_review_only: true,
+      plain_language_summary: 'This goal is code-side only. Live deploy, restart, runtime switch, record/state/config mutation, dispatch/session-send, worker activation, PR merge, secrets, and operational reconciliation all require separate approval.',
+      separate_approval_action_count: 5,
+      separate_approval_actions: ['live operational reconciliation', 'AcceptedBaselineRecord append', 'live worker dispatch', 'deploy/restart/runtime switch', 'PR merge'],
+      separate_approval_required: true,
+      session_send_enabled: false,
+      source: 'mission_control_hard_boundary_contract_v1',
+      state: 'separate_approval_required',
+      stored: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      would_dispatch: false,
+      would_execute: false,
+      would_session_send: false
+    },
     lane: { active_lane_count: 0 },
+    latest_handoff: {
+      handoff_id: 'handoff-1',
+      present: true,
+      would_execute: false
+    },
+    next_safe_actions: {
+      action_count: 1,
+      actions: [
+        {
+          action_id: 'review_runtime_provenance_blockers',
+          blocked_until: 'runtime provenance is clean and aligned',
+          label: 'Review runtime provenance blockers',
+          manual_only: true,
+          priority: 10,
+          reason: 'gateway git metadata is broken',
+          requires_approval: false
+        }
+      ],
+      blocked: true,
+      blocked_reasons: ['gateway git metadata is broken', 'run_id run-parent-1 references unavailable approval_id approval-old'],
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      primary_action: {
+        action_id: 'review_runtime_provenance_blockers',
+        blocked_until: 'runtime provenance is clean and aligned',
+        label: 'Review runtime provenance blockers',
+        manual_only: true,
+        priority: 10,
+        reason: 'gateway git metadata is broken',
+        requires_approval: false
+      },
+      primary_action_id: 'review_runtime_provenance_blockers',
+      primary_action_label: 'Review runtime provenance blockers',
+      session_send_enabled: false,
+      source: 'mission_control_next_safe_actions_v1',
+      stored: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      would_execute: false
+    },
+    operator_decision_packet: {
+      approval_required: true,
+      blocked: true,
+      blocked_reasons: [
+        'gateway git metadata is broken',
+        'report_id report-worker has multiple append-only records',
+        'report_id report-worker attempts to overwrite append-only report fields: status',
+        'report_id report-worker still needs Jenny review',
+        'worker node offline',
+        'worker-node presence_status is not recorded',
+        'runtime provenance is not clean',
+        'worker-node presence is not confirmed online',
+        'report_id report-worker missing contract fields: result, evidence, tests, next lane, safety confirmation',
+        'run run-stopped has no stop_reason',
+        'run run-stopped has no linked stop/cancel report'
+      ],
+      child_instruction_available: true,
+      child_instruction_ready_for_handoff: false,
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_mode_blocked_reasons: [],
+      execution_mode_family: 'worker_node_preview',
+      execution_packet_blocked_reasons: ['runtime provenance is not clean', 'worker-node presence is not confirmed online'],
+      execution_packet_eligible: false,
+      execution_packet_mode: 'worker_node',
+      execution_lock_blocked_reasons: [],
+      execution_enabled: false,
+      execution_ready: false,
+      jenny_review_required: true,
+      manual_operator_review_only: true,
+      next_safe_action_id: 'review_runtime_provenance_blockers',
+      next_safe_action_label: 'Review runtime provenance blockers',
+      next_safe_action_reason: 'gateway git metadata is broken',
+      plain_language_summary: 'Operator state: report review required. Approval required: yes. Runtime provenance: GATEWAY_UNTRUSTED. Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked. Worker presence: unknown. Execution mode: worker_node_preview; execution disabled. Execution packet preview: worker_node, eligible false; execution disabled. Next safe action: Review runtime provenance blockers. Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review. Report overwrite conflicts: 1; duplicate report IDs are quarantined. Result ingestion: 1 ready, 0 blocked. Report contract completeness: 0 complete, 1 incomplete. Report completion path: 0 ready, 2 blocked. Stop/cancel control: 1 item, blocked true. Worker instruction: preview available but blocked; laptop Codex dispatch remains disabled. Child instruction: preview available but blocked; execution remains disabled. Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation.',
+      recommended_operator_instruction: 'Jenny reviews Laptop Codex reported scoped PR evidence. before issuing another worker instruction.',
+      report_contract_blocked_reasons: ['report_id report-worker missing contract fields: result, evidence, tests, next lane, safety confirmation'],
+      report_contract_incomplete_count: 1,
+      report_contract_primary_item_id: 'report-contract:report-worker',
+      report_completion_blocked_count: 2,
+      report_completion_blocked_reasons: [
+        'run run-parent-1 has no linked completion report',
+        'report_id report-worker still needs Jenny review before completion',
+        'report_id report-worker missing completion contract fields: result, evidence, tests, next lane, safety confirmation'
+      ],
+      report_completion_link_mismatch_count: 0,
+      report_completion_primary_item_id: 'report-completion:run:run-parent-1',
+      report_link_mismatch_count: 0,
+      report_link_mismatch_ids: [],
+      report_overwrite_conflict_count: 1,
+      report_overwrite_conflict_ids: ['report-worker'],
+      report_review_queue_link_mismatch_count: 0,
+      report_review_queue_count: 3,
+      result_ingestion_blocked_count: 0,
+      result_ingestion_blocked_reasons: [],
+      result_ingestion_link_mismatch_count: 0,
+      result_ingestion_primary_item_id: '',
+      session_send_enabled: false,
+      source: 'mission_control_operator_decision_packet_v1',
+      state: 'report_review_required',
+      stored: false,
+      stop_cancel_blocked_reasons: ['run run-stopped has no stop_reason', 'run run-stopped has no linked stop/cancel report'],
+      stop_cancel_count: 1,
+      stop_cancel_link_mismatch_count: 0,
+      stop_cancel_primary_item_id: 'run:run-stopped',
+      summary_lines: [
+        'Operator state: report review required.',
+        'Approval required: yes.',
+        'Runtime provenance: GATEWAY_UNTRUSTED.',
+        'Readiness: read-only blocked, scoped PR blocked, laptop Codex blocked.',
+        'Worker presence: unknown.',
+        'Execution mode: worker_node_preview; execution disabled.',
+        'Execution packet preview: worker_node, eligible false; execution disabled.',
+        'Next safe action: Review runtime provenance blockers.',
+        'Top report review: Laptop Codex reported scoped PR evidence. because report_id report-worker still needs Jenny review.',
+        'Report overwrite conflicts: 1; duplicate report IDs are quarantined.',
+        'Result ingestion: 1 ready, 0 blocked.',
+        'Report contract completeness: 0 complete, 1 incomplete.',
+        'Report completion path: 0 ready, 2 blocked.',
+        'Stop/cancel control: 1 item, blocked true.',
+        'Worker instruction: preview available but blocked; laptop Codex dispatch remains disabled.',
+        'Child instruction: preview available but blocked; execution remains disabled.',
+        'Hard locks: no deploy, restart, runtime switch, record/state/config mutation, secrets, live dispatch, session sending, or worker activation.'
+      ],
+      top_report_review_item_id: 'report:report-worker',
+      top_report_review_label: 'Laptop Codex reported scoped PR evidence.',
+      top_report_review_reason: 'report_id report-worker still needs Jenny review',
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      worker_instruction_available: true,
+      worker_instruction_ready_for_handoff: false,
+      worker_last_seen_at: '',
+      worker_online: false,
+      worker_presence_state: 'unknown',
+      would_dispatch: false,
+      would_execute: false,
+      would_session_send: false
+    },
+    orchestration_readiness: {
+      blocked: true,
+      blocked_reasons: ['runtime provenance is not clean', 'exact approved ApprovalRecord is required', 'worker node offline'],
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      execution_ready: false,
+      laptop_codex_worker_node: {
+        active_count: 1,
+        blocked_reasons: ['worker node offline', 'worker-node presence_status is not recorded', 'worker-node presence is not confirmed online'],
+        dispatch_enabled: false,
+        display_only: true,
+        execution_enabled: false,
+        execution_ready: false,
+        online: false,
+        presence_state: 'unknown',
+        preview_ready: false,
+        recorded: true,
+        session_send_enabled: false,
+        state: 'blocked',
+        trusted_for_execution: false,
+        worker_dispatch_enabled: false,
+        would_execute: false
+      },
+      next_safe_action_id: 'review_runtime_provenance_blockers',
+      next_safe_action_label: 'Review runtime provenance blockers',
+      plain_language_summary: 'Supervised read-only autonomy is blocked: runtime provenance is not clean. Scoped PR creation is blocked: exact approved ApprovalRecord is required. Laptop Codex worker-node is blocked: worker node offline. Next safe action: Review runtime provenance blockers.',
+      scoped_pr_creation: {
+        blocked_reasons: ['exact approved ApprovalRecord is required'],
+        dispatch_enabled: false,
+        display_only: true,
+        eligible: false,
+        execution_enabled: false,
+        execution_ready: false,
+        preview_ready: false,
+        session_send_enabled: false,
+        state: 'blocked',
+        trusted_for_execution: false,
+        worker_dispatch_enabled: false,
+        would_execute: false
+      },
+      session_send_enabled: false,
+      source: 'mission_control_orchestration_readiness_v1',
+      states: {
+        laptop_codex_worker_node: 'blocked',
+        scoped_pr_creation: 'blocked',
+        supervised_read_only_autonomy: 'blocked'
+      },
+      stored: false,
+      summary_lines: [
+        'Supervised read-only autonomy is blocked: runtime provenance is not clean.',
+        'Scoped PR creation is blocked: exact approved ApprovalRecord is required.',
+        'Laptop Codex worker-node is blocked: worker node offline.',
+        'Next safe action: Review runtime provenance blockers.'
+      ],
+      supervised_read_only_autonomy: {
+        blocked_reasons: ['runtime provenance is not clean'],
+        dispatch_enabled: false,
+        display_only: true,
+        eligible: false,
+        execution_enabled: false,
+        execution_ready: false,
+        preview_ready: false,
+        session_send_enabled: false,
+        state: 'blocked',
+        trusted_for_execution: false,
+        worker_dispatch_enabled: false,
+        would_execute: false
+      },
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      would_execute: false
+    },
+    orchestration_run_graph: {
+      blocked: true,
+      blocked_reasons: ['worker_run_id worker-run-1 references missing parent run_id run-parent-1'],
+      child_run_node_count: 1,
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      edge_count: 3,
+      edges: [
+        { edge_type: 'child_run', source_id: 'run-parent-1', target_id: 'child-run-1' },
+        { edge_type: 'linked_report', source_id: 'worker-run-1', target_id: 'report-worker' },
+        { edge_type: 'produced_report', source_id: 'worker-run-1', target_id: 'report-worker' }
+      ],
+      execution_enabled: false,
+      node_count: 4,
+      nodes: [
+        { label: 'Parent run', node_id: 'run-parent-1', node_type: 'run', status: 'running' },
+        { label: 'Inspect bounded Mission Control context.', node_id: 'child-run-1', node_type: 'child_run', parent_run_id: 'run-parent-1', report_id: 'report-child', report_review_status: 'needs_review', status: 'running' },
+        { label: 'Prepare bounded scoped PR packet.', node_id: 'worker-run-1', node_type: 'worker_node_run', parent_run_id: 'run-parent-1', report_id: 'report-worker', report_review_status: 'accepted', status: 'blocked' },
+        { label: 'Worker node reported evidence.', node_id: 'report-worker', node_type: 'report', parent_run_id: 'worker-run-1', report_id: 'report-worker', report_review_status: 'accepted', status: 'accepted' }
+      ],
+      report_node_count: 1,
+      run_node_count: 1,
+      session_send_enabled: false,
+      source: 'mission_control_orchestration_run_graph_v1',
+      stored: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      worker_node_run_count: 1,
+      would_execute: false
+    },
+    read_only_autonomy_eligibility: {
+      blocked_reasons: ['runtime provenance is not clean', 'gateway git metadata is broken'],
+      bridge_permissions: {
+        permission_classification: 'write_capable',
+        read_only_safe: false
+      },
+      dispatch_enabled: false,
+      dry_run_only: true,
+      eligible: false,
+      execution_enabled: false,
+      session_send_enabled: false,
+      would_execute: false
+    },
+    scoped_pr_lane_eligibility: {
+      blocked_reasons: ['exact approved ApprovalRecord is required'],
+      bridge_permissions: {
+        permission_classification: 'manual_only',
+        read_only_safe: false
+      },
+      dispatch_enabled: false,
+      dry_run_only: true,
+      eligible: false,
+      execution_enabled: false,
+      merge_enabled: false,
+      scope: { directories: [], files: [] },
+      session_send_enabled: false,
+      worker_dispatch_enabled: false,
+      would_commit: false,
+      would_create_pr: false,
+      would_execute: false
+    },
+    runtime_provenance: {
+      autonomy_blocked: true,
+      autonomy_blocked_reasons: ['gateway git metadata is broken'],
+      default_branch_head: 'c06898098b865b5a8f48535c08ad9de5459211e4',
+      primary_status: 'GATEWAY_UNTRUSTED',
+      source_head: '0f87620038d220eb016612ba0b466c2407663743',
+      status: 'BLOCKED_UNSAFE_FOR_AUTONOMY',
+      statuses: ['BROKEN_GIT_METADATA', 'GATEWAY_UNTRUSTED']
+    },
+    rollback_baseline: {
+      head: 'cb42bbc1ed372576079ce8162e6c66fe11872fa4',
+      runtime_path: '/home/jenny/.hermes/hermes-runtime-evidencehash-cb42bbc',
+      would_execute: false
+    },
     runtime_worktree_guard: { decision_state: 'pass' },
+    report_lifecycle: {
+      append_only_projection: true,
+      blocked: true,
+      blocked_reasons: [
+        'report_id report-worker has multiple append-only records',
+        'report_id report-worker attempts to overwrite append-only report fields: status',
+        'run_id run-parent-1 has no linked report',
+        'report_id report-worker still needs review'
+      ],
+      dispatch_enabled: false,
+      display_only: true,
+      duplicate_report_ids: ['report-worker'],
+      execution_enabled: false,
+      open_report_ids: ['report-worker'],
+      raw_report_count: 2,
+      report_count: 1,
+      report_overwrite_conflict_count: 1,
+      report_overwrite_conflict_ids: ['report-worker'],
+      report_overwrite_conflicts: { 'report-worker': ['status'] },
+      reports_by_run_id: { 'worker-run-1': ['report-worker'] },
+      reviewed_report_ids: [],
+      runs_missing_report: ['run-parent-1'],
+      runs_with_missing_linked_report_ids: {},
+      session_send_enabled: false,
+      terminal_report_ids: [],
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false
+    },
+    report_contract_compliance: {
+      blocked: true,
+      blocked_reasons: ['report_id report-worker missing contract fields: result, evidence, tests, next lane, safety confirmation'],
+      complete_report_count: 0,
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      incomplete_report_count: 1,
+      items: [
+        {
+          complete: false,
+          item_id: 'report-contract:report-worker',
+          linked_record_id: 'worker-run-1',
+          linked_record_type: 'worker_node_run',
+          manual_only: true,
+          missing_fields: ['result', 'evidence', 'tests', 'next lane', 'safety confirmation'],
+          recommended_action: 'Jenny reviews the report contract fields before accepting the worker or child result.',
+          report_id: 'report-worker',
+          required_fields: ['summary', 'result', 'risks/blockers', 'evidence', 'tests', 'next lane', 'safety confirmation'],
+          review_status: 'needs_review',
+          run_id: 'worker-run-1',
+          status: 'needs_review',
+          summary: 'Laptop Codex reported scoped PR evidence.'
+        }
+      ],
+      manual_review_only: true,
+      primary_item_id: 'report-contract:report-worker',
+      primary_item_label: 'Laptop Codex reported scoped PR evidence.',
+      report_count: 1,
+      session_send_enabled: false,
+      source: 'mission_control_report_contract_compliance_v1',
+      stored: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      would_execute: false
+    },
+    report_completion_path: {
+      blocked: true,
+      blocked_reasons: [
+        'run run-parent-1 has no linked completion report',
+        'report_id report-worker still needs Jenny review before completion',
+        'report_id report-worker missing completion contract fields: result, evidence, tests, next lane, safety confirmation'
+      ],
+      blocked_completion_count: 2,
+      completion_ready_count: 0,
+      contract_incomplete_count: 2,
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      duplicate_report_count: 0,
+      execution_enabled: false,
+      ingestion_blocked_count: 0,
+      items: [
+        {
+          blocked_reasons: ['run run-parent-1 has no linked completion report'],
+          completion_ready: false,
+          contract_missing_fields: [],
+          duplicate_report: false,
+          forbidden_metadata_keys: [],
+          item_id: 'report-completion:run:run-parent-1',
+          label: 'Parent run',
+          manual_review_required: true,
+          parent_run_id: '',
+          recommended_action: 'Jenny reviews the linked report, contract fields, ingestion safety, and final run status before treating this work as complete.',
+          record_id: 'run-parent-1',
+          record_type: 'run',
+          redaction_status: '',
+          report_contract_complete: false,
+          report_id: '',
+          report_link_status: 'missing_linked_report',
+          report_review_status: 'missing_report',
+          result_ingestion_ready: false,
+          safety_confirmation_present: false,
+          status: 'completed'
+        },
+        {
+          blocked_reasons: [
+            'report_id report-worker still needs Jenny review before completion',
+            'report_id report-worker missing completion contract fields: result, evidence, tests, next lane, safety confirmation'
+          ],
+          completion_ready: false,
+          contract_missing_fields: ['result', 'evidence', 'tests', 'next lane', 'safety confirmation'],
+          duplicate_report: false,
+          forbidden_metadata_keys: [],
+          item_id: 'report-completion:worker_node_run:worker-run-1',
+          label: 'Prepare bounded scoped PR packet.',
+          manual_review_required: true,
+          parent_run_id: 'run-parent-1',
+          recommended_action: 'Jenny reviews the linked report, contract fields, ingestion safety, and final run status before treating this work as complete.',
+          record_id: 'worker-run-1',
+          record_type: 'worker_node_run',
+          redaction_status: 'operator_supplied_redacted',
+          report_contract_complete: false,
+          report_id: 'report-worker',
+          report_link_status: 'linked_report_found',
+          report_review_status: 'needs_review',
+          result_ingestion_ready: true,
+          safety_confirmation_present: true,
+          status: 'blocked'
+        }
+      ],
+      link_mismatch_count: 0,
+      manual_review_only: true,
+      missing_report_count: 1,
+      needs_review_count: 1,
+      primary_item_id: 'report-completion:run:run-parent-1',
+      primary_item_label: 'Parent run',
+      rejected_report_count: 0,
+      session_send_enabled: false,
+      source: 'mission_control_report_completion_path_v1',
+      stored: false,
+      terminal_item_count: 2,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      would_execute: false
+    },
+    report_review_queue: {
+      blocked: true,
+      blocked_reasons: [
+        'report_id report-worker still needs Jenny review',
+        'report_id report-child still needs Jenny review',
+        'run_id run-parent-1 has no linked report'
+      ],
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      duplicate_report_count: 1,
+      execution_enabled: false,
+      items: [
+        {
+          item_id: 'report:report-worker',
+          item_type: 'report_needs_review',
+          linked_record_id: 'worker-run-1',
+          linked_record_type: 'worker_node_run',
+          manual_only: true,
+          priority: 10,
+          reason: 'report_id report-worker still needs Jenny review',
+          recommended_action: 'Jenny reviews the report evidence, blockers, changed files, and tests before any next instruction.',
+          report_id: 'report-worker',
+          review_status: 'needs_review',
+          run_id: 'worker-run-1',
+          status: 'needs_review',
+          summary: 'Laptop Codex reported scoped PR evidence.'
+        },
+        {
+          item_id: 'report:report-child',
+          item_type: 'report_needs_review',
+          linked_record_id: 'child-run-1',
+          linked_record_type: 'child_run',
+          manual_only: true,
+          priority: 15,
+          reason: 'report_id report-child still needs Jenny review',
+          recommended_action: 'Jenny reviews the report evidence, blockers, changed files, and tests before any next instruction.',
+          report_id: 'report-child',
+          review_status: 'needs_review',
+          run_id: 'child-run-1',
+          status: 'received',
+          summary: 'Child reported evidence.'
+        },
+        {
+          item_id: 'missing-report:run:run-parent-1',
+          item_type: 'missing_required_report',
+          linked_record_id: 'run-parent-1',
+          linked_record_type: 'run',
+          manual_only: true,
+          priority: 25,
+          reason: 'run_id run-parent-1 has no linked report',
+          recommended_action: 'Find or request the terminal run report before marking the lane complete.',
+          review_status: 'missing_report',
+          run_id: 'run-parent-1',
+          status: 'completed',
+          summary: 'Parent run'
+        }
+      ],
+      manual_review_only: true,
+      link_mismatch_count: 0,
+      missing_report_count: 1,
+      needs_review_count: 2,
+      primary_review_item: {
+        item_id: 'report:report-worker',
+        linked_record_id: 'worker-run-1',
+        linked_record_type: 'worker_node_run',
+        reason: 'report_id report-worker still needs Jenny review',
+        report_id: 'report-worker',
+        review_status: 'needs_review',
+        summary: 'Laptop Codex reported scoped PR evidence.'
+      },
+      primary_review_item_id: 'report:report-worker',
+      primary_review_label: 'Laptop Codex reported scoped PR evidence.',
+      primary_review_reason: 'report_id report-worker still needs Jenny review',
+      queue_count: 3,
+      session_send_enabled: false,
+      source: 'mission_control_report_review_queue_v1',
+      stored: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      would_execute: false
+    },
+    result_ingestion_contract: {
+      blocked: false,
+      blocked_reasons: [],
+      blocked_report_count: 0,
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      duplicate_report_count: 0,
+      execution_enabled: false,
+      forbidden_metadata_count: 0,
+      ingestion_ready_count: 1,
+      items: [
+        {
+          ingestion_ready: true,
+          item_id: 'result-ingestion:report-worker',
+          linked_record_id: 'worker-run-1',
+          linked_record_type: 'worker_node_run',
+          manual_review_required: true,
+          recommended_action: 'Jenny reviews the linked, redacted report and safety confirmation before relying on it.',
+          redaction_status: 'operator_supplied_redacted',
+          report_id: 'report-worker',
+          review_status: 'needs_review',
+          run_id: 'worker-run-1',
+          safety_confirmation_present: true,
+          status: 'needs_review',
+          submitted_by: 'codex',
+          submitted_from: 'laptop-codex',
+          summary: 'Laptop Codex reported scoped PR evidence.'
+        }
+      ],
+      link_mismatch_count: 0,
+      manual_review_only: true,
+      missing_link_count: 0,
+      missing_safety_confirmation_count: 0,
+      primary_item_id: '',
+      primary_item_label: '',
+      raw_report_count: 1,
+      report_count: 1,
+      session_send_enabled: false,
+      source: 'mission_control_result_ingestion_contract_v1',
+      stored: false,
+      trusted_for_execution: false,
+      unsafe_redaction_count: 0,
+      worker_dispatch_enabled: false,
+      would_execute: false
+    },
+    orchestration_stop_control: {
+      active_stop_count: 0,
+      blocked: true,
+      blocked_reasons: ['run run-stopped has no stop_reason', 'run run-stopped has no linked stop/cancel report'],
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      items: [
+        {
+          item_id: 'run:run-stopped',
+          label: 'run run-stopped stopped',
+          manual_review_required: true,
+          record_id: 'run-stopped',
+          record_type: 'run',
+          recommended_action: 'Jenny reviews stop reason, final report, blockers, and safety confirmation before assigning follow-up work.',
+          report_link_status: 'missing_linked_report',
+          report_review_status: 'missing',
+          status: 'stopped',
+          stop_reason: '',
+          stopped_at: ''
+        }
+      ],
+      link_mismatch_count: 0,
+      manual_review_only: true,
+      needs_report_count: 1,
+      needs_review_count: 0,
+      primary_item: {
+        item_id: 'run:run-stopped',
+        label: 'run run-stopped stopped',
+        record_id: 'run-stopped',
+        record_type: 'run',
+        report_link_status: 'missing_linked_report',
+        status: 'stopped'
+      },
+      primary_item_id: 'run:run-stopped',
+      primary_item_label: 'run run-stopped stopped',
+      session_send_enabled: false,
+      source: 'mission_control_orchestration_stop_control_v1',
+      stop_cancel_count: 1,
+      stored: false,
+      terminal_stop_count: 1,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      would_execute: false
+    },
+    run_lifecycle: {
+      active_mutation_lane_count: 0,
+      active_mutation_run_ids: [],
+      active_run_ids: ['run-parent-1'],
+      append_only_projection: true,
+      blocked: true,
+      blocked_reasons: ['terminal run_id run-reportless has no linked report'],
+      dispatch_enabled: false,
+      display_only: true,
+      duplicate_run_ids: [],
+      execution_enabled: false,
+      one_active_mutation_lane_rule_passed: true,
+      run_count: 3,
+      session_send_enabled: false,
+      stop_cancel_run_ids: ['run-stopped'],
+      terminal_run_ids: ['run-reportless', 'run-stopped'],
+      terminal_runs_missing_report: ['run-reportless'],
+      terminal_runs_with_missing_linked_report_ids: {},
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false
+    },
     safety: { dispatch_in_gateway: false, send_to_jenny_enabled: false },
-    stale_context: { warnings: [] }
+    stale_context: { warnings: [] },
+    tool_permission_classification: {
+      blocked_path_count: 1,
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      path_count: 2,
+      paths: [
+        {
+          label: 'audit read',
+          path_id: 'audit_read',
+          permission_classification: 'read_only_safe',
+          read_only_safe: true,
+          reasons: []
+        },
+        {
+          label: 'laptop Codex',
+          path_id: 'laptop_codex_worker_node',
+          permission_classification: 'write_capable_not_safe_for_autonomy',
+          read_only_safe: false,
+          reasons: ['path exposes write or execution capabilities: worker_node_path']
+        }
+      ],
+      permission_classification: 'write_capable_not_safe_for_autonomy',
+      read_only_safe: false,
+      session_send_enabled: false,
+      stored: false,
+      worker_dispatch_enabled: false,
+      write_capable_path_ids: ['laptop_codex_worker_node']
+    },
+    worker_node_presence: {
+      active_worker_node_run_count: 1,
+      blocked: true,
+      blocked_reasons: ['worker-node presence_status is not recorded'],
+      capability_summary: '',
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      last_seen_age_seconds: null,
+      last_seen_at: '',
+      online: false,
+      parent_run_id: 'run-parent-1',
+      presence_state: 'unknown',
+      presence_status: '',
+      recorded_worker_node_run_count: 1,
+      session_send_enabled: false,
+      source: 'mission_control_worker_node_presence_v1',
+      stale_after_seconds: 900,
+      stored: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      worker_host_label: 'laptop-codex',
+      worker_identity: 'codex',
+      worker_kind: 'laptop_codex',
+      worker_run_id: 'worker-run-1',
+      worker_version: '',
+      would_execute: false
+    },
+    worker_node_orchestration: {
+      active_count: 1,
+      active_runs: [
+        {
+          blocked_reasons: ['worker node offline'],
+          objective: 'Prepare bounded scoped PR packet.',
+          parent_run_id: 'run-parent-1',
+          linked_report_review_status: 'accepted',
+          linked_report_status: 'accepted',
+          linked_report_summary: 'Worker node reported evidence.',
+          report_id: 'report-worker',
+          report_link_status: 'linked_report_found',
+          report_contract_status: 'required',
+          report_review_status: 'waiting',
+          status: 'blocked',
+          worker_dispatch_enabled: false,
+          worker_host_label: 'laptop-codex',
+          worker_identity: 'codex',
+          worker_kind: 'laptop_codex',
+          worker_run_id: 'worker-run-1'
+        }
+      ],
+      blocked_reasons: ['worker node offline'],
+      dispatch_enabled: false,
+      display_only: true,
+      execution_enabled: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false
+    },
+    worker_node_instruction_preview: {
+      allowed_actions: ['edit scoped files', 'run focused tests'],
+      assigned_packet_id: 'packet-worker-1',
+      assigned_packet_summary: 'Prepare scoped PR evidence.',
+      available: true,
+      blocked: true,
+      blocked_reasons: ['worker node offline', 'worker-node presence_status is not recorded'],
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      forbidden_actions: ['deploy', 'restart', 'runtime switch', 'no live deploy', 'no worker dispatch activation', 'no bypassing Codex safety checks'],
+      instruction_lines: [
+        'Worker: codex on laptop-codex.',
+        'Objective: Prepare bounded scoped PR packet.',
+        'Allowed actions: edit scoped files, run focused tests.',
+        'Forbidden actions: deploy, restart, runtime switch, no live deploy, no worker dispatch activation, no bypassing Codex safety checks.',
+        'Worker safety hardness: Codex must independently enforce repo/worktree, test, secret, git, and live-operation safeguards before acting. A Jenny packet is not permission to bypass Codex safety checks.',
+        'Report contract: Report changed files, tests/checks, result, blockers, safety confirmation, and the next suggested chunk.',
+        'Handoff readiness: blocked until worker-node blockers are cleared.',
+        'Manual handoff only; execution and worker dispatch remain disabled.'
+      ],
+      manual_handoff_only: true,
+      manual_handoff_prompt: 'Worker: codex on laptop-codex.\nObjective: Prepare bounded scoped PR packet.\nAllowed actions: edit scoped files, run focused tests.\nForbidden actions: deploy, restart, runtime switch, no live deploy, no worker dispatch activation, no bypassing Codex safety checks.\nWorker safety hardness: Codex must independently enforce repo/worktree, test, secret, git, and live-operation safeguards before acting. A Jenny packet is not permission to bypass Codex safety checks.\nReport contract: Report changed files, tests/checks, result, blockers, safety confirmation, and the next suggested chunk.\nHandoff readiness: blocked until worker-node blockers are cleared.\nManual handoff only; execution and worker dispatch remain disabled.',
+      objective: 'Prepare bounded scoped PR packet.',
+      online: false,
+      parent_run_id: 'run-parent-1',
+      presence_state: 'unknown',
+      ready_for_handoff: false,
+      report_contract: 'Report changed files, tests/checks, result, blockers, safety confirmation, and the next suggested chunk.',
+      report_id: 'report-worker',
+      report_review_status: 'accepted',
+      session_send_enabled: false,
+      source: 'mission_control_worker_node_instruction_preview_v1',
+      stored: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      worker_host_label: 'laptop-codex',
+      worker_identity: 'codex',
+      worker_run_id: 'worker-run-1',
+      worker_safety_hardness: [
+        'Codex must independently enforce repo/worktree, test, secret, git, and live-operation safeguards before acting.',
+        'A Jenny packet is not permission to bypass Codex safety checks.'
+      ],
+      would_execute: false
+    }
   })
   createMissionControlReport.mockResolvedValue({
     dispatch_enabled: false,
@@ -156,7 +1139,7 @@ beforeEach(() => {
       to_agent: 'jenny'
     },
     record_type: 'GitHubBridgeMessageRecord',
-    send_to_jenny_enabled: true,
+    send_to_jenny_enabled: false,
     stored: true
   })
   createMissionControlJennyReplyReview.mockResolvedValue({
@@ -251,7 +1234,7 @@ beforeEach(() => {
       status: 'replied',
       to_agent: 'travis'
     },
-    send_to_jenny_enabled: true,
+    send_to_jenny_enabled: false,
     stored: true,
     worker_enabled: false,
     timer_enabled: false
@@ -872,9 +1855,170 @@ describe('MissionControlView', () => {
     expect(screen.getByText('daemon disabled / worker disabled / timer disabled')).toBeTruthy()
     expect(screen.getByText('deploy state')).toBeTruthy()
     expect(screen.getByText('merged not deployed')).toBeTruthy()
+    expect(screen.getByText('runtime provenance')).toBeTruthy()
+    expect(screen.getByText('GATEWAY UNTRUSTED')).toBeTruthy()
+    expect(screen.getByText('read-only autonomy')).toBeTruthy()
+    expect(screen.getAllByText('blocked / no execution').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('bridge permission')).toBeTruthy()
+    expect(screen.getByText('write capable')).toBeTruthy()
+    expect(screen.getByText('tool permissions')).toBeTruthy()
+    expect(screen.getByText('write capable not safe for autonomy / blocked paths 1')).toBeTruthy()
+    expect(screen.getByText('write-capable tool paths')).toBeTruthy()
+    expect(screen.getByText('laptop_codex_worker_node')).toBeTruthy()
+    expect(screen.getByText('scoped PR lane')).toBeTruthy()
+    expect(screen.getByText('scoped PR bridge')).toBeTruthy()
+    expect(screen.getByText('manual only')).toBeTruthy()
+    expect(screen.getByText('execution mode')).toBeTruthy()
+    expect(screen.getByText('worker node preview / preview yes / execution no')).toBeTruthy()
+    expect(screen.getByText('execution packet')).toBeTruthy()
+    expect(screen.getByText('worker node / eligible no / execute no')).toBeTruthy()
+    expect(screen.getByText('execution packet body locks')).toBeTruthy()
+    expect(screen.getAllByText('execute no / dispatch no / session no / worker no').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('worker contract locks')).toBeTruthy()
+    expect(screen.getByText('lifecycle projection')).toBeTruthy()
+    expect(screen.getByText('append-only yes / active mutation lanes 0')).toBeTruthy()
+    expect(screen.getByText('next safe action')).toBeTruthy()
+    expect(screen.getByText('Review runtime provenance blockers')).toBeTruthy()
+    expect(screen.getByText('next action mode')).toBeTruthy()
+    expect(screen.getByText('display-only yes / actions 1')).toBeTruthy()
+    expect(screen.getByText('operator packet')).toBeTruthy()
+    expect(screen.getByText('report review required / approval required yes / display-only yes')).toBeTruthy()
+    expect(screen.getByText('operator review gates')).toBeTruthy()
+    expect(screen.getByText('Jenny review yes / execution-ready no / worker dispatch no')).toBeTruthy()
+    expect(screen.getByText('operator packet locks')).toBeTruthy()
+    expect(screen.getByText('execute no / dispatch no / session no / worker no / would dispatch no / would session no')).toBeTruthy()
+    expect(screen.getByText('operator next instruction')).toBeTruthy()
+    expect(screen.getByText('Jenny reviews Laptop Codex reported scoped PR evidence. before issuing another worker instruction.')).toBeTruthy()
+    expect(screen.getByText('operator report links')).toBeTruthy()
+    expect(screen.getByText('mismatch 0 / queue 0 / ingestion 0 / completion 0 / stop 0')).toBeTruthy()
+    expect(screen.getByText('hard boundary')).toBeTruthy()
+    expect(screen.getByText('separate approval required / forbidden 15 / separate approval 5')).toBeTruthy()
+    expect(screen.getByText('hard boundary locks')).toBeTruthy()
+    expect(screen.getByText('execute no / execution-ready no / worker no / live ops no')).toBeTruthy()
+    expect(screen.getByText('next action reasons')).toBeTruthy()
+    expect(screen.getByText('gateway git metadata is broken, run_id run-parent-1 references unavailable approval_id approval-old')).toBeTruthy()
+    expect(screen.getByText('operator summary')).toBeTruthy()
+    expect(screen.getByText(/Operator state: report review required/)).toBeTruthy()
+    expect(screen.getByText(/Approval required: yes/)).toBeTruthy()
+    expect(screen.getByText(/Worker instruction: preview available but blocked/)).toBeTruthy()
+    expect(screen.getByText(/Child instruction: preview available but blocked/)).toBeTruthy()
+    expect(screen.getByText(/Report overwrite conflicts: 1; duplicate report IDs are quarantined/)).toBeTruthy()
+    expect(screen.getByText('operator blockers')).toBeTruthy()
+    expect(screen.getByText('gateway git metadata is broken, report_id report-worker has multiple append-only records, report_id report-worker attempts to overwrite append-only report fields: status, report_id report-worker still needs Jenny review, worker node offline, worker-node presence_status is not recorded, runtime provenance is not clean, worker-node presence is not confirmed online, report_id report-worker missing contract fields: result, evidence, tests, next lane, safety confirmation, run run-stopped has no stop_reason, run run-stopped has no linked stop/cancel report')).toBeTruthy()
+    expect(screen.getByText('operator execution locks')).toBeTruthy()
+    expect(statusItemValue('operator execution locks').textContent).toBe('none')
+    expect(screen.getByText('hard boundary summary')).toBeTruthy()
+    expect(screen.getByText(/This goal is code-side only/)).toBeTruthy()
+    expect(screen.getByText('hard boundary blockers')).toBeTruthy()
+    expect(statusItemValue('hard boundary blockers').textContent).toBe('none')
+    expect(screen.getByText('projection execution locks')).toBeTruthy()
+    expect(statusItemValue('projection execution locks').textContent).toBe('none')
+    expect(screen.getByText('execution mode blockers')).toBeTruthy()
+    expect(screen.getByText('protected execution markers')).toBeTruthy()
+    expect(screen.getByText('execution packet blockers')).toBeTruthy()
+    expect(screen.getByText('runtime provenance is not clean, worker-node presence is not confirmed online')).toBeTruthy()
+    expect(screen.getByText('execution lock blockers')).toBeTruthy()
+    expect(statusItemValue('execution lock blockers').textContent).toBe('none')
+    expect(screen.getByText('orchestration readiness')).toBeTruthy()
+    expect(screen.getByText('read-only blocked / scoped PR blocked')).toBeTruthy()
+    expect(screen.getByText('worker readiness')).toBeTruthy()
+    expect(screen.getByText('laptop Codex blocked / execution-ready no')).toBeTruthy()
+    expect(screen.getByText('worker presence')).toBeTruthy()
+    expect(screen.getByText('unknown / online no')).toBeTruthy()
+    expect(screen.getByText('orchestration summary')).toBeTruthy()
+    expect(screen.getByText(/Supervised read-only autonomy is blocked: runtime provenance is not clean/)).toBeTruthy()
+    expect(screen.getByText('orchestration run graph')).toBeTruthy()
+    expect(screen.getByText('nodes 4 / edges 3')).toBeTruthy()
+    expect(screen.getByText('run graph nodes')).toBeTruthy()
+    expect(screen.getByText('runs 1 / child 1 / worker 1 / reports 1')).toBeTruthy()
+    expect(screen.getByText('run graph blockers')).toBeTruthy()
+    expect(screen.getByText('worker_run_id worker-run-1 references missing parent run_id run-parent-1')).toBeTruthy()
+    expect(screen.getByText('approval lifecycle')).toBeTruthy()
+    expect(screen.getByText('available 1 / pending 1 / expired 1')).toBeTruthy()
+    expect(screen.getByText('approval gaps')).toBeTruthy()
+    expect(screen.getByText('duplicates 0 / consumed 0 / unavailable runs 1')).toBeTruthy()
+    expect(screen.getByText('run lifecycle')).toBeTruthy()
+    expect(screen.getByText('active 1 / terminal 2 / stop-cancel 1')).toBeTruthy()
+    expect(screen.getByText('run gaps')).toBeTruthy()
+    expect(screen.getByText('duplicates 0 / missing reports 1 / stale links 0')).toBeTruthy()
+    expect(screen.getByText('report lifecycle')).toBeTruthy()
+    expect(screen.getByText('open 1 / reviewed 0 / terminal 0')).toBeTruthy()
+    expect(screen.getByText('report gaps')).toBeTruthy()
+    expect(screen.getByText('duplicates 1 / overwrite conflicts 1 / missing 1 / stale links 0')).toBeTruthy()
+    expect(screen.getAllByText('report contract').length).toBeGreaterThan(0)
+    expect(screen.getByText('reports 1 / complete 0 / incomplete 1')).toBeTruthy()
+    expect(screen.getByText('report completion')).toBeTruthy()
+    expect(screen.getByText('ready 0 / blocked 2 / terminal 2')).toBeTruthy()
+    expect(screen.getByText('report review queue')).toBeTruthy()
+    expect(screen.getByText('items 3 / needs review 2 / missing 1 / mismatch 0')).toBeTruthy()
+    expect(screen.getByText('result ingestion')).toBeTruthy()
+    expect(screen.getByText('ready 1 / blocked 0 / reports 1')).toBeTruthy()
+    expect(screen.getByText('stop/cancel control')).toBeTruthy()
+    expect(screen.getByText('items 1 / stopping 0 / terminal 1 / mismatch 0')).toBeTruthy()
+    expect(screen.getByText('top report review')).toBeTruthy()
+    expect(screen.getByText('Laptop Codex reported scoped PR evidence.')).toBeTruthy()
+    expect(screen.getByText('baseline execute lock')).toBeTruthy()
+    expect(screen.getByText('accepted no / rollback no / handoff no')).toBeTruthy()
+    expect(screen.getByText('report review blockers')).toBeTruthy()
+    expect(screen.getByText('report_id report-worker has multiple append-only records, report_id report-worker attempts to overwrite append-only report fields: status, run_id run-parent-1 has no linked report, report_id report-worker still needs review')).toBeTruthy()
+    expect(screen.getByText('report contract blockers')).toBeTruthy()
+    expect(screen.getByText('report_id report-worker missing contract fields: result, evidence, tests, next lane, safety confirmation')).toBeTruthy()
+    expect(screen.getByText('report completion blockers')).toBeTruthy()
+    expect(screen.getByText('run run-parent-1 has no linked completion report, report_id report-worker still needs Jenny review before completion, report_id report-worker missing completion contract fields: result, evidence, tests, next lane, safety confirmation')).toBeTruthy()
+    expect(screen.getByText('report completion gaps')).toBeTruthy()
+    expect(screen.getByText('missing 1 / review 1 / rejected 0 / contract 2 / ingestion 0 / mismatch 0 / duplicates 0')).toBeTruthy()
+    expect(screen.getByText('report queue reason')).toBeTruthy()
+    expect(screen.getByText('report_id report-worker still needs Jenny review, report_id report-child still needs Jenny review, run_id run-parent-1 has no linked report')).toBeTruthy()
+    expect(screen.getByText('result ingestion blockers')).toBeTruthy()
+    expect(screen.getByText('No result ingestion blockers recorded')).toBeTruthy()
+    expect(screen.getByText('result ingestion gaps')).toBeTruthy()
+    expect(screen.getByText('duplicates 0 / unlinked 0 / mismatch 0 / redaction 0 / metadata 0 / safety 0')).toBeTruthy()
+    expect(screen.getByText('stop/cancel blockers')).toBeTruthy()
+    expect(screen.getByText('run run-stopped has no stop_reason, run run-stopped has no linked stop/cancel report')).toBeTruthy()
+    expect(screen.getByText('child-agent status')).toBeTruthy()
+    expect(screen.getByText('1 active / latest running')).toBeTruthy()
+    expect(screen.getByText('child-agent objective')).toBeTruthy()
+    expect(screen.getByText('Inspect bounded Mission Control context.')).toBeTruthy()
+    expect(screen.getByText('child-agent report')).toBeTruthy()
+    expect(screen.getByText('linked report found / needs review / report-child')).toBeTruthy()
+    expect(screen.getByText('child instruction preview')).toBeTruthy()
+    expect(screen.getAllByText('available yes / handoff ready no / manual yes').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('child instruction prompt')).toBeTruthy()
+    expect(screen.getByText(/Child agent: jenny-child/)).toBeTruthy()
+    expect(screen.getByText(/Handoff readiness: blocked until child-agent blockers are cleared/)).toBeTruthy()
+    expect(screen.getByText('laptop Codex worker-node')).toBeTruthy()
+    expect(screen.getByText('laptop-codex / blocked')).toBeTruthy()
+    expect(screen.getByText('worker-node objective')).toBeTruthy()
+    expect(screen.getByText('Prepare bounded scoped PR packet.')).toBeTruthy()
+    expect(screen.getByText('worker-node report')).toBeTruthy()
+    expect(screen.getByText('required / linked report found / accepted / report-worker')).toBeTruthy()
+    expect(screen.getByText('worker instruction preview')).toBeTruthy()
+    expect(screen.getAllByText('available yes / handoff ready no / manual yes').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('worker instruction prompt')).toBeTruthy()
+    expect(screen.getByText(/Worker: codex on laptop-codex/)).toBeTruthy()
+    expect(screen.getByText(/Codex must independently enforce repo\/worktree/)).toBeTruthy()
+    expect(screen.getByText(/Handoff readiness: blocked until worker-node blockers are cleared/)).toBeTruthy()
+    expect(screen.getByText('worker instruction blockers')).toBeTruthy()
+    expect(screen.getByText('worker-node blockers')).toBeTruthy()
+    expect(screen.getByText('worker presence blockers')).toBeTruthy()
+    expect(screen.getAllByText('worker-node presence_status is not recorded').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('worker node offline').length).toBeGreaterThan(0)
+    expect(screen.getByText('scoped PR blockers')).toBeTruthy()
+    expect(screen.getByText('exact approved ApprovalRecord is required')).toBeTruthy()
+    expect(screen.getByText('autonomy blockers')).toBeTruthy()
+    expect(screen.getAllByText(/gateway git metadata is broken/).length).toBeGreaterThan(0)
+    expect(screen.getByText('approval blockers')).toBeTruthy()
+    expect(screen.getByText('run_id run-parent-1 references unavailable approval_id approval-old')).toBeTruthy()
+    expect(screen.getByText('run blockers')).toBeTruthy()
+    expect(screen.getByText('terminal run_id run-reportless has no linked report')).toBeTruthy()
+    expect(screen.getByText('child-agent blockers')).toBeTruthy()
+    expect(screen.getAllByText('report_id report-child still needs review').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('child instruction blockers')).toBeTruthy()
     expect(screen.getByText(/Desktop can be current while phone\/web waits for a safe dashboard-only update/)).toBeTruthy()
     expect(screen.getByText('accepted-live head')).toBeTruthy()
     expect(screen.getByText('0f87620038d2')).toBeTruthy()
+    expect(screen.getByText('default branch head')).toBeTruthy()
+    expect(screen.getByText('c06898098b86')).toBeTruthy()
     expect(screen.getByText('deployed head')).toBeTruthy()
     expect(screen.getByText('9f8863c0bf28')).toBeTruthy()
     expect(screen.getByText('desktop app install')).toBeTruthy()
@@ -1443,7 +2587,7 @@ describe('MissionControlView', () => {
         status: 'replied',
         to_agent: 'travis'
       },
-      send_to_jenny_enabled: true,
+      send_to_jenny_enabled: false,
       stored: true,
       timer_enabled: false,
       worker_enabled: false
@@ -1482,6 +2626,74 @@ describe('MissionControlView', () => {
     expect(await screen.findByText('Jenny bridge is offline. Start or reconnect the Hermes gateway, then send the message again.')).toBeTruthy()
     expect(screen.queryByText(/ECONNREFUSED/)).toBeNull()
     expect(answerMissionControlGitHubBridgeOnce).not.toHaveBeenCalled()
+  })
+
+  it('warns when accepted child or worker reports have mismatched lineage', async () => {
+    const status = JSON.parse(JSON.stringify(await getMissionControlWorkspaceStatus()))
+    const childMismatch = 'report_id report-child run_id other-child-run does not match linked child_run child-run-1'
+    const workerMismatch = 'report_id report-worker run_id other-worker-run does not match linked worker_node_run worker-run-1'
+
+    Object.assign(status.child_agent_orchestration.active_runs[0], {
+      blocked_reasons: [childMismatch],
+      linked_report_review_status: 'accepted',
+      report_link_mismatch: true,
+      report_link_mismatch_reason: childMismatch,
+      report_link_status: 'linked_report_run_id_mismatch'
+    })
+    Object.assign(status.worker_node_orchestration.active_runs[0], {
+      blocked_reasons: [workerMismatch],
+      linked_report_review_status: 'accepted',
+      report_link_mismatch: true,
+      report_link_mismatch_reason: workerMismatch,
+      report_link_status: 'linked_report_run_id_mismatch'
+    })
+    status.child_agent_orchestration.blocked_reasons = [childMismatch]
+    status.worker_node_orchestration.blocked_reasons = [workerMismatch]
+    status.report_review_queue.link_mismatch_count = 2
+    status.operator_decision_packet.report_link_mismatch_count = 2
+    status.operator_decision_packet.report_review_queue_link_mismatch_count = 2
+    status.operator_decision_packet.result_ingestion_link_mismatch_count = 0
+    status.operator_decision_packet.report_completion_link_mismatch_count = 0
+    status.operator_decision_packet.stop_cancel_link_mismatch_count = 0
+    getMissionControlWorkspaceStatus.mockResolvedValueOnce(status)
+
+    await renderMissionControl()
+    await screen.findByText('child-agent report')
+
+    const childReport = statusItemValue('child-agent report')
+    expect(childReport.textContent).toContain('linked report run id mismatch / accepted / mismatch yes')
+    expect(childReport.textContent).toContain(childMismatch)
+    expect(childReport.className).toContain('text-amber')
+
+    const workerReport = statusItemValue('worker-node report')
+    expect(workerReport.textContent).toContain('required / linked report run id mismatch / accepted / mismatch yes')
+    expect(workerReport.textContent).toContain(workerMismatch)
+    expect(workerReport.className).toContain('text-amber')
+    expect(screen.getByText('items 3 / needs review 2 / missing 1 / mismatch 2')).toBeTruthy()
+    expect(screen.getByText('mismatch 2 / queue 2 / ingestion 0 / completion 0 / stop 0')).toBeTruthy()
+  }, 10000)
+
+  it('treats stringy live flags as execution lock blockers in the Desktop summary', async () => {
+    const { summarizeWorkspaceStatus } = await import('./index')
+    const status = JSON.parse(JSON.stringify(await getMissionControlWorkspaceStatus()))
+
+    status.execution_packet_preview.would_dispatch = 'true'
+    status.execution_packet_preview.packet.session_send_enabled = 'yes'
+    status.execution_packet_preview.packet.worker_node_contract.worker_dispatch_enabled = 1
+    status.next_safe_actions.execution_enabled = 'enabled'
+    status.operator_decision_packet.would_session_send = 'on'
+    status.hard_boundary_contract.send_to_jenny_enabled = 'yes'
+
+    const summary = summarizeWorkspaceStatus(status)
+
+    expect(summary.executionPacketLockReasons).toEqual([
+      'execution packet: would_dispatch must remain false',
+      'execution packet body: session_send_enabled must remain false',
+      'worker contract: worker_dispatch_enabled must remain false'
+    ])
+    expect(summary.projectionExecutionLockReasons).toContain('next safe actions: execution_enabled must remain false')
+    expect(summary.projectionExecutionLockReasons).toContain('operator decision: would_session_send must remain false')
+    expect(summary.projectionExecutionLockReasons).toContain('hard boundary: send_to_jenny_enabled must remain false')
   })
 
   it('restores Jenny working status from bridge audit records after refresh', async () => {
@@ -1785,9 +2997,12 @@ describe('MissionControlView', () => {
       '.post(',
       '/dispatch',
       '/execute',
+      '/api/status',
       '/api/plugins/kanban/tasks',
+      'getStatus(',
       'PATCH',
       'DELETE',
+      '9121',
       '/api/sessions/',
       'session-send',
       'sendSession',
@@ -1799,5 +3014,66 @@ describe('MissionControlView', () => {
     ]) {
       expect(text).not.toContain(forbidden)
     }
+  })
+
+  it('fails closed before Desktop Mission Control GitHub bridge writes when live flags are unsafe', async () => {
+    const source = await import('./index?raw')
+    const text = source.default as string
+
+    for (const expected of [
+      'function missionControlGitHubBridgeSafety(',
+      'reasons.push(\'GitHub bridge status not loaded\')',
+      'status.manual_start_only !== true',
+      '[\'would_execute\', \'would_execute must remain false\']',
+      '[\'dispatch_enabled\', \'dispatch_enabled must remain false\']',
+      '[\'execution_enabled\', \'execution_enabled must remain false\']',
+      '[\'send_to_jenny_enabled\', \'send_to_jenny_enabled must remain false\']',
+      '[\'session_send_enabled\', \'session_send_enabled must remain false\']',
+      '[\'worker_dispatch_enabled\', \'worker_dispatch_enabled must remain false\']',
+      '[\'worker_enabled\', \'worker_enabled must remain false\']',
+      '[\'workers_enabled\', \'workers_enabled must remain false\']',
+      '[\'timer_enabled\', \'timer_enabled must remain false\']',
+      '[\'daemon_enabled\', \'daemon_enabled must remain false\']',
+      '[\'discord_automation_enabled\', \'discord_automation_enabled must remain false\']',
+      '[\'model_routing_enabled\', \'model_routing_enabled must remain false\']',
+      '[\'payment_enabled\', \'payment_enabled must remain false\']',
+      '[\'queue_mutation_enabled\', \'queue_mutation_enabled must remain false\']',
+      '[\'social_enabled\', \'social_enabled must remain false\']',
+      '[\'waha_enabled\', \'waha_enabled must remain false\']',
+      'hard_boundary_contract is not loaded',
+      "executionLockReasons('hard_boundary_contract', hardBoundary)",
+      'const operatorPacket = workspaceStatus?.operator_decision_packet',
+      'operatorPacket?.execution_lock_blocked_reasons',
+      "executionLockReasons('operator_decision_packet', operatorPacket)",
+      "executionLockReasons('orchestration_readiness', workspaceStatus?.orchestration_readiness)",
+      "executionLockReasons('workspace safety', status.safety as ExecutionLockSource | undefined)",
+      'const uniqueReasons = [...new Set(reasons)]',
+      'function liveFlagEnabled(value: unknown): boolean',
+      'if (liveFlagEnabled(status[flag]))',
+      '.filter(([flag]) => liveFlagEnabled(source[flag]))',
+      'function missionControlBridgeBlockedMessage(safety: MissionControlBridgeSafety): string',
+      'const githubBridgeSafety = missionControlGitHubBridgeSafety(githubBridgeStatus, workspaceStatus)',
+      'const bridgeActionDisabled = saving || paused || !githubBridgeSafety.safe',
+      'disabled={bridgeActionDisabled}',
+      'Manual Jenny bridge blocked:'
+    ]) {
+      expect(text).toContain(expected)
+    }
+
+    const queue = text.slice(text.indexOf('async function queueJennyBridgeRequest'), text.indexOf('async function runJennyOnce'))
+    const runOnce = text.slice(text.indexOf('async function runJennyOnce'), text.indexOf('async function reviewJennyReply'))
+    const updateLane = text.slice(text.indexOf('async function queueHermesUpdateLane'), text.indexOf('async function queueHermesStorageCleanupLane'))
+    const cleanupLane = text.slice(text.indexOf('async function queueHermesStorageCleanupLane'), text.indexOf('async function saveChallengeDraft'))
+
+    for (const block of [queue, runOnce, updateLane, cleanupLane]) {
+      expect(block).toContain('const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus, snapshot.workspaceStatus)')
+      expect(block).toContain('if (!bridgeSafety.safe)')
+      expect(block).toContain('setProjectRoomMessage(missionControlBridgeBlockedMessage(bridgeSafety))')
+    }
+
+    expect(queue.indexOf('if (!bridgeSafety.safe)')).toBeLessThan(queue.indexOf('createMissionControlGitHubBridgeRequest'))
+    expect(runOnce.indexOf('if (!bridgeSafety.safe)')).toBeLessThan(runOnce.indexOf('answerMissionControlGitHubBridgeOnce'))
+    expect(updateLane.indexOf('if (!bridgeSafety.safe)')).toBeLessThan(updateLane.indexOf('createMissionControlGitHubBridgeRequest'))
+    expect(cleanupLane.indexOf('if (!bridgeSafety.safe)')).toBeLessThan(cleanupLane.indexOf('createMissionControlGitHubBridgeRequest'))
   })
 })

@@ -306,6 +306,859 @@ export interface MissionControlReportRecord {
   metadata?: { artifact_links?: string[]; [key: string]: unknown }
 }
 
+export interface MissionControlChildRunRecord {
+  agent_identity?: string
+  allowed_actions?: string[]
+  child_run_id: string
+  created_at?: string
+  delegation_source?: string
+  depends_on_child_run_ids?: string[]
+  failure_reason?: string
+  forbidden_actions?: string[]
+  metadata?: Record<string, unknown>
+  objective?: string
+  parent_run_id: string
+  project_id?: string
+  linked_report?: MissionControlLinkedReport
+  linked_report_review_status?: string
+  linked_report_status?: string
+  linked_report_summary?: string
+  report_link_mismatch?: boolean
+  report_link_mismatch_reason?: string
+  report_link_status?: string
+  report_id?: string
+  result_record_id?: string
+  status?: string
+  stop_reason?: string
+  stopped_at?: string
+  updated_at?: string
+}
+
+export interface MissionControlWorkerNodeRunRecord {
+  allowed_actions?: string[]
+  assigned_packet_id?: string
+  assigned_packet_summary?: string
+  blocked_reasons?: string[]
+  created_at?: string
+  failure_reason?: string
+  forbidden_actions?: string[]
+  metadata?: Record<string, unknown>
+  objective?: string
+  parent_run_id: string
+  project_id?: string
+  linked_report?: MissionControlLinkedReport
+  linked_report_review_status?: string
+  linked_report_status?: string
+  linked_report_summary?: string
+  report_link_mismatch?: boolean
+  report_link_mismatch_reason?: string
+  report_link_status?: string
+  report_contract_status?: string
+  report_id?: string
+  report_review_status?: string
+  capability_summary?: string
+  last_seen_at?: string
+  presence_status?: string
+  status?: string
+  stop_reason?: string
+  stopped_at?: string
+  updated_at?: string
+  worker_version?: string
+  worker_dispatch_enabled?: boolean
+  worker_host_label?: string
+  worker_identity?: string
+  worker_kind?: string
+  worker_run_id: string
+}
+
+export interface MissionControlLinkedReport {
+  report_id?: string
+  review_status?: string
+  reviewed_at?: string
+  reviewed_by?: string
+  run_id?: string
+  status?: string
+  summary?: string
+}
+
+export interface MissionControlOrchestrationProjection<T> {
+  active_count?: number
+  active_runs?: T[]
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  execution_enabled?: boolean
+  latest_by_id?: Record<string, T>
+  session_send_enabled?: boolean
+  source?: string
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+}
+
+export interface MissionControlPathPermission {
+  dispatch_enabled?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  label?: string
+  manual_only?: boolean
+  path_id: string
+  permission_classification?: string
+  read_only_safe?: boolean
+  reasons?: string[]
+  session_send_enabled?: boolean
+  stored?: boolean
+  worker_dispatch_enabled?: boolean
+  write_capability_markers?: string[]
+}
+
+export interface MissionControlToolPermissionClassification {
+  blocked_path_count?: number
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  manual_only_path_count?: number
+  path_count?: number
+  paths?: MissionControlPathPermission[]
+  permission_classification?: string
+  read_only_safe?: boolean
+  read_only_safe_path_count?: number
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  unknown_blocked_path_count?: number
+  unknown_path_ids?: string[]
+  worker_dispatch_enabled?: boolean
+  write_capable_path_count?: number
+  write_capable_path_ids?: string[]
+}
+
+export interface MissionControlApprovalLifecycle {
+  append_only_projection?: boolean
+  approval_count?: number
+  available_approval_ids?: string[]
+  blocked?: boolean
+  blocked_reasons?: string[]
+  consumed_approval_ids?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  duplicate_approval_ids?: string[]
+  execution_enabled?: boolean
+  expired_approval_ids?: string[]
+  pending_approval_ids?: string[]
+  raw_approval_count?: number
+  rejected_or_cancelled_approval_ids?: string[]
+  runs_by_approval_id?: Record<string, string[]>
+  runs_missing_approval_id?: string[]
+  runs_with_missing_approval_record?: Record<string, string>
+  runs_with_unavailable_approval?: Record<string, string>
+  session_send_enabled?: boolean
+  source?: string
+  status_counts?: Record<string, number>
+  terminal_approval_ids?: string[]
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+}
+
+export interface MissionControlRunLifecycle {
+  active_mutation_lane_count?: number
+  active_mutation_run_ids?: string[]
+  active_run_ids?: string[]
+  append_only_projection?: boolean
+  blocked?: boolean
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  duplicate_run_ids?: string[]
+  execution_enabled?: boolean
+  one_active_mutation_lane_rule_passed?: boolean
+  raw_run_count?: number
+  run_count?: number
+  runs_by_status?: Record<string, string[]>
+  session_send_enabled?: boolean
+  source?: string
+  status_counts?: Record<string, number>
+  stop_cancel_run_ids?: string[]
+  terminal_run_ids?: string[]
+  terminal_runs_missing_report?: string[]
+  terminal_runs_with_missing_linked_report_ids?: Record<string, string[]>
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+}
+
+export interface MissionControlReportLifecycle {
+  append_only_projection?: boolean
+  blocked?: boolean
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  duplicate_report_ids?: string[]
+  execution_enabled?: boolean
+  open_report_ids?: string[]
+  raw_report_count?: number
+  report_count?: number
+  report_overwrite_conflict_count?: number
+  report_overwrite_conflict_ids?: string[]
+  report_overwrite_conflicts?: Record<string, string[]>
+  reports_by_run_id?: Record<string, string[]>
+  reviewed_report_ids?: string[]
+  runs_missing_report?: string[]
+  runs_with_missing_linked_report_ids?: Record<string, string[]>
+  session_send_enabled?: boolean
+  source?: string
+  status_counts?: Record<string, number>
+  terminal_report_ids?: string[]
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+}
+
+export interface MissionControlReportReviewQueueItem {
+  blockers?: string[]
+  created_at?: string
+  item_id?: string
+  item_type?: string
+  linked_record_id?: string
+  linked_record_type?: string
+  manual_only?: boolean
+  priority?: number
+  reason?: string
+  recommended_action?: string
+  report_link_mismatch?: boolean
+  report_id?: string
+  review_status?: string
+  risks?: string[]
+  run_id?: string
+  status?: string
+  submitted_by?: string
+  submitted_from?: string
+  summary?: string
+  tests?: string[]
+}
+
+export interface MissionControlReportReviewQueue {
+  blocked?: boolean
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  duplicate_report_count?: number
+  execution_enabled?: boolean
+  items?: MissionControlReportReviewQueueItem[]
+  link_mismatch_count?: number
+  manual_review_only?: boolean
+  missing_report_count?: number
+  needs_review_count?: number
+  primary_review_item?: MissionControlReportReviewQueueItem
+  primary_review_item_id?: string
+  primary_review_label?: string
+  primary_review_reason?: string
+  queue_count?: number
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
+}
+
+export interface MissionControlReportContractComplianceItem {
+  artifact_refs?: string[]
+  blockers?: string[]
+  changed_files?: string[]
+  complete?: boolean
+  evidence_refs?: string[]
+  item_id?: string
+  linked_record_id?: string
+  linked_record_type?: string
+  manual_only?: boolean
+  missing_fields?: string[]
+  recommended_action?: string
+  report_id?: string
+  required_fields?: string[]
+  review_status?: string
+  risks?: string[]
+  run_id?: string
+  status?: string
+  submitted_by?: string
+  submitted_from?: string
+  summary?: string
+  tests?: string[]
+}
+
+export interface MissionControlReportContractCompliance {
+  blocked?: boolean
+  blocked_reasons?: string[]
+  complete_report_count?: number
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  incomplete_report_count?: number
+  items?: MissionControlReportContractComplianceItem[]
+  manual_review_only?: boolean
+  primary_item?: MissionControlReportContractComplianceItem
+  primary_item_id?: string
+  primary_item_label?: string
+  report_count?: number
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
+}
+
+export interface MissionControlResultIngestionContractItem {
+  blocked_reasons?: string[]
+  forbidden_metadata_keys?: string[]
+  ingestion_ready?: boolean
+  item_id?: string
+  linked_record_id?: string
+  linked_record_type?: string
+  manual_review_required?: boolean
+  recommended_action?: string
+  redaction_status?: string
+  report_link_mismatch?: boolean
+  report_id?: string
+  review_status?: string
+  run_id?: string
+  safety_confirmation_present?: boolean
+  status?: string
+  submitted_by?: string
+  submitted_from?: string
+  summary?: string
+}
+
+export interface MissionControlResultIngestionContract {
+  blocked?: boolean
+  blocked_reasons?: string[]
+  blocked_report_count?: number
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  duplicate_report_count?: number
+  execution_enabled?: boolean
+  forbidden_metadata_count?: number
+  ingestion_ready_count?: number
+  items?: MissionControlResultIngestionContractItem[]
+  link_mismatch_count?: number
+  manual_review_only?: boolean
+  missing_link_count?: number
+  missing_safety_confirmation_count?: number
+  primary_item?: MissionControlResultIngestionContractItem
+  primary_item_id?: string
+  primary_item_label?: string
+  raw_report_count?: number
+  report_count?: number
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  trusted_for_execution?: boolean
+  unsafe_redaction_count?: number
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
+}
+
+export interface MissionControlReportCompletionPathItem {
+  blocked_reasons?: string[]
+  completion_ready?: boolean
+  contract_missing_fields?: string[]
+  duplicate_report?: boolean
+  forbidden_metadata_keys?: string[]
+  item_id?: string
+  label?: string
+  manual_review_required?: boolean
+  parent_run_id?: string
+  recommended_action?: string
+  record_id?: string
+  record_type?: string
+  redaction_status?: string
+  report_contract_complete?: boolean
+  report_id?: string
+  report_link_status?: string
+  report_link_mismatch?: boolean
+  report_review_status?: string
+  result_ingestion_ready?: boolean
+  safety_confirmation_present?: boolean
+  status?: string
+}
+
+export interface MissionControlReportCompletionPath {
+  blocked?: boolean
+  blocked_reasons?: string[]
+  blocked_completion_count?: number
+  completion_ready_count?: number
+  contract_incomplete_count?: number
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  duplicate_report_count?: number
+  execution_enabled?: boolean
+  ingestion_blocked_count?: number
+  items?: MissionControlReportCompletionPathItem[]
+  link_mismatch_count?: number
+  manual_review_only?: boolean
+  missing_report_count?: number
+  needs_review_count?: number
+  primary_item?: MissionControlReportCompletionPathItem
+  primary_item_id?: string
+  primary_item_label?: string
+  rejected_report_count?: number
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  terminal_item_count?: number
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
+}
+
+export interface MissionControlOrchestrationStopControlItem {
+  item_id?: string
+  label?: string
+  manual_review_required?: boolean
+  parent_run_id?: string
+  recommended_action?: string
+  record_id?: string
+  record_type?: string
+  report_id?: string
+  report_link_mismatch?: boolean
+  report_link_mismatch_reason?: string
+  report_link_status?: string
+  report_review_status?: string
+  status?: string
+  stop_reason?: string
+  stopped_at?: string
+}
+
+export interface MissionControlOrchestrationStopControl {
+  active_stop_count?: number
+  blocked?: boolean
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  items?: MissionControlOrchestrationStopControlItem[]
+  link_mismatch_count?: number
+  manual_review_only?: boolean
+  needs_report_count?: number
+  needs_review_count?: number
+  primary_item?: MissionControlOrchestrationStopControlItem
+  primary_item_id?: string
+  primary_item_label?: string
+  session_send_enabled?: boolean
+  source?: string
+  stop_cancel_count?: number
+  stored?: boolean
+  terminal_stop_count?: number
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
+}
+
+export interface MissionControlOperatorDecisionPacket {
+  approval_required?: boolean
+  blocked?: boolean
+  blocked_reasons?: string[]
+  child_instruction_available?: boolean
+  child_instruction_ready_for_handoff?: boolean
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  execution_mode_blocked_reasons?: string[]
+  execution_mode_family?: string
+  dry_run_only?: boolean
+  execution_packet_blocked_reasons?: string[]
+  execution_packet_eligible?: boolean
+  execution_packet_mode?: string
+  execution_lock_blocked_reasons?: string[]
+  execution_enabled?: boolean
+  execution_ready?: boolean
+  hard_boundary_blocked_reasons?: string[]
+  hard_boundary_forbidden_action_count?: number
+  hard_boundary_live_flag_violation_count?: number
+  hard_boundary_separate_approval_action_count?: number
+  hard_boundary_state?: string
+  jenny_review_required?: boolean
+  manual_operator_review_only?: boolean
+  next_safe_action_id?: string
+  next_safe_action_label?: string
+  next_safe_action_reason?: string
+  plain_language_summary?: string
+  recommended_operator_instruction?: string
+  report_contract_blocked_reasons?: string[]
+  report_contract_incomplete_count?: number
+  report_contract_primary_item_id?: string
+  report_completion_blocked_count?: number
+  report_completion_blocked_reasons?: string[]
+  report_completion_link_mismatch_count?: number
+  report_completion_primary_item_id?: string
+  report_link_mismatch_count?: number
+  report_link_mismatch_ids?: string[]
+  report_overwrite_conflict_count?: number
+  report_overwrite_conflict_ids?: string[]
+  report_review_queue_link_mismatch_count?: number
+  report_review_queue_count?: number
+  result_ingestion_blocked_count?: number
+  result_ingestion_blocked_reasons?: string[]
+  result_ingestion_link_mismatch_count?: number
+  result_ingestion_primary_item_id?: string
+  session_send_enabled?: boolean
+  source?: string
+  state?: string
+  stored?: boolean
+  stop_cancel_blocked_reasons?: string[]
+  stop_cancel_count?: number
+  stop_cancel_link_mismatch_count?: number
+  stop_cancel_primary_item_id?: string
+  summary_lines?: string[]
+  top_report_review_item_id?: string
+  top_report_review_label?: string
+  top_report_review_reason?: string
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  worker_instruction_available?: boolean
+  worker_instruction_ready_for_handoff?: boolean
+  worker_last_seen_at?: string
+  worker_online?: boolean
+  worker_presence_state?: string
+  would_dispatch?: boolean
+  would_execute?: boolean
+  would_session_send?: boolean
+}
+
+export interface MissionControlExecutionModeClassification {
+  action_class?: string
+  blocked?: boolean
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  higher_risk?: boolean
+  lane_type?: string
+  manual_handoff_only?: boolean
+  mode_family?: string
+  preview_ready?: boolean
+  protected_action_markers?: string[]
+  read_only_preview_allowed?: boolean
+  requested_mode?: string
+  scoped_pr_preview_allowed?: boolean
+  separate_approval_required?: boolean
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  trusted_for_execution?: boolean
+  warnings?: string[]
+  worker_dispatch_enabled?: boolean
+  worker_node_preview_allowed?: boolean
+  would_dispatch?: boolean
+  would_execute?: boolean
+  would_session_send?: boolean
+}
+
+export interface MissionControlExecutionLockFields {
+  daemon_enabled?: boolean
+  dispatch_enabled?: boolean
+  dispatch_in_gateway?: boolean
+  dispatch_state?: boolean | string
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  execution_ready?: boolean
+  inert_context_only?: boolean
+  live_operations_enabled?: boolean
+  model_routing_enabled?: boolean
+  payment_enabled?: boolean
+  queue_mutation_enabled?: boolean
+  send_to_jenny_enabled?: boolean
+  session_send_enabled?: boolean
+  social_enabled?: boolean
+  stored?: boolean
+  timer_enabled?: boolean
+  trusted_for_execution?: boolean
+  waha_enabled?: boolean
+  worker_dispatch_enabled?: boolean
+  worker_enabled?: boolean
+  workers_enabled?: boolean
+  would_dispatch?: boolean
+  would_execute?: boolean
+  would_session_send?: boolean
+}
+
+export interface MissionControlWorkerNodeContract extends MissionControlExecutionLockFields {
+  codex_safety_hardness_required?: boolean
+  manual_handoff_only?: boolean
+  parent_run_id?: string
+  report_contract_status?: string
+  report_review_status?: string
+  worker_host_label?: string
+  worker_identity?: string
+  worker_kind?: string
+  worker_safety_hardness?: string[]
+}
+
+export interface MissionControlExecutionPacketBody extends MissionControlExecutionLockFields {
+  allowed_actions?: string[]
+  approval_id?: string
+  child_run_contract?: Record<string, unknown>
+  forbidden_actions?: string[]
+  mode?: string
+  objective?: string
+  packet_version?: string
+  project_id?: string
+  report_contract?: Record<string, unknown>
+  run_id?: string
+  scope?: { directories?: string[]; explicit?: boolean; files?: string[]; has_wildcard?: boolean }
+  worker_node_contract?: MissionControlWorkerNodeContract
+}
+
+export interface MissionControlExecutionPacketPreview extends MissionControlExecutionLockFields {
+  blocked_reasons?: string[]
+  eligible?: boolean
+  packet?: MissionControlExecutionPacketBody
+  source?: string
+  warnings?: string[]
+}
+
+export interface MissionControlHardBoundaryContract extends MissionControlExecutionLockFields {
+  blocked?: boolean
+  blocked_reasons?: string[]
+  execution_ready?: boolean
+  forbidden_action_count?: number
+  forbidden_actions?: string[]
+  live_flag_violation_count?: number
+  live_flag_violations?: string[]
+  live_operational_reconciliation_state?: string
+  live_operations_enabled?: boolean
+  live_operations_goal?: boolean
+  manual_review_only?: boolean
+  plain_language_summary?: string
+  send_to_jenny_enabled?: boolean
+  separate_approval_action_count?: number
+  separate_approval_actions?: string[]
+  separate_approval_required?: boolean
+  source?: string
+  state?: string
+}
+
+export interface MissionControlNextSafeAction {
+  action_id?: string
+  blocked_until?: string
+  label?: string
+  manual_only?: boolean
+  priority?: number
+  reason?: string
+  requires_approval?: boolean
+}
+
+export interface MissionControlNextSafeActions {
+  action_count?: number
+  actions?: MissionControlNextSafeAction[]
+  blocked?: boolean
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  primary_action?: MissionControlNextSafeAction
+  primary_action_id?: string
+  primary_action_label?: string
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
+}
+
+export interface MissionControlOrchestrationReadinessLane {
+  active_count?: number
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  eligible?: boolean
+  execution_enabled?: boolean
+  execution_ready?: boolean
+  online?: boolean
+  presence_state?: string
+  preview_ready?: boolean
+  recorded?: boolean
+  session_send_enabled?: boolean
+  state?: string
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
+}
+
+export interface MissionControlOrchestrationReadiness {
+  blocked?: boolean
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  execution_ready?: boolean
+  laptop_codex_worker_node?: MissionControlOrchestrationReadinessLane
+  next_safe_action_id?: string
+  next_safe_action_label?: string
+  plain_language_summary?: string
+  scoped_pr_creation?: MissionControlOrchestrationReadinessLane
+  session_send_enabled?: boolean
+  source?: string
+  states?: Record<string, string>
+  stored?: boolean
+  summary_lines?: string[]
+  supervised_read_only_autonomy?: MissionControlOrchestrationReadinessLane
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
+}
+
+export interface MissionControlWorkerNodeInstructionPreview {
+  allowed_actions?: string[]
+  assigned_packet_id?: string
+  assigned_packet_summary?: string
+  available?: boolean
+  blocked?: boolean
+  blocked_reasons?: string[]
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  forbidden_actions?: string[]
+  instruction_lines?: string[]
+  manual_handoff_only?: boolean
+  manual_handoff_prompt?: string
+  objective?: string
+  capability_summary?: string
+  last_seen_age_seconds?: number | null
+  last_seen_at?: string
+  online?: boolean
+  parent_run_id?: string
+  presence_state?: string
+  ready_for_handoff?: boolean
+  report_contract?: string
+  report_id?: string
+  report_link_mismatch?: boolean
+  report_link_mismatch_reason?: string
+  report_link_status?: string
+  report_review_status?: string
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  worker_host_label?: string
+  worker_identity?: string
+  worker_safety_hardness?: string[]
+  worker_version?: string
+  worker_run_id?: string
+  would_execute?: boolean
+}
+
+export interface MissionControlWorkerNodePresence {
+  active_worker_node_run_count?: number
+  blocked?: boolean
+  blocked_reasons?: string[]
+  capability_summary?: string
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  last_seen_age_seconds?: number | null
+  last_seen_at?: string
+  online?: boolean
+  parent_run_id?: string
+  presence_state?: string
+  presence_status?: string
+  recorded_worker_node_run_count?: number
+  session_send_enabled?: boolean
+  source?: string
+  stale_after_seconds?: number
+  stored?: boolean
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  worker_host_label?: string
+  worker_identity?: string
+  worker_kind?: string
+  worker_run_id?: string
+  worker_version?: string
+  would_execute?: boolean
+}
+
+export interface MissionControlOrchestrationRunGraphNode {
+  label?: string
+  node_id?: string
+  node_type?: string
+  parent_run_id?: string
+  report_id?: string
+  report_review_status?: string
+  status?: string
+}
+
+export interface MissionControlOrchestrationRunGraphEdge {
+  edge_type?: string
+  source_id?: string
+  target_id?: string
+}
+
+export interface MissionControlOrchestrationRunGraph {
+  blocked?: boolean
+  blocked_reasons?: string[]
+  child_run_node_count?: number
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  edge_count?: number
+  edges?: MissionControlOrchestrationRunGraphEdge[]
+  execution_enabled?: boolean
+  node_count?: number
+  nodes?: MissionControlOrchestrationRunGraphNode[]
+  report_node_count?: number
+  run_node_count?: number
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  worker_node_run_count?: number
+  would_execute?: boolean
+}
+
+export interface MissionControlChildAgentInstructionPreview {
+  agent_identity?: string
+  allowed_actions?: string[]
+  available?: boolean
+  blocked?: boolean
+  blocked_reasons?: string[]
+  child_run_id?: string
+  dispatch_enabled?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  execution_enabled?: boolean
+  forbidden_actions?: string[]
+  instruction_lines?: string[]
+  manual_handoff_only?: boolean
+  manual_handoff_prompt?: string
+  objective?: string
+  parent_run_id?: string
+  ready_for_handoff?: boolean
+  report_contract?: string
+  report_id?: string
+  report_link_mismatch?: boolean
+  report_link_mismatch_reason?: string
+  report_link_status?: string
+  report_review_status?: string
+  session_send_enabled?: boolean
+  source?: string
+  stored?: boolean
+  trusted_for_execution?: boolean
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
+}
+
 export interface MissionControlProjectSession {
   cwd?: null | string
   durable_session_id?: string
@@ -491,6 +1344,8 @@ export interface MissionControlJennyBridgePollerStatusResponse {
   status_records?: Array<MissionControlRecordEnvelope<MissionControlJennyBridgePollerStatusRecord>>
   stored?: boolean
   timer_enabled?: boolean
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
   worker_enabled?: boolean
 }
 
@@ -543,6 +1398,7 @@ export interface MissionControlGitHubBridgeStatusResponse {
   foreground_watch_supported?: boolean
   foreground_watch_running?: boolean
   model_routing_enabled?: boolean
+  payment_enabled?: boolean
   pending_count?: number
   project_id?: string
   visible_pending_count?: number
@@ -553,10 +1409,16 @@ export interface MissionControlGitHubBridgeStatusResponse {
   response_messages?: Array<MissionControlRecordEnvelope<MissionControlGitHubBridgeMessageRecord>>
   send_to_jenny_enabled?: boolean
   session_send_enabled?: boolean
+  social_enabled?: boolean
   status_records?: Array<MissionControlRecordEnvelope<MissionControlGitHubBridgeMailboxStatusRecord>>
   stored?: boolean
   timer_enabled?: boolean
+  queue_mutation_enabled?: boolean
+  waha_enabled?: boolean
+  worker_dispatch_enabled?: boolean
+  would_execute?: boolean
   worker_enabled?: boolean
+  workers_enabled?: boolean
 }
 
 export interface MissionControlAsyncAgentStatusResponse {
@@ -566,22 +1428,35 @@ export interface MissionControlAsyncAgentStatusResponse {
   current_mode?: string
   daemon_enabled?: boolean
   dispatch_enabled?: boolean
+  dispatch_in_gateway?: boolean
+  dispatch_state?: boolean | string
   display_only?: boolean
   execution_enabled?: boolean
+  execution_ready?: boolean
   inert_context_only?: boolean
+  live_operations_enabled?: boolean
   manual_copy_only?: boolean
   manual_start_only?: boolean
   model_routing_enabled?: boolean
+  payment_enabled?: boolean
   policy_summary?: string
+  queue_mutation_enabled?: boolean
   recommended_next_lane?: string
   send_to_jenny_enabled?: boolean
   session_send_enabled?: boolean
+  social_enabled?: boolean
   stored?: boolean
   sync_delegate_task_available?: boolean
   sync_delegate_task_durable?: boolean
   timer_enabled?: boolean
   trusted_for_execution?: boolean
+  waha_enabled?: boolean
+  would_dispatch?: boolean
+  would_execute?: boolean
+  would_session_send?: boolean
+  worker_dispatch_enabled?: boolean
   worker_enabled?: boolean
+  workers_enabled?: boolean
 }
 
 export interface MissionControlGitHubBridgeRequestCreatePayload {
@@ -681,13 +1556,152 @@ export interface MissionControlJennyBridgeResponseCreateResponse {
   stored?: boolean
 }
 
+export interface MissionControlWorkspaceBaseline {
+  clean?: boolean
+  head?: string
+  runtime_path?: string
+  status?: string
+  would_execute?: boolean
+}
+
+export interface MissionControlWorkspaceAcceptedBaselineRecord extends MissionControlWorkspaceBaseline {
+  active_kanban?: number
+  baseline_id?: string
+  dispatch_in_gateway?: boolean
+  display_only?: boolean
+  dry_run_only?: boolean
+  enforces_runtime?: boolean
+  issue?: string
+  max_active_lane?: number
+  present?: boolean
+  recorded_at?: string
+  rollback_head?: string
+  rollback_runtime_path?: string
+  source?: string
+}
+
+export interface MissionControlWorkspaceHandoff {
+  accepted_head?: string
+  accepted_runtime_path?: string
+  active_lane?: string
+  active_lane_count?: number
+  created_at?: string
+  display_only?: boolean
+  dispatch_in_gateway?: boolean
+  dry_run_only?: boolean
+  enforces_runtime?: boolean
+  handoff_id?: string
+  lane_mode?: string
+  last_result?: string
+  max_active_lane?: number
+  next_action?: string
+  present?: boolean
+  rollback_head?: string
+  rollback_runtime_path?: string
+  source?: string
+  status?: string
+  target_head?: string
+  target_id?: string
+  target_type?: string
+  warnings?: string[]
+  would_execute?: boolean
+}
+
 export interface MissionControlWorkspaceStatus {
-  accepted_baseline?: { head?: string; runtime_path?: string }
+  accepted_baseline?: MissionControlWorkspaceBaseline
+  accepted_baseline_record?: MissionControlWorkspaceAcceptedBaselineRecord
+  approval_lifecycle?: MissionControlApprovalLifecycle
+  child_agent_instruction_preview?: MissionControlChildAgentInstructionPreview
+  child_agent_orchestration?: MissionControlOrchestrationProjection<MissionControlChildRunRecord>
+  control_plane_lifecycle?: {
+    active_mutation_lane_count?: number
+    append_only_projection?: boolean
+    latest_approvals_by_id?: Record<string, Record<string, unknown>>
+    latest_reports_by_id?: Record<string, Record<string, unknown>>
+    latest_runs_by_id?: Record<string, Record<string, unknown>>
+    source?: string
+  }
   deployment_gap?: { dashboard_deploy_needed?: boolean; deployed_head?: string; accepted_live_head?: string; latest_merged_pr?: string; state?: string }
+  execution_mode_classification?: MissionControlExecutionModeClassification
+  execution_packet_preview?: MissionControlExecutionPacketPreview
+  hard_boundary_contract?: MissionControlHardBoundaryContract
   lane?: { active_lane_count?: number; max_active_lane?: number }
+  latest_handoff?: MissionControlWorkspaceHandoff
+  next_safe_actions?: MissionControlNextSafeActions
+  operator_decision_packet?: MissionControlOperatorDecisionPacket
+  orchestration_readiness?: MissionControlOrchestrationReadiness
+  orchestration_run_graph?: MissionControlOrchestrationRunGraph
+  orchestration_stop_control?: MissionControlOrchestrationStopControl
+  read_only_autonomy_eligibility?: {
+    blocked_reasons?: string[]
+    bridge_permissions?: { permission_classification?: string; read_only_safe?: boolean; reasons?: string[] }
+    dispatch_enabled?: boolean
+    dry_run_only?: boolean
+    eligible?: boolean
+    execution_enabled?: boolean
+    session_send_enabled?: boolean
+    warnings?: string[]
+    would_execute?: boolean
+  }
+  scoped_pr_lane_eligibility?: {
+    blocked_reasons?: string[]
+    bridge_permissions?: { permission_classification?: string; read_only_safe?: boolean; reasons?: string[] }
+    dispatch_enabled?: boolean
+    dry_run_only?: boolean
+    eligible?: boolean
+    execution_enabled?: boolean
+    merge_enabled?: boolean
+    scope?: { directories?: string[]; files?: string[] }
+    session_send_enabled?: boolean
+    warnings?: string[]
+    worker_dispatch_enabled?: boolean
+    would_commit?: boolean
+    would_create_pr?: boolean
+    would_execute?: boolean
+  }
+  runtime_provenance?: {
+    autonomy_blocked?: boolean
+    autonomy_blocked_reasons?: string[]
+    accepted_baseline_head?: string
+    dashboard_head?: string
+    default_branch_head?: string
+    gateway_head?: string
+    latest_merged_pr?: string
+    merged_prs_after_accepted_baseline?: string[]
+    primary_status?: string
+    rollback_head?: string
+    source_head?: string
+    status?: string
+    statuses?: string[]
+    warnings?: string[]
+  }
   runtime_worktree_guard?: { decision_state?: string; reason?: string }
-  safety?: { dispatch_in_gateway?: boolean; send_to_jenny_enabled?: boolean }
+  rollback_baseline?: MissionControlWorkspaceBaseline
+  safety?: {
+    daemon_enabled?: unknown
+    dispatch_in_gateway?: unknown
+    dispatch_state?: unknown
+    model_routing_enabled?: unknown
+    payment_enabled?: unknown
+    queue_mutation_enabled?: unknown
+    send_to_jenny_enabled?: unknown
+    social_enabled?: unknown
+    timer_enabled?: unknown
+    waha_enabled?: unknown
+    worker_enabled?: unknown
+    workers_enabled?: unknown
+  }
   stale_context?: { warnings?: string[] }
+  report_lifecycle?: MissionControlReportLifecycle
+  report_contract_compliance?: MissionControlReportContractCompliance
+  report_completion_path?: MissionControlReportCompletionPath
+  report_review_queue?: MissionControlReportReviewQueue
+  result_ingestion_contract?: MissionControlResultIngestionContract
+  run_lifecycle?: MissionControlRunLifecycle
+  tool_permission_classification?: MissionControlToolPermissionClassification
+  worker_node_instruction_preview?: MissionControlWorkerNodeInstructionPreview
+  worker_node_orchestration?: MissionControlOrchestrationProjection<MissionControlWorkerNodeRunRecord>
+  worker_node_presence?: MissionControlWorkerNodePresence
 }
 
 export interface MissionControlMemoryFileLevel {

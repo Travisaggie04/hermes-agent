@@ -5,6 +5,7 @@ from mission_control.domain_governance import (
     WAHA_HARD_WALL_POLICY,
     get_domain_governance_policies,
 )
+from mission_control.inert_contract import INERT_LIVE_OPERATION_FLAGS
 
 
 def test_waha_hard_wall_policy_is_explicit_and_inert():
@@ -33,12 +34,11 @@ def test_waha_hard_wall_policy_is_explicit_and_inert():
         "verifier_required": True,
     }
     assert policy["verifier_policy"]["waha_technical_verifier_required"] is True
-    assert policy["enforcement"] == {
-        "trusted_for_execution": False,
-        "inert_context_only": True,
-        "enforcement_enabled": False,
-        "display_only": True,
-    }
+    for key, value in INERT_LIVE_OPERATION_FLAGS.items():
+        assert policy["enforcement"][key] is value
+    assert policy["enforcement"]["enforcement_enabled"] is False
+    assert policy["enforcement"]["dry_run_only"] is True
+    assert policy["enforcement"]["display_only"] is True
 
 
 def test_domain_governance_policy_registry_returns_display_copies_only():

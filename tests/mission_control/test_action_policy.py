@@ -6,6 +6,7 @@ def test_action_policy_allows_bounded_work_without_runtime_enforcement():
 
     assert report.policy_id == POLICY_ID
     assert report.default_off is True
+    assert report.would_execute is False
     assert report.enforces_runtime is False
     assert report.denied_actions == ()
     assert report.approval_actions == ()
@@ -71,4 +72,5 @@ def test_action_policy_preserves_explicit_approval_slices_without_enforcing_runt
     assert report.approval_actions == ("deploy dashboard",)
     assert report.required_approvals == ("approval-dashboard-deploy",)
     assert report.approval_satisfied is True
+    assert report.would_execute is False
     assert report.enforces_runtime is False

@@ -19,6 +19,38 @@ def _dict(value: Any) -> dict[str, Any]:
     return dict(value)
 
 
+def _inert_execution_metadata(value: Any) -> dict[str, Any]:
+    metadata = _dict(value)
+    metadata.update(
+        {
+            "would_execute": False,
+            "would_dispatch": False,
+            "would_session_send": False,
+            "execution_enabled": False,
+            "dispatch_enabled": False,
+            "dispatch_in_gateway": False,
+            "dispatch_state": False,
+            "execution_ready": False,
+            "live_operations_enabled": False,
+            "send_to_jenny_enabled": False,
+            "session_send_enabled": False,
+            "worker_enabled": False,
+            "workers_enabled": False,
+            "worker_dispatch_enabled": False,
+            "timer_enabled": False,
+            "daemon_enabled": False,
+            "waha_enabled": False,
+            "social_enabled": False,
+            "payment_enabled": False,
+            "queue_mutation_enabled": False,
+            "model_routing_enabled": False,
+            "trusted_for_execution": False,
+            "inert_context_only": True,
+        }
+    )
+    return metadata
+
+
 def _required(data: dict[str, Any], field_name: str) -> Any:
     try:
         return data[field_name]
@@ -983,7 +1015,7 @@ class ApprovalRecord:
         object.__setattr__(self, "forbidden_actions", tuple(str(item) for item in _tuple(self.forbidden_actions)))
         object.__setattr__(self, "approval_mode", self.approval_mode or "one_time")
         object.__setattr__(self, "expires_at", str(self.expires_at).strip() if self.expires_at else None)
-        object.__setattr__(self, "metadata", _dict(self.metadata))
+        object.__setattr__(self, "metadata", _inert_execution_metadata(self.metadata))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1084,7 +1116,7 @@ class RunRecord:
         object.__setattr__(self, "safety_gate_reasons", tuple(str(item) for item in _tuple(self.safety_gate_reasons)))
         object.__setattr__(self, "report_ids", tuple(str(item) for item in _tuple(self.report_ids)))
         object.__setattr__(self, "result_record_ids", tuple(str(item) for item in _tuple(self.result_record_ids)))
-        object.__setattr__(self, "metadata", _dict(self.metadata))
+        object.__setattr__(self, "metadata", _inert_execution_metadata(self.metadata))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1188,7 +1220,7 @@ class ReportRecord:
         object.__setattr__(self, "evidence_refs", tuple(str(item) for item in _tuple(self.evidence_refs)))
         object.__setattr__(self, "artifact_refs", tuple(str(item) for item in _tuple(self.artifact_refs)))
         object.__setattr__(self, "redaction_status", self.redaction_status or "operator_supplied_redacted")
-        object.__setattr__(self, "metadata", _dict(self.metadata))
+        object.__setattr__(self, "metadata", _inert_execution_metadata(self.metadata))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1242,6 +1274,196 @@ class ReportRecord:
             reviewed_at=data.get("reviewed_at", ""),
             reviewed_by=data.get("reviewed_by", ""),
             redaction_status=data.get("redaction_status", "operator_supplied_redacted"),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
+class ChildRunRecord:
+    child_run_id: str
+    parent_run_id: str
+    project_id: str = ""
+    agent_identity: str = ""
+    delegation_source: str = ""
+    objective: str = ""
+    allowed_actions: tuple[str, ...] = ()
+    forbidden_actions: tuple[str, ...] = ()
+    status: str = "requested"
+    failure_reason: str = ""
+    report_id: str = ""
+    result_record_id: str = ""
+    depends_on_child_run_ids: tuple[str, ...] = ()
+    created_at: str = ""
+    updated_at: str = ""
+    stopped_at: str = ""
+    stop_reason: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "ChildRunRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "allowed_actions", tuple(str(item) for item in _tuple(self.allowed_actions)))
+        object.__setattr__(self, "forbidden_actions", tuple(str(item) for item in _tuple(self.forbidden_actions)))
+        object.__setattr__(self, "depends_on_child_run_ids", tuple(str(item) for item in _tuple(self.depends_on_child_run_ids)))
+        metadata = _inert_execution_metadata(self.metadata)
+        metadata.update(
+            {
+                "display_only": True,
+            }
+        )
+        object.__setattr__(self, "metadata", metadata)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "child_run_id": self.child_run_id,
+            "parent_run_id": self.parent_run_id,
+            "project_id": self.project_id,
+            "agent_identity": self.agent_identity,
+            "delegation_source": self.delegation_source,
+            "objective": self.objective,
+            "allowed_actions": list(self.allowed_actions),
+            "forbidden_actions": list(self.forbidden_actions),
+            "status": self.status,
+            "failure_reason": self.failure_reason,
+            "report_id": self.report_id,
+            "result_record_id": self.result_record_id,
+            "depends_on_child_run_ids": list(self.depends_on_child_run_ids),
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "stopped_at": self.stopped_at,
+            "stop_reason": self.stop_reason,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ChildRunRecord:
+        return cls(
+            child_run_id=_required(data, "child_run_id"),
+            parent_run_id=_required(data, "parent_run_id"),
+            project_id=data.get("project_id", ""),
+            agent_identity=data.get("agent_identity", ""),
+            delegation_source=data.get("delegation_source", ""),
+            objective=data.get("objective", ""),
+            allowed_actions=data.get("allowed_actions") or (),
+            forbidden_actions=data.get("forbidden_actions") or (),
+            status=data.get("status", "requested"),
+            failure_reason=data.get("failure_reason", ""),
+            report_id=data.get("report_id", ""),
+            result_record_id=data.get("result_record_id", ""),
+            depends_on_child_run_ids=data.get("depends_on_child_run_ids") or (),
+            created_at=data.get("created_at", ""),
+            updated_at=data.get("updated_at", ""),
+            stopped_at=data.get("stopped_at", ""),
+            stop_reason=data.get("stop_reason", ""),
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass(frozen=True)
+class WorkerNodeRunRecord:
+    worker_run_id: str
+    parent_run_id: str
+    project_id: str = ""
+    worker_identity: str = "codex"
+    worker_host_label: str = "laptop-codex"
+    worker_kind: str = "laptop_codex"
+    objective: str = ""
+    assigned_packet_id: str = ""
+    assigned_packet_summary: str = ""
+    allowed_actions: tuple[str, ...] = ()
+    forbidden_actions: tuple[str, ...] = ()
+    status: str = "requested"
+    blocked_reasons: tuple[str, ...] = ()
+    failure_reason: str = ""
+    report_id: str = ""
+    report_review_status: str = ""
+    report_contract_status: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    stopped_at: str = ""
+    stop_reason: str = ""
+    presence_status: str = ""
+    last_seen_at: str = ""
+    worker_version: str = ""
+    capability_summary: str = ""
+    worker_dispatch_enabled: bool = False
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    record_type: ClassVar[str] = "WorkerNodeRunRecord"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "allowed_actions", tuple(str(item) for item in _tuple(self.allowed_actions)))
+        object.__setattr__(self, "forbidden_actions", tuple(str(item) for item in _tuple(self.forbidden_actions)))
+        object.__setattr__(self, "blocked_reasons", tuple(str(item) for item in _tuple(self.blocked_reasons)))
+        object.__setattr__(self, "worker_dispatch_enabled", False)
+        metadata = _inert_execution_metadata(self.metadata)
+        metadata.update(
+            {
+                "display_only": True,
+            }
+        )
+        object.__setattr__(self, "metadata", metadata)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "worker_run_id": self.worker_run_id,
+            "parent_run_id": self.parent_run_id,
+            "project_id": self.project_id,
+            "worker_identity": self.worker_identity,
+            "worker_host_label": self.worker_host_label,
+            "worker_kind": self.worker_kind,
+            "objective": self.objective,
+            "assigned_packet_id": self.assigned_packet_id,
+            "assigned_packet_summary": self.assigned_packet_summary,
+            "allowed_actions": list(self.allowed_actions),
+            "forbidden_actions": list(self.forbidden_actions),
+            "status": self.status,
+            "blocked_reasons": list(self.blocked_reasons),
+            "failure_reason": self.failure_reason,
+            "report_id": self.report_id,
+            "report_review_status": self.report_review_status,
+            "report_contract_status": self.report_contract_status,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "stopped_at": self.stopped_at,
+            "stop_reason": self.stop_reason,
+            "presence_status": self.presence_status,
+            "last_seen_at": self.last_seen_at,
+            "worker_version": self.worker_version,
+            "capability_summary": self.capability_summary,
+            "worker_dispatch_enabled": False,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> WorkerNodeRunRecord:
+        return cls(
+            worker_run_id=_required(data, "worker_run_id"),
+            parent_run_id=_required(data, "parent_run_id"),
+            project_id=data.get("project_id", ""),
+            worker_identity=data.get("worker_identity", "codex"),
+            worker_host_label=data.get("worker_host_label", "laptop-codex"),
+            worker_kind=data.get("worker_kind", "laptop_codex"),
+            objective=data.get("objective", ""),
+            assigned_packet_id=data.get("assigned_packet_id", ""),
+            assigned_packet_summary=data.get("assigned_packet_summary", ""),
+            allowed_actions=data.get("allowed_actions") or (),
+            forbidden_actions=data.get("forbidden_actions") or (),
+            status=data.get("status", "requested"),
+            blocked_reasons=data.get("blocked_reasons") or (),
+            failure_reason=data.get("failure_reason", ""),
+            report_id=data.get("report_id", ""),
+            report_review_status=data.get("report_review_status", ""),
+            report_contract_status=data.get("report_contract_status", ""),
+            created_at=data.get("created_at", ""),
+            updated_at=data.get("updated_at", ""),
+            stopped_at=data.get("stopped_at", ""),
+            stop_reason=data.get("stop_reason", ""),
+            presence_status=data.get("presence_status", ""),
+            last_seen_at=data.get("last_seen_at", ""),
+            worker_version=data.get("worker_version", ""),
+            capability_summary=data.get("capability_summary", ""),
+            worker_dispatch_enabled=False,
             metadata=data.get("metadata") or {},
         )
 
@@ -1398,6 +1620,7 @@ class VerifierWorkflowEvidenceRecord:
     blocked_actions: tuple[str, ...] = ()
     required_approvals: tuple[str, ...] = ()
     unresolved_policy_fields: tuple[str, ...] = ()
+    would_execute: bool = False
     dry_run_only: bool = True
     enforces_runtime: bool = False
     packet_hash: str = ""
@@ -1412,6 +1635,7 @@ class VerifierWorkflowEvidenceRecord:
         object.__setattr__(self, "blocked_actions", tuple(str(item) for item in _tuple(self.blocked_actions)))
         object.__setattr__(self, "required_approvals", tuple(str(item) for item in _tuple(self.required_approvals)))
         object.__setattr__(self, "unresolved_policy_fields", tuple(str(item) for item in _tuple(self.unresolved_policy_fields)))
+        object.__setattr__(self, "would_execute", False)
         object.__setattr__(self, "dry_run_only", True)
         object.__setattr__(self, "enforces_runtime", False)
         object.__setattr__(self, "packet_hash", _sanitize_pr_merge_packet_hash(self.action_class, self.packet_hash))
@@ -1434,6 +1658,7 @@ class VerifierWorkflowEvidenceRecord:
             "blocked_actions": list(self.blocked_actions),
             "required_approvals": list(self.required_approvals),
             "unresolved_policy_fields": list(self.unresolved_policy_fields),
+            "would_execute": False,
             "dry_run_only": True,
             "enforces_runtime": False,
         }
@@ -1484,6 +1709,7 @@ class PrMergeApprovalRecord:
     operator_id: str = ""
     approved_scope: str = ""
     consumed: bool = False
+    would_execute: bool = False
     dry_run_only: bool = True
     enforces_runtime: bool = False
 
@@ -1504,6 +1730,7 @@ class PrMergeApprovalRecord:
         object.__setattr__(self, "approved_scope", _sanitize_pr_merge_approved_scope(self.approved_scope) if action_class == "pr_merge" else "")
         object.__setattr__(self, "expires_at", str(self.expires_at).strip() if self.expires_at else None)
         object.__setattr__(self, "consumed", False)
+        object.__setattr__(self, "would_execute", False)
         object.__setattr__(self, "dry_run_only", True)
         object.__setattr__(self, "enforces_runtime", False)
 
@@ -1531,6 +1758,7 @@ class PrMergeApprovalRecord:
             if value:
                 payload[field_name] = value
         payload["consumed"] = False
+        payload["would_execute"] = False
         payload["dry_run_only"] = True
         payload["enforces_runtime"] = False
         return payload
@@ -1553,6 +1781,7 @@ class PrMergeApprovalRecord:
             operator_id=data.get("operator_id", ""),
             approved_scope=data.get("approved_scope", ""),
             consumed=False,
+            would_execute=False,
             dry_run_only=True,
             enforces_runtime=False,
         )
@@ -1614,6 +1843,9 @@ def approval_matches_pr_merge_packet(
         if approval_payload.get("consumed") is not False:
             invalid_fields.append("consumed")
             reasons.append("approval consumed")
+        if approval_payload.get("would_execute") is not False:
+            invalid_fields.append("would_execute")
+            reasons.append("approval would_execute is not false")
         if approval_payload.get("dry_run_only") is not True:
             invalid_fields.append("dry_run_only")
             reasons.append("approval dry_run_only is not true")
@@ -1634,6 +1866,7 @@ def approval_matches_pr_merge_packet(
         "reasons": reasons,
         "missing_fields": missing_fields,
         "invalid_fields": invalid_fields,
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
     }
@@ -2041,6 +2274,7 @@ class AcceptedBaselineRecord:
     max_active_lane: int = 1
     issue: str = ""
     display_only: bool = True
+    would_execute: bool = False
     dry_run_only: bool = True
     enforces_runtime: bool = False
 
@@ -2059,6 +2293,7 @@ class AcceptedBaselineRecord:
         object.__setattr__(self, "max_active_lane", _bounded_handoff_int(self.max_active_lane, default=1) or 1)
         object.__setattr__(self, "issue", _bounded_handoff_text(self.issue))
         object.__setattr__(self, "display_only", True)
+        object.__setattr__(self, "would_execute", False)
         object.__setattr__(self, "dry_run_only", True)
         object.__setattr__(self, "enforces_runtime", False)
 
@@ -2076,6 +2311,7 @@ class AcceptedBaselineRecord:
             "max_active_lane": self.max_active_lane,
             "issue": self.issue,
             "display_only": True,
+            "would_execute": False,
             "dry_run_only": True,
             "enforces_runtime": False,
         }
@@ -2095,6 +2331,7 @@ class AcceptedBaselineRecord:
             max_active_lane=data.get("max_active_lane", 1),
             issue=data.get("issue", ""),
             display_only=True,
+            would_execute=False,
             dry_run_only=True,
             enforces_runtime=False,
         )
@@ -2121,6 +2358,7 @@ class OperatingWorkspaceHandoffRecord:
     last_result: str = ""
     next_action: str = ""
     warnings: tuple[str, ...] = ()
+    would_execute: bool = False
     dry_run_only: bool = True
     enforces_runtime: bool = False
     display_only: bool = True
@@ -2147,6 +2385,7 @@ class OperatingWorkspaceHandoffRecord:
         object.__setattr__(self, "last_result", _bounded_handoff_text(self.last_result))
         object.__setattr__(self, "next_action", _bounded_handoff_text(self.next_action))
         object.__setattr__(self, "warnings", _bounded_handoff_warnings(self.warnings))
+        object.__setattr__(self, "would_execute", False)
         object.__setattr__(self, "dry_run_only", True)
         object.__setattr__(self, "enforces_runtime", False)
         object.__setattr__(self, "display_only", True)
@@ -2172,6 +2411,7 @@ class OperatingWorkspaceHandoffRecord:
             "last_result": self.last_result,
             "next_action": self.next_action,
             "warnings": list(self.warnings),
+            "would_execute": False,
             "dry_run_only": True,
             "enforces_runtime": False,
             "display_only": True,
@@ -2199,6 +2439,7 @@ class OperatingWorkspaceHandoffRecord:
             last_result=data.get("last_result", ""),
             next_action=data.get("next_action", ""),
             warnings=data.get("warnings") or (),
+            would_execute=False,
             dry_run_only=True,
             enforces_runtime=False,
             display_only=True,
@@ -2211,6 +2452,7 @@ RECORD_TYPES = {
         AcceptedBaselineRecord,
         ApprovalRecord,
         ApprovalSlice,
+        ChildRunRecord,
         PrMergeApprovalRecord,
         ArtifactRef,
         ChallengeReviewRecord,
@@ -2237,5 +2479,6 @@ RECORD_TYPES = {
         StartGateCheck,
         TaskControlEnvelope,
         VerifierWorkflowEvidenceRecord,
+        WorkerNodeRunRecord,
     )
 }

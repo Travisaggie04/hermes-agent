@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { usePageHeader } from "@/contexts/usePageHeader";
 
 const WORKSPACE_PROJECTS_URL = "/api/plugins/mission-control-governance/workspace/projects";
+const WORKSPACE_STATUS_URL = "/api/plugins/mission-control-governance/workspace-status";
 const WORKSPACE_GITHUB_BRIDGE_STATUS_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/status";
 const WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/outbox/create";
 const WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/answer-once";
@@ -112,6 +113,7 @@ interface GitHubBridgeStatusRecord {
 interface GitHubBridgeStatus {
   background_pending_count?: number;
   daemon_enabled?: boolean;
+  discord_automation_enabled?: boolean;
   dispatch_enabled?: boolean;
   execution_enabled?: boolean;
   foreground_watch_running?: boolean;
@@ -123,16 +125,110 @@ interface GitHubBridgeStatus {
   last_status?: string;
   manual_start_only?: boolean;
   model_routing_enabled?: boolean;
+  payment_enabled?: boolean;
   pending_count?: number;
   pending_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
   recent_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
   response_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
+  send_to_jenny_enabled?: boolean;
   session_send_enabled?: boolean;
+  social_enabled?: boolean;
   status_records?: Array<WrappedRecord<GitHubBridgeStatusRecord> | GitHubBridgeStatusRecord>;
   timer_enabled?: boolean;
+  queue_mutation_enabled?: boolean;
   visible_pending_count?: number;
   visible_pending_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
+  waha_enabled?: boolean;
+  worker_dispatch_enabled?: boolean;
+  would_execute?: boolean;
   worker_enabled?: boolean;
+  workers_enabled?: boolean;
+}
+
+interface MobileExecutionLockSource {
+  daemon_enabled?: unknown;
+  dispatch_enabled?: unknown;
+  dispatch_in_gateway?: unknown;
+  dispatch_state?: unknown;
+  execution_enabled?: unknown;
+  execution_ready?: unknown;
+  live_operations_enabled?: unknown;
+  model_routing_enabled?: unknown;
+  payment_enabled?: unknown;
+  queue_mutation_enabled?: unknown;
+  send_to_jenny_enabled?: unknown;
+  session_send_enabled?: unknown;
+  social_enabled?: unknown;
+  timer_enabled?: unknown;
+  waha_enabled?: unknown;
+  worker_dispatch_enabled?: unknown;
+  worker_enabled?: unknown;
+  workers_enabled?: unknown;
+  would_dispatch?: unknown;
+  would_execute?: unknown;
+  would_session_send?: unknown;
+}
+
+interface MobileReportLifecycle extends MobileExecutionLockSource {
+  blocked?: boolean;
+  blocked_reasons?: string[];
+  duplicate_report_ids?: string[];
+  open_report_ids?: string[];
+  report_overwrite_conflict_count?: number;
+  report_overwrite_conflict_ids?: string[];
+  reviewed_report_ids?: string[];
+  runs_missing_report?: string[];
+  runs_with_missing_linked_report_ids?: Record<string, string[]>;
+  terminal_report_ids?: string[];
+}
+
+interface MobileWorkerNodePresence extends MobileExecutionLockSource {
+  blocked_reasons?: string[];
+  capability_summary?: string;
+  last_seen_at?: string;
+  online?: boolean;
+  presence_state?: string;
+  worker_host_label?: string;
+  worker_run_id?: string;
+}
+
+interface MobileWorkerNodeInstructionPreview extends MobileExecutionLockSource {
+  available?: boolean;
+  blocked_reasons?: string[];
+  manual_handoff_only?: boolean;
+  manual_handoff_prompt?: string;
+  ready_for_handoff?: boolean;
+  worker_host_label?: string;
+}
+
+interface MobileWorkerNodeOrchestration extends MobileExecutionLockSource {
+  active_count?: number;
+  active_runs?: Array<Record<string, unknown>>;
+  blocked_reasons?: string[];
+  latest_by_id?: Record<string, Record<string, unknown>>;
+}
+
+interface MobileWorkspaceStatus {
+  hard_boundary_contract?: MobileExecutionLockSource & {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    live_flag_violations?: string[];
+  };
+  operator_decision_packet?: MobileExecutionLockSource & {
+    execution_lock_blocked_reasons?: string[];
+  };
+  orchestration_readiness?: MobileExecutionLockSource & {
+    states?: {
+      laptop_codex_worker_node?: string;
+      scoped_pr_creation?: string;
+      supervised_read_only_autonomy?: string;
+    };
+  };
+  report_lifecycle?: MobileReportLifecycle;
+  safety?: MobileExecutionLockSource;
+  worker_node_instruction_preview?: MobileWorkerNodeInstructionPreview;
+  worker_node_orchestration?: MobileWorkerNodeOrchestration;
+  worker_node_presence?: MobileWorkerNodePresence;
 }
 
 interface OutboxResponse {
@@ -160,6 +256,11 @@ interface RunState {
   detail: string;
   requestId?: string;
   status: "idle" | "queued" | "working" | "replied" | "failed";
+}
+
+interface MobileBridgeSafety {
+  reasons: string[];
+  safe: boolean;
 }
 
 interface ModelChoice {
@@ -417,6 +518,120 @@ function statusFromBridge(status: GitHubBridgeStatus | undefined): RunState {
   return { detail: "Ready for a bounded Jenny request.", status: "idle" };
 }
 
+function mobileBridgeSafety(status: GitHubBridgeStatus | undefined): MobileBridgeSafety {
+  const reasons: string[] = [];
+  if (!status) {
+    reasons.push("bridge status not loaded");
+  } else {
+    if (status.manual_start_only !== true) reasons.push("manual_start_only is not confirmed");
+    const liveFlags: Array<[keyof GitHubBridgeStatus, string]> = [
+      ["dispatch_enabled", "dispatch_enabled must remain false"],
+      ["execution_enabled", "execution_enabled must remain false"],
+      ["send_to_jenny_enabled", "send_to_jenny_enabled must remain false"],
+      ["session_send_enabled", "session_send_enabled must remain false"],
+      ["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"],
+      ["would_execute", "would_execute must remain false"],
+      ["worker_enabled", "worker_enabled must remain false"],
+      ["workers_enabled", "workers_enabled must remain false"],
+      ["timer_enabled", "timer_enabled must remain false"],
+      ["daemon_enabled", "daemon_enabled must remain false"],
+      ["discord_automation_enabled", "discord_automation_enabled must remain false"],
+      ["model_routing_enabled", "model_routing_enabled must remain false"],
+      ["payment_enabled", "payment_enabled must remain false"],
+      ["queue_mutation_enabled", "queue_mutation_enabled must remain false"],
+      ["social_enabled", "social_enabled must remain false"],
+      ["waha_enabled", "waha_enabled must remain false"],
+    ];
+    for (const [flag, reason] of liveFlags) {
+      if (mobileLiveFlagEnabled(status[flag])) reasons.push(reason);
+    }
+  }
+  return { reasons, safe: reasons.length === 0 };
+}
+
+function mobileLiveFlagEnabled(value: unknown): boolean {
+  if (value === true) return true;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    return ["1", "true", "yes", "y", "on", "enabled"].includes(value.trim().toLowerCase());
+  }
+  return false;
+}
+
+function mobileExecutionLockReasons(label: string, source?: MobileExecutionLockSource | null): string[] {
+  if (!source) return [];
+  const flags: Array<[keyof MobileExecutionLockSource, string]> = [
+    ["would_execute", "would_execute must remain false"],
+    ["would_dispatch", "would_dispatch must remain false"],
+    ["would_session_send", "would_session_send must remain false"],
+    ["dispatch_enabled", "dispatch_enabled must remain false"],
+    ["dispatch_in_gateway", "dispatch_in_gateway must remain false"],
+    ["dispatch_state", "dispatch_state must remain false"],
+    ["execution_enabled", "execution_enabled must remain false"],
+    ["execution_ready", "execution_ready must remain false"],
+    ["live_operations_enabled", "live_operations_enabled must remain false"],
+    ["model_routing_enabled", "model_routing_enabled must remain false"],
+    ["payment_enabled", "payment_enabled must remain false"],
+    ["queue_mutation_enabled", "queue_mutation_enabled must remain false"],
+    ["send_to_jenny_enabled", "send_to_jenny_enabled must remain false"],
+    ["session_send_enabled", "session_send_enabled must remain false"],
+    ["social_enabled", "social_enabled must remain false"],
+    ["timer_enabled", "timer_enabled must remain false"],
+    ["waha_enabled", "waha_enabled must remain false"],
+    ["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"],
+    ["worker_enabled", "worker_enabled must remain false"],
+    ["workers_enabled", "workers_enabled must remain false"],
+  ];
+  return flags
+    .filter(([flag]) => mobileLiveFlagEnabled(source[flag]))
+    .map(([, reason]) => `${label}: ${reason}`);
+}
+
+function mobileRecordText(record: Record<string, unknown> | undefined, field: string): string {
+  const value = record?.[field];
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return "";
+}
+
+function mobileWorkspaceSafety(status: MobileWorkspaceStatus | null): MobileBridgeSafety {
+  const reasons: string[] = [];
+  if (!status) {
+    reasons.push("workspace status not loaded");
+  }
+
+  const hardBoundary = status?.hard_boundary_contract;
+  if (!hardBoundary) {
+    reasons.push("hard_boundary_contract is not loaded");
+  } else {
+    if (hardBoundary.blocked === true) {
+      reasons.push(hardBoundary.blocked_reasons?.[0] ?? "hard_boundary_contract is blocked");
+    }
+    for (const reason of hardBoundary.live_flag_violations ?? []) {
+      reasons.push(reason);
+    }
+    reasons.push(...mobileExecutionLockReasons("hard_boundary_contract", hardBoundary));
+  }
+
+  const operatorPacket = status?.operator_decision_packet;
+  reasons.push(...(operatorPacket?.execution_lock_blocked_reasons ?? []));
+  reasons.push(...mobileExecutionLockReasons("operator_decision_packet", operatorPacket));
+  reasons.push(...mobileExecutionLockReasons("orchestration_readiness", status?.orchestration_readiness));
+  reasons.push(...mobileExecutionLockReasons("workspace safety", status?.safety));
+  reasons.push(...mobileExecutionLockReasons("report_lifecycle", status?.report_lifecycle));
+  reasons.push(...mobileExecutionLockReasons("worker_node_presence", status?.worker_node_presence));
+  reasons.push(...mobileExecutionLockReasons("worker_node_orchestration", status?.worker_node_orchestration));
+  reasons.push(...mobileExecutionLockReasons("worker_node_instruction_preview", status?.worker_node_instruction_preview));
+
+  const uniqueReasons = [...new Set(reasons)];
+  return { reasons: uniqueReasons, safe: uniqueReasons.length === 0 };
+}
+
+function combineMobileSafety(...checks: MobileBridgeSafety[]): MobileBridgeSafety {
+  const reasons = [...new Set(checks.flatMap((check) => check.reasons))];
+  return { reasons, safe: reasons.length === 0 };
+}
+
 function mobileRequestId(): string {
   const fallback = Math.random().toString(16).slice(2, 14);
   return `jenny-mobile-${globalThis.crypto?.randomUUID?.() ?? fallback}`;
@@ -554,6 +769,7 @@ export default function JennyMobilePage() {
   });
   const [messagesByProject, setMessagesByProject] = useState<Record<string, ChatMessage[]>>({});
   const [statusByProject, setStatusByProject] = useState<Record<string, GitHubBridgeStatus>>({});
+  const [workspaceStatus, setWorkspaceStatus] = useState<MobileWorkspaceStatus | null>(null);
   const [runByProject, setRunByProject] = useState<Record<string, RunState>>({});
   const [composer, setComposer] = useState("");
   const [loading, setLoading] = useState(true);
@@ -603,15 +819,17 @@ export default function JennyMobilePage() {
     let cancelled = false;
     async function loadChrome() {
       try {
-        const [projectsPayload, info, options] = await Promise.all([
+        const [projectsPayload, info, options, workspace] = await Promise.all([
           fetchJSON<{ projects?: Array<WrappedRecord<MobileProject> | MobileProject> }>(`${WORKSPACE_PROJECTS_URL}?limit=25`),
           fetchJSON<ModelInfoResponse>(MODEL_INFO_URL),
           fetchJSON<ModelOptionsResponse>(MODEL_OPTIONS_URL),
+          fetchJSON<MobileWorkspaceStatus>(WORKSPACE_STATUS_URL),
         ]);
         if (cancelled) return;
         setProjects(canonicalProjects(unwrapRecords(projectsPayload.projects)));
         setModelInfo(info);
         setModelOptions(options);
+        setWorkspaceStatus(workspace);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err));
@@ -632,19 +850,55 @@ export default function JennyMobilePage() {
   const messages = messagesByProject[selectedProject.project_id] ?? [];
   const bridgeStatus = statusByProject[selectedProject.project_id];
   const runState = runByProject[selectedProject.project_id] ?? statusFromBridge(bridgeStatus);
+  const bridgeSafety = useMemo(() => mobileBridgeSafety(bridgeStatus), [bridgeStatus]);
+  const workspaceSafety = useMemo(() => mobileWorkspaceSafety(workspaceStatus), [workspaceStatus]);
+  const mobileSafety = useMemo(() => combineMobileSafety(bridgeSafety, workspaceSafety), [bridgeSafety, workspaceSafety]);
+  const visibleRunState: RunState = mobileSafety.safe
+    ? runState
+    : {
+        detail: `Manual chat blocked: ${mobileSafety.reasons[0] ?? "backend safety is not confirmed"}`,
+        status: "failed",
+      };
   const modelChoices = useMemo(() => buildModelChoices(modelInfo, modelOptions), [modelInfo, modelOptions]);
   const currentModelChoice = selectedModelChoice || modelChoices[0]?.key || "";
   const selectedModel = modelChoiceFromKey(currentModelChoice);
   const statusRecords = unwrapRecords(bridgeStatus?.status_records).slice(-5).reverse();
   const latestPendingId = latestPendingRequestId(messages);
-  const sendDisabled = sending || !composer.trim();
+  const sendDisabled = sending || loading || !composer.trim() || !mobileSafety.safe;
+  const reportLifecycle = workspaceStatus?.report_lifecycle;
+  const reportMissingLinkedCount = Object.values(reportLifecycle?.runs_with_missing_linked_report_ids ?? {}).reduce(
+    (count, reportIds) => count + reportIds.length,
+    0,
+  );
+  const reportOverwriteConflictCount = reportLifecycle?.report_overwrite_conflict_count ?? reportLifecycle?.report_overwrite_conflict_ids?.length ?? 0;
+  const reportGapCount =
+    (reportLifecycle?.duplicate_report_ids?.length ?? 0)
+    + reportOverwriteConflictCount
+    + (reportLifecycle?.runs_missing_report?.length ?? 0)
+    + reportMissingLinkedCount;
+  const readinessStates = workspaceStatus?.orchestration_readiness?.states;
+  const workerPresence = workspaceStatus?.worker_node_presence;
+  const workerInstruction = workspaceStatus?.worker_node_instruction_preview;
+  const workerProjection = workspaceStatus?.worker_node_orchestration;
+  const workerRecord = workerProjection?.active_runs?.[0] ?? Object.values(workerProjection?.latest_by_id ?? {})[0];
+  const workerLatestStatus = mobileRecordText(workerRecord, "status") || "none";
+  const workerLatestObjective = mobileRecordText(workerRecord, "objective") || "no assigned objective";
+  const workerBlockedReasons = [
+    ...(workerPresence?.blocked_reasons ?? []),
+    ...(workerProjection?.blocked_reasons ?? []),
+    ...(workerInstruction?.blocked_reasons ?? []),
+  ].filter(Boolean);
 
   const refreshMessages = useCallback(async (projectId: string) => {
-    const status = await fetchJSON<GitHubBridgeStatus>(
-      `${WORKSPACE_GITHUB_BRIDGE_STATUS_URL}?project_id=${encodeURIComponent(projectId)}&limit=80`,
-    );
+    const [status, workspace] = await Promise.all([
+      fetchJSON<GitHubBridgeStatus>(
+        `${WORKSPACE_GITHUB_BRIDGE_STATUS_URL}?project_id=${encodeURIComponent(projectId)}&limit=80`,
+      ),
+      fetchJSON<MobileWorkspaceStatus>(WORKSPACE_STATUS_URL),
+    ]);
     const incoming = messagesFromStatus(status);
     setStatusByProject((prev) => ({ ...prev, [projectId]: status }));
+    setWorkspaceStatus(workspace);
     setMessagesByProject((prev) => ({
       ...prev,
       [projectId]: mergeMessages(prev[projectId] ?? [], incoming),
@@ -670,7 +924,7 @@ export default function JennyMobilePage() {
 
   useEffect(() => {
     endRef.current?.scrollIntoView?.({ block: "end" });
-  }, [messages.length, runState.status, selectedProject.project_id]);
+  }, [messages.length, visibleRunState.status, selectedProject.project_id]);
 
   const updateMessageStatus = useCallback((projectId: string, requestId: string, status: MobileMessageStatus) => {
     setMessagesByProject((prev) => ({
@@ -692,6 +946,17 @@ export default function JennyMobilePage() {
 
   const runJennyOnce = useCallback(async (projectId: string, requestId: string) => {
     if (!requestId || replyingRequestIdRef.current) return;
+    if (!mobileSafety.safe) {
+      setRunByProject((prev) => ({
+        ...prev,
+        [projectId]: {
+          detail: `Manual chat blocked: ${mobileSafety.reasons[0] ?? "backend safety is not confirmed"}`,
+          requestId,
+          status: "failed",
+        },
+      }));
+      return;
+    }
     replyingRequestIdRef.current = requestId;
     setReplyingRequestId(requestId);
     setRunByProject((prev) => ({
@@ -748,7 +1013,7 @@ export default function JennyMobilePage() {
       replyingRequestIdRef.current = "";
       setReplyingRequestId("");
     }
-  }, [appendMessage, refreshMessages, updateMessageStatus]);
+  }, [appendMessage, mobileSafety.reasons, mobileSafety.safe, refreshMessages, updateMessageStatus]);
 
   async function sendMessage() {
     const text = composer.trim();
@@ -860,12 +1125,12 @@ export default function JennyMobilePage() {
         <div className="flex items-center justify-between gap-3 px-1 text-xs text-zinc-400">
           <span className={cn(
             "inline-flex items-center gap-1 font-medium",
-            runState.status === "failed" ? "text-red-300" : runState.status === "working" ? "text-sky-300" : "text-emerald-300",
+            visibleRunState.status === "failed" ? "text-red-300" : visibleRunState.status === "working" ? "text-sky-300" : "text-emerald-300",
           )}>
-            {runState.status === "working" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : runState.status === "failed" ? <AlertCircle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-            {runState.status}
+            {visibleRunState.status === "working" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : visibleRunState.status === "failed" ? <AlertCircle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+            {visibleRunState.status}
           </span>
-          <span className="min-w-0 truncate text-right">{runState.detail}</span>
+          <span className="min-w-0 truncate text-right">{visibleRunState.detail}</span>
         </div>
 
         {error ? (
@@ -904,7 +1169,7 @@ export default function JennyMobilePage() {
                       <button
                         className="rounded-full bg-black/15 px-2 py-0.5 text-[0.7rem] font-semibold text-zinc-950 disabled:opacity-50"
                         type="button"
-                        disabled={replyingRequestId !== "" || sending}
+                        disabled={replyingRequestId !== "" || sending || !mobileSafety.safe}
                         onClick={() => void runJennyOnce(selectedProject.project_id, message.requestId ?? "")}
                       >
                         {message.status === "failed" ? "Retry" : "Get reply"}
@@ -1051,9 +1316,82 @@ export default function JennyMobilePage() {
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-zinc-400">Safety</dt>
-                  <dd className="text-right">manual foreground only</dd>
+                  <dd className={cn("text-right", mobileSafety.safe ? "text-emerald-300" : "text-red-300")}>
+                    {mobileSafety.safe ? "manual foreground only" : "blocked"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-zinc-400">Readiness</dt>
+                  <dd className="min-w-0 truncate text-right">
+                    read-only {readinessStates?.supervised_read_only_autonomy?.replaceAll("_", " ") ?? "unknown"} / worker{" "}
+                    {readinessStates?.laptop_codex_worker_node?.replaceAll("_", " ") ?? "unknown"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-zinc-400">Laptop Codex</dt>
+                  <dd className={cn("min-w-0 truncate text-right", workerPresence?.online ? "text-emerald-300" : "text-amber-300")}>
+                    {workerPresence?.worker_host_label ?? "laptop Codex"} / {workerPresence?.presence_state?.replaceAll("_", " ") ?? "unknown"} / online{" "}
+                    {workerPresence?.online ? "yes" : "no"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-zinc-400">Worker objective</dt>
+                  <dd className="min-w-0 truncate text-right">{workerLatestObjective}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-zinc-400">Worker handoff</dt>
+                  <dd className={cn("min-w-0 truncate text-right", workerInstruction?.ready_for_handoff ? "text-emerald-300" : "text-amber-300")}>
+                    latest {workerLatestStatus} / available {workerInstruction?.available ? "yes" : "no"} / handoff{" "}
+                    {workerInstruction?.ready_for_handoff ? "yes" : "no"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-zinc-400">Report lifecycle</dt>
+                  <dd className={cn("min-w-0 truncate text-right", reportLifecycle?.blocked ? "text-amber-300" : "text-emerald-300")}>
+                    open {reportLifecycle?.open_report_ids?.length ?? 0} / reviewed{" "}
+                    {reportLifecycle?.reviewed_report_ids?.length ?? 0} / terminal{" "}
+                    {reportLifecycle?.terminal_report_ids?.length ?? 0}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-zinc-400">Report gaps</dt>
+                  <dd className={cn("min-w-0 truncate text-right", reportGapCount ? "text-amber-300" : "text-emerald-300")}>
+                    dup {reportLifecycle?.duplicate_report_ids?.length ?? 0} / overwrite {reportOverwriteConflictCount} / missing{" "}
+                    {reportLifecycle?.runs_missing_report?.length ?? 0} / stale {reportMissingLinkedCount}
+                  </dd>
                 </div>
               </dl>
+
+              {!mobileSafety.safe ? (
+                <div className="mt-3 rounded-lg border border-red-400/30 bg-red-950/40 px-3 py-2 text-sm text-red-100">
+                  <p className="font-medium">Manual chat blocked</p>
+                  <ul className="mt-1 list-disc space-y-1 pl-4">
+                    {mobileSafety.reasons.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {reportLifecycle?.blocked_reasons?.length ? (
+                <div className="mt-3 rounded-lg border border-amber-400/30 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
+                  <p className="font-medium">Report lifecycle needs Jenny review</p>
+                  <ul className="mt-1 list-disc space-y-1 pl-4">
+                    {reportLifecycle.blocked_reasons.slice(0, 4).map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {workerBlockedReasons.length ? (
+                <div className="mt-3 rounded-lg border border-amber-400/30 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
+                  <p className="font-medium">Laptop Codex needs review</p>
+                  <ul className="mt-1 list-disc space-y-1 pl-4">
+                    {[...new Set(workerBlockedReasons)].slice(0, 4).map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
 
               <div className="mt-4 border-t border-white/10 pt-3">
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">Recent status</h3>

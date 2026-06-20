@@ -12,6 +12,8 @@ import json
 import re
 from typing import Any
 
+from mission_control.inert_contract import inert_live_operation_flags
+
 PACKET_VERSION = "pr_merge_packet_v1"
 HASH_PREFIX = "sha256:"
 ALLOWED_MERGE_METHODS = {"merge", "squash", "rebase"}
@@ -33,10 +35,15 @@ OPTIONAL_FIELDS = (
 _HEX_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _HASH_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 _WHITESPACE_RE = re.compile(r"\s+")
+_INERT_PACKET_HASH_FLAGS = inert_live_operation_flags(
+    dry_run_only=True,
+    enforces_runtime=False,
+)
 
 
 def _empty_validation(expected_hash: Any) -> dict[str, Any]:
     return {
+        **_INERT_PACKET_HASH_FLAGS,
         "valid": False,
         "computed_hash": "",
         "expected_hash": str(expected_hash or "").strip(),
@@ -44,8 +51,6 @@ def _empty_validation(expected_hash: Any) -> dict[str, Any]:
         "reasons": [],
         "missing_fields": [],
         "invalid_fields": [],
-        "dry_run_only": True,
-        "enforces_runtime": False,
     }
 
 

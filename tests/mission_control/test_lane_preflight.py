@@ -33,6 +33,7 @@ def test_valid_lane_start_request_returns_dry_run_pass_result():
     result = run_lane_start_preflight(_lane_start_request())
 
     assert result["default_off"] is True
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
     assert result["would_block"] is False
@@ -62,6 +63,7 @@ def test_missing_required_fields_are_reported_without_runtime_enforcement(field_
     result = run_lane_start_preflight(_lane_start_request(**{field_name: replacement}))
 
     assert result["default_off"] is True
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
     assert result["would_block"] is True
@@ -146,6 +148,7 @@ def test_lane_preflight_blocks_pr_create_from_accepted_runtime_worktree():
     )
 
     assert result["dry_run_only"] is True
+    assert result["would_execute"] is False
     assert result["enforces_runtime"] is False
     assert result["would_block"] is True
     assert result["decision_state"] == "blocked"
@@ -211,4 +214,5 @@ def test_caller_does_not_write_records_or_call_runtime_surfaces(monkeypatch):
     result = run_lane_start_preflight(_lane_start_request())
 
     assert result["decision_state"] == "pass"
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True

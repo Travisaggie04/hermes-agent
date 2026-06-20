@@ -18,6 +18,13 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from hermes_constants import get_hermes_home
+from mission_control.autonomy_eligibility import (
+    build_execution_packet_preview,
+    classify_control_path_permissions,
+    evaluate_read_only_autonomy_eligibility,
+    evaluate_runtime_provenance,
+    evaluate_scoped_pr_lane_eligibility,
+)
 from mission_control.action_policy_guardrails import (
     evaluate_action_policy,
     get_action_policy_guardrails,
@@ -43,7 +50,10 @@ from mission_control.verifier_workflow import (
     get_verifier_workflow_policy,
 )
 from mission_control.workspace_status import build_workspace_status
-from mission_control.workspace_status_records import build_workspace_status_from_records
+from mission_control.workspace_status_records import (
+    build_workspace_status_from_records,
+    decorate_workspace_status_operator_projections,
+)
 from mission_control.lane_preflight import run_lane_start_preflight
 from mission_control.github_bridge_mailbox import answer_pending_with_hermes, post_github_message
 from mission_control.records.errors import RecordStoreError
@@ -55,6 +65,7 @@ from mission_control.records import (
     ApprovalRecord,
     ApprovalSlice,
     ChallengeReviewRecord,
+    ChildRunRecord,
     EvidenceCard,
     GoalContract,
     GitHubBridgeMailboxStatusRecord,
@@ -77,6 +88,7 @@ from mission_control.records import (
     StartGateCheck,
     TaskControlEnvelope,
     VerifierWorkflowEvidenceRecord,
+    WorkerNodeRunRecord,
 )
 
 
@@ -117,21 +129,44 @@ _PR_MERGE_GATE_EVIDENCE_FIELDS = {
     "verifier_id",
     "would_block",
     "blocked_actions",
+    "would_execute",
     "dry_run_only",
     "enforces_runtime",
 }
-_PR_MERGE_GATE_BOOL_FIELDS = {"would_block", "dry_run_only", "enforces_runtime"}
+_PR_MERGE_GATE_BOOL_FIELDS = {"would_block", "would_execute", "dry_run_only", "enforces_runtime"}
 _PR_MERGE_GATE_LIST_FIELDS = {"blocked_actions"}
 _VERIFIER_EVIDENCE_FIELDS = {"source", "lane_id", "task_id", "domain_id", "action_class"}
 _SECRET_LIKE_RE = re.compile(
     r"(?i)(sk-[a-z0-9_-]{8,}|gh[pousr]_[a-z0-9_]{8,}|"
-    r"(?:api[_-]?key|token|secret|password|bearer)\s*[:=]\s*[^\s,;]+)"
+    r"(?:api[_-]?key|auth(?:orization|[_-]?header)?|bearer|client[_-]?secret|cookie|"
+    r"env[_-]?secret|password|private[_-]?key|refresh[_-]?token|session[_-]?cookie|secret|token)"
+    r"\s*[:=]\s*[^\s,;]+)"
 )
 _PATH_LIKE_RE = re.compile(r"(?<!\w)(?:/[A-Za-z0-9._@%+\-]+){2,}|[A-Za-z]:\\[^\s,;]+")
 INERT_FLAGS = {
     "trusted_for_execution": False,
     "inert_context_only": True,
+    "would_execute": False,
+    "would_dispatch": False,
+    "would_session_send": False,
     "execution_enabled": False,
+    "dispatch_enabled": False,
+    "dispatch_in_gateway": False,
+    "dispatch_state": False,
+    "execution_ready": False,
+    "live_operations_enabled": False,
+    "send_to_jenny_enabled": False,
+    "session_send_enabled": False,
+    "worker_enabled": False,
+    "workers_enabled": False,
+    "worker_dispatch_enabled": False,
+    "timer_enabled": False,
+    "daemon_enabled": False,
+    "waha_enabled": False,
+    "social_enabled": False,
+    "payment_enabled": False,
+    "queue_mutation_enabled": False,
+    "model_routing_enabled": False,
 }
 CONTROL_PLANE_INERT_FLAGS = {
     **INERT_FLAGS,
@@ -139,7 +174,15 @@ CONTROL_PLANE_INERT_FLAGS = {
     "manual_copy_only": True,
     "send_to_jenny_enabled": False,
     "dispatch_enabled": False,
+    "session_send_enabled": False,
+    "worker_dispatch_enabled": False,
 }
+
+
+def _control_plane_metadata(source: str, **extra: Any) -> dict[str, Any]:
+    return {**CONTROL_PLANE_INERT_FLAGS, "source": source, **extra}
+
+
 APPROVAL_STATUSES = {"proposed", "approved", "rejected", "expired", "consumed", "cancelled"}
 RUN_STATUSES = {"requested", "preflight_passed", "running", "stopping", "stopped", "completed", "failed", "cancelled", "blocked"}
 REPORT_STATUSES = {"received", "needs_review", "accepted", "rejected", "superseded"}
@@ -766,9 +809,13 @@ def _jenny_bridge_poller_status_projection(limit: int = DEFAULT_RECORDS_LIMIT) -
     latest_response = responses[-1]["record"] if responses else {}
     return {
         "manual_start_only": True,
+        "trusted_for_execution": False,
+        "inert_context_only": True,
+        "would_execute": False,
         "dispatch_enabled": False,
         "session_send_enabled": False,
         "execution_enabled": False,
+        "worker_dispatch_enabled": False,
         "worker_enabled": False,
         "timer_enabled": False,
         "count": len(statuses),
@@ -892,9 +939,13 @@ def _github_bridge_mailbox_status_projection(limit: int = DEFAULT_RECORDS_LIMIT,
     latest_response = responses[-1]["record"] if responses else {}
     return {
         "manual_start_only": True,
+        "trusted_for_execution": False,
+        "inert_context_only": True,
+        "would_execute": False,
         "dispatch_enabled": False,
         "session_send_enabled": False,
         "execution_enabled": False,
+        "worker_dispatch_enabled": False,
         "worker_enabled": False,
         "timer_enabled": False,
         "daemon_enabled": False,
@@ -963,20 +1014,9 @@ def _async_agent_capability_projection() -> dict[str, Any]:
     )
 
     return {
-        "display_only": True,
-        "manual_copy_only": True,
-        "send_to_jenny_enabled": False,
-        "dispatch_enabled": False,
-        "execution_enabled": False,
-        "trusted_for_execution": False,
-        "inert_context_only": True,
+        **CONTROL_PLANE_INERT_FLAGS,
         "stored": False,
         "manual_start_only": True,
-        "session_send_enabled": False,
-        "worker_enabled": False,
-        "timer_enabled": False,
-        "daemon_enabled": False,
-        "model_routing_enabled": False,
         "current_mode": current_mode,
         "sync_delegate_task_available": sync_delegate_available,
         "sync_delegate_task_durable": False,
@@ -999,13 +1039,12 @@ def _project_template_payload(template: dict[str, str], existing_projects: tuple
     ids = {project.project_id for project in existing_projects}
     exists = slug in names or template["project_id"] in ids
     return {
+        **CONTROL_PLANE_INERT_FLAGS,
         **template,
+        "source": "mission_control_project_template_catalog_v1",
         "canonical_slug": slug,
         "exists": exists,
         "default_guards": template["default_guards"],
-        "send_to_jenny_enabled": False,
-        "dispatch_enabled": False,
-        "manual_copy_only": True,
     }
 
 
@@ -1022,14 +1061,11 @@ def _project_record_from_template(template: dict[str, str]) -> ProjectRecord:
         profile=template["profile"],
         created_at=now,
         updated_at=now,
-        metadata={
-            "source": "mission_control_real_project_onboarding_v1",
-            "canonical_slug": template["slug"],
-            "default_guards": template["default_guards"],
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-        },
+        metadata=_control_plane_metadata(
+            "mission_control_real_project_onboarding_v1",
+            canonical_slug=template["slug"],
+            default_guards=template["default_guards"],
+        ),
     )
 
 
@@ -1244,13 +1280,10 @@ def _build_session_project_link_record(payload: dict[str, Any]) -> SessionProjec
         _workspace_text(payload.get("link_method"), max_chars=40) or "manual"
     )
     now = _utc_now()
-    metadata = {
-        "source": "mission_control_session_project_link_backend_v1",
-        "manual_copy_only": True,
-        "send_to_jenny_enabled": False,
-        "dispatch_enabled": False,
-        "auto_inferred": False,
-    }
+    metadata = _control_plane_metadata(
+        "mission_control_session_project_link_backend_v1",
+        auto_inferred=False,
+    )
     if normalized_from:
         metadata["normalized_link_method_from"] = normalized_from
     return SessionProjectLinkRecord(
@@ -1683,7 +1716,7 @@ def _build_project_record(payload: dict[str, Any]) -> ProjectRecord:
         profile=_workspace_text(payload.get("profile"), max_chars=80),
         created_at=now,
         updated_at=now,
-        metadata={"source": "mission_control_project_workspace_pr_a"},
+        metadata=_control_plane_metadata("mission_control_project_workspace_pr_a"),
     )
 
 
@@ -1715,13 +1748,10 @@ def _build_project_brief_record(payload: dict[str, Any]) -> ProjectBriefRecord:
         status=status,
         created_at=now,
         updated_at=now,
-        metadata={
-            "source": "mission_control_project_intake_v1",
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-            "challenge_gate_required": True,
-        },
+        metadata=_control_plane_metadata(
+            "mission_control_project_intake_v1",
+            challenge_gate_required=True,
+        ),
     )
 
 
@@ -1764,15 +1794,12 @@ def _build_challenge_review_record(payload: dict[str, Any]) -> ChallengeReviewRe
         status=status,
         created_at=now,
         reviewed_by=_workspace_text(payload.get("reviewed_by"), max_chars=80),
-        metadata={
-            "source": "mission_control_challenge_gate_v1",
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-            "can_start_lane": decision_state == "clear_and_safe",
-            "challenge_category_options": sorted(CHALLENGE_REVIEW_CATEGORIES),
-            "blocking_verdict_options": sorted(CHALLENGE_BLOCKING_VERDICTS),
-        },
+        metadata=_control_plane_metadata(
+            "mission_control_challenge_gate_v1",
+            can_start_lane=decision_state == "clear_and_safe",
+            challenge_category_options=sorted(CHALLENGE_REVIEW_CATEGORIES),
+            blocking_verdict_options=sorted(CHALLENGE_BLOCKING_VERDICTS),
+        ),
     )
 
 
@@ -1800,12 +1827,7 @@ def _build_lane_request_record(payload: dict[str, Any]) -> LaneRequestRecord:
         status="draft",
         created_at=now,
         updated_at=now,
-        metadata={
-            "source": "mission_control_project_workspace_pr_a",
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-        },
+        metadata=_control_plane_metadata("mission_control_project_workspace_pr_a"),
     )
 
 
@@ -1829,13 +1851,10 @@ def _build_jenny_report_record(payload: dict[str, Any]) -> JennyReportRecord:
         risks=_workspace_list(payload.get("risks")),
         next_recommended_lane=_workspace_text(payload.get("next_recommended_lane")),
         created_at=now,
-        metadata={
-            "source": "mission_control_manual_jenny_report_inbox_pr_b",
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-            "artifact_links": _workspace_list(payload.get("artifact_links")),
-        },
+        metadata=_control_plane_metadata(
+            "mission_control_manual_jenny_report_inbox_pr_b",
+            artifact_links=_workspace_list(payload.get("artifact_links")),
+        ),
     )
 
 
@@ -1864,8 +1883,13 @@ def _build_jenny_bridge_request_record(payload: dict[str, Any]) -> JennyBridgeMe
             "bridge_direction": "outbound",
             "manual_copy_only": False,
             "send_to_jenny_enabled": False,
+            "would_execute": False,
             "dispatch_enabled": False,
+            "session_send_enabled": False,
             "execution_enabled": False,
+            "worker_dispatch_enabled": False,
+            "trusted_for_execution": False,
+            "inert_context_only": True,
             "requires_external_jenny_poller": True,
             "dedupe_key": _workspace_text(payload.get("dedupe_key"), max_chars=160),
             "user_message": user_message,
@@ -1899,8 +1923,13 @@ def _build_jenny_bridge_response_record(payload: dict[str, Any]) -> JennyBridgeM
             "bridge_direction": "inbound",
             "manual_copy_only": False,
             "send_to_jenny_enabled": False,
+            "would_execute": False,
             "dispatch_enabled": False,
+            "session_send_enabled": False,
             "execution_enabled": False,
+            "worker_dispatch_enabled": False,
+            "trusted_for_execution": False,
+            "inert_context_only": True,
             "external_jenny_response": True,
         },
     )
@@ -1935,8 +1964,11 @@ def _build_jenny_reply_review_record(payload: dict[str, Any]) -> JennyReplyRevie
             "display_only": True,
             "manual_start_only": True,
             "send_to_jenny_enabled": False,
+            "would_execute": False,
             "dispatch_enabled": False,
+            "session_send_enabled": False,
             "execution_enabled": False,
+            "worker_dispatch_enabled": False,
             "worker_enabled": False,
             "timer_enabled": False,
             "trusted_for_execution": False,
@@ -2019,13 +2051,10 @@ def _build_approval_record(payload: dict[str, Any]) -> ApprovalRecord:
         baseline_head=_workspace_text(payload.get("baseline_head"), max_chars=80),
         packet_hash=_workspace_text(payload.get("packet_hash"), max_chars=80),
         scope_fingerprint=_workspace_text(payload.get("scope_fingerprint"), max_chars=120),
-        metadata={
-            "source": "mission_control_control_plane_approval_backend_v1",
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-            "dangerous_action_display_only": action_class in DANGEROUS_APPROVAL_ACTION_CLASSES,
-        },
+        metadata=_control_plane_metadata(
+            "mission_control_control_plane_approval_backend_v1",
+            dangerous_action_display_only=action_class in DANGEROUS_APPROVAL_ACTION_CLASSES,
+        ),
     )
 
 
@@ -2066,12 +2095,7 @@ def _build_run_record(payload: dict[str, Any]) -> RunRecord:
         safety_gate_reasons=_workspace_list(payload.get("safety_gate_reasons")),
         report_ids=_workspace_list(payload.get("report_ids")),
         result_record_ids=_workspace_list(payload.get("result_record_ids")),
-        metadata={
-            "source": "mission_control_control_plane_run_backend_v1",
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-        },
+        metadata=_control_plane_metadata("mission_control_control_plane_run_backend_v1"),
     )
 
 
@@ -2107,12 +2131,66 @@ def _build_report_record(payload: dict[str, Any]) -> ReportRecord:
         reviewed_at=_workspace_text(payload.get("reviewed_at"), max_chars=80),
         reviewed_by=_workspace_text(payload.get("reviewed_by"), max_chars=120),
         redaction_status=_workspace_text(payload.get("redaction_status"), max_chars=120) or "operator_supplied_redacted",
-        metadata={
-            "source": "mission_control_control_plane_report_backend_v1",
-            "manual_copy_only": True,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-        },
+        metadata=_control_plane_metadata("mission_control_control_plane_report_backend_v1"),
+    )
+
+
+def _build_child_run_record(payload: dict[str, Any]) -> ChildRunRecord:
+    parent_run_id = _workspace_text(payload.get("parent_run_id"), max_chars=120)
+    if not parent_run_id:
+        raise HTTPException(status_code=422, detail="parent_run_id is required")
+    now = _utc_now()
+    return ChildRunRecord(
+        child_run_id=_workspace_text(payload.get("child_run_id"), max_chars=120) or f"child-run-{uuid.uuid4().hex[:12]}",
+        parent_run_id=parent_run_id,
+        project_id=_workspace_text(payload.get("project_id"), max_chars=120),
+        agent_identity=_workspace_text(payload.get("agent_identity"), max_chars=120),
+        delegation_source=_workspace_text(payload.get("delegation_source"), max_chars=120),
+        objective=_workspace_text(payload.get("objective"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
+        allowed_actions=_workspace_list(payload.get("allowed_actions")),
+        forbidden_actions=_workspace_list(payload.get("forbidden_actions")),
+        status=_workspace_text(payload.get("status"), max_chars=80) or "requested",
+        failure_reason=_workspace_text(payload.get("failure_reason"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
+        report_id=_workspace_text(payload.get("report_id"), max_chars=120),
+        result_record_id=_workspace_text(payload.get("result_record_id"), max_chars=120),
+        depends_on_child_run_ids=_workspace_list(payload.get("depends_on_child_run_ids")),
+        created_at=_workspace_text(payload.get("created_at"), max_chars=80) or now,
+        updated_at=_workspace_text(payload.get("updated_at"), max_chars=80),
+        stopped_at=_workspace_text(payload.get("stopped_at"), max_chars=80),
+        stop_reason=_workspace_text(payload.get("stop_reason"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
+        metadata=_control_plane_metadata("mission_control_child_run_tracking_v1"),
+    )
+
+
+def _build_worker_node_run_record(payload: dict[str, Any]) -> WorkerNodeRunRecord:
+    parent_run_id = _workspace_text(payload.get("parent_run_id"), max_chars=120)
+    if not parent_run_id:
+        raise HTTPException(status_code=422, detail="parent_run_id is required")
+    now = _utc_now()
+    return WorkerNodeRunRecord(
+        worker_run_id=_workspace_text(payload.get("worker_run_id"), max_chars=120) or f"worker-run-{uuid.uuid4().hex[:12]}",
+        parent_run_id=parent_run_id,
+        project_id=_workspace_text(payload.get("project_id"), max_chars=120),
+        worker_identity=_workspace_text(payload.get("worker_identity"), max_chars=120) or "codex",
+        worker_host_label=_workspace_text(payload.get("worker_host_label"), max_chars=120) or "laptop-codex",
+        worker_kind=_workspace_text(payload.get("worker_kind"), max_chars=80) or "laptop_codex",
+        objective=_workspace_text(payload.get("objective"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
+        assigned_packet_id=_workspace_text(payload.get("assigned_packet_id"), max_chars=120),
+        assigned_packet_summary=_workspace_text(payload.get("assigned_packet_summary"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
+        allowed_actions=_workspace_list(payload.get("allowed_actions")),
+        forbidden_actions=_workspace_list(payload.get("forbidden_actions")),
+        status=_workspace_text(payload.get("status"), max_chars=80) or "requested",
+        blocked_reasons=_workspace_list(payload.get("blocked_reasons")),
+        failure_reason=_workspace_text(payload.get("failure_reason"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
+        report_id=_workspace_text(payload.get("report_id"), max_chars=120),
+        report_review_status=_workspace_text(payload.get("report_review_status"), max_chars=80),
+        report_contract_status=_workspace_text(payload.get("report_contract_status"), max_chars=80),
+        created_at=_workspace_text(payload.get("created_at"), max_chars=80) or now,
+        updated_at=_workspace_text(payload.get("updated_at"), max_chars=80),
+        stopped_at=_workspace_text(payload.get("stopped_at"), max_chars=80),
+        stop_reason=_workspace_text(payload.get("stop_reason"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
+        worker_dispatch_enabled=False,
+        metadata=_control_plane_metadata("mission_control_worker_node_tracking_v1"),
     )
 
 
@@ -2767,6 +2845,7 @@ def _pr_merge_visibility_payload(config: dict[str, Any], packet: dict[str, Any])
         "missing_requirements": missing_requirements[:MAX_EVALUATION_LIST_ITEMS],
         "required_approvals": required_approvals,
         "unresolved_policy_fields": unresolved_policy_fields,
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
     }
@@ -3176,7 +3255,7 @@ async def workspace_profile_memory_storage() -> dict[str, Any]:
 @router.post("/workspace-status/preview")
 async def workspace_status_preview(request: Request) -> dict[str, Any]:
     payload = await _read_json_object_body(request)
-    status = build_workspace_status(payload)
+    status = decorate_workspace_status_operator_projections(build_workspace_status(payload))
     return {
         **INERT_FLAGS,
         "enforcement_enabled": False,
@@ -3185,6 +3264,65 @@ async def workspace_status_preview(request: Request) -> dict[str, Any]:
         **status,
         "source": "caller_supplied_workspace_status_preview",
         "stored": False,
+    }
+
+
+@router.post("/workspace/runtime-provenance/preview")
+async def workspace_runtime_provenance_preview(request: Request) -> dict[str, Any]:
+    payload = await _read_json_object_body(request)
+    return {
+        **INERT_FLAGS,
+        "enforcement_enabled": False,
+        "dry_run_only": True,
+        "display_only": True,
+        "execution_enabled": False,
+        "stored": False,
+        "source": "caller_supplied_runtime_provenance_preview",
+        **evaluate_runtime_provenance(payload),
+    }
+
+
+@router.post("/workspace/autonomy-eligibility/preview")
+async def workspace_autonomy_eligibility_preview(request: Request) -> dict[str, Any]:
+    payload = await _read_json_object_body(request)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": False,
+        "source": "caller_supplied_read_only_autonomy_preview",
+        **evaluate_read_only_autonomy_eligibility(payload),
+    }
+
+
+@router.post("/workspace/scoped-pr-eligibility/preview")
+async def workspace_scoped_pr_eligibility_preview(request: Request) -> dict[str, Any]:
+    payload = await _read_json_object_body(request)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": False,
+        "source": "caller_supplied_scoped_pr_lane_preview",
+        **evaluate_scoped_pr_lane_eligibility(payload),
+    }
+
+
+@router.post("/workspace/tool-permissions/preview")
+async def workspace_tool_permissions_preview(request: Request) -> dict[str, Any]:
+    payload = await _read_json_object_body(request)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": False,
+        "source": "caller_supplied_tool_permission_preview",
+        **classify_control_path_permissions(payload),
+    }
+
+
+@router.post("/workspace/execution-packet/preview")
+async def workspace_execution_packet_preview(request: Request) -> dict[str, Any]:
+    payload = await _read_json_object_body(request)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": False,
+        **build_execution_packet_preview(payload),
+        "source": "caller_supplied_execution_packet_preview",
     }
 
 
@@ -3744,6 +3882,8 @@ async def workspace_jenny_bridge_poller_status(limit: str | None = Query(default
         "manual_copy_only": False,
         "send_to_jenny_enabled": False,
         "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
         **projection,
     }
 
@@ -3820,6 +3960,8 @@ async def workspace_github_bridge_status(
         "manual_copy_only": False,
         "send_to_jenny_enabled": False,
         "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
         **projection,
     }
 
@@ -3860,19 +4002,24 @@ async def workspace_github_bridge_outbox_create(request: Request) -> dict[str, A
 
     return {
         **INERT_FLAGS,
+        **result,
         "stored": True,
         "display_only": False,
         "manual_start_only": True,
         "manual_copy_only": False,
-        "send_to_jenny_enabled": True,
+        "bridge_permission_classification": "write_capable_not_safe_for_autonomy",
+        "write_capable_not_safe_for_autonomy": True,
+        "read_only_safe": False,
+        "autonomy_safe": False,
+        "send_to_jenny_enabled": False,
         "dispatch_enabled": False,
         "session_send_enabled": False,
         "execution_enabled": False,
+        "worker_dispatch_enabled": False,
         "worker_enabled": False,
         "timer_enabled": False,
         "daemon_enabled": False,
         "github_bridge_enabled": True,
-        **result,
     }
 
 
@@ -3901,21 +4048,26 @@ async def workspace_github_bridge_answer_once(request: Request) -> dict[str, Any
 
     return {
         **INERT_FLAGS,
+        **result,
         "stored": True,
         "display_only": False,
         "manual_start_only": True,
         "manual_hermes_answer_enabled": True,
         "requires_explicit_manual_confirmation": True,
         "manual_copy_only": False,
-        "send_to_jenny_enabled": True,
+        "bridge_permission_classification": "write_capable_not_safe_for_autonomy",
+        "write_capable_not_safe_for_autonomy": True,
+        "read_only_safe": False,
+        "autonomy_safe": False,
+        "send_to_jenny_enabled": False,
         "dispatch_enabled": False,
         "session_send_enabled": False,
         "execution_enabled": False,
+        "worker_dispatch_enabled": False,
         "worker_enabled": False,
         "timer_enabled": False,
         "daemon_enabled": False,
         "github_bridge_enabled": True,
-        **result,
     }
 
 
@@ -3931,6 +4083,8 @@ async def workspace_jenny_bridge_outbox_create(request: Request) -> dict[str, An
         "manual_copy_only": False,
         "send_to_jenny_enabled": False,
         "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
         "record_index": index,
         "record_type": record.record_type,
         "request": _jenny_bridge_request_payload(record),
@@ -3958,6 +4112,8 @@ async def workspace_jenny_bridge_inbox(
         "manual_copy_only": False,
         "send_to_jenny_enabled": False,
         "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
         "project_id": safe_project_id,
         "request_id": safe_request_id,
         "count": len(responses),
@@ -3977,6 +4133,8 @@ async def workspace_jenny_bridge_inbox_create(request: Request) -> dict[str, Any
         "manual_copy_only": False,
         "send_to_jenny_enabled": False,
         "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
         "record_index": index,
         "record_type": record.record_type,
         "response": _jenny_bridge_response_payload(record),
@@ -4058,6 +4216,58 @@ async def workspace_report_ingest(request: Request) -> dict[str, Any]:
         "record_index": index,
         "record_type": record.record_type,
         "report": record.to_dict(),
+    }
+
+
+@router.get("/workspace/child-runs")
+async def workspace_child_runs(limit: str | None = Query(default=None)) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    child_runs = _latest_workspace_records(ChildRunRecord, applied_limit)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": False,
+        "count": len(child_runs),
+        "child_runs": child_runs,
+    }
+
+
+@router.post("/workspace/child-runs/create")
+async def workspace_child_run_create(request: Request) -> dict[str, Any]:
+    payload = await _read_workspace_json_body(request)
+    record = _build_child_run_record(payload)
+    index = JsonlRecordStore(record_store_path()).append(record)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": True,
+        "record_index": index,
+        "record_type": record.record_type,
+        "child_run": record.to_dict(),
+    }
+
+
+@router.get("/workspace/worker-node-runs")
+async def workspace_worker_node_runs(limit: str | None = Query(default=None)) -> dict[str, Any]:
+    applied_limit = _safe_records_limit(limit)
+    worker_runs = _latest_workspace_records(WorkerNodeRunRecord, applied_limit)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": False,
+        "count": len(worker_runs),
+        "worker_node_runs": worker_runs,
+    }
+
+
+@router.post("/workspace/worker-node-runs/create")
+async def workspace_worker_node_run_create(request: Request) -> dict[str, Any]:
+    payload = await _read_workspace_json_body(request)
+    record = _build_worker_node_run_record(payload)
+    index = JsonlRecordStore(record_store_path()).append(record)
+    return {
+        **CONTROL_PLANE_INERT_FLAGS,
+        "stored": True,
+        "record_index": index,
+        "record_type": record.record_type,
+        "worker_node_run": record.to_dict(),
     }
 
 

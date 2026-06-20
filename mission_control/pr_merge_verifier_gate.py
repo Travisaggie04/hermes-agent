@@ -12,15 +12,14 @@ import json
 from copy import deepcopy
 from typing import Any, cast
 
+from mission_control.inert_contract import inert_live_operation_flags
 from mission_control.pr_merge_packet_hash import validate_pr_merge_packet_hash
 
-_INERT_GATE_FLAGS: dict[str, Any] = {
-    "trusted_for_execution": False,
-    "inert_context_only": True,
-    "enforcement_enabled": False,
-    "dry_run_only": True,
-    "display_only": True,
-}
+_INERT_GATE_FLAGS: dict[str, Any] = inert_live_operation_flags(
+    enforcement_enabled=False,
+    dry_run_only=True,
+    display_only=True,
+)
 
 PR_MERGE_VERIFIER_GATE_POLICY: dict[str, Any] = {
     "gate_id": "pr_merge_verifier_gate_v1",
@@ -264,6 +263,9 @@ def evaluate_pr_merge_verifier_gate(state: dict[str, Any] | None) -> dict[str, A
         if _has_merge_blocked_action(evidence_blocked_actions):
             _add_unique(reasons, "verifier evidence contains merge-related blocked action")
             _add_unique(blocked_actions, "proceed with PR merge packet")
+        if evidence.get("would_execute") is not False:
+            _add_unique(reasons, "verifier evidence would_execute is not false")
+            _add_unique(blocked_actions, "proceed with PR merge packet")
         if evidence.get("dry_run_only") is not True:
             _add_unique(reasons, "verifier evidence dry_run_only is not true")
             _add_unique(blocked_actions, "proceed with PR merge packet")
@@ -283,13 +285,13 @@ def evaluate_pr_merge_verifier_gate(state: dict[str, Any] | None) -> dict[str, A
         decision_state = "warn"
 
     result = {
+        **_INERT_GATE_FLAGS,
         "decision_state": decision_state,
         "would_block": would_block,
         "reasons": reasons,
         "blocked_actions": blocked_actions,
         "required_approvals": required_approvals,
         "unresolved_policy_fields": list(PR_MERGE_VERIFIER_GATE_POLICY["unresolved_policy_fields"]),
-        "dry_run_only": True,
         "enforces_runtime": False,
     }
     result.update(packet_hash_metadata)

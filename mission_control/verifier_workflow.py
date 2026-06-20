@@ -11,13 +11,13 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-_INERT_VERIFIER_FLAGS: dict[str, Any] = {
-    "trusted_for_execution": False,
-    "inert_context_only": True,
-    "enforcement_enabled": False,
-    "dry_run_only": True,
-    "display_only": True,
-}
+from mission_control.inert_contract import inert_live_operation_flags
+
+_INERT_VERIFIER_FLAGS: dict[str, Any] = inert_live_operation_flags(
+    enforcement_enabled=False,
+    dry_run_only=True,
+    display_only=True,
+)
 
 VERIFIER_WORKFLOW_POLICY: dict[str, Any] = {
     "workflow_id": "verifier_workflow_v1",
@@ -299,12 +299,12 @@ def evaluate_verifier_workflow(observed_state: dict[str, Any] | None) -> dict[st
         decision_state = "warn"
 
     return {
+        **_INERT_VERIFIER_FLAGS,
         "decision_state": decision_state,
         "would_block": would_block,
         "reasons": reasons,
         "blocked_actions": blocked_actions,
         "required_approvals": required_approvals,
         "unresolved_policy_fields": list(policy["unresolved_policy_fields"]),
-        "dry_run_only": True,
         "enforces_runtime": False,
     }

@@ -266,7 +266,12 @@ describe('native project chat header', () => {
   it('reads async-agent readiness as hidden status detail without adding an execution control', () => {
     expect(source).toContain('getMissionControlAsyncAgentStatus')
     expect(source).toContain("queryKey: ['mission-control-async-agent-status']")
+    expect(source).toContain("import { asyncAgentLiveFlagEnabled, asyncAgentLiveSafetyReason } from '@/lib/mission-control-live-flags'")
     expect(source).toContain('function nativeAsyncAgentDetail')
+    expect(source).toContain('const safetyReason = asyncAgentLiveSafetyReason(status)')
+    expect(source).toContain('Jenny activity safety check needs review because ${safetyReason}.')
+    expect(source).toContain("['Would execute', asyncAgentLiveFlagEnabled(asyncStatus?.would_execute) ? 'on' : 'off']")
+    expect(source).toContain("['Worker', asyncAgentLiveFlagEnabled(asyncStatus?.worker_enabled) ? 'on' : 'off']")
     expect(source).toContain('starts and steering remain approval-gated')
     expect(source).toContain('native async agents are not active yet')
     expect(source).not.toContain('Run async agent')

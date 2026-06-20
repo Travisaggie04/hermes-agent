@@ -52,13 +52,14 @@ import {
   MISSION_CONTROL_PROJECT_LINK_CREATED,
   notifyMissionControlProjectCreated
 } from '@/lib/mission-control-events'
+import { asyncAgentLiveFlagEnabled, asyncAgentLiveSafetyReason } from '@/lib/mission-control-live-flags'
 import { formatModelStatusLabel } from '@/lib/model-status-label'
+import { latestNativeJennyReplyAttempt } from '@/lib/native-jenny-reply-loop'
 import {
   createNativeProjectFromIntake,
   emptyNativeProjectIntake,
   type NativeProjectIntakeValue
 } from '@/lib/native-project-intake'
-import { latestNativeJennyReplyAttempt } from '@/lib/native-jenny-reply-loop'
 import { cn } from '@/lib/utils'
 import type { ComposerAttachment } from '@/store/composer'
 import { $pinnedSessionIds } from '@/store/layout'
@@ -103,8 +104,8 @@ import type { DroppedFile } from './hooks/use-composer-actions'
 import { useFileDropZone } from './hooks/use-file-drop-zone'
 import { nativeJennyStatus, type NativeJennyStatusTone } from './native-jenny-status'
 import {
-  nativeProjectChatModel,
   NATIVE_PROJECT_SESSION_LIMIT,
+  nativeProjectChatModel,
   type NativeProjectChatOption,
   type NativeProjectChatSession
 } from './native-projects'
@@ -316,8 +317,8 @@ function ChatHeader({
           loading={projectsQuery.isLoading || projectSessionsQuery.isLoading}
           onClearProject={() => setSelectedMissionControlProject(null)}
           onNewProject={() => setProjectIntakeOpen(true)}
-          onResumeProjectSession={onOpenProjectSession}
           onResumeOtherSession={onResumeSession}
+          onResumeProjectSession={onOpenProjectSession}
           onSelectProject={onStartProjectChat}
           otherChatCount={projectModel.otherChatCount}
           otherChats={projectModel.otherChats}
@@ -376,11 +377,11 @@ function ChatHeader({
       </div>
       <NativeJennyActivityDialog
         asyncStatus={asyncAgentStatusQuery.data}
+        onOpenChange={setActivityOpen}
         onOpenSubagentSession={sessionId => {
           setActivityOpen(false)
           onResumeSession(sessionId)
         }}
-        onOpenChange={setActivityOpen}
         open={activityOpen}
         projectName={selectedProjectTitle}
         subagents={sessionSubagents}
@@ -416,10 +417,11 @@ function NativeJennyActivityDialog({
   const rows = subagents.slice(-8).reverse()
   const readiness = nativeAsyncAgentDetail(asyncStatus) || 'Checking Jenny activity support.'
   const flags = [
-    ['Execution', asyncStatus?.execution_enabled === true ? 'on' : 'off'],
-    ['Dispatch', asyncStatus?.dispatch_enabled === true ? 'on' : 'off'],
-    ['Worker', asyncStatus?.worker_enabled === true ? 'on' : 'off'],
-    ['Timer', asyncStatus?.timer_enabled === true ? 'on' : 'off']
+    ['Would execute', asyncAgentLiveFlagEnabled(asyncStatus?.would_execute) ? 'on' : 'off'],
+    ['Execution', asyncAgentLiveFlagEnabled(asyncStatus?.execution_enabled) ? 'on' : 'off'],
+    ['Dispatch', asyncAgentLiveFlagEnabled(asyncStatus?.dispatch_enabled) ? 'on' : 'off'],
+    ['Worker', asyncAgentLiveFlagEnabled(asyncStatus?.worker_enabled) ? 'on' : 'off'],
+    ['Timer', asyncAgentLiveFlagEnabled(asyncStatus?.timer_enabled) ? 'on' : 'off']
   ]
 
   return (
@@ -560,6 +562,12 @@ function NativeJennyActivityRow({
 function nativeAsyncAgentDetail(status?: MissionControlAsyncAgentStatusResponse | null): string {
   if (!status) {
     return ''
+  }
+
+  const safetyReason = asyncAgentLiveSafetyReason(status)
+
+  if (safetyReason) {
+    return `Jenny activity safety check needs review because ${safetyReason}.`
   }
 
   if (status.async_agent_controls_available) {

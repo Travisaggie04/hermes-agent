@@ -258,6 +258,7 @@ interface GitHubBridgeStatus {
   foreground_watch_supported?: boolean;
   foreground_watch_running?: boolean;
   model_routing_enabled?: boolean;
+  payment_enabled?: boolean;
   pending_count?: number;
   visible_pending_count?: number;
   background_pending_count?: number;
@@ -265,10 +266,22 @@ interface GitHubBridgeStatus {
   visible_pending_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
   recent_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
   response_messages?: Array<WrappedRecord<GitHubBridgeMessageRecord> | GitHubBridgeMessageRecord>;
+  send_to_jenny_enabled?: boolean;
   session_send_enabled?: boolean;
+  social_enabled?: boolean;
   status_records?: Array<WrappedRecord<GitHubBridgeMailboxStatusRecord> | GitHubBridgeMailboxStatusRecord>;
   timer_enabled?: boolean;
+  queue_mutation_enabled?: boolean;
+  waha_enabled?: boolean;
+  worker_dispatch_enabled?: boolean;
+  would_execute?: boolean;
   worker_enabled?: boolean;
+  workers_enabled?: boolean;
+}
+
+interface CompactBridgeSafety {
+  reasons: string[];
+  safe: boolean;
 }
 
 interface GitHubBridgeMailboxStatusRecord {
@@ -333,11 +346,274 @@ interface ProjectSessionRecord {
 
 interface WorkspaceStatus {
   accepted_baseline?: { head?: string; runtime_path?: string };
+  approval_lifecycle?: CompactExecutionLockSource & {
+    available_approval_ids?: string[];
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    consumed_approval_ids?: string[];
+    duplicate_approval_ids?: string[];
+    expired_approval_ids?: string[];
+    pending_approval_ids?: string[];
+    rejected_or_cancelled_approval_ids?: string[];
+    runs_missing_approval_id?: string[];
+    runs_with_missing_approval_record?: Record<string, string>;
+    runs_with_unavailable_approval?: Record<string, string>;
+  };
+  child_agent_instruction_preview?: CompactExecutionLockSource & {
+    agent_identity?: string;
+    available?: boolean;
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    child_run_id?: string;
+    manual_handoff_only?: boolean;
+    manual_handoff_prompt?: string;
+    objective?: string;
+    ready_for_handoff?: boolean;
+    report_id?: string;
+    report_link_status?: string;
+    report_review_status?: string;
+  };
+  child_agent_orchestration?: CompactExecutionLockSource & {
+    active_count?: number;
+    active_runs?: Array<Record<string, unknown>>;
+    blocked_reasons?: string[];
+    latest_by_id?: Record<string, Record<string, unknown>>;
+  };
   deployment_gap?: { accepted_live_head?: string; dashboard_deploy_needed?: boolean; deployed_head?: string; latest_merged_pr?: string; state?: string };
+  execution_mode_classification?: CompactExecutionLockSource & {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    mode_family?: string;
+    preview_ready?: boolean;
+    warnings?: string[];
+  };
+  execution_packet_preview?: CompactExecutionLockSource & {
+    blocked_reasons?: string[];
+    eligible?: boolean;
+    packet?: CompactExecutionLockSource & {
+      mode?: string;
+      worker_node_contract?: CompactExecutionLockSource & {
+        codex_safety_hardness_required?: boolean;
+        manual_handoff_only?: boolean;
+        worker_host_label?: string;
+        worker_identity?: string;
+      };
+    };
+    warnings?: string[];
+  };
+  hard_boundary_contract?: CompactExecutionLockSource & {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    execution_ready?: boolean;
+    forbidden_action_count?: number;
+    forbidden_actions?: string[];
+    live_flag_violation_count?: number;
+    live_flag_violations?: string[];
+    live_operations_enabled?: boolean;
+    live_operations_goal?: boolean;
+    plain_language_summary?: string;
+    separate_approval_action_count?: number;
+    separate_approval_actions?: string[];
+    separate_approval_required?: boolean;
+    state?: string;
+  };
   lane?: { active_lane_count?: number };
+  next_safe_actions?: {
+    action_count?: number;
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    dispatch_enabled?: boolean;
+    display_only?: boolean;
+    execution_enabled?: boolean;
+    primary_action_label?: string;
+    session_send_enabled?: boolean;
+    would_execute?: boolean;
+    worker_dispatch_enabled?: boolean;
+    worker_enabled?: boolean;
+  };
+  operator_decision_packet?: {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    dispatch_enabled?: boolean;
+    display_only?: boolean;
+    execution_lock_blocked_reasons?: string[];
+    execution_enabled?: boolean;
+    jenny_review_required?: boolean;
+    next_safe_action_label?: string;
+    plain_language_summary?: string;
+    recommended_operator_instruction?: string;
+    session_send_enabled?: boolean;
+    state?: string;
+    would_dispatch?: boolean;
+    would_execute?: boolean;
+    would_session_send?: boolean;
+    worker_dispatch_enabled?: boolean;
+    worker_enabled?: boolean;
+  };
+  orchestration_readiness?: {
+    blocked_reasons?: string[];
+    dispatch_enabled?: boolean;
+    execution_enabled?: boolean;
+    execution_ready?: boolean;
+    session_send_enabled?: boolean;
+    states?: {
+      laptop_codex_worker_node?: string;
+      scoped_pr_creation?: string;
+      supervised_read_only_autonomy?: string;
+    };
+    would_execute?: boolean;
+    worker_dispatch_enabled?: boolean;
+    worker_enabled?: boolean;
+  };
+  orchestration_run_graph?: CompactExecutionLockSource & {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    child_run_node_count?: number;
+    edge_count?: number;
+    node_count?: number;
+    report_node_count?: number;
+    run_node_count?: number;
+    worker_node_run_count?: number;
+  };
+  orchestration_stop_control?: CompactExecutionLockSource & {
+    active_stop_count?: number;
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    link_mismatch_count?: number;
+    needs_report_count?: number;
+    needs_review_count?: number;
+    primary_item_id?: string;
+    primary_item_label?: string;
+    stop_cancel_count?: number;
+    terminal_stop_count?: number;
+  };
+  report_contract_compliance?: CompactExecutionLockSource & {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    complete_report_count?: number;
+    incomplete_report_count?: number;
+    primary_item_id?: string;
+    primary_item_label?: string;
+    report_count?: number;
+  };
+  report_completion_path?: {
+    blocked?: boolean;
+    blocked_completion_count?: number;
+    blocked_reasons?: string[];
+    completion_ready_count?: number;
+    contract_incomplete_count?: number;
+    dispatch_enabled?: boolean;
+    duplicate_report_count?: number;
+    execution_enabled?: boolean;
+    ingestion_blocked_count?: number;
+    link_mismatch_count?: number;
+    missing_report_count?: number;
+    needs_review_count?: number;
+    primary_item_id?: string;
+    primary_item_label?: string;
+    rejected_report_count?: number;
+    session_send_enabled?: boolean;
+    terminal_item_count?: number;
+    would_execute?: boolean;
+    worker_dispatch_enabled?: boolean;
+    worker_enabled?: boolean;
+  };
+  report_lifecycle?: CompactExecutionLockSource & {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    duplicate_report_ids?: string[];
+    open_report_ids?: string[];
+    report_overwrite_conflict_count?: number;
+    report_overwrite_conflict_ids?: string[];
+    report_overwrite_conflicts?: Record<string, string[]>;
+    reviewed_report_ids?: string[];
+    runs_missing_report?: string[];
+    runs_with_missing_linked_report_ids?: Record<string, string[]>;
+    terminal_report_ids?: string[];
+  };
+  report_review_queue?: CompactExecutionLockSource & {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    duplicate_report_count?: number;
+    link_mismatch_count?: number;
+    missing_report_count?: number;
+    needs_review_count?: number;
+    primary_review_item_id?: string;
+    primary_review_label?: string;
+    primary_review_reason?: string;
+    queue_count?: number;
+  };
+  result_ingestion_contract?: {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    blocked_report_count?: number;
+    dispatch_enabled?: boolean;
+    duplicate_report_count?: number;
+    execution_enabled?: boolean;
+    forbidden_metadata_count?: number;
+    ingestion_ready_count?: number;
+    link_mismatch_count?: number;
+    missing_link_count?: number;
+    missing_safety_confirmation_count?: number;
+    primary_item_id?: string;
+    primary_item_label?: string;
+    report_count?: number;
+    session_send_enabled?: boolean;
+    unsafe_redaction_count?: number;
+    would_execute?: boolean;
+    worker_dispatch_enabled?: boolean;
+    worker_enabled?: boolean;
+  };
+  run_lifecycle?: CompactExecutionLockSource & {
+    active_mutation_lane_count?: number;
+    active_mutation_run_ids?: string[];
+    active_run_ids?: string[];
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    duplicate_run_ids?: string[];
+    one_active_mutation_lane_rule_passed?: boolean;
+    stop_cancel_run_ids?: string[];
+    terminal_run_ids?: string[];
+    terminal_runs_missing_report?: string[];
+    terminal_runs_with_missing_linked_report_ids?: Record<string, string[]>;
+  };
   runtime_worktree_guard?: { decision_state?: string };
-  safety?: { dispatch_in_gateway?: boolean };
+  safety?: {
+    daemon_enabled?: unknown;
+    dispatch_in_gateway?: unknown;
+    dispatch_state?: unknown;
+    model_routing_enabled?: unknown;
+    payment_enabled?: unknown;
+    queue_mutation_enabled?: unknown;
+    social_enabled?: unknown;
+    timer_enabled?: unknown;
+    waha_enabled?: unknown;
+    worker_enabled?: unknown;
+    workers_enabled?: unknown;
+  };
   stale_context?: { warnings?: string[] };
+  worker_node_presence?: {
+    blocked?: boolean;
+    blocked_reasons?: string[];
+    dispatch_enabled?: boolean;
+    execution_enabled?: boolean;
+    online?: boolean;
+    presence_state?: string;
+    session_send_enabled?: boolean;
+    would_execute?: boolean;
+    worker_dispatch_enabled?: boolean;
+    worker_enabled?: boolean;
+    worker_host_label?: string;
+    worker_run_id?: string;
+  };
+  worker_node_instruction_preview?: CompactExecutionLockSource & {
+    available?: boolean;
+    blocked_reasons?: string[];
+    manual_handoff_only?: boolean;
+    manual_handoff_prompt?: string;
+    ready_for_handoff?: boolean;
+    worker_host_label?: string;
+  };
 }
 
 interface MemoryFileLevel {
@@ -1248,6 +1524,59 @@ function normalizedBridgeError(bridgeStatus: JennyBridgePollerStatus, githubBrid
   return hasGitHubBridgeSignal(githubBridgeStatus) ? "" : legacyError;
 }
 
+function compactGitHubBridgeSafety(status: GitHubBridgeStatus | undefined, workspaceStatus?: WorkspaceStatus): CompactBridgeSafety {
+  const reasons: string[] = [];
+  if (!status) {
+    reasons.push("GitHub bridge status not loaded");
+  } else {
+    if (status.manual_start_only !== true) reasons.push("manual_start_only is not confirmed");
+    const liveFlags: Array<[keyof GitHubBridgeStatus, string]> = [
+      ["dispatch_enabled", "dispatch_enabled must remain false"],
+      ["execution_enabled", "execution_enabled must remain false"],
+      ["send_to_jenny_enabled", "send_to_jenny_enabled must remain false"],
+      ["session_send_enabled", "session_send_enabled must remain false"],
+      ["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"],
+      ["would_execute", "would_execute must remain false"],
+      ["worker_enabled", "worker_enabled must remain false"],
+      ["workers_enabled", "workers_enabled must remain false"],
+      ["timer_enabled", "timer_enabled must remain false"],
+      ["daemon_enabled", "daemon_enabled must remain false"],
+      ["discord_automation_enabled", "discord_automation_enabled must remain false"],
+      ["model_routing_enabled", "model_routing_enabled must remain false"],
+      ["payment_enabled", "payment_enabled must remain false"],
+      ["queue_mutation_enabled", "queue_mutation_enabled must remain false"],
+      ["social_enabled", "social_enabled must remain false"],
+      ["waha_enabled", "waha_enabled must remain false"],
+    ];
+    for (const [flag, reason] of liveFlags) {
+      if (compactLiveFlagEnabled(status[flag])) reasons.push(reason);
+    }
+  }
+  const hardBoundary = workspaceStatus?.hard_boundary_contract;
+  if (!hardBoundary) {
+    reasons.push("hard_boundary_contract is not loaded");
+  } else {
+    if (hardBoundary.blocked === true) {
+      reasons.push(hardBoundary.blocked_reasons?.[0] ?? "hard_boundary_contract is blocked");
+    }
+    for (const reason of hardBoundary.live_flag_violations ?? []) {
+      reasons.push(reason);
+    }
+    reasons.push(...compactExecutionLockReasons("hard_boundary_contract", hardBoundary));
+  }
+  const operatorPacket = workspaceStatus?.operator_decision_packet;
+  reasons.push(...(operatorPacket?.execution_lock_blocked_reasons ?? []));
+  reasons.push(...compactExecutionLockReasons("operator_decision_packet", operatorPacket));
+  reasons.push(...compactExecutionLockReasons("orchestration_readiness", workspaceStatus?.orchestration_readiness));
+
+  const uniqueReasons = [...new Set(reasons)];
+  return { reasons: uniqueReasons, safe: uniqueReasons.length === 0 };
+}
+
+function compactBridgeBlockedMessage(safety: CompactBridgeSafety): string {
+  return `Manual Jenny bridge blocked: ${safety.reasons[0] ?? "bridge safety is not confirmed"}`;
+}
+
 function noReplyStatusMessage(error: unknown): string {
   const rawError = error ?? "no matching pending request";
   if (isNoPendingBridgeError(rawError)) {
@@ -1689,6 +2018,45 @@ function safetySummary(status: WorkspaceStatus): string {
   const activeLaneCount = status.lane?.active_lane_count ?? 0;
   const staleWarnings = status.stale_context?.warnings ?? [];
   return `guard=${guard}; dispatch=${dispatch}; active_lane_count=${activeLaneCount}; stale_warnings=${staleWarnings.length ? staleWarnings.join(", ") : "none"}`;
+}
+
+function firstReason(values: string[] | undefined, fallback: string): string {
+  return values?.find(value => value.trim()) ?? fallback;
+}
+
+function compactRecordText(record: Record<string, unknown> | undefined, field: string): string {
+  const value = record?.[field];
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return "";
+}
+
+function compactStateLabel(value: string | undefined, fallback = "unknown"): string {
+  return (value?.trim() || fallback).replaceAll("_", " ");
+}
+
+function compactOperatorSummary(status: WorkspaceStatus): string {
+  const packet = status.operator_decision_packet;
+  return compactText(
+    packet?.execution_lock_blocked_reasons?.length
+      ? `Operator execution locks: ${firstReason(packet.execution_lock_blocked_reasons, "review nested execution lock blockers")}`
+      : (
+        packet?.recommended_operator_instruction
+        || packet?.next_safe_action_label
+        || packet?.plain_language_summary
+        || "Keep Mission Control preview-only and review the next safe action."
+      ),
+    260,
+  );
+}
+
+function compactReadinessSummary(status: WorkspaceStatus): string {
+  const states = status.orchestration_readiness?.states;
+  return [
+    `read-only ${compactStateLabel(states?.supervised_read_only_autonomy)}`,
+    `scoped PR ${compactStateLabel(states?.scoped_pr_creation)}`,
+    `laptop Codex ${compactStateLabel(states?.laptop_codex_worker_node)}`,
+  ].join("; ");
 }
 
 function structuredJennyHandoff(projectName: string): string {
@@ -2169,6 +2537,11 @@ export default function MissionControlCompactPage() {
       setRoomMessage("Write one bounded request before queuing a Jenny bridge message.");
       return;
     }
+    const bridgeSafety = compactGitHubBridgeSafety(snapshot?.githubBridgeStatus, snapshot?.workspaceStatus);
+    if (!bridgeSafety.safe) {
+      setRoomMessage(compactBridgeBlockedMessage(bridgeSafety));
+      return;
+    }
     const requestId = bridgeRequestId();
     setRoomBusy(true);
     setRoomMessage("");
@@ -2208,6 +2581,11 @@ export default function MissionControlCompactPage() {
   }
 
   async function runJennyOnce(projectView: ProjectViewModel, requestId?: string) {
+    const bridgeSafety = compactGitHubBridgeSafety(snapshot?.githubBridgeStatus, snapshot?.workspaceStatus);
+    if (!bridgeSafety.safe) {
+      setRoomMessage(compactBridgeBlockedMessage(bridgeSafety));
+      return;
+    }
     const pendingRequestId = requestId || latestVisiblePendingGitHubBridgeMessageForProject(
       unwrapRecords(snapshot?.githubBridgeStatus.visible_pending_messages),
       projectView.project.project_id,
@@ -2317,6 +2695,11 @@ export default function MissionControlCompactPage() {
   }
 
   async function queueHermesUpdateLane(projectView: ProjectViewModel) {
+    const bridgeSafety = compactGitHubBridgeSafety(snapshot?.githubBridgeStatus, snapshot?.workspaceStatus);
+    if (!bridgeSafety.safe) {
+      setRoomMessage(compactBridgeBlockedMessage(bridgeSafety));
+      return;
+    }
     setRoomBusy(true);
     setRoomMessage("");
     setProjectRequest(HERMES_UPDATE_LANE_REQUEST);
@@ -2343,6 +2726,11 @@ export default function MissionControlCompactPage() {
   }
 
   async function queueHermesStorageCleanupLane(projectView: ProjectViewModel) {
+    const bridgeSafety = compactGitHubBridgeSafety(snapshot?.githubBridgeStatus, snapshot?.workspaceStatus);
+    if (!bridgeSafety.safe) {
+      setRoomMessage(compactBridgeBlockedMessage(bridgeSafety));
+      return;
+    }
     setRoomBusy(true);
     setRoomMessage("");
     setProjectRequest(HERMES_STORAGE_CLEANUP_LANE_REQUEST);
@@ -2583,6 +2971,7 @@ export default function MissionControlCompactPage() {
               runEffort={selectedEffort}
               runSettingsLabel={compactRunSettingsLabel(compactRunSettings)}
               selectedProjectView={selectedProjectView}
+              workspaceStatus={snapshot?.workspaceStatus ?? {}}
             />
           </div>
           <div className="sr-only order-2 min-w-0 max-w-full overflow-hidden">
@@ -2864,6 +3253,7 @@ function CompactProjectRoom({
   runEffort,
   runSettingsLabel,
   selectedProjectView,
+  workspaceStatus,
 }: {
   busy: boolean;
   bridgeRequests: JennyBridgeRequestRecord[];
@@ -2900,6 +3290,7 @@ function CompactProjectRoom({
   runEffort: string;
   runSettingsLabel: string;
   selectedProjectView: ProjectViewModel;
+  workspaceStatus: WorkspaceStatus;
 }) {
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const sessions = selectedProjectView.projectState?.recent_sessions ?? [];
@@ -2940,8 +3331,10 @@ function CompactProjectRoom({
   const sendButtonLabel = jennySendButtonLabel();
   const latestReviewByResponseId = latestReplyReviewByResponseId(replyReviews);
   const bridgeError = normalizedBridgeError(bridgeStatus, githubBridgeStatus);
+  const githubBridgeSafety = compactGitHubBridgeSafety(githubBridgeStatus, workspaceStatus);
+  const bridgeActionDisabled = busy || paused || !githubBridgeSafety.safe;
   const hasRunnablePendingMessage = Boolean(projectedVisiblePending ?? latestPending);
-  const canRunForegroundReply = !paused && (hasRunnablePendingMessage || pendingCount > 0);
+  const canRunForegroundReply = !paused && githubBridgeSafety.safe && (hasRunnablePendingMessage || pendingCount > 0);
   const statusRecords = unwrapRecords(githubBridgeStatus.status_records);
   const statusSourceBridgeMessages = [
     ...visibleGitHubBridgeMessages,
@@ -3354,6 +3747,11 @@ function CompactProjectRoom({
               Review the latest Jenny reply in the chat before acting on it.
             </p>
           ) : null}
+          {!githubBridgeSafety.safe ? (
+            <p className="mb-2 max-w-full rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-700 [overflow-wrap:anywhere] dark:text-red-200" role="status">
+              {compactBridgeBlockedMessage(githubBridgeSafety)}
+            </p>
+          ) : null}
           <div className="mb-2 grid min-w-0 max-w-full grid-cols-2 gap-1.5 text-[0.68rem]" aria-label="Compact chat tools">
             <label className="min-w-0">
               <span className="mb-1 block font-semibold uppercase tracking-[0.14em] text-[#a59783]">Model</span>
@@ -3404,7 +3802,7 @@ function CompactProjectRoom({
             </label>
 
             <div className="flex min-w-0 shrink-0 justify-end">
-              <button className="min-h-11 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={busy || paused} onClick={onQueueBridge} type="button">
+              <button className="min-h-11 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={bridgeActionDisabled} onClick={onQueueBridge} type="button">
                 {sendButtonLabel}
               </button>
             </div>
@@ -3560,12 +3958,12 @@ function CompactProjectRoom({
               </p>
               <div className="mt-2 grid min-w-0 gap-2 sm:flex sm:flex-wrap">
                 {onQueueHermesUpdate ? (
-                  <button className="w-full rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300 sm:w-auto" disabled={busy} onClick={onQueueHermesUpdate} type="button">
+                  <button className="w-full rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300 sm:w-auto" disabled={busy || !githubBridgeSafety.safe} onClick={onQueueHermesUpdate} type="button">
                     Start Hermes update lane
                   </button>
                 ) : null}
                 {onQueueStorageCleanup ? (
-                  <button className="w-full rounded-xl border border-sky-500/40 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/10 disabled:opacity-60 dark:text-sky-300 sm:w-auto" disabled={busy} onClick={onQueueStorageCleanup} type="button">
+                  <button className="w-full rounded-xl border border-sky-500/40 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/10 disabled:opacity-60 dark:text-sky-300 sm:w-auto" disabled={busy || !githubBridgeSafety.safe} onClick={onQueueStorageCleanup} type="button">
                     Start storage cleanup lane
                   </button>
                 ) : null}
@@ -3600,6 +3998,7 @@ function CompactProjectRoom({
             </div>
             <div className="mt-3 grid min-w-0 gap-2 rounded-lg border border-sky-500/20 bg-sky-500/5 p-2 text-xs sm:grid-cols-2">
               <CompactField label="GitHub mailbox" value={githubBridgeStatus.manual_start_only === false ? "disabled" : "manual-start only"} />
+              <CompactField label="GitHub safety" value={githubBridgeSafety.safe ? "manual-only confirmed" : compactBridgeBlockedMessage(githubBridgeSafety)} />
               <CompactField label="GitHub mode" value={githubBridgeStatus.mode || "manual"} />
               <CompactField
                 label="GitHub pending"
@@ -3789,6 +4188,71 @@ function SafetyStrip({ status }: { status: WorkspaceStatus }) {
 
 type CompactHealthTone = "bad" | "good" | "idle" | "warn";
 
+type CompactExecutionLockSource = {
+  daemon_enabled?: boolean;
+  dispatch_enabled?: boolean;
+  dispatch_in_gateway?: boolean;
+  dispatch_state?: boolean;
+  execution_enabled?: boolean;
+  execution_ready?: boolean;
+  model_routing_enabled?: boolean;
+  payment_enabled?: boolean;
+  queue_mutation_enabled?: boolean;
+  send_to_jenny_enabled?: boolean;
+  session_send_enabled?: boolean;
+  social_enabled?: boolean;
+  timer_enabled?: boolean;
+  waha_enabled?: boolean;
+  would_dispatch?: boolean;
+  would_execute?: boolean;
+  would_session_send?: boolean;
+  worker_dispatch_enabled?: boolean;
+  worker_enabled?: boolean;
+  workers_enabled?: boolean;
+};
+
+const COMPACT_EXECUTION_LOCK_FLAGS: Array<[keyof CompactExecutionLockSource, string]> = [
+  ["would_execute", "would_execute must remain false"],
+  ["would_dispatch", "would_dispatch must remain false"],
+  ["would_session_send", "would_session_send must remain false"],
+  ["dispatch_enabled", "dispatch_enabled must remain false"],
+  ["dispatch_in_gateway", "dispatch_in_gateway must remain false"],
+  ["dispatch_state", "dispatch_state must remain false"],
+  ["execution_enabled", "execution_enabled must remain false"],
+  ["execution_ready", "execution_ready must remain false"],
+  ["model_routing_enabled", "model_routing_enabled must remain false"],
+  ["payment_enabled", "payment_enabled must remain false"],
+  ["queue_mutation_enabled", "queue_mutation_enabled must remain false"],
+  ["send_to_jenny_enabled", "send_to_jenny_enabled must remain false"],
+  ["session_send_enabled", "session_send_enabled must remain false"],
+  ["social_enabled", "social_enabled must remain false"],
+  ["timer_enabled", "timer_enabled must remain false"],
+  ["waha_enabled", "waha_enabled must remain false"],
+  ["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"],
+  ["worker_enabled", "worker_enabled must remain false"],
+  ["workers_enabled", "workers_enabled must remain false"],
+];
+
+function compactExecutionLockReasons(label: string, source?: CompactExecutionLockSource | null): string[] {
+  if (!source) return [];
+  return COMPACT_EXECUTION_LOCK_FLAGS
+    .filter(([flag]) => compactLiveFlagEnabled(source[flag]))
+    .map(([, reason]) => `${label}: ${reason}`);
+}
+
+function compactLiveFlagEnabled(value: unknown): boolean {
+  if (value === true) return true;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    return ["1", "true", "yes", "y", "on", "enabled"].includes(value.trim().toLowerCase());
+  }
+  return false;
+}
+
+function compactWorkspaceSafetyFlagReasons(status: WorkspaceStatus): string[] {
+  return compactExecutionLockReasons("Workspace safety", status.safety as CompactExecutionLockSource | undefined);
+}
+
 function CompactHermesHealthDashboard({
   activeProjectViews,
   pausedProjects,
@@ -3809,19 +4273,316 @@ function CompactHermesHealthDashboard({
   const memoryErrors = snapshot.memoryStorage.errors ?? [];
   const reportCount = activeProjectViews.filter(projectView => projectView.projectState?.has_real_report || projectView.report).length;
   const deployedHead = status.deployment_gap?.deployed_head ?? status.accepted_baseline?.head ?? "unknown";
+  const executionMode = status.execution_mode_classification;
+  const executionPacket = status.execution_packet_preview;
+  const hardBoundary = status.hard_boundary_contract;
+  const operatorPacket = status.operator_decision_packet;
+  const readiness = status.orchestration_readiness;
+  const approvalLifecycle = status.approval_lifecycle;
+  const runLifecycle = status.run_lifecycle;
+  const childProjection = status.child_agent_orchestration;
+  const childInstruction = status.child_agent_instruction_preview;
+  const runGraph = status.orchestration_run_graph;
+  const reportReviewQueue = status.report_review_queue;
+  const reportContract = status.report_contract_compliance;
+  const stopControl = status.orchestration_stop_control;
+  const workerInstruction = status.worker_node_instruction_preview;
+  const workerPresence = status.worker_node_presence;
+  const resultIngestion = status.result_ingestion_contract;
+  const reportCompletion = status.report_completion_path;
+  const reportLifecycle = status.report_lifecycle;
+  const nextSafeActions = status.next_safe_actions;
+  const reportReviewQueueCount = reportReviewQueue?.queue_count ?? 0;
+  const reportReviewNeedsReviewCount = reportReviewQueue?.needs_review_count ?? 0;
+  const reportReviewMissingCount = reportReviewQueue?.missing_report_count ?? 0;
+  const reportReviewMismatchCount = reportReviewQueue?.link_mismatch_count ?? 0;
+  const reportContractIncompleteCount = reportContract?.incomplete_report_count ?? 0;
+  const resultIngestionBlocked = resultIngestion?.blocked_report_count ?? 0;
+  const reportCompletionBlocked = reportCompletion?.blocked_completion_count ?? 0;
+  const stopCancelCount = stopControl?.stop_cancel_count ?? 0;
+  const stopCancelBlockedCount =
+    (stopControl?.needs_report_count ?? 0)
+    + (stopControl?.needs_review_count ?? 0)
+    + (stopControl?.link_mismatch_count ?? 0);
+  const approvalMissingRecordCount = Object.keys(approvalLifecycle?.runs_with_missing_approval_record ?? {}).length;
+  const approvalUnavailableRunCount = Object.keys(approvalLifecycle?.runs_with_unavailable_approval ?? {}).length;
+  const approvalGapCount =
+    (approvalLifecycle?.duplicate_approval_ids?.length ?? 0)
+    + (approvalLifecycle?.consumed_approval_ids?.length ?? 0)
+    + (approvalLifecycle?.rejected_or_cancelled_approval_ids?.length ?? 0)
+    + (approvalLifecycle?.runs_missing_approval_id?.length ?? 0)
+    + approvalMissingRecordCount
+    + approvalUnavailableRunCount;
+  const runTerminalMissingLinkedCount = Object.values(runLifecycle?.terminal_runs_with_missing_linked_report_ids ?? {}).reduce(
+    (count, reportIds) => count + reportIds.length,
+    0,
+  );
+  const runGapCount =
+    (runLifecycle?.duplicate_run_ids?.length ?? 0)
+    + (runLifecycle?.terminal_runs_missing_report?.length ?? 0)
+    + runTerminalMissingLinkedCount
+    + (runLifecycle?.one_active_mutation_lane_rule_passed === false ? 1 : 0);
+  const reportDuplicateCount = reportLifecycle?.duplicate_report_ids?.length ?? 0;
+  const reportMissingRunCount = reportLifecycle?.runs_missing_report?.length ?? 0;
+  const reportMissingLinkedCount = Object.values(reportLifecycle?.runs_with_missing_linked_report_ids ?? {}).reduce(
+    (count, reportIds) => count + reportIds.length,
+    0,
+  );
+  const reportOverwriteConflictCount = reportLifecycle?.report_overwrite_conflict_count ?? reportLifecycle?.report_overwrite_conflict_ids?.length ?? 0;
+  const reportGapCount = reportDuplicateCount + reportOverwriteConflictCount + reportMissingRunCount + reportMissingLinkedCount;
+  const hardBoundaryViolationCount = hardBoundary?.live_flag_violation_count ?? hardBoundary?.live_flag_violations?.length ?? 0;
+  const hardBoundaryForbiddenCount = hardBoundary?.forbidden_action_count ?? hardBoundary?.forbidden_actions?.length ?? 0;
+  const hardBoundarySeparateApprovalCount = hardBoundary?.separate_approval_action_count ?? hardBoundary?.separate_approval_actions?.length ?? 0;
+  const workerPresenceState = workerPresence?.presence_state ?? "unknown";
+  const readinessStates = readiness?.states;
+  const nextSafeActionLockReasons = compactExecutionLockReasons("Safe next actions", nextSafeActions);
+  const approvalLifecycleLockReasons = compactExecutionLockReasons("Approval lifecycle", approvalLifecycle);
+  const runLifecycleLockReasons = compactExecutionLockReasons("Run lifecycle", runLifecycle);
+  const runGraphLockReasons = compactExecutionLockReasons("Orchestration run graph", runGraph);
+  const childProjectionLockReasons = compactExecutionLockReasons("Child agent", childProjection);
+  const childInstructionLockReasons = compactExecutionLockReasons("Child handoff", childInstruction);
+  const reportReviewQueueLockReasons = compactExecutionLockReasons("Report review queue", reportReviewQueue);
+  const reportContractLockReasons = compactExecutionLockReasons("Report contract", reportContract);
+  const stopControlLockReasons = compactExecutionLockReasons("Stop/cancel control", stopControl);
+  const executionModeLockReasons = compactExecutionLockReasons("Execution mode", executionMode);
+  const executionPacketLockReasons = compactExecutionLockReasons("Execution packet", executionPacket);
+  const executionPacketBodyLockReasons = compactExecutionLockReasons("Execution packet body", executionPacket?.packet);
+  const workerContractLockReasons = compactExecutionLockReasons("Worker contract", executionPacket?.packet?.worker_node_contract);
+  const hardBoundaryLockReasons = compactExecutionLockReasons("Hard boundary", hardBoundary);
+  const operatorLockReasons = compactExecutionLockReasons("Operator decision", operatorPacket);
+  const operatorExecutionLockBlockedReasons = operatorPacket?.execution_lock_blocked_reasons ?? [];
+  const readinessLockReasons = compactExecutionLockReasons("Preview readiness", readiness);
+  const workerInstructionLockReasons = compactExecutionLockReasons("Worker handoff", workerInstruction);
+  const workerLockReasons = compactExecutionLockReasons("Worker node", workerPresence);
+  const workspaceSafetyFlagReasons = compactWorkspaceSafetyFlagReasons(status);
+  const ingestionLockReasons = compactExecutionLockReasons("Result ingestion", resultIngestion);
+  const completionLockReasons = compactExecutionLockReasons("Report completion", reportCompletion);
+  const reportLifecycleLockReasons = compactExecutionLockReasons("Report lifecycle", reportLifecycle);
   const issues = [
     bridgeError ? `Jenny bridge error: ${bridgeError}` : "",
     guard !== "pass" ? `Runtime guard is ${guard}` : "",
     dispatch !== false ? "Dispatch safety is not confirmed off" : "",
+    ...workspaceSafetyFlagReasons,
     activeLaneCount > 1 ? `${activeLaneCount} active lanes recorded` : "",
     status.deployment_gap?.dashboard_deploy_needed ? "Phone/web dashboard needs a dashboard-only update" : "",
     staleWarnings.length ? `Stale context: ${staleWarnings.join(", ")}` : "",
     memoryErrors.length ? `${memoryErrors.length} memory storage warning${memoryErrors.length === 1 ? "" : "s"}` : "",
+    ...nextSafeActionLockReasons,
+    ...approvalLifecycleLockReasons,
+    ...runLifecycleLockReasons,
+    ...runGraphLockReasons,
+    ...childProjectionLockReasons,
+    ...childInstructionLockReasons,
+    ...reportReviewQueueLockReasons,
+    ...reportContractLockReasons,
+    ...stopControlLockReasons,
+    ...executionModeLockReasons,
+    ...executionPacketLockReasons,
+    ...executionPacketBodyLockReasons,
+    ...workerContractLockReasons,
+    ...hardBoundaryLockReasons,
+    ...operatorLockReasons,
+    operatorExecutionLockBlockedReasons.length ? firstReason(operatorExecutionLockBlockedReasons, "Operator execution locks need review") : "",
+    ...readinessLockReasons,
+    ...workerInstructionLockReasons,
+    ...workerLockReasons,
+    ...ingestionLockReasons,
+    ...completionLockReasons,
+    ...reportLifecycleLockReasons,
+    hardBoundary?.blocked ? firstReason(hardBoundary.blocked_reasons, "Hard boundary contract needs review") : "",
+    operatorPacket?.blocked ? firstReason(operatorPacket.blocked_reasons, "Operator decision packet is blocked") : "",
+    approvalLifecycle?.blocked ? firstReason(approvalLifecycle.blocked_reasons, "Approval lifecycle needs review") : "",
+    runLifecycle?.blocked ? firstReason(runLifecycle.blocked_reasons, "Run lifecycle needs review") : "",
+    runGraph?.blocked ? firstReason(runGraph.blocked_reasons, "Orchestration run graph needs review") : "",
+    childProjection?.blocked_reasons?.length ? firstReason(childProjection.blocked_reasons, "Child-agent projection needs review") : "",
+    childInstruction?.blocked ? firstReason(childInstruction.blocked_reasons, "Child handoff preview needs review") : "",
+    reportReviewQueue?.blocked ? firstReason(reportReviewQueue.blocked_reasons, "Report review queue needs Jenny review") : "",
+    reportContract?.blocked ? firstReason(reportContract.blocked_reasons, "Report contract needs review") : "",
+    stopControl?.blocked ? firstReason(stopControl.blocked_reasons, "Stop/cancel control needs review") : "",
+    executionMode?.blocked ? firstReason(executionMode.blocked_reasons, "Execution mode preview is blocked") : "",
+    executionPacket?.blocked_reasons?.length ? firstReason(executionPacket.blocked_reasons, "Execution packet preview is blocked") : "",
+    readiness?.blocked_reasons?.length ? firstReason(readiness.blocked_reasons, "Orchestration readiness is blocked") : "",
+    workerInstruction?.blocked_reasons?.length ? firstReason(workerInstruction.blocked_reasons, "Worker handoff preview is blocked") : "",
+    workerPresence?.blocked ? firstReason(workerPresence.blocked_reasons, "Laptop Codex worker-node presence is blocked") : "",
+    resultIngestionBlocked ? firstReason(resultIngestion?.blocked_reasons, "Result ingestion needs review") : "",
+    reportCompletionBlocked ? firstReason(reportCompletion?.blocked_reasons, "Report completion path needs review") : "",
+    reportLifecycle?.blocked ? firstReason(reportLifecycle.blocked_reasons, "Report lifecycle needs review") : "",
   ].filter(Boolean);
   const overallTone: CompactHealthTone = issues.length ? "warn" : "good";
   const bridgeTone: CompactHealthTone = bridgeError ? "bad" : bridgePending ? "warn" : "good";
-  const safetyOk = guard === "pass" && dispatch === false && activeLaneCount <= 1 && staleWarnings.length === 0;
+  const safetyOk = guard === "pass" && dispatch === false && workspaceSafetyFlagReasons.length === 0 && activeLaneCount <= 1 && staleWarnings.length === 0;
+  const workspaceSafetyDetail = workspaceSafetyFlagReasons.length ? workspaceSafetyFlagReasons[0] : "live safety flags disabled";
+  const approvalLifecycleTone: CompactHealthTone = approvalLifecycleLockReasons.length
+    ? "bad"
+    : approvalLifecycle?.blocked || approvalGapCount
+      ? "warn"
+      : "good";
+  const runLifecycleTone: CompactHealthTone = runLifecycleLockReasons.length
+    ? "bad"
+    : runLifecycle?.blocked || runGapCount
+      ? "warn"
+      : "good";
+  const runGraphTone: CompactHealthTone = runGraphLockReasons.length
+    ? "bad"
+    : !runGraph || runGraph.blocked || runGraph.blocked_reasons?.length
+      ? "warn"
+      : "good";
+  const childProjectionTone: CompactHealthTone = childProjectionLockReasons.length
+    ? "bad"
+    : childProjection?.blocked_reasons?.length
+      ? "warn"
+      : "good";
+  const childInstructionTone: CompactHealthTone = childInstructionLockReasons.length
+    ? "bad"
+    : childInstruction?.blocked_reasons?.length || childInstruction?.ready_for_handoff !== true
+      ? "warn"
+      : "good";
+  const reportReviewQueueTone: CompactHealthTone = reportReviewQueueLockReasons.length
+    ? "bad"
+    : reportReviewQueue?.blocked || reportReviewQueueCount
+      ? "warn"
+      : "good";
+  const reportContractTone: CompactHealthTone = reportContractLockReasons.length
+    ? "bad"
+    : reportContract?.blocked || reportContractIncompleteCount
+      ? "warn"
+      : "good";
+  const stopControlTone: CompactHealthTone = stopControlLockReasons.length
+    ? "bad"
+    : stopControl?.blocked || stopCancelBlockedCount
+      ? "warn"
+      : "good";
+  const executionPreviewTone: CompactHealthTone = [
+    ...executionModeLockReasons,
+    ...executionPacketLockReasons,
+    ...executionPacketBodyLockReasons,
+    ...workerContractLockReasons,
+  ].length
+    ? "bad"
+    : executionMode?.blocked || executionPacket?.eligible === false || executionPacket?.blocked_reasons?.length
+      ? "warn"
+      : "good";
+  const operatorTone: CompactHealthTone = operatorLockReasons.length
+    ? "bad"
+    : operatorExecutionLockBlockedReasons.length
+      ? "bad"
+      : operatorPacket?.blocked || operatorPacket?.jenny_review_required
+      ? "warn"
+      : "good";
+  const hardBoundaryTone: CompactHealthTone = hardBoundaryLockReasons.length || hardBoundaryViolationCount
+    ? "bad"
+    : !hardBoundary || hardBoundary.live_operations_enabled !== false || hardBoundary.live_operations_goal !== false || hardBoundary.execution_ready !== false
+      ? "warn"
+      : "good";
+  const readinessTone: CompactHealthTone = readinessLockReasons.length
+    ? "bad"
+    : readiness?.blocked_reasons?.length
+      ? "warn"
+      : "good";
+  const workerInstructionTone: CompactHealthTone = workerInstructionLockReasons.length
+    ? "bad"
+    : workerInstruction?.blocked_reasons?.length || workerInstruction?.ready_for_handoff !== true
+      ? "warn"
+      : "good";
+  const workerTone: CompactHealthTone = workerLockReasons.length
+    ? "bad"
+    : workerPresence?.online
+      ? "good"
+      : "warn";
+  const ingestionTone: CompactHealthTone = ingestionLockReasons.length
+    ? "bad"
+    : resultIngestionBlocked
+      ? "warn"
+      : "good";
+  const completionTone: CompactHealthTone = completionLockReasons.length
+    ? "bad"
+    : reportCompletionBlocked
+      ? "warn"
+      : "good";
+  const reportLifecycleTone: CompactHealthTone = reportLifecycleLockReasons.length
+    ? "bad"
+    : reportLifecycle?.blocked || reportGapCount
+      ? "warn"
+      : "good";
   const maxMountPercent = Math.max(0, ...(snapshot.memoryStorage.profiles ?? []).map(profile => profile.mount?.percent_used ?? 0));
+  const executionPreviewDetail = compactText([
+    ...executionModeLockReasons,
+    ...executionPacketLockReasons,
+    ...executionPacketBodyLockReasons,
+    ...workerContractLockReasons,
+    firstReason(executionMode?.blocked_reasons, ""),
+    firstReason(executionPacket?.blocked_reasons, ""),
+    ...(executionPacket?.warnings ?? []),
+    ...(executionMode?.warnings ?? []),
+    "Execution preview remains display-only; dispatch, session send, and worker activation stay disabled.",
+  ].find(Boolean) ?? "Execution preview remains display-only.", 260);
+  const hardBoundaryDetail = compactText([
+    ...hardBoundaryLockReasons,
+    firstReason(hardBoundary?.blocked_reasons, ""),
+    hardBoundary?.plain_language_summary,
+    "Live operations require separate approval.",
+  ].find(Boolean) ?? "Live operations require separate approval.", 260);
+  const workerInstructionDetail = compactText([
+    ...workerInstructionLockReasons,
+    firstReason(workerInstruction?.blocked_reasons, ""),
+    workerInstruction?.manual_handoff_prompt,
+    "No worker-node instruction preview recorded.",
+  ].find(Boolean) ?? "No worker-node instruction preview recorded.", 260);
+  const approvalLifecycleDetail = compactText([
+    ...approvalLifecycleLockReasons,
+    firstReason(approvalLifecycle?.blocked_reasons, ""),
+    `Approval gaps: duplicates ${approvalLifecycle?.duplicate_approval_ids?.length ?? 0}, consumed ${approvalLifecycle?.consumed_approval_ids?.length ?? 0}, unavailable runs ${approvalUnavailableRunCount}.`,
+  ].find(Boolean), 260);
+  const runLifecycleDetail = compactText([
+    ...runLifecycleLockReasons,
+    firstReason(runLifecycle?.blocked_reasons, ""),
+    `Run gaps: duplicates ${runLifecycle?.duplicate_run_ids?.length ?? 0}, missing reports ${runLifecycle?.terminal_runs_missing_report?.length ?? 0}, stale links ${runTerminalMissingLinkedCount}.`,
+  ].find(Boolean), 260);
+  const childRecord = childProjection?.active_runs?.[0] ?? Object.values(childProjection?.latest_by_id ?? {})[0];
+  const childLatestStatus = compactRecordText(childRecord, "status") || "none";
+  const childLatestObjective = compactRecordText(childRecord, "objective") || compactRecordText(childRecord, "agent_identity") || "no child agent recorded";
+  const childLatestReport = compactRecordText(childRecord, "report_id") || "none";
+  const childLatestReportReview = compactRecordText(childRecord, "linked_report_review_status") || compactRecordText(childRecord, "report_review_status") || "not reviewed";
+  const runGraphDetail = compactText([
+    ...runGraphLockReasons,
+    firstReason(runGraph?.blocked_reasons, ""),
+    `Run graph: runs ${runGraph?.run_node_count ?? 0}, child ${runGraph?.child_run_node_count ?? 0}, worker ${runGraph?.worker_node_run_count ?? 0}, reports ${runGraph?.report_node_count ?? 0}.`,
+  ].find(Boolean), 260);
+  const childProjectionDetail = compactText([
+    ...childProjectionLockReasons,
+    firstReason(childProjection?.blocked_reasons, ""),
+    childLatestObjective,
+  ].find(Boolean), 260);
+  const childInstructionDetail = compactText([
+    ...childInstructionLockReasons,
+    firstReason(childInstruction?.blocked_reasons, ""),
+    childInstruction?.manual_handoff_prompt,
+    "No child-agent instruction preview recorded.",
+  ].find(Boolean), 260);
+  const reportReviewQueueDetail = compactText([
+    ...reportReviewQueueLockReasons,
+    firstReason(reportReviewQueue?.blocked_reasons, ""),
+    reportReviewQueue?.primary_review_reason,
+    reportReviewQueue?.primary_review_label,
+    "No report review queue blockers recorded.",
+  ].find(Boolean), 260);
+  const reportContractDetail = compactText([
+    ...reportContractLockReasons,
+    firstReason(reportContract?.blocked_reasons, ""),
+    reportContract?.primary_item_label,
+    "Reports must include summary, result, risks or blockers, evidence, and tests before Jenny can rely on them.",
+  ].find(Boolean), 260);
+  const stopControlDetail = compactText([
+    ...stopControlLockReasons,
+    firstReason(stopControl?.blocked_reasons, ""),
+    stopControl?.primary_item_label,
+    "Stopped or cancelled work stays manual-review-only until reports and lineage are clean.",
+  ].find(Boolean), 260);
+  const reportLifecycleDetail = compactText([
+    ...reportLifecycleLockReasons,
+    firstReason(reportLifecycle?.blocked_reasons, ""),
+    `Report gaps: duplicates ${reportDuplicateCount}, overwrite conflicts ${reportOverwriteConflictCount}, missing ${reportMissingRunCount}, stale links ${reportMissingLinkedCount}.`,
+  ].find(Boolean), 260);
 
   return (
     <section className="max-w-full overflow-hidden rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-3" aria-label="Hermes health dashboard">
@@ -3853,10 +4614,142 @@ function CompactHermesHealthDashboard({
           value={status.deployment_gap?.dashboard_deploy_needed ? "Update waiting" : "Current"}
         />
         <CompactHealthTile
-          detail={`Guard=${guard}; dispatch=${dispatch === false ? "false" : "unknown"}; active lanes=${activeLaneCount}.`}
+          detail={`Guard=${guard}; dispatch=${dispatch === false ? "false" : "unknown"}; ${workspaceSafetyDetail}; active lanes=${activeLaneCount}.`}
           label="Safety locks"
           tone={safetyOk ? "good" : "warn"}
           value={safetyOk ? "Holding" : "Check"}
+        />
+        <CompactHealthTile
+          detail={approvalLifecycleDetail}
+          label="Approval lifecycle"
+          tone={approvalLifecycleTone}
+          value={`available ${approvalLifecycle?.available_approval_ids?.length ?? 0} / pending ${approvalLifecycle?.pending_approval_ids?.length ?? 0} / expired ${approvalLifecycle?.expired_approval_ids?.length ?? 0}`}
+        />
+        <CompactHealthTile
+          detail={approvalGapCount ? "Approval gaps block autonomy until approval records and active run links are exact and available." : "No approval lifecycle gaps are currently recorded."}
+          label="Approval gaps"
+          tone={approvalGapCount ? "warn" : "good"}
+          value={`duplicates ${approvalLifecycle?.duplicate_approval_ids?.length ?? 0} / consumed ${approvalLifecycle?.consumed_approval_ids?.length ?? 0} / unavailable runs ${approvalUnavailableRunCount}`}
+        />
+        <CompactHealthTile
+          detail={runLifecycleDetail}
+          label="Run lifecycle"
+          tone={runLifecycleTone}
+          value={`active ${runLifecycle?.active_run_ids?.length ?? 0} / terminal ${runLifecycle?.terminal_run_ids?.length ?? 0} / stop-cancel ${runLifecycle?.stop_cancel_run_ids?.length ?? 0}`}
+        />
+        <CompactHealthTile
+          detail={runLifecycle?.one_active_mutation_lane_rule_passed === false ? "More than one active mutation lane is recorded; autonomy and PR lanes stay blocked." : "Run gaps cover duplicate runs, missing reports, stale report links, and the one-active-mutation-lane rule."}
+          label="Run gaps"
+          tone={runGapCount ? "warn" : "good"}
+          value={`duplicates ${runLifecycle?.duplicate_run_ids?.length ?? 0} / missing reports ${runLifecycle?.terminal_runs_missing_report?.length ?? 0} / stale links ${runTerminalMissingLinkedCount}`}
+        />
+        <CompactHealthTile
+          detail={runGraphDetail}
+          label="Run graph"
+          tone={runGraphTone}
+          value={`nodes ${runGraph?.node_count ?? 0} / edges ${runGraph?.edge_count ?? 0}`}
+        />
+        <CompactHealthTile
+          detail={childProjectionDetail}
+          label="Child agent"
+          tone={childProjectionTone}
+          value={`${childProjection?.active_count ?? 0} active / latest ${compactStateLabel(childLatestStatus, "none")}`}
+        />
+        <CompactHealthTile
+          detail={`report ${childLatestReport} / review ${compactStateLabel(childLatestReportReview, "not reviewed")}`}
+          label="Child report"
+          tone={childProjection?.blocked_reasons?.length ? "warn" : "good"}
+          value={childLatestReport}
+        />
+        <CompactHealthTile
+          detail={childInstructionDetail}
+          label="Child handoff"
+          tone={childInstructionTone}
+          value={`available ${childInstruction?.available ? "yes" : "no"} / handoff ${childInstruction?.ready_for_handoff ? "yes" : "no"} / manual ${childInstruction?.manual_handoff_only === false ? "no" : "yes"}`}
+        />
+        <CompactHealthTile
+          detail={compactOperatorSummary(status)}
+          label="Operator decision"
+          tone={operatorTone}
+          value={`${compactStateLabel(operatorPacket?.state)} / display-only ${operatorPacket?.display_only === false ? "no" : "yes"}`}
+        />
+        <CompactHealthTile
+          detail={hardBoundaryDetail}
+          label="Hard boundary"
+          tone={hardBoundaryTone}
+          value={`${compactStateLabel(hardBoundary?.state)} / forbidden ${hardBoundaryForbiddenCount} / separate approval ${hardBoundarySeparateApprovalCount}`}
+        />
+        <CompactHealthTile
+          detail={`${compactReadinessSummary(status)}. Next safe action: ${nextSafeActions?.primary_action_label || operatorPacket?.next_safe_action_label || "review Mission Control status"}.`}
+          label="Preview readiness"
+          tone={readinessTone}
+          value={`read-only ${compactStateLabel(readinessStates?.supervised_read_only_autonomy)} / worker ${compactStateLabel(readinessStates?.laptop_codex_worker_node)}`}
+        />
+        <CompactHealthTile
+          detail={executionPreviewDetail}
+          label="Execution preview"
+          tone={executionPreviewTone}
+          value={`${compactStateLabel(executionMode?.mode_family)} / packet ${compactStateLabel(executionPacket?.packet?.mode)} / execute ${executionPacket?.execution_enabled ? "yes" : "no"}`}
+        />
+        <CompactHealthTile
+          detail={workerInstructionDetail}
+          label="Worker handoff"
+          tone={workerInstructionTone}
+          value={`available ${workerInstruction?.available ? "yes" : "no"} / handoff ${workerInstruction?.ready_for_handoff ? "yes" : "no"} / manual ${workerInstruction?.manual_handoff_only === false ? "no" : "yes"}`}
+        />
+        <CompactHealthTile
+          detail={workerPresence?.blocked_reasons?.length ? firstReason(workerPresence.blocked_reasons, "Worker-node presence needs review.") : `${workerPresence?.worker_host_label ?? "laptop Codex"} ${workerPresence?.online ? "is online" : "is not confirmed online"}.`}
+          label="Worker node"
+          tone={workerTone}
+          value={`${compactStateLabel(workerPresenceState)} / online ${workerPresence?.online ? "yes" : "no"}`}
+        />
+        <CompactHealthTile
+          detail={reportReviewQueueDetail}
+          label="Report review queue"
+          tone={reportReviewQueueTone}
+          value={`items ${reportReviewQueueCount} / needs review ${reportReviewNeedsReviewCount} / missing ${reportReviewMissingCount} / mismatch ${reportReviewMismatchCount}`}
+        />
+        <CompactHealthTile
+          detail={reportReviewQueue?.primary_review_label || reportReviewQueue?.primary_review_reason || "No report waiting for review."}
+          label="Top report review"
+          tone={reportReviewQueueTone}
+          value={reportReviewQueue?.primary_review_item_id || "none"}
+        />
+        <CompactHealthTile
+          detail={reportContractDetail}
+          label="Report contract"
+          tone={reportContractTone}
+          value={`reports ${reportContract?.report_count ?? 0} / complete ${reportContract?.complete_report_count ?? 0} / incomplete ${reportContractIncompleteCount}`}
+        />
+        <CompactHealthTile
+          detail={resultIngestionBlocked ? firstReason(resultIngestion?.blocked_reasons, "Reports need ingestion review.") : "Reports that Jenny can rely on are linked, redacted, metadata-safe, and safety-confirmed."}
+          label="Result ingestion"
+          tone={ingestionTone}
+          value={`${resultIngestion?.ingestion_ready_count ?? 0} ready / ${resultIngestionBlocked} blocked`}
+        />
+        <CompactHealthTile
+          detail={reportCompletionBlocked ? firstReason(reportCompletion?.blocked_reasons, "Terminal work needs report completion review.") : "Terminal runs, child runs, and worker-node runs have reviewed completion evidence."}
+          label="Report completion"
+          tone={completionTone}
+          value={`${reportCompletion?.completion_ready_count ?? 0} ready / ${reportCompletionBlocked} blocked`}
+        />
+        <CompactHealthTile
+          detail={stopControlDetail}
+          label="Stop/cancel control"
+          tone={stopControlTone}
+          value={`items ${stopCancelCount} / stopping ${stopControl?.active_stop_count ?? 0} / terminal ${stopControl?.terminal_stop_count ?? 0} / mismatch ${stopControl?.link_mismatch_count ?? 0}`}
+        />
+        <CompactHealthTile
+          detail={reportLifecycleDetail}
+          label="Report lifecycle"
+          tone={reportLifecycleTone}
+          value={`open ${reportLifecycle?.open_report_ids?.length ?? 0} / reviewed ${reportLifecycle?.reviewed_report_ids?.length ?? 0} / terminal ${reportLifecycle?.terminal_report_ids?.length ?? 0}`}
+        />
+        <CompactHealthTile
+          detail={reportOverwriteConflictCount ? "Overwrite conflicts quarantine duplicate report IDs until Travis reviews the append-only report history." : "No duplicate report overwrite conflict is currently recorded."}
+          label="Report gaps"
+          tone={reportGapCount ? "warn" : "good"}
+          value={`duplicates ${reportDuplicateCount} / overwrite conflicts ${reportOverwriteConflictCount} / missing ${reportMissingRunCount} / stale links ${reportMissingLinkedCount}`}
         />
         <CompactHealthTile
           detail={`${reportCount} active project${reportCount === 1 ? "" : "s"} have live report evidence. ${pausedProjects.length} projects remain intentionally on hold.`}

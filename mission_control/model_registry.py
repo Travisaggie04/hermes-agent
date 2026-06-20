@@ -10,12 +10,12 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-_INERT_MODEL_FLAGS = {
-    "trusted_for_execution": False,
-    "inert_context_only": True,
-    "routing_enabled": False,
-    "display_only": True,
-}
+from mission_control.inert_contract import inert_live_operation_flags
+
+_INERT_MODEL_FLAGS = inert_live_operation_flags(
+    routing_enabled=False,
+    display_only=True,
+)
 
 MODEL_REGISTRY_RECORDS: tuple[dict[str, Any], ...] = (
     {

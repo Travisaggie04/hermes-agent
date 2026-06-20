@@ -3,9 +3,11 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from mission_control.records.models import (
+    ApprovalRecord,
     ApprovalSlice,
     ArtifactRef,
     ChallengeReviewRecord,
+    ChildRunRecord,
     EvidenceCard,
     GoalContract,
     GitHubBridgeMailboxStatusRecord,
@@ -22,12 +24,41 @@ from mission_control.records.models import (
     OperatorAction,
     ProjectBriefRecord,
     ProjectRecord,
+    ReportRecord,
     RECORD_TYPES,
     RoomContractRecord,
     RoomJournalEventRecord,
+    RunRecord,
     StartGateCheck,
     TaskControlEnvelope,
+    WorkerNodeRunRecord,
 )
+
+
+def _assert_inert_execution_metadata(metadata):
+    assert metadata["would_execute"] is False
+    assert metadata["would_dispatch"] is False
+    assert metadata["would_session_send"] is False
+    assert metadata["execution_enabled"] is False
+    assert metadata["dispatch_enabled"] is False
+    assert metadata["dispatch_in_gateway"] is False
+    assert metadata["dispatch_state"] is False
+    assert metadata["execution_ready"] is False
+    assert metadata["live_operations_enabled"] is False
+    assert metadata["send_to_jenny_enabled"] is False
+    assert metadata["session_send_enabled"] is False
+    assert metadata["worker_enabled"] is False
+    assert metadata["workers_enabled"] is False
+    assert metadata["worker_dispatch_enabled"] is False
+    assert metadata["timer_enabled"] is False
+    assert metadata["daemon_enabled"] is False
+    assert metadata["waha_enabled"] is False
+    assert metadata["social_enabled"] is False
+    assert metadata["payment_enabled"] is False
+    assert metadata["queue_mutation_enabled"] is False
+    assert metadata["model_routing_enabled"] is False
+    assert metadata["trusted_for_execution"] is False
+    assert metadata["inert_context_only"] is True
 
 
 def test_project_record_round_trips_workspace_fields():
@@ -223,6 +254,61 @@ def test_jenny_report_record_round_trips_manual_report_fields():
     assert JennyReportRecord.from_dict(data) == record
     assert isinstance(JennyReportRecord.from_dict(data).changed_files, tuple)
     assert RECORD_TYPES["JennyReportRecord"] is JennyReportRecord
+
+
+def test_control_plane_lifecycle_records_force_inert_execution_metadata():
+    approval = ApprovalRecord(
+        approval_id="approval-1",
+        project_id="project-hermes",
+        action_class="read_only_lane",
+        approval_scope="bounded read-only audit",
+        approved_actions=("inspect",),
+        status="approved",
+        metadata={
+            "would_execute": True,
+            "execution_enabled": True,
+            "dispatch_enabled": True,
+            "session_send_enabled": True,
+            "worker_dispatch_enabled": True,
+            "trusted_for_execution": True,
+        },
+    )
+    run = RunRecord(
+        run_id="run-1",
+        project_id="project-hermes",
+        lane_type="read_only_inspection",
+        objective="Inspect status only.",
+        metadata={
+            "would_execute": True,
+            "execution_enabled": True,
+            "dispatch_enabled": True,
+            "session_send_enabled": True,
+            "worker_dispatch_enabled": True,
+            "trusted_for_execution": True,
+        },
+    )
+    report = ReportRecord(
+        report_id="report-1",
+        run_id="run-1",
+        project_id="project-hermes",
+        summary="Reported status only.",
+        metadata={
+            "would_execute": True,
+            "execution_enabled": True,
+            "dispatch_enabled": True,
+            "session_send_enabled": True,
+            "worker_dispatch_enabled": True,
+            "trusted_for_execution": True,
+        },
+    )
+
+    for record in (approval, run, report):
+        _assert_inert_execution_metadata(record.to_dict()["metadata"])
+        assert type(record).from_dict(record.to_dict()) == record
+
+    assert RECORD_TYPES["ApprovalRecord"] is ApprovalRecord
+    assert RECORD_TYPES["RunRecord"] is RunRecord
+    assert RECORD_TYPES["ReportRecord"] is ReportRecord
 
 
 def test_jenny_bridge_message_request_record_round_trips_outbound_fields():
@@ -768,6 +854,7 @@ def test_operating_workspace_handoff_record_round_trips_display_only_fields():
         last_result="PR #44 accepted",
         next_action="Implement PR #45 tests",
         warnings=("display-only",),
+        would_execute=True,
         dry_run_only=False,
         enforces_runtime=True,
         display_only=False,
@@ -795,6 +882,7 @@ def test_operating_workspace_handoff_record_round_trips_display_only_fields():
         "last_result": "PR #44 accepted",
         "next_action": "Implement PR #45 tests",
         "warnings": ["display-only"],
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
         "display_only": True,
@@ -862,6 +950,7 @@ def test_accepted_baseline_record_round_trips_and_forces_inert_flags():
         max_active_lane=1,
         issue="none",
         display_only=False,
+        would_execute=True,
         dry_run_only=False,
         enforces_runtime=True,
     )
@@ -881,6 +970,7 @@ def test_accepted_baseline_record_round_trips_and_forces_inert_flags():
         "max_active_lane": 1,
         "issue": "none",
         "display_only": True,
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
     }
@@ -921,3 +1011,93 @@ def test_accepted_baseline_record_sanitizes_bounds_shas_and_forbidden_fields():
     rendered = str(data).lower()
     for forbidden in ("raw_log", "transcript", "discord_messages", "pr_body", "github_response", "placeholder-token", "canonical_packet_json"):
         assert forbidden not in rendered
+
+
+def test_child_run_record_round_trips_orchestration_status_and_forces_disabled_flags():
+    record = ChildRunRecord(
+        child_run_id="child-run-1",
+        parent_run_id="run-parent-1",
+        project_id="project-hermes-mission-control",
+        agent_identity="jenny-child",
+        delegation_source="mission-control-preview",
+        objective="Inspect one scoped file and report risks.",
+        allowed_actions=("read files",),
+        forbidden_actions=("dispatch", "deploy", "session-send"),
+        status="running",
+        report_id="report-child-1",
+        result_record_id="result-child-1",
+        depends_on_child_run_ids=("child-run-0",),
+        metadata={
+            "dispatch_enabled": True,
+            "worker_dispatch_enabled": True,
+            "waha_enabled": True,
+            "social_enabled": True,
+            "payment_enabled": True,
+            "queue_mutation_enabled": True,
+            "model_routing_enabled": True,
+        },
+    )
+
+    data = record.to_dict()
+
+    assert data["child_run_id"] == "child-run-1"
+    assert data["allowed_actions"] == ["read files"]
+    assert data["depends_on_child_run_ids"] == ["child-run-0"]
+    assert data["metadata"]["display_only"] is True
+    _assert_inert_execution_metadata(data["metadata"])
+    assert ChildRunRecord.from_dict(data) == record
+    assert RECORD_TYPES["ChildRunRecord"] is ChildRunRecord
+
+
+def test_worker_node_run_record_round_trips_laptop_codex_state_and_forces_disabled_flags():
+    record = WorkerNodeRunRecord(
+        worker_run_id="worker-run-1",
+        parent_run_id="run-parent-1",
+        project_id="project-hermes-mission-control",
+        worker_identity="codex",
+        worker_host_label="laptop-codex",
+        worker_kind="laptop_codex",
+        objective="Prepare a scoped PR and report test results.",
+        assigned_packet_id="packet-1",
+        assigned_packet_summary="Scoped PR packet preview.",
+        allowed_actions=("edit scoped files", "run focused tests"),
+        forbidden_actions=("deploy", "restart", "runtime switch"),
+        status="blocked",
+        blocked_reasons=("worker node offline",),
+        report_id="report-worker-1",
+        report_review_status="needs_review",
+        report_contract_status="incomplete",
+        presence_status="online",
+        last_seen_at="2026-06-19T12:00:00Z",
+        worker_version="codex-desktop-1.2.3",
+        capability_summary="repo-local engineering worker with guarded shell and patch tools",
+        worker_dispatch_enabled=True,
+        metadata={
+            "execution_enabled": True,
+            "dispatch_enabled": True,
+            "worker_enabled": True,
+            "workers_enabled": True,
+            "timer_enabled": True,
+            "daemon_enabled": True,
+            "waha_enabled": True,
+            "social_enabled": True,
+            "payment_enabled": True,
+            "queue_mutation_enabled": True,
+            "model_routing_enabled": True,
+        },
+    )
+
+    data = record.to_dict()
+
+    assert data["worker_run_id"] == "worker-run-1"
+    assert data["worker_host_label"] == "laptop-codex"
+    assert data["blocked_reasons"] == ["worker node offline"]
+    assert data["presence_status"] == "online"
+    assert data["last_seen_at"] == "2026-06-19T12:00:00Z"
+    assert data["worker_version"] == "codex-desktop-1.2.3"
+    assert data["capability_summary"] == "repo-local engineering worker with guarded shell and patch tools"
+    assert data["worker_dispatch_enabled"] is False
+    assert data["metadata"]["display_only"] is True
+    _assert_inert_execution_metadata(data["metadata"])
+    assert WorkerNodeRunRecord.from_dict(data) == record
+    assert RECORD_TYPES["WorkerNodeRunRecord"] is WorkerNodeRunRecord

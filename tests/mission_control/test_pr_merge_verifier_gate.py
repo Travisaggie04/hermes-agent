@@ -31,6 +31,7 @@ def _valid_state():
             "verifier_id": "jenny-verifier",
             "would_block": False,
             "blocked_actions": [],
+            "would_execute": False,
             "dry_run_only": True,
             "enforces_runtime": False,
         },
@@ -73,6 +74,7 @@ def _valid_state_with_merge_packet():
             "verifier_id": "jenny-verifier",
             "would_block": False,
             "blocked_actions": [],
+            "would_execute": False,
             "dry_run_only": True,
             "enforces_runtime": False,
         },
@@ -87,6 +89,7 @@ def test_pr_merge_verifier_gate_policy_loads_as_inert_display_only_record():
     assert policy["gate_id"] == "pr_merge_verifier_gate_v1"
     assert policy["trusted_for_execution"] is False
     assert policy["inert_context_only"] is True
+    assert policy["would_execute"] is False
     assert policy["enforcement_enabled"] is False
     assert policy["dry_run_only"] is True
     assert policy["display_only"] is True
@@ -111,6 +114,7 @@ def test_valid_matching_verifier_evidence_allows_but_remains_dry_run_warning():
     assert result["decision_state"] == "warn"
     assert result["would_block"] is False
     assert result["blocked_actions"] == []
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
 
@@ -138,6 +142,7 @@ def test_valid_canonical_merge_packet_hash_passes_inert_gate_with_metadata():
     assert result["packet_hash_reasons"] == []
     assert result["canonical_packet_json"]
     assert len(result["canonical_packet_json"]) < 2000
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
 
@@ -264,14 +269,17 @@ def test_merge_related_blocked_actions_would_block():
 
 def test_evidence_runtime_flags_must_remain_dry_run_only():
     state = _valid_state()
+    state["verifier_evidence"]["would_execute"] = True
     state["verifier_evidence"]["dry_run_only"] = False
     state["verifier_evidence"]["enforces_runtime"] = True
 
     result = evaluate_pr_merge_verifier_gate(state)
 
     assert result["would_block"] is True
+    assert "verifier evidence would_execute is not false" in result["reasons"]
     assert "verifier evidence dry_run_only is not true" in result["reasons"]
     assert "verifier evidence enforces_runtime is not false" in result["reasons"]
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
 
@@ -285,6 +293,7 @@ def test_pr_merge_gate_uses_caller_supplied_state_only(monkeypatch):
     result = evaluate_pr_merge_verifier_gate(_valid_state())
 
     assert result["would_block"] is False
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
 

@@ -11,6 +11,14 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from mission_control.autonomy_eligibility import (
+    build_execution_packet_preview,
+    classify_execution_mode,
+    classify_control_path_permissions,
+    evaluate_read_only_autonomy_eligibility,
+    evaluate_runtime_provenance,
+    evaluate_scoped_pr_lane_eligibility,
+)
 from mission_control.runtime_worktree_guard import evaluate_runtime_worktree_guard
 
 MAX_TEXT_CHARS = 160
@@ -23,7 +31,11 @@ INERT_WORKSPACE_FLAGS: dict[str, bool] = {
     "display_only": True,
     "trusted_for_execution": False,
     "inert_context_only": True,
+    "would_execute": False,
     "execution_enabled": False,
+    "dispatch_enabled": False,
+    "session_send_enabled": False,
+    "worker_dispatch_enabled": False,
     "enforcement_enabled": False,
     "dry_run_only": True,
     "enforces_runtime": False,
@@ -71,6 +83,12 @@ _DEFAULT_STATUS: dict[str, Any] = {
     "safety": {
         "dispatch_in_gateway": False,
         "workers_enabled": False,
+        "worker_enabled": False,
+        "timer_enabled": False,
+        "daemon_enabled": False,
+        "waha_enabled": False,
+        "social_enabled": False,
+        "payment_enabled": False,
         "queue_mutation_enabled": False,
         "model_routing_enabled": False,
         "enforcement_enabled": False,
@@ -101,6 +119,7 @@ _DEFAULT_STATUS: dict[str, Any] = {
     "source_control": {
         "branch": "",
         "accepted_live_head": "",
+        "default_branch_head": "",
         "latest_merged_pr": "",
     },
 }
@@ -181,6 +200,52 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
     source_control = _source_control_section(_section(source, "source_control"), defaults=_DEFAULT_STATUS["source_control"])
     deployment_gap = _deployment_gap_section(accepted, source_control)
     runtime_guard = evaluate_runtime_worktree_guard(_runtime_worktree_guard_input(_section(source, "runtime_worktree_guard"), accepted, rollback))
+    runtime_provenance = evaluate_runtime_provenance(
+        _runtime_provenance_input(
+            source=source,
+            accepted=accepted,
+            accepted_record=accepted_record,
+            rollback=rollback,
+            source_control=source_control,
+            safety=safety,
+            lane=lane,
+        )
+    )
+    read_only_autonomy_eligibility = evaluate_read_only_autonomy_eligibility(
+        _merge_dicts(
+            _section(source, "autonomy_eligibility"),
+            {
+                "runtime_provenance": runtime_provenance,
+                "active_mutation_lane_count": _safe_int(
+                    _section(source, "control_plane_lifecycle").get("active_mutation_lane_count"),
+                    default=0,
+                ),
+            },
+        )
+    )
+    scoped_pr_lane_eligibility = evaluate_scoped_pr_lane_eligibility(
+        _merge_dicts(
+            _section(source, "scoped_pr_eligibility"),
+            {
+                "runtime_provenance": runtime_provenance,
+                "active_mutation_lane_count": _safe_int(
+                    _section(source, "control_plane_lifecycle").get("active_mutation_lane_count"),
+                    default=0,
+                ),
+            },
+        )
+    )
+    tool_permission_classification = classify_control_path_permissions(_section(source, "tool_permissions"))
+    execution_mode_classification = classify_execution_mode(
+        _execution_mode_classification_input(source=source)
+    )
+    execution_packet_preview = build_execution_packet_preview(
+        _execution_packet_preview_input(
+            source=source,
+            runtime_provenance=runtime_provenance,
+            tool_permission_classification=tool_permission_classification,
+        )
+    )
 
     warnings: list[str] = []
     if accepted_source == "static_fallback":
@@ -193,6 +258,19 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         warnings.append("baseline_mismatch")
     if safety.get("dispatch_in_gateway") is not False:
         warnings.append("dispatch_not_false")
+    for flag in (
+        "workers_enabled",
+        "worker_enabled",
+        "timer_enabled",
+        "daemon_enabled",
+        "waha_enabled",
+        "social_enabled",
+        "payment_enabled",
+        "queue_mutation_enabled",
+        "model_routing_enabled",
+    ):
+        if safety.get(flag) is not False:
+            warnings.append(f"{flag}_not_false")
     if lane["active_lane_count"] > lane["max_active_lane"]:
         warnings.append("active_lane_count_exceeds_max")
     if activity["active_workers"] > 0 or activity["active_tasks"] > 0 or activity["active_runs"] > 0:
@@ -226,6 +304,9 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
     if deployment_gap["state"] == "merged_not_deployed":
         warnings.append("accepted_live_head_not_deployed")
     warnings.extend(runtime_guard.get("blockers", ()))
+    warnings.extend(status for status in runtime_provenance.get("statuses", ()) if status != "CLEAN_AND_ALIGNED")
+    warnings.extend(runtime_provenance.get("autonomy_blocked_reasons", ()))
+    warnings.extend(read_only_autonomy_eligibility.get("blocked_reasons", ()))
 
     warnings = _dedupe_bounded(warnings)
     return {
@@ -245,6 +326,12 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         "source_control": source_control,
         "deployment_gap": deployment_gap,
         "runtime_worktree_guard": runtime_guard,
+        "runtime_provenance": runtime_provenance,
+        "read_only_autonomy_eligibility": read_only_autonomy_eligibility,
+        "scoped_pr_lane_eligibility": scoped_pr_lane_eligibility,
+        "tool_permission_classification": tool_permission_classification,
+        "execution_mode_classification": execution_mode_classification,
+        "execution_packet_preview": execution_packet_preview,
         "latest_handoff": latest_handoff,
         "stale_context": {
             "baseline_mismatch": "baseline_mismatch" in warnings,
@@ -252,6 +339,108 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
             "warnings": warnings,
         },
     }
+
+
+def _runtime_provenance_input(
+    *,
+    source: dict[str, Any],
+    accepted: dict[str, Any],
+    accepted_record: dict[str, Any],
+    rollback: dict[str, Any],
+    source_control: dict[str, Any],
+    safety: dict[str, Any],
+    lane: dict[str, Any],
+) -> dict[str, Any]:
+    section = _section(source, "runtime_provenance")
+    return {
+        "source": _merge_dicts(
+            _section(section, "source"),
+            {
+                "head": source_control.get("accepted_live_head", ""),
+                "default_branch_head": source_control.get("default_branch_head", ""),
+                "latest_merged_pr": source_control.get("latest_merged_pr", ""),
+                "merged_prs_after_accepted_baseline": source_control.get("merged_prs_after_accepted_baseline", ()),
+            },
+        ),
+        "accepted_baseline": _merge_dicts(
+            _section(section, "accepted_baseline"),
+            {
+                "baseline_id": accepted_record.get("baseline_id", ""),
+                "path": accepted.get("runtime_path", ""),
+                "head": accepted.get("head", ""),
+            },
+        ),
+        "dashboard_runtime": _section(section, "dashboard_runtime") or _section(source, "dashboard_runtime"),
+        "gateway_runtime": _section(section, "gateway_runtime") or _section(source, "gateway_runtime"),
+        "rollback_runtime": _merge_dicts(
+            _section(section, "rollback_runtime") or _section(source, "rollback_runtime"),
+            {
+                "path": rollback.get("runtime_path", ""),
+                "head": rollback.get("head", ""),
+            },
+        ),
+        "dispatch_in_gateway": safety.get("dispatch_in_gateway"),
+        "active_lane_count": lane.get("active_lane_count"),
+        "max_active_lane": lane.get("max_active_lane"),
+    }
+
+
+def _execution_mode_classification_input(*, source: dict[str, Any]) -> dict[str, Any]:
+    section = _section(source, "execution_mode_classification")
+    return _merge_dicts(
+        section,
+        {
+            "mode": section.get("mode") or section.get("execution_mode") or _section(source, "lane").get("mode"),
+            "lane": _merge_dicts(_section(source, "lane"), _section(section, "lane")),
+            "run": _section(section, "run") or _section(source, "run"),
+            "approval": _section(section, "approval") or _section(source, "approval"),
+            "worker_node": _section(section, "worker_node") or _section(source, "worker_node"),
+            "capabilities": _section(section, "capabilities") or _section(source, "capabilities"),
+        },
+    )
+
+
+def _execution_packet_preview_input(
+    *,
+    source: dict[str, Any],
+    runtime_provenance: dict[str, Any],
+    tool_permission_classification: dict[str, Any],
+) -> dict[str, Any]:
+    section = _section(source, "execution_packet_preview")
+    lane = _section(section, "lane") or _section(source, "lane")
+    run = _section(section, "run")
+    worker_node = _section(section, "worker_node")
+    packet_tool_permissions = section.get("tool_permissions")
+    if not isinstance(packet_tool_permissions, (dict, list)):
+        packet_tool_permissions = tool_permission_classification
+    mode = _safe_text(section.get("mode") or section.get("execution_mode"))
+    lane_type = _safe_text(
+        run.get("lane_type")
+        or lane.get("lane_type")
+        or lane.get("mode")
+    )
+    if not mode:
+        if worker_node:
+            mode = "worker_node"
+        elif lane_type in {"pr_creation", "scoped_pr"}:
+            mode = "scoped_pr"
+        elif lane_type in {"read_only_lane", "read_only_design", "read_only_inspection"} or lane_type.startswith("read_only"):
+            mode = "read_only"
+        else:
+            mode = "blocked"
+
+    return _merge_dicts(
+        section,
+        {
+            "mode": mode,
+            "runtime_provenance": runtime_provenance,
+            "tool_permissions": packet_tool_permissions,
+            "active_mutation_lane_count": _safe_int(
+                _section(source, "control_plane_lifecycle").get("active_mutation_lane_count"),
+                default=0,
+            ),
+        },
+    )
 
 
 
@@ -273,6 +462,7 @@ def _accepted_baseline_record_section(section: dict[str, Any]) -> dict[str, Any]
         "max_active_lane": _safe_int(section.get("max_active_lane"), default=1) or 1,
         "issue": _safe_text(section.get("issue")),
         "display_only": True,
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
     }
@@ -359,6 +549,7 @@ def _latest_handoff_section(section: dict[str, Any]) -> dict[str, Any]:
         "last_result": _safe_text(section.get("last_result")),
         "next_action": _safe_text(section.get("next_action")),
         "warnings": _dedupe_bounded(section.get("warnings") if isinstance(section.get("warnings"), list | tuple) else ()),
+        "would_execute": False,
         "dry_run_only": True,
         "enforces_runtime": False,
         "display_only": True,
@@ -394,6 +585,16 @@ def _safe_bool(value: Any, default: bool = False) -> bool:
     return default
 
 
+def _live_flag_enabled(value: Any) -> bool:
+    if value is True:
+        return True
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on", "enabled"}
+    return False
+
+
 def _safe_int(value: Any, default: int = 0) -> int:
     if isinstance(value, bool):
         return default
@@ -426,6 +627,7 @@ def _baseline_section(section: dict[str, Any], *, defaults: dict[str, Any]) -> d
         "runtime_path": _safe_text(merged.get("runtime_path"), max_chars=240),
         "head": _safe_sha(merged.get("head")),
         "status": _safe_text(merged.get("status") or "accepted"),
+        "would_execute": False,
     }
 
 
@@ -435,6 +637,7 @@ def _rollback_section(section: dict[str, Any], *, defaults: dict[str, Any]) -> d
         "runtime_path": _safe_text(merged.get("runtime_path"), max_chars=240),
         "head": _safe_sha(merged.get("head")),
         "clean": _safe_bool(merged.get("clean"), default=False),
+        "would_execute": False,
     }
 
 
@@ -455,10 +658,16 @@ def _lane_section(section: dict[str, Any], *, defaults: dict[str, Any]) -> dict[
 def _safety_section(section: dict[str, Any], *, defaults: dict[str, Any]) -> dict[str, Any]:
     merged = _merge_dicts(defaults, section)
     return {
-        "dispatch_in_gateway": _safe_bool(merged.get("dispatch_in_gateway"), default=False),
-        "workers_enabled": _safe_bool(merged.get("workers_enabled"), default=False),
-        "queue_mutation_enabled": _safe_bool(merged.get("queue_mutation_enabled"), default=False),
-        "model_routing_enabled": _safe_bool(merged.get("model_routing_enabled"), default=False),
+        "dispatch_in_gateway": _live_flag_enabled(merged.get("dispatch_in_gateway")),
+        "workers_enabled": _live_flag_enabled(merged.get("workers_enabled")),
+        "worker_enabled": _live_flag_enabled(merged.get("worker_enabled")),
+        "timer_enabled": _live_flag_enabled(merged.get("timer_enabled")),
+        "daemon_enabled": _live_flag_enabled(merged.get("daemon_enabled")),
+        "waha_enabled": _live_flag_enabled(merged.get("waha_enabled")),
+        "social_enabled": _live_flag_enabled(merged.get("social_enabled")),
+        "payment_enabled": _live_flag_enabled(merged.get("payment_enabled")),
+        "queue_mutation_enabled": _live_flag_enabled(merged.get("queue_mutation_enabled")),
+        "model_routing_enabled": _live_flag_enabled(merged.get("model_routing_enabled")),
         "enforcement_enabled": False,
     }
 
@@ -510,11 +719,12 @@ def _deployment_section(section: dict[str, Any], *, defaults: dict[str, Any]) ->
 def _source_control_section(section: dict[str, Any], *, defaults: dict[str, Any]) -> dict[str, Any]:
     merged = _merge_dicts(defaults, section)
     return {
+        **INERT_WORKSPACE_FLAGS,
         "branch": _safe_text(merged.get("branch"), max_chars=120),
         "accepted_live_head": _safe_sha(merged.get("accepted_live_head")),
+        "default_branch_head": _safe_sha(merged.get("default_branch_head")),
         "latest_merged_pr": _safe_text(merged.get("latest_merged_pr"), max_chars=20),
-        "display_only": True,
-        "trusted_for_execution": False,
+        "merged_prs_after_accepted_baseline": _dedupe_bounded(merged.get("merged_prs_after_accepted_baseline") or ()),
     }
 
 
@@ -530,13 +740,12 @@ def _deployment_gap_section(accepted: dict[str, Any], source_control: dict[str, 
     else:
         state = "unknown"
     return {
+        **INERT_WORKSPACE_FLAGS,
         "state": state,
         "accepted_live_head": accepted_live_head,
         "deployed_head": deployed_head,
         "latest_merged_pr": source_control.get("latest_merged_pr") or "",
         "dashboard_deploy_needed": state == "merged_not_deployed",
-        "display_only": True,
-        "trusted_for_execution": False,
     }
 
 

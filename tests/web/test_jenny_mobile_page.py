@@ -34,6 +34,7 @@ def test_jenny_mobile_uses_lightweight_project_chat_endpoints() -> None:
 
     for expected in [
         'WORKSPACE_PROJECTS_URL = "/api/plugins/mission-control-governance/workspace/projects"',
+        'WORKSPACE_STATUS_URL = "/api/plugins/mission-control-governance/workspace-status"',
         'WORKSPACE_GITHUB_BRIDGE_STATUS_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/status"',
         'WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/outbox/create"',
         'WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/answer-once"',
@@ -43,7 +44,6 @@ def test_jenny_mobile_uses_lightweight_project_chat_endpoints() -> None:
         assert expected in src
 
     for forbidden in [
-        "workspace-status",
         "project-briefs",
         "challenge-reviews",
         "lane-requests",
@@ -75,6 +75,15 @@ def test_jenny_mobile_renders_codex_like_mobile_chat_controls() -> None:
         "Send Jenny message",
         "Open activity",
         "Extra high",
+        "Report lifecycle",
+        "Report gaps",
+        "Report lifecycle needs Jenny review",
+        "Readiness",
+        "Laptop Codex",
+        "Worker objective",
+        "Worker handoff",
+        "Laptop Codex needs review",
+        "dup {reportLifecycle?.duplicate_report_ids?.length ?? 0} / overwrite",
     ]:
         assert expected in src
 
@@ -102,7 +111,7 @@ def test_jenny_mobile_send_is_optimistic_and_foreground_only() -> None:
     assert "await refreshMessages(project.project_id)" not in send_fn
     assert "void runJennyOnce(project.project_id, requestId)" in src
     assert "await runJennyOnce(project.project_id, requestId)" not in src
-    assert "const sendDisabled = sending || !composer.trim();" in src
+    assert "const sendDisabled = sending || loading || !composer.trim() || !mobileSafety.safe;" in src
     assert 'const ANSWER_ONCE_TIMEOUT_MS = 45_000;' in src
     assert "fetchJSONWithTimeout<AnswerOnceResponse>" in src
     assert "confirm_manual_hermes_answer: true" in src
@@ -113,3 +122,119 @@ def test_jenny_mobile_send_is_optimistic_and_foreground_only() -> None:
     assert "setSelectedModelChoice" in src
     assert "setSelectedEffort" in src
     assert "createMissionControl" not in src
+
+
+def test_jenny_mobile_bridge_controls_fail_closed_on_live_flags() -> None:
+    src = page_source()
+
+    for expected in [
+        "function mobileBridgeSafety(status: GitHubBridgeStatus | undefined): MobileBridgeSafety",
+        "function mobileLiveFlagEnabled(value: unknown): boolean",
+        'reasons.push("bridge status not loaded")',
+        'status.manual_start_only !== true',
+        '["dispatch_enabled", "dispatch_enabled must remain false"]',
+        '["execution_enabled", "execution_enabled must remain false"]',
+        '["send_to_jenny_enabled", "send_to_jenny_enabled must remain false"]',
+        '["session_send_enabled", "session_send_enabled must remain false"]',
+        '["worker_dispatch_enabled", "worker_dispatch_enabled must remain false"]',
+        '["would_execute", "would_execute must remain false"]',
+        '["worker_enabled", "worker_enabled must remain false"]',
+        '["workers_enabled", "workers_enabled must remain false"]',
+        '["timer_enabled", "timer_enabled must remain false"]',
+        '["daemon_enabled", "daemon_enabled must remain false"]',
+        '["discord_automation_enabled", "discord_automation_enabled must remain false"]',
+        '["model_routing_enabled", "model_routing_enabled must remain false"]',
+        '["payment_enabled", "payment_enabled must remain false"]',
+        '["queue_mutation_enabled", "queue_mutation_enabled must remain false"]',
+        '["social_enabled", "social_enabled must remain false"]',
+        '["waha_enabled", "waha_enabled must remain false"]',
+        "if (mobileLiveFlagEnabled(status[flag])) reasons.push(reason);",
+        'return ["1", "true", "yes", "y", "on", "enabled"].includes(value.trim().toLowerCase());',
+        "function mobileWorkspaceSafety(status: MobileWorkspaceStatus | null): MobileBridgeSafety",
+        'reasons.push("workspace status not loaded")',
+        'reasons.push("hard_boundary_contract is not loaded")',
+        'hardBoundary.blocked_reasons?.[0] ?? "hard_boundary_contract is blocked"',
+        "hardBoundary.live_flag_violations",
+        '["send_to_jenny_enabled", "send_to_jenny_enabled must remain false"]',
+        '["dispatch_in_gateway", "dispatch_in_gateway must remain false"]',
+        '["dispatch_state", "dispatch_state must remain false"]',
+        '["model_routing_enabled", "model_routing_enabled must remain false"]',
+        '["payment_enabled", "payment_enabled must remain false"]',
+        '["queue_mutation_enabled", "queue_mutation_enabled must remain false"]',
+        '["social_enabled", "social_enabled must remain false"]',
+        '["timer_enabled", "timer_enabled must remain false"]',
+        '["waha_enabled", "waha_enabled must remain false"]',
+        '["workers_enabled", "workers_enabled must remain false"]',
+        'mobileExecutionLockReasons("hard_boundary_contract", hardBoundary)',
+        "operatorPacket?.execution_lock_blocked_reasons",
+        'mobileExecutionLockReasons("operator_decision_packet", operatorPacket)',
+        'mobileExecutionLockReasons("orchestration_readiness", status?.orchestration_readiness)',
+        'mobileExecutionLockReasons("workspace safety", status?.safety)',
+        'mobileExecutionLockReasons("report_lifecycle", status?.report_lifecycle)',
+        'mobileExecutionLockReasons("worker_node_presence", status?.worker_node_presence)',
+        'mobileExecutionLockReasons("worker_node_orchestration", status?.worker_node_orchestration)',
+        'mobileExecutionLockReasons("worker_node_instruction_preview", status?.worker_node_instruction_preview)',
+        "interface MobileReportLifecycle extends MobileExecutionLockSource",
+        "interface MobileWorkerNodePresence extends MobileExecutionLockSource",
+        "interface MobileWorkerNodeInstructionPreview extends MobileExecutionLockSource",
+        "interface MobileWorkerNodeOrchestration extends MobileExecutionLockSource",
+        "report_lifecycle?: MobileReportLifecycle",
+        "worker_node_presence?: MobileWorkerNodePresence",
+        "worker_node_instruction_preview?: MobileWorkerNodeInstructionPreview",
+        "worker_node_orchestration?: MobileWorkerNodeOrchestration",
+        "mobileRecordText",
+        "workerBlockedReasons",
+        "function combineMobileSafety(...checks: MobileBridgeSafety[]): MobileBridgeSafety",
+        "fetchJSON<MobileWorkspaceStatus>(WORKSPACE_STATUS_URL)",
+        "const bridgeSafety = useMemo(() => mobileBridgeSafety(bridgeStatus), [bridgeStatus]);",
+        "const workspaceSafety = useMemo(() => mobileWorkspaceSafety(workspaceStatus), [workspaceStatus]);",
+        "const mobileSafety = useMemo(() => combineMobileSafety(bridgeSafety, workspaceSafety), [bridgeSafety, workspaceSafety]);",
+        "const visibleRunState: RunState = mobileSafety.safe",
+        "Manual chat blocked:",
+        "const sendDisabled = sending || loading || !composer.trim() || !mobileSafety.safe;",
+        'disabled={replyingRequestId !== "" || sending || !mobileSafety.safe}',
+        'mobileSafety.safe ? "manual foreground only" : "blocked"',
+    ]:
+        assert expected in src
+
+    run_once_start = src.index("const runJennyOnce = useCallback")
+    run_once_end = src.index("replyingRequestIdRef.current = requestId;", run_once_start)
+    run_once_guard = src[run_once_start:run_once_end]
+    assert "if (!mobileSafety.safe)" in run_once_guard
+    assert "setRunByProject" in run_once_guard
+    assert "fetchJSONWithTimeout<AnswerOnceResponse>" not in run_once_guard
+
+
+def test_jenny_mobile_has_no_hidden_runtime_status_or_dispatch_wiring() -> None:
+    src = page_source()
+
+    for forbidden in [
+        "/api/status",
+        "9121",
+        "dispatchMissionControl",
+        "session-send",
+        "kanban/dispatch",
+        "new Worker",
+        "window.setInterval",
+        "setInterval(",
+        "/api/model/set",
+    ]:
+        assert forbidden not in src
+
+    assert src.count('method: "POST"') == 2
+
+    timeout_start = src.index("async function fetchJSONWithTimeout")
+    timeout_end = src.index("function stripHiddenJennyContext", timeout_start)
+    timeout_fn = src[timeout_start:timeout_end]
+    assert "window.setTimeout(() => controller.abort(), timeoutMs)" in timeout_fn
+    assert "window.clearTimeout(timeoutId)" in timeout_fn
+
+    send_start = src.index("async function sendMessage()")
+    send_end = src.index("  return (", send_start)
+    send_fn = src[send_start:send_end]
+    run_once_start = src.index("const runJennyOnce = useCallback")
+    run_once_end = src.index("async function sendMessage()", run_once_start)
+    run_once_fn = src[run_once_start:run_once_end]
+    assert "WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL" in send_fn
+    assert "WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL" in run_once_fn
+    assert "confirm_manual_hermes_answer: true" in run_once_fn

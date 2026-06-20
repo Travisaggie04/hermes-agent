@@ -18,6 +18,7 @@ def test_verifier_workflow_policy_loads_as_inert_display_only_record():
     assert policy["workflow_id"] == "verifier_workflow_v1"
     assert policy["trusted_for_execution"] is False
     assert policy["inert_context_only"] is True
+    assert policy["would_execute"] is False
     assert policy["enforcement_enabled"] is False
     assert policy["dry_run_only"] is True
     assert policy["display_only"] is True
@@ -74,6 +75,7 @@ def test_dry_run_evaluator_warns_for_complete_safe_state_because_future_fields_u
 
     assert result["decision_state"] == "warn"
     assert result["would_block"] is False
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
     assert "future_runtime_enforcement_wiring" in result["unresolved_policy_fields"]
@@ -210,6 +212,7 @@ def test_dry_run_evaluator_uses_caller_supplied_state_only(monkeypatch):
     )
 
     assert result["decision_state"] == "would_block"
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
 
@@ -219,6 +222,7 @@ def test_dry_run_evaluator_unknown_without_observed_state():
 
     assert result["decision_state"] == "unknown"
     assert result["would_block"] is False
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False
     assert "caller-supplied observed workflow state is incomplete" in result["reasons"]
@@ -254,8 +258,10 @@ def test_verifier_workflow_evidence_record_is_append_only_and_inert(tmp_path):
     records = store.read_all(VerifierWorkflowEvidenceRecord)
     assert [record.record_id for record in records] == ["record-1", "record-2"]
     assert records[0].guard_type == "verifier_workflow"
+    assert records[0].would_execute is False
     assert records[0].dry_run_only is True
     assert records[0].enforces_runtime is False
+    assert records[0].to_dict()["would_execute"] is False
     assert records[0].to_dict()["dry_run_only"] is True
     assert records[0].to_dict()["enforces_runtime"] is False
 
@@ -314,6 +320,7 @@ def test_verifier_evidence_record_stores_pr_merge_packet_hash_identity_only():
     assert "canonical_packet_json" not in payload
     for forbidden in ("raw_log", "transcript", "comments", "pr_body", "local_path", "token", "api_key"):
         assert forbidden not in payload["packet_identity"]
+    assert payload["would_execute"] is False
     assert payload["dry_run_only"] is True
     assert payload["enforces_runtime"] is False
 
@@ -342,6 +349,7 @@ def test_verifier_evidence_record_omits_invalid_pr_merge_packet_fields():
     assert payload["packet_identity"] == {
         "base_branch": "pr-base/v2026.5.29.2-mission-control-records"
     }
+    assert payload["would_execute"] is False
     assert payload["dry_run_only"] is True
     assert payload["enforces_runtime"] is False
 
@@ -371,6 +379,7 @@ def test_verifier_evidence_packet_fields_round_trip_and_append_only(tmp_path):
     assert records[0].packet_hash == packet_hash
     assert records[0].packet_version == "pr_merge_packet_v1"
     assert records[0].packet_identity["repo"] == "travisaggie04/hermes-agent"
+    assert records[0].would_execute is False
     assert records[0].dry_run_only is True
     assert records[0].enforces_runtime is False
 
@@ -404,6 +413,7 @@ def test_pr_merge_gate_can_consume_stored_packet_evidence_summary():
         "verifier_id": "jenny-verifier",
         "would_block": payload["would_block"],
         "blocked_actions": payload["blocked_actions"],
+        "would_execute": payload["would_execute"],
         "dry_run_only": payload["dry_run_only"],
         "enforces_runtime": payload["enforces_runtime"],
     }
@@ -421,5 +431,6 @@ def test_pr_merge_gate_can_consume_stored_packet_evidence_summary():
 
     assert result["would_block"] is False
     assert result["packet_hash_valid"] is True
+    assert result["would_execute"] is False
     assert result["dry_run_only"] is True
     assert result["enforces_runtime"] is False

@@ -5,6 +5,20 @@ from __future__ import annotations
 from mission_control.workspace_status import build_workspace_status, default_workspace_status_input
 
 
+def _assert_inert_workspace_flags(payload):
+    assert payload["display_only"] is True
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["would_execute"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
+    assert payload["enforcement_enabled"] is False
+    assert payload["dry_run_only"] is True
+    assert payload["enforces_runtime"] is False
+
+
 def _baseline_payload(**overrides):
     payload = {
         "accepted_baseline": {
@@ -26,6 +40,12 @@ def _baseline_payload(**overrides):
         "safety": {
             "dispatch_in_gateway": False,
             "workers_enabled": False,
+            "worker_enabled": False,
+            "timer_enabled": False,
+            "daemon_enabled": False,
+            "waha_enabled": False,
+            "social_enabled": False,
+            "payment_enabled": False,
             "queue_mutation_enabled": False,
             "model_routing_enabled": False,
             "enforcement_enabled": False,
@@ -62,10 +82,15 @@ def _baseline_payload(**overrides):
 def test_workspace_status_returns_inert_display_only_flags_and_baselines():
     status = build_workspace_status(_baseline_payload())
 
+    _assert_inert_workspace_flags(status)
     assert status["display_only"] is True
     assert status["trusted_for_execution"] is False
     assert status["inert_context_only"] is True
+    assert status["would_execute"] is False
     assert status["execution_enabled"] is False
+    assert status["dispatch_enabled"] is False
+    assert status["session_send_enabled"] is False
+    assert status["worker_dispatch_enabled"] is False
     assert status["enforcement_enabled"] is False
     assert status["dry_run_only"] is True
     assert status["enforces_runtime"] is False
@@ -78,7 +103,171 @@ def test_workspace_status_returns_inert_display_only_flags_and_baselines():
     assert status["activity"]["active_workers"] == 0
     assert status["pr_gate"]["packet_hash_valid"] is True
     assert status["deployment"]["status"] == "accepted"
-    assert status["stale_context"]["warnings"] == ["accepted_baseline_source_missing"]
+    warnings = set(status["stale_context"]["warnings"])
+    assert "accepted_baseline_source_missing" in warnings
+    assert "MISSING_RUNTIME_PATH" in warnings
+    assert status["runtime_provenance"]["autonomy_blocked"] is True
+    assert status["read_only_autonomy_eligibility"]["eligible"] is False
+    _assert_inert_workspace_flags(status["source_control"])
+    _assert_inert_workspace_flags(status["deployment_gap"])
+
+
+def test_workspace_status_surfaces_scoped_pr_lane_eligibility_as_inert_preview():
+    status = build_workspace_status(
+        _baseline_payload(
+            scoped_pr_eligibility={
+                "approval": {
+                    "approval_id": "approval-pr-1",
+                    "status": "approved",
+                    "approval_mode": "one_time",
+                    "approval_scope": "project-hermes-mission-control:scoped-pr:mission_control/",
+                    "action_class": "pr_creation",
+                    "approved_files": ["mission_control/workspace_status.py"],
+                    "expires_at": "2099-01-01T00:00:00Z",
+                },
+                "run": {
+                    "run_id": "run-pr-1",
+                    "project_id": "project-hermes-mission-control",
+                    "approval_id": "approval-pr-1",
+                    "lane_type": "pr_creation",
+                    "status": "requested",
+                    "forbidden_actions": ["merge", "deploy", "restart", "runtime switch"],
+                },
+                "lane": {
+                    "lane_type": "pr_creation",
+                    "allowed_files": ["mission_control/workspace_status.py"],
+                    "forbidden_actions": ["merge", "deploy", "restart", "runtime switch"],
+                    "tests_required": True,
+                    "review_required": True,
+                },
+                "report_contract": {"required": True, "tests_required": True, "review_required": True},
+            }
+        )
+    )
+
+    scoped_pr = status["scoped_pr_lane_eligibility"]
+    assert scoped_pr["stored"] is False
+    assert scoped_pr["dry_run_only"] is True
+    assert scoped_pr["would_execute"] is False
+    assert scoped_pr["would_create_pr"] is False
+    assert scoped_pr["would_commit"] is False
+    assert scoped_pr["execution_enabled"] is False
+    assert scoped_pr["dispatch_enabled"] is False
+    assert scoped_pr["session_send_enabled"] is False
+    assert scoped_pr["worker_dispatch_enabled"] is False
+    assert scoped_pr["eligible"] is False
+    assert "runtime provenance is not clean" in scoped_pr["blocked_reasons"]
+
+
+def test_workspace_status_surfaces_execution_packet_preview_as_inert_work_packet():
+    status = build_workspace_status(
+        _baseline_payload(
+            execution_packet_preview={
+                "mode": "scoped_pr",
+                "approval": {
+                    "approval_id": "approval-pr-1",
+                    "status": "approved",
+                    "approval_mode": "one_time",
+                    "approval_scope": "project-hermes-mission-control:scoped-pr:mission_control/",
+                    "action_class": "pr_creation",
+                    "approved_files": ["mission_control/workspace_status.py"],
+                    "expires_at": "2099-01-01T00:00:00Z",
+                },
+                "run": {
+                    "run_id": "run-pr-1",
+                    "project_id": "project-hermes-mission-control",
+                    "approval_id": "approval-pr-1",
+                    "lane_type": "pr_creation",
+                    "status": "requested",
+                    "forbidden_actions": ["merge", "deploy", "restart", "runtime switch"],
+                },
+                "lane": {
+                    "lane_type": "pr_creation",
+                    "allowed_files": ["mission_control/workspace_status.py"],
+                    "tests_required": True,
+                    "review_required": True,
+                },
+                "report_contract": {"required": True, "tests_required": True, "review_required": True},
+            }
+        )
+    )
+
+    packet = status["execution_packet_preview"]
+    assert packet["source"] == "mission_control_execution_packet_preview_v1"
+    assert packet["display_only"] is True
+    assert packet["trusted_for_execution"] is False
+    assert packet["would_execute"] is False
+    assert packet["would_dispatch"] is False
+    assert packet["would_session_send"] is False
+    assert packet["execution_enabled"] is False
+    assert packet["dispatch_enabled"] is False
+    assert packet["session_send_enabled"] is False
+    assert packet["worker_dispatch_enabled"] is False
+    assert packet["packet"]["mode"] == "scoped_pr"
+    assert packet["packet"]["run_id"] == "run-pr-1"
+    assert packet["packet"]["scope"]["files"] == ["mission_control/workspace_status.py"]
+    assert packet["eligible"] is False
+    assert "runtime provenance is not clean" in packet["blocked_reasons"]
+
+
+def test_workspace_status_surfaces_execution_mode_classification_as_inert_preview():
+    status = build_workspace_status(
+        _baseline_payload(
+            execution_mode_classification={
+                "mode": "worker_node",
+                "run": {
+                    "run_id": "run-pr-1",
+                    "lane_type": "pr_creation",
+                    "objective": "Prepare bounded scoped PR evidence.",
+                },
+                "worker_node": {
+                    "parent_run_id": "run-pr-1",
+                    "worker_identity": "codex",
+                    "worker_host_label": "laptop-codex",
+                    "presence_status": "online",
+                },
+            }
+        )
+    )
+
+    mode = status["execution_mode_classification"]
+    assert mode["source"] == "mission_control_execution_mode_classification_v1"
+    assert mode["display_only"] is True
+    assert mode["trusted_for_execution"] is False
+    assert mode["would_execute"] is False
+    assert mode["execution_enabled"] is False
+    assert mode["dispatch_enabled"] is False
+    assert mode["session_send_enabled"] is False
+    assert mode["worker_dispatch_enabled"] is False
+    assert mode["stored"] is False
+    assert mode["dry_run_only"] is True
+    assert mode["mode_family"] == "worker_node_preview"
+    assert mode["manual_handoff_only"] is True
+    assert mode["preview_ready"] is True
+    assert mode["blocked"] is False
+
+
+def test_workspace_status_surfaces_tool_permission_classification():
+    status = build_workspace_status(
+        _baseline_payload(
+            tool_permissions={
+                "paths": [
+                    {"path_id": "audit_read", "read_only_safe": True, "tools": ["read_file"]},
+                    {"path_id": "worker_path", "worker_node_path": True},
+                ]
+            }
+        )
+    )
+
+    permissions = status["tool_permission_classification"]
+    assert permissions["stored"] is False
+    assert permissions["dry_run_only"] is True
+    assert permissions["permission_classification"] == "write_capable_not_safe_for_autonomy"
+    assert permissions["execution_enabled"] is False
+    assert permissions["dispatch_enabled"] is False
+    assert permissions["session_send_enabled"] is False
+    assert permissions["worker_dispatch_enabled"] is False
+    assert "worker_path" in permissions["write_capable_path_ids"]
 
 
 def test_workspace_status_warns_on_stale_baseline_dispatch_lane_and_workers():
@@ -120,6 +309,11 @@ def test_workspace_status_exposes_runtime_worktree_guard_blockers_display_only()
     guard = status["runtime_worktree_guard"]
     assert guard["dry_run_only"] is True
     assert guard["enforces_runtime"] is False
+    assert guard["would_execute"] is False
+    assert guard["execution_enabled"] is False
+    assert guard["dispatch_enabled"] is False
+    assert guard["session_send_enabled"] is False
+    assert guard["worker_dispatch_enabled"] is False
     assert guard["would_block"] is True
     assert guard["decision_state"] == "blocked"
     assert "dev_worktree_is_live_runtime" in guard["blockers"]
@@ -309,6 +503,70 @@ def test_workspace_status_uses_accepted_baseline_record_source_when_present():
     assert "accepted_baseline_source_missing" not in status["stale_context"]["warnings"]
 
 
+def test_workspace_status_surfaces_merged_prs_after_accepted_baseline_in_provenance():
+    status = build_workspace_status(
+        _baseline_payload(
+            accepted_baseline_record=_accepted_baseline_record_payload(),
+            source_control={
+                "accepted_live_head": "d11681f81c7cd16a99c53649f157040b2d10a89f",
+                "latest_merged_pr": "396",
+                "merged_prs_after_accepted_baseline": ["395", "396"],
+            },
+            dashboard_runtime={
+                "path": "/home/jenny/.hermes/hermes-runtime-handoff-8c560c7",
+                "head": "8c560c739606564aeeb4db464fe1989cb67a40b6",
+            },
+            gateway_runtime={
+                "path": "/home/jenny/.hermes/hermes-runtime-handoff-8c560c7",
+                "head": "8c560c739606564aeeb4db464fe1989cb67a40b6",
+            },
+        )
+    )
+
+    provenance = status["runtime_provenance"]
+    warnings = set(status["stale_context"]["warnings"])
+    assert provenance["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
+    assert "SOURCE_CURRENT_BUT_BASELINE_STALE" in provenance["statuses"]
+    assert provenance["latest_merged_pr"] == "396"
+    assert provenance["merged_prs_after_accepted_baseline"] == ["395", "396"]
+    assert "latest merged PR #396 is after the accepted baseline" in provenance["autonomy_blocked_reasons"]
+    assert "merged PRs after accepted baseline: PR #395, PR #396" in provenance["autonomy_blocked_reasons"]
+    assert "latest merged PR #396 is after the accepted baseline" in warnings
+
+
+def test_workspace_status_surfaces_source_default_head_drift_in_provenance():
+    accepted_head = "8c560c739606564aeeb4db464fe1989cb67a40b6"
+    default_head = "d11681f81c7cd16a99c53649f157040b2d10a89f"
+    status = build_workspace_status(
+        _baseline_payload(
+            accepted_baseline_record=_accepted_baseline_record_payload(rollback_head=accepted_head),
+            source_control={
+                "accepted_live_head": accepted_head,
+                "default_branch_head": default_head,
+            },
+            dashboard_runtime={
+                "path": "/home/jenny/.hermes/hermes-runtime-handoff-8c560c7",
+                "head": accepted_head,
+            },
+            gateway_runtime={
+                "path": "/home/jenny/.hermes/hermes-runtime-handoff-8c560c7",
+                "head": accepted_head,
+            },
+        )
+    )
+
+    provenance = status["runtime_provenance"]
+    warnings = set(status["stale_context"]["warnings"])
+    _assert_inert_workspace_flags(status["source_control"])
+    _assert_inert_workspace_flags(status["deployment_gap"])
+    assert status["source_control"]["default_branch_head"] == default_head
+    assert provenance["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
+    assert provenance["primary_status"] == "SOURCE_DEFAULT_DRIFT"
+    assert provenance["default_branch_head"] == default_head
+    assert "SOURCE_DEFAULT_DRIFT" in provenance["statuses"]
+    assert "source HEAD does not match default branch HEAD" in provenance["autonomy_blocked_reasons"]
+    assert "SOURCE_DEFAULT_DRIFT" in warnings
+    assert "source HEAD does not match default branch HEAD" in warnings
 
 
 def test_workspace_status_record_source_defaults_lane_to_idle_and_matching_baseline():
@@ -326,13 +584,69 @@ def test_workspace_status_record_source_defaults_lane_to_idle_and_matching_basel
     assert status["stale_context"]["baseline_mismatch"] is False
     assert status["safety"]["dispatch_in_gateway"] is False
     assert status["safety"]["workers_enabled"] is False
+    assert status["safety"]["worker_enabled"] is False
+    assert status["safety"]["timer_enabled"] is False
+    assert status["safety"]["daemon_enabled"] is False
+    assert status["safety"]["waha_enabled"] is False
+    assert status["safety"]["social_enabled"] is False
+    assert status["safety"]["payment_enabled"] is False
     assert status["safety"]["queue_mutation_enabled"] is False
     assert status["safety"]["model_routing_enabled"] is False
     assert status["safety"]["enforcement_enabled"] is False
+    assert status["would_execute"] is False
     assert status["execution_enabled"] is False
+    assert status["dispatch_enabled"] is False
+    assert status["session_send_enabled"] is False
+    assert status["worker_dispatch_enabled"] is False
     assert status["display_only"] is True
     assert status["dry_run_only"] is True
     assert status["enforces_runtime"] is False
+
+
+def test_workspace_status_surfaces_truthy_live_safety_flags_as_warnings():
+    status = build_workspace_status(
+        _baseline_payload(
+            safety={
+                "dispatch_in_gateway": "yes",
+                "workers_enabled": "enabled",
+                "worker_enabled": "true",
+                "timer_enabled": 1,
+                "daemon_enabled": "on",
+                "waha_enabled": "y",
+                "social_enabled": True,
+                "payment_enabled": "1",
+                "queue_mutation_enabled": "true",
+                "model_routing_enabled": "yes",
+            }
+        )
+    )
+
+    warnings = set(status["stale_context"]["warnings"])
+    assert status["safety"]["dispatch_in_gateway"] is True
+    assert status["safety"]["workers_enabled"] is True
+    assert status["safety"]["worker_enabled"] is True
+    assert status["safety"]["timer_enabled"] is True
+    assert status["safety"]["daemon_enabled"] is True
+    assert status["safety"]["waha_enabled"] is True
+    assert status["safety"]["social_enabled"] is True
+    assert status["safety"]["payment_enabled"] is True
+    assert status["safety"]["queue_mutation_enabled"] is True
+    assert status["safety"]["model_routing_enabled"] is True
+    assert "dispatch_not_false" in warnings
+    assert "workers_enabled_not_false" in warnings
+    assert "worker_enabled_not_false" in warnings
+    assert "timer_enabled_not_false" in warnings
+    assert "daemon_enabled_not_false" in warnings
+    assert "waha_enabled_not_false" in warnings
+    assert "social_enabled_not_false" in warnings
+    assert "payment_enabled_not_false" in warnings
+    assert "queue_mutation_enabled_not_false" in warnings
+    assert "model_routing_enabled_not_false" in warnings
+    assert status["would_execute"] is False
+    assert status["execution_enabled"] is False
+    assert status["dispatch_enabled"] is False
+    assert status["session_send_enabled"] is False
+    assert status["worker_dispatch_enabled"] is False
 
 
 def test_workspace_status_record_source_preserves_caller_supplied_active_lane():

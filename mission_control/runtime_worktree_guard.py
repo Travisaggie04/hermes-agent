@@ -12,6 +12,8 @@ import os
 from collections.abc import Mapping
 from typing import Any
 
+from mission_control.inert_contract import inert_live_operation_flags
+
 GUARD_ID = "runtime_worktree_guard_v1"
 DEFAULT_OFF = True
 DRY_RUN_ONLY = True
@@ -114,9 +116,7 @@ def evaluate_runtime_worktree_guard(observed_state: Mapping[str, Any] | None = N
         "default_off": DEFAULT_OFF,
         "dry_run_only": DRY_RUN_ONLY,
         "enforces_runtime": ENFORCES_RUNTIME,
-        "trusted_for_execution": False,
-        "inert_context_only": True,
-        "execution_enabled": False,
+        **inert_live_operation_flags(),
         "requested_action_class": action_class,
         "runtime_paths_allowed_for_action": runtime_allowed,
         "decision_state": decision_state,

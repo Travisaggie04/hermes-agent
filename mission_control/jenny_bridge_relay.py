@@ -25,11 +25,29 @@ DEFAULT_LIMIT = 25
 POLLER_ID = "manual-jenny-bridge-relay"
 INERT_STATUS_METADATA = {
     "manual_start_only": True,
+    "trusted_for_execution": False,
+    "inert_context_only": True,
+    "would_execute": False,
+    "would_dispatch": False,
+    "would_session_send": False,
     "dispatch_enabled": False,
     "session_send_enabled": False,
+    "dispatch_in_gateway": False,
+    "dispatch_state": False,
     "execution_enabled": False,
+    "execution_ready": False,
+    "live_operations_enabled": False,
+    "send_to_jenny_enabled": False,
+    "worker_dispatch_enabled": False,
     "worker_enabled": False,
+    "workers_enabled": False,
     "timer_enabled": False,
+    "daemon_enabled": False,
+    "waha_enabled": False,
+    "social_enabled": False,
+    "payment_enabled": False,
+    "queue_mutation_enabled": False,
+    "model_routing_enabled": False,
 }
 
 
@@ -129,6 +147,10 @@ def latest_status_records(path: Path | None = None, *, limit: int = DEFAULT_LIMI
     return list(_store(path).read_latest(JennyBridgePollerStatusRecord, limit=max(1, limit)))
 
 
+def _inert_response_flags() -> dict[str, bool]:
+    return dict(INERT_STATUS_METADATA)
+
+
 def relay_status(path: Path | None = None, *, limit: int = DEFAULT_LIMIT) -> dict[str, Any]:
     pending = pending_requests(path, limit=limit)
     statuses = latest_status_records(path, limit=limit)
@@ -138,12 +160,7 @@ def relay_status(path: Path | None = None, *, limit: int = DEFAULT_LIMIT) -> dic
     if responses:
         latest_response = responses[-1][1]
     return {
-        "manual_start_only": True,
-        "dispatch_enabled": False,
-        "session_send_enabled": False,
-        "execution_enabled": False,
-        "worker_enabled": False,
-        "timer_enabled": False,
+        **_inert_response_flags(),
         "pending_count": len(pending),
         "last_poll_at": latest.created_at if latest else "",
         "last_status": latest.status if latest else "idle",
@@ -280,12 +297,10 @@ def append_response(
         status="received",
         created_at=utc_now(),
         metadata={
+            **INERT_STATUS_METADATA,
             "source": "mission_control_jenny_bridge_relay_cli",
             "bridge_direction": "inbound",
             "manual_copy_only": False,
-            "send_to_jenny_enabled": False,
-            "dispatch_enabled": False,
-            "execution_enabled": False,
             "external_jenny_response": True,
         },
     )
@@ -303,6 +318,7 @@ def append_response(
 
 def _pending_payload(requests: list[PendingBridgeRequest]) -> dict[str, Any]:
     return {
+        **_inert_response_flags(),
         "count": len(requests),
         "requests": [
             {
@@ -313,9 +329,6 @@ def _pending_payload(requests: list[PendingBridgeRequest]) -> dict[str, Any]:
             for item in requests
         ],
         "relay_packet": relay_packet(requests),
-        "send_to_jenny_enabled": False,
-        "dispatch_enabled": False,
-        "execution_enabled": False,
     }
 
 

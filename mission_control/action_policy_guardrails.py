@@ -10,15 +10,15 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Literal
 
+from mission_control.inert_contract import inert_live_operation_flags
+
 Decision = Literal["ALLOW", "ASK", "DENY"]
 
-INERT_POLICY_FLAGS: dict[str, Any] = {
-    "trusted_for_execution": False,
-    "inert_context_only": True,
-    "enforcement_enabled": False,
-    "dry_run_only": True,
-    "display_only": True,
-}
+INERT_POLICY_FLAGS: dict[str, Any] = inert_live_operation_flags(
+    enforcement_enabled=False,
+    dry_run_only=True,
+    display_only=True,
+)
 
 ACTION_POLICY_GUARDRAILS: dict[str, Any] = {
     "policy_id": "jenny_os_action_policy_v1",
@@ -219,6 +219,10 @@ def _payload_text(payload: dict[str, Any]) -> str:
     return "\n".join(parts).strip()
 
 
+def _evaluation_flags() -> dict[str, Any]:
+    return {**INERT_POLICY_FLAGS, "enforces_runtime": False}
+
+
 def _matches_rule(text: str, rule: dict[str, Any]) -> bool:
     lowered = text.lower()
     return any(pattern in lowered for pattern in rule["patterns"])
@@ -241,14 +245,13 @@ def evaluate_action_policy(payload: dict[str, Any] | None) -> dict[str, Any]:
 
     if not text:
         return {
+            **_evaluation_flags(),
             "decision": "ASK",
             "decision_state": "needs_request",
             "matched_categories": [],
             "reasons": ["request text or requested_actions are required"],
             "blocked_actions": [],
             "required_approvals": [],
-            "dry_run_only": True,
-            "enforces_runtime": False,
         }
 
     for rule in _DENY_RULES:
@@ -260,14 +263,13 @@ def evaluate_action_policy(payload: dict[str, Any] | None) -> dict[str, Any]:
 
     if blocked_actions:
         return {
+            **_evaluation_flags(),
             "decision": "DENY",
             "decision_state": "denied",
             "matched_categories": matched_categories,
             "reasons": reasons,
             "blocked_actions": blocked_actions,
             "required_approvals": required_approvals,
-            "dry_run_only": True,
-            "enforces_runtime": False,
         }
 
     for rule in _ASK_RULES:
@@ -280,23 +282,21 @@ def evaluate_action_policy(payload: dict[str, Any] | None) -> dict[str, Any]:
 
     if blocked_actions:
         return {
+            **_evaluation_flags(),
             "decision": "ASK",
             "decision_state": "requires_explicit_approval",
             "matched_categories": matched_categories,
             "reasons": reasons,
             "blocked_actions": blocked_actions,
             "required_approvals": required_approvals,
-            "dry_run_only": True,
-            "enforces_runtime": False,
         }
 
     return {
+        **_evaluation_flags(),
         "decision": "ALLOW",
         "decision_state": "allowed_in_current_guardrails",
         "matched_categories": [],
         "reasons": ["request has no protected action matches"],
         "blocked_actions": [],
         "required_approvals": [],
-        "dry_run_only": True,
-        "enforces_runtime": False,
     }

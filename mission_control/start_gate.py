@@ -11,11 +11,13 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from mission_control.action_policy import evaluate_action_policy
+from mission_control.inert_contract import inert_live_operation_flags
 from mission_control.records import StartGateCheck, TaskControlEnvelope
 
 
 DEFAULT_OFF = True
 INERT = True
+WOULD_EXECUTE = False
 ENFORCES_RUNTIME = False
 
 _REQUIRED_FIELDS = (
@@ -118,6 +120,7 @@ def evaluate_start_gate(envelope: TaskControlEnvelope | Mapping[str, Any]) -> St
         metadata={
             "default_off": DEFAULT_OFF,
             "inert": INERT,
+            **inert_live_operation_flags(dry_run_only=True),
             "enforces_runtime": ENFORCES_RUNTIME,
             "policy": "mission_control.start_gate.default_off.v1",
             "action_policy": action_policy.policy_id,

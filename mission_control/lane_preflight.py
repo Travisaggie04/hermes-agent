@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from mission_control.inert_contract import inert_live_operation_flags
 from mission_control.preflight import (
     ADAPTER_POLICY,
     DEFAULT_OFF,
@@ -73,6 +74,7 @@ def run_lane_start_preflight(lane_start: Mapping[str, Any]) -> dict[str, Any]:
         "caller": CALLER_POLICY,
         "preflight_adapter": ADAPTER_POLICY,
         "default_off": DEFAULT_OFF,
+        **inert_live_operation_flags(),
         "dry_run_only": DRY_RUN_ONLY,
         "enforces_runtime": ENFORCES_RUNTIME,
         "would_block": would_block,

@@ -62,6 +62,11 @@ interface MissionControlSnapshot {
   workspaceStatus: MissionControlWorkspaceStatus
 }
 
+interface MissionControlBridgeSafety {
+  reasons: string[]
+  safe: boolean
+}
+
 const emptySnapshot: MissionControlSnapshot = {
   challengeReviews: [],
   jennyBridgeRequests: [],
@@ -177,6 +182,23 @@ function text(value: unknown, fallback = 'Not recorded'): string {
 
 function yesNo(value: unknown): string {
   return value === true ? 'yes' : value === false ? 'no' : 'unknown'
+}
+
+function allFalse(values: unknown[]): boolean {
+  return values.every(value => value === false)
+}
+
+function liveFlagEnabled(value: unknown): boolean {
+  if (value === true) {
+    return true
+  }
+  if (typeof value === 'number') {
+    return value !== 0
+  }
+  if (typeof value === 'string') {
+    return ['1', 'true', 'yes', 'y', 'on', 'enabled'].includes(value.trim().toLowerCase())
+  }
+  return false
 }
 
 function formatBytes(value: unknown): string {
@@ -906,6 +928,67 @@ function normalizedBridgeError(
   return hasGitHubBridgeSignal(githubBridgeStatus) ? '' : legacyError
 }
 
+function missionControlGitHubBridgeSafety(
+  status: MissionControlGitHubBridgeStatusResponse | undefined,
+  workspaceStatus?: MissionControlWorkspaceStatus
+): MissionControlBridgeSafety {
+  const reasons: string[] = []
+  if (!status) {
+    reasons.push('GitHub bridge status not loaded')
+  } else {
+    if (status.manual_start_only !== true) {
+      reasons.push('manual_start_only is not confirmed')
+    }
+    const liveFlags: Array<[keyof MissionControlGitHubBridgeStatusResponse, string]> = [
+      ['would_execute', 'would_execute must remain false'],
+      ['dispatch_enabled', 'dispatch_enabled must remain false'],
+      ['execution_enabled', 'execution_enabled must remain false'],
+      ['send_to_jenny_enabled', 'send_to_jenny_enabled must remain false'],
+      ['session_send_enabled', 'session_send_enabled must remain false'],
+      ['worker_dispatch_enabled', 'worker_dispatch_enabled must remain false'],
+      ['worker_enabled', 'worker_enabled must remain false'],
+      ['workers_enabled', 'workers_enabled must remain false'],
+      ['timer_enabled', 'timer_enabled must remain false'],
+      ['daemon_enabled', 'daemon_enabled must remain false'],
+      ['discord_automation_enabled', 'discord_automation_enabled must remain false'],
+      ['model_routing_enabled', 'model_routing_enabled must remain false'],
+      ['payment_enabled', 'payment_enabled must remain false'],
+      ['queue_mutation_enabled', 'queue_mutation_enabled must remain false'],
+      ['social_enabled', 'social_enabled must remain false'],
+      ['waha_enabled', 'waha_enabled must remain false']
+    ]
+    for (const [flag, reason] of liveFlags) {
+      if (liveFlagEnabled(status[flag])) {
+        reasons.push(reason)
+      }
+    }
+  }
+  const hardBoundary = workspaceStatus?.hard_boundary_contract
+  if (!hardBoundary) {
+    reasons.push('hard_boundary_contract is not loaded')
+  } else {
+    if (hardBoundary.blocked === true) {
+      reasons.push(hardBoundary.blocked_reasons?.[0] ?? 'hard_boundary_contract is blocked')
+    }
+    for (const reason of hardBoundary.live_flag_violations ?? []) {
+      reasons.push(reason)
+    }
+    reasons.push(...executionLockReasons('hard_boundary_contract', hardBoundary))
+  }
+
+  const operatorPacket = workspaceStatus?.operator_decision_packet
+  reasons.push(...(operatorPacket?.execution_lock_blocked_reasons ?? []))
+  reasons.push(...executionLockReasons('operator_decision_packet', operatorPacket))
+  reasons.push(...executionLockReasons('orchestration_readiness', workspaceStatus?.orchestration_readiness))
+
+  const uniqueReasons = [...new Set(reasons)]
+  return { reasons: uniqueReasons, safe: uniqueReasons.length === 0 }
+}
+
+function missionControlBridgeBlockedMessage(safety: MissionControlBridgeSafety): string {
+  return `Manual Jenny bridge blocked: ${safety.reasons[0] ?? 'bridge safety is not confirmed'}`
+}
+
 function noReplyStatusMessage(error: unknown): string {
   const rawError = error ?? 'no matching pending request'
   if (isNoPendingBridgeError(rawError)) {
@@ -1215,18 +1298,555 @@ function latestForProject<T extends { project_id?: string }>(projectId: string, 
   return [...records].reverse().find(record => record.project_id === projectId) ?? null
 }
 
+function latestProjectionRecord<T>(projection?: { active_runs?: T[]; latest_by_id?: Record<string, T> }): T | null {
+  const activeRuns = projection?.active_runs ?? []
+  if (activeRuns.length) {
+    return activeRuns[activeRuns.length - 1]
+  }
+
+  const latestRecords = Object.values(projection?.latest_by_id ?? {})
+  return latestRecords.length ? latestRecords[latestRecords.length - 1] : null
+}
+
+function projectionRecordText(record: Record<string, unknown> | null, key: string): string {
+  const value = record?.[key]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function projectionRecordList(record: Record<string, unknown> | null, key: string): string[] {
+  const value = record?.[key]
+  return Array.isArray(value) ? value.map(item => String(item)).filter(Boolean) : []
+}
+
+function projectionRecordFlag(record: Record<string, unknown> | null, key: string): boolean {
+  return record?.[key] === true
+}
+
+function uniqueTextList(values: string[]): string[] {
+  return [...new Set(values.map(value => value.trim()).filter(Boolean))]
+}
+
+function labelText(value: string): string {
+  return (value || 'unknown').replaceAll('_', ' ')
+}
+
+function reportReviewAccepted(value: string): boolean {
+  const normalized = value.trim().toLowerCase().replaceAll(' ', '_')
+
+  return normalized === 'accepted' || normalized === 'reviewed'
+}
+
+function reportLinkHealthy({
+  mismatch,
+  reportId,
+  reviewStatus,
+  linkStatus
+}: {
+  mismatch: boolean
+  reportId: string
+  reviewStatus: string
+  linkStatus: string
+}): boolean {
+  return Boolean(reportId) && linkStatus === 'linked_report_found' && reportReviewAccepted(reviewStatus) && !mismatch
+}
+
+function reportLinkValue({
+  linkStatus,
+  mismatch,
+  mismatchReason,
+  reportId,
+  reviewStatus
+}: {
+  linkStatus: string
+  mismatch: boolean
+  mismatchReason: string
+  reportId: string
+  reviewStatus: string
+}): string {
+  return [
+    labelText(linkStatus),
+    labelText(reviewStatus),
+    mismatch ? 'mismatch yes' : '',
+    mismatchReason,
+    reportId
+  ]
+    .filter(Boolean)
+    .join(' / ')
+}
+
+type ExecutionLockSource = {
+  daemon_enabled?: unknown
+  dispatch_enabled?: boolean
+  dispatch_in_gateway?: unknown
+  dispatch_state?: unknown
+  execution_enabled?: boolean
+  execution_ready?: unknown
+  live_operations_enabled?: unknown
+  model_routing_enabled?: unknown
+  payment_enabled?: unknown
+  queue_mutation_enabled?: unknown
+  send_to_jenny_enabled?: boolean
+  session_send_enabled?: boolean
+  social_enabled?: unknown
+  timer_enabled?: unknown
+  waha_enabled?: unknown
+  would_dispatch?: boolean
+  would_execute?: boolean
+  would_session_send?: boolean
+  worker_dispatch_enabled?: boolean
+  worker_enabled?: unknown
+  workers_enabled?: unknown
+}
+
+const EXECUTION_LOCK_FLAGS: Array<[keyof ExecutionLockSource, string]> = [
+  ['would_execute', 'would_execute must remain false'],
+  ['would_dispatch', 'would_dispatch must remain false'],
+  ['would_session_send', 'would_session_send must remain false'],
+  ['execution_enabled', 'execution_enabled must remain false'],
+  ['dispatch_enabled', 'dispatch_enabled must remain false'],
+  ['dispatch_in_gateway', 'dispatch_in_gateway must remain false'],
+  ['dispatch_state', 'dispatch_state must remain false'],
+  ['execution_ready', 'execution_ready must remain false'],
+  ['live_operations_enabled', 'live_operations_enabled must remain false'],
+  ['model_routing_enabled', 'model_routing_enabled must remain false'],
+  ['payment_enabled', 'payment_enabled must remain false'],
+  ['queue_mutation_enabled', 'queue_mutation_enabled must remain false'],
+  ['send_to_jenny_enabled', 'send_to_jenny_enabled must remain false'],
+  ['session_send_enabled', 'session_send_enabled must remain false'],
+  ['social_enabled', 'social_enabled must remain false'],
+  ['timer_enabled', 'timer_enabled must remain false'],
+  ['waha_enabled', 'waha_enabled must remain false'],
+  ['worker_dispatch_enabled', 'worker_dispatch_enabled must remain false'],
+  ['worker_enabled', 'worker_enabled must remain false'],
+  ['workers_enabled', 'workers_enabled must remain false']
+]
+
+function executionLockReasons(label: string, source?: ExecutionLockSource | null): string[] {
+  if (!source) {
+    return []
+  }
+
+  return EXECUTION_LOCK_FLAGS
+    .filter(([flag]) => liveFlagEnabled(source[flag]))
+    .map(([, reason]) => `${label}: ${reason}`)
+}
+
 export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) {
+  const runtimeProvenance = status.runtime_provenance
+  const autonomyEligibility = status.read_only_autonomy_eligibility
+  const scopedPrEligibility = status.scoped_pr_lane_eligibility
+  const toolPermissions = status.tool_permission_classification
+  const approvalLifecycle = status.approval_lifecycle
+  const runLifecycle = status.run_lifecycle
+  const reportLifecycle = status.report_lifecycle
+  const reportContractCompliance = status.report_contract_compliance
+  const reportCompletionPath = status.report_completion_path
+  const reportReviewQueue = status.report_review_queue
+  const resultIngestionContract = status.result_ingestion_contract
+  const stopControl = status.orchestration_stop_control
+  const hardBoundary = status.hard_boundary_contract
+  const nextSafeActions = status.next_safe_actions
+  const nextSafePrimaryAction = nextSafeActions?.primary_action
+  const executionModeClassification = status.execution_mode_classification
+  const executionPacket = status.execution_packet_preview
+  const executionPacketBody = executionPacket?.packet
+  const workerContract = executionPacketBody?.worker_node_contract
+  const operatorDecisionPacket = status.operator_decision_packet
+  const orchestrationReadiness = status.orchestration_readiness
+  const orchestrationRunGraph = status.orchestration_run_graph
+  const childInstruction = status.child_agent_instruction_preview
+  const workerInstruction = status.worker_node_instruction_preview
+  const workerPresence = status.worker_node_presence
+  const childRecord = latestProjectionRecord(status.child_agent_orchestration) as Record<string, unknown> | null
+  const workerRecord = latestProjectionRecord(status.worker_node_orchestration) as Record<string, unknown> | null
+  const childReportLinkStatus = projectionRecordText(childRecord, 'report_link_status') || 'no report id recorded'
+
+  const childReportLinkMismatch =
+    projectionRecordFlag(childRecord, 'report_link_mismatch') || childReportLinkStatus === 'linked_report_run_id_mismatch'
+
+  const workerReportLinkStatus = projectionRecordText(workerRecord, 'report_link_status') || 'no report id recorded'
+
+  const workerReportLinkMismatch =
+    projectionRecordFlag(workerRecord, 'report_link_mismatch') || workerReportLinkStatus === 'linked_report_run_id_mismatch'
+
+  const childBlockedReasons = uniqueTextList([
+    ...(status.child_agent_orchestration?.blocked_reasons ?? []),
+    ...projectionRecordList(childRecord, 'blocked_reasons'),
+    projectionRecordText(childRecord, 'failure_reason')
+  ])
+  const workerBlockedReasons = uniqueTextList([
+    ...(status.worker_node_orchestration?.blocked_reasons ?? []),
+    ...projectionRecordList(workerRecord, 'blocked_reasons'),
+    projectionRecordText(workerRecord, 'failure_reason')
+  ])
+  const scopedPrScopeCount = (scopedPrEligibility?.scope?.files?.length ?? 0) + (scopedPrEligibility?.scope?.directories?.length ?? 0)
+  const reportMissingLinkedCount = Object.values(reportLifecycle?.runs_with_missing_linked_report_ids ?? {}).reduce(
+    (count, reportIds) => count + reportIds.length,
+    0
+  )
+  const approvalMissingRecordCount = Object.keys(approvalLifecycle?.runs_with_missing_approval_record ?? {}).length
+  const approvalUnavailableRunCount = Object.keys(approvalLifecycle?.runs_with_unavailable_approval ?? {}).length
+  const runTerminalMissingLinkedCount = Object.values(runLifecycle?.terminal_runs_with_missing_linked_report_ids ?? {}).reduce(
+    (count, reportIds) => count + reportIds.length,
+    0
+  )
+  const nextSafeActionReasons = uniqueTextList([
+    ...(nextSafeActions?.blocked_reasons ?? []),
+    ...(nextSafeActions?.actions ?? []).map(action => action.reason ?? '')
+  ])
+  const executionPacketLockReasons = uniqueTextList([
+    ...executionLockReasons('execution mode', executionModeClassification),
+    ...executionLockReasons('execution packet', executionPacket),
+    ...executionLockReasons('execution packet body', executionPacketBody),
+    ...executionLockReasons('worker contract', workerContract)
+  ])
+  const projectionExecutionLockReasons = uniqueTextList([
+    ...executionLockReasons('read-only eligibility', autonomyEligibility),
+    ...executionLockReasons('scoped PR eligibility', scopedPrEligibility),
+    ...executionLockReasons('tool permissions', toolPermissions),
+    ...executionLockReasons('workspace safety', status.safety as ExecutionLockSource | undefined),
+    ...executionLockReasons('approval lifecycle', approvalLifecycle),
+    ...executionLockReasons('run lifecycle', runLifecycle),
+    ...executionLockReasons('report lifecycle', reportLifecycle),
+    ...executionLockReasons('report review queue', reportReviewQueue),
+    ...executionLockReasons('report contract', reportContractCompliance),
+    ...executionLockReasons('result ingestion', resultIngestionContract),
+    ...executionLockReasons('report completion', reportCompletionPath),
+    ...executionLockReasons('stop/cancel control', stopControl),
+    ...executionLockReasons('hard boundary', hardBoundary),
+    ...executionLockReasons('next safe actions', nextSafeActions),
+    ...executionLockReasons('operator decision', operatorDecisionPacket),
+    ...executionLockReasons('orchestration readiness', orchestrationReadiness),
+    ...executionLockReasons('orchestration run graph', orchestrationRunGraph),
+    ...executionLockReasons('child instruction', childInstruction),
+    ...executionLockReasons('worker handoff', workerInstruction),
+    ...executionLockReasons('worker presence', workerPresence)
+  ])
   return {
     activeLaneCount: status.lane?.active_lane_count ?? 0,
+    activeMutationLaneCount: status.control_plane_lifecycle?.active_mutation_lane_count ?? 0,
+    appendOnlyProjection: status.control_plane_lifecycle?.append_only_projection === true,
+    approvalAvailableCount: approvalLifecycle?.available_approval_ids?.length ?? 0,
+    approvalBlockedReasons: approvalLifecycle?.blocked_reasons ?? [],
+    approvalConsumedCount: approvalLifecycle?.consumed_approval_ids?.length ?? 0,
+    approvalDuplicateCount: approvalLifecycle?.duplicate_approval_ids?.length ?? 0,
+    approvalExpiredCount: approvalLifecycle?.expired_approval_ids?.length ?? 0,
+    approvalLifecycleBlocked: approvalLifecycle?.blocked,
+    approvalLifecycleExecutionEnabled: approvalLifecycle?.execution_enabled,
+    approvalMissingRecordCount,
+    approvalPendingCount: approvalLifecycle?.pending_approval_ids?.length ?? 0,
+    approvalRejectedCount: approvalLifecycle?.rejected_or_cancelled_approval_ids?.length ?? 0,
+    approvalRunMissingIdCount: approvalLifecycle?.runs_missing_approval_id?.length ?? 0,
+    approvalUnavailableRunCount,
+    acceptedBaselineWouldExecute: status.accepted_baseline?.would_execute,
+    autonomyBlockedReasons: autonomyEligibility?.blocked_reasons ?? [],
+    autonomyEligible: autonomyEligibility?.eligible,
+    bridgePermission: autonomyEligibility?.bridge_permissions?.permission_classification ?? 'unknown',
+    childActiveCount: status.child_agent_orchestration?.active_count ?? 0,
+    childBlockedReasons,
+    childDispatchEnabled: status.child_agent_orchestration?.dispatch_enabled,
+    childExecutionEnabled: status.child_agent_orchestration?.execution_enabled,
+    childLatestAgent: projectionRecordText(childRecord, 'agent_identity') || 'no child agent recorded',
+    childLatestObjective: projectionRecordText(childRecord, 'objective'),
+    childLatestStatus: projectionRecordText(childRecord, 'status') || 'none',
+    childReportId: projectionRecordText(childRecord, 'report_id'),
+    childReportLinkMismatch,
+    childReportLinkMismatchReason: projectionRecordText(childRecord, 'report_link_mismatch_reason'),
+    childReportLinkStatus,
+    childReportReviewStatus: projectionRecordText(childRecord, 'linked_report_review_status') || 'not reviewed',
+    childInstructionAvailable: childInstruction?.available,
+    childInstructionBlockedReasons: childInstruction?.blocked_reasons ?? [],
+    childInstructionExecutionEnabled: childInstruction?.execution_enabled,
+    childInstructionManualHandoffOnly: childInstruction?.manual_handoff_only,
+    childInstructionPrompt: childInstruction?.manual_handoff_prompt ?? 'No child-agent instruction preview recorded.',
+    childInstructionReadyForHandoff: childInstruction?.ready_for_handoff,
+    childInstructionWorkerDispatchEnabled: childInstruction?.worker_dispatch_enabled,
     deploymentGapState: status.deployment_gap?.state ?? 'unknown',
     deploymentNeeded: status.deployment_gap?.dashboard_deploy_needed ?? false,
+    defaultBranchHead: runtimeProvenance?.default_branch_head ?? 'unknown',
     deployedHead: status.deployment_gap?.deployed_head ?? status.accepted_baseline?.head ?? 'unknown',
     dispatch: status.safety?.dispatch_in_gateway,
+    executionModeBlockedReasons: executionModeClassification?.blocked_reasons ?? [],
+    executionModeDispatchEnabled: executionModeClassification?.dispatch_enabled,
+    executionModeExecutionEnabled: executionModeClassification?.execution_enabled,
+    executionModeFamily: executionModeClassification?.mode_family ?? 'unknown',
+    executionModeHigherRisk: executionModeClassification?.higher_risk,
+    executionModePreviewReady: executionModeClassification?.preview_ready,
+    executionModeProtectedMarkers: executionModeClassification?.protected_action_markers ?? [],
+    executionModeWouldDispatch: executionModeClassification?.would_dispatch,
+    executionModeWouldExecute: executionModeClassification?.would_execute,
+    executionModeWouldSessionSend: executionModeClassification?.would_session_send,
+    executionModeWorkerDispatchEnabled: executionModeClassification?.worker_dispatch_enabled,
+    executionPacketBlockedReasons: executionPacket?.blocked_reasons ?? [],
+    executionPacketBodyDispatchEnabled: executionPacketBody?.dispatch_enabled,
+    executionPacketBodyExecutionEnabled: executionPacketBody?.execution_enabled,
+    executionPacketBodySessionSendEnabled: executionPacketBody?.session_send_enabled,
+    executionPacketBodyWorkerDispatchEnabled: executionPacketBody?.worker_dispatch_enabled,
+    executionPacketBodyWouldDispatch: executionPacketBody?.would_dispatch,
+    executionPacketBodyWouldExecute: executionPacketBody?.would_execute,
+    executionPacketBodyWouldSessionSend: executionPacketBody?.would_session_send,
+    executionPacketDispatchEnabled: executionPacket?.dispatch_enabled,
+    executionPacketDisplayOnly: executionPacket?.display_only,
+    executionPacketEligible: executionPacket?.eligible,
+    executionPacketExecutionEnabled: executionPacket?.execution_enabled,
+    executionPacketLockReasons,
+    executionPacketMode: executionPacket?.packet?.mode ?? 'unknown',
+    executionPacketSessionSendEnabled: executionPacket?.session_send_enabled,
+    executionPacketWarnings: executionPacket?.warnings ?? [],
+    executionPacketWorkerDispatchEnabled: executionPacket?.worker_dispatch_enabled,
+    executionPacketWouldDispatch: executionPacket?.would_dispatch,
+    executionPacketWouldExecute: executionPacket?.would_execute,
+    executionPacketWouldSessionSend: executionPacket?.would_session_send,
     guard: status.runtime_worktree_guard?.decision_state ?? 'unknown',
+    hardBoundaryBlockedReasons: hardBoundary?.blocked_reasons ?? [],
+    hardBoundaryDisplayOnly: hardBoundary?.display_only,
+    hardBoundaryExecutionEnabled: hardBoundary?.execution_enabled,
+    hardBoundaryExecutionReady: hardBoundary?.execution_ready,
+    hardBoundaryForbiddenActionCount: hardBoundary?.forbidden_action_count ?? hardBoundary?.forbidden_actions?.length ?? 0,
+    hardBoundaryLiveFlagViolationCount: hardBoundary?.live_flag_violation_count ?? hardBoundary?.live_flag_violations?.length ?? 0,
+    hardBoundaryLiveOperationsEnabled: hardBoundary?.live_operations_enabled,
+    hardBoundaryLiveOperationsGoal: hardBoundary?.live_operations_goal,
+    hardBoundarySeparateApprovalActionCount: hardBoundary?.separate_approval_action_count ?? hardBoundary?.separate_approval_actions?.length ?? 0,
+    hardBoundarySeparateApprovalRequired: hardBoundary?.separate_approval_required,
+    hardBoundaryState: hardBoundary?.state ?? 'unknown',
+    hardBoundarySummary: hardBoundary?.plain_language_summary ?? 'No hard-boundary contract recorded.',
+    hardBoundaryWorkerDispatchEnabled: hardBoundary?.worker_dispatch_enabled,
     head: status.deployment_gap?.accepted_live_head ?? status.accepted_baseline?.head ?? 'unknown',
     latestMergedPr: status.deployment_gap?.latest_merged_pr ?? '',
+    latestHandoffWouldExecute: status.latest_handoff?.would_execute,
+    nextSafeActionCount: nextSafeActions?.action_count ?? nextSafeActions?.actions?.length ?? 0,
+    nextSafeActionDispatchEnabled: nextSafeActions?.dispatch_enabled,
+    nextSafeActionDisplayOnly: nextSafeActions?.display_only,
+    nextSafeActionExecutionEnabled: nextSafeActions?.execution_enabled,
+    nextSafeActionReasons,
+    nextSafeActionWorkerDispatchEnabled: nextSafeActions?.worker_dispatch_enabled,
+    nextSafeActionsBlocked: nextSafeActions?.blocked,
+    nextSafePrimaryAction:
+      nextSafePrimaryAction?.label ??
+      nextSafeActions?.primary_action_label ??
+      'Keep Mission Control preview-only',
+    nextSafePrimaryActionId: nextSafePrimaryAction?.action_id ?? nextSafeActions?.primary_action_id ?? '',
+    nextSafePrimaryReason: nextSafePrimaryAction?.reason ?? nextSafeActionReasons[0] ?? 'No executable action is enabled by this projection.',
+    operatorPacketApprovalRequired: operatorDecisionPacket?.approval_required,
+    operatorPacketBlockedReasons: operatorDecisionPacket?.blocked_reasons ?? [],
+    operatorPacketDispatchEnabled: operatorDecisionPacket?.dispatch_enabled,
+    operatorPacketDisplayOnly: operatorDecisionPacket?.display_only,
+    operatorPacketExecutionModeBlockedReasons: operatorDecisionPacket?.execution_mode_blocked_reasons ?? [],
+    operatorPacketExecutionModeFamily: operatorDecisionPacket?.execution_mode_family ?? 'unknown',
+    operatorPacketExecutionPacketEligible: operatorDecisionPacket?.execution_packet_eligible,
+    operatorPacketExecutionPacketMode: operatorDecisionPacket?.execution_packet_mode ?? 'unknown',
+    operatorPacketExecutionLockBlockedReasons: operatorDecisionPacket?.execution_lock_blocked_reasons ?? [],
+    operatorPacketExecutionEnabled: operatorDecisionPacket?.execution_enabled,
+    operatorPacketExecutionReady: operatorDecisionPacket?.execution_ready,
+    operatorPacketJennyReviewRequired: operatorDecisionPacket?.jenny_review_required,
+    operatorPacketManualOnly: operatorDecisionPacket?.manual_operator_review_only,
+    operatorPacketNextInstruction:
+      operatorDecisionPacket?.recommended_operator_instruction ??
+      operatorDecisionPacket?.next_safe_action_label ??
+      'Keep Mission Control preview-only and wait for exact approval.',
+    operatorPacketLinkMismatchCount: operatorDecisionPacket?.report_link_mismatch_count ?? 0,
+    operatorPacketQueueLinkMismatchCount: operatorDecisionPacket?.report_review_queue_link_mismatch_count ?? 0,
+    operatorPacketIngestionLinkMismatchCount: operatorDecisionPacket?.result_ingestion_link_mismatch_count ?? 0,
+    operatorPacketCompletionLinkMismatchCount: operatorDecisionPacket?.report_completion_link_mismatch_count ?? 0,
+    operatorPacketStopLinkMismatchCount: operatorDecisionPacket?.stop_cancel_link_mismatch_count ?? 0,
+    operatorPacketReportQueueCount: operatorDecisionPacket?.report_review_queue_count ?? 0,
+    operatorPacketSessionSendEnabled: operatorDecisionPacket?.session_send_enabled,
+    operatorPacketState: operatorDecisionPacket?.state ?? 'unknown',
+    operatorPacketSummary: operatorDecisionPacket?.plain_language_summary ?? 'No operator decision packet recorded.',
+    operatorPacketWouldDispatch: operatorDecisionPacket?.would_dispatch,
+    operatorPacketWouldExecute: operatorDecisionPacket?.would_execute,
+    operatorPacketWouldSessionSend: operatorDecisionPacket?.would_session_send,
+    operatorPacketWorkerDispatchEnabled: operatorDecisionPacket?.worker_dispatch_enabled,
+    operatorPacketWorkerOnline: operatorDecisionPacket?.worker_online,
+    operatorPacketWorkerPresenceState: operatorDecisionPacket?.worker_presence_state ?? 'unknown',
+    projectionExecutionLockReasons,
+    orchestrationReadinessBlockedReasons: orchestrationReadiness?.blocked_reasons ?? [],
+    orchestrationReadinessDispatchEnabled: orchestrationReadiness?.dispatch_enabled,
+    orchestrationReadinessDisplayOnly: orchestrationReadiness?.display_only,
+    orchestrationReadinessExecutionEnabled: orchestrationReadiness?.execution_enabled,
+    orchestrationReadinessExecutionReady: orchestrationReadiness?.execution_ready,
+    orchestrationReadinessSummary: orchestrationReadiness?.plain_language_summary ?? 'No orchestration readiness summary recorded.',
+    orchestrationReadinessWorkerDispatchEnabled: orchestrationReadiness?.worker_dispatch_enabled,
+    orchestrationRunGraphBlockedReasons: orchestrationRunGraph?.blocked_reasons ?? [],
+    orchestrationRunGraphChildCount: orchestrationRunGraph?.child_run_node_count ?? 0,
+    orchestrationRunGraphDisplayOnly: orchestrationRunGraph?.display_only,
+    orchestrationRunGraphEdgeCount: orchestrationRunGraph?.edge_count ?? 0,
+    orchestrationRunGraphExecutionEnabled: orchestrationRunGraph?.execution_enabled,
+    orchestrationRunGraphNodeCount: orchestrationRunGraph?.node_count ?? 0,
+    orchestrationRunGraphReportCount: orchestrationRunGraph?.report_node_count ?? 0,
+    orchestrationRunGraphRunCount: orchestrationRunGraph?.run_node_count ?? 0,
+    orchestrationRunGraphWorkerCount: orchestrationRunGraph?.worker_node_run_count ?? 0,
+    orchestrationRunGraphWorkerDispatchEnabled: orchestrationRunGraph?.worker_dispatch_enabled,
+    readinessReadOnlyState: orchestrationReadiness?.states?.supervised_read_only_autonomy ?? 'unknown',
+    readinessScopedPrState: orchestrationReadiness?.states?.scoped_pr_creation ?? 'unknown',
+    readinessWorkerNodeState: orchestrationReadiness?.states?.laptop_codex_worker_node ?? 'unknown',
+    provenanceBlocked: runtimeProvenance?.autonomy_blocked,
+    provenanceReasons: runtimeProvenance?.autonomy_blocked_reasons ?? [],
+    provenanceStatus: runtimeProvenance?.primary_status ?? runtimeProvenance?.status ?? 'unknown',
+    sourceHead: runtimeProvenance?.source_head ?? status.deployment_gap?.accepted_live_head ?? status.accepted_baseline?.head ?? 'unknown',
     runtime: status.accepted_baseline?.runtime_path ?? 'unknown',
-    staleWarnings: status.stale_context?.warnings ?? []
+    reportDuplicateCount: reportLifecycle?.duplicate_report_ids?.length ?? 0,
+    reportLifecycleBlocked: reportLifecycle?.blocked,
+    reportLifecycleBlockedReasons: reportLifecycle?.blocked_reasons ?? [],
+    reportLifecycleExecutionEnabled: reportLifecycle?.execution_enabled,
+    reportMissingLinkedCount,
+    reportMissingRunCount: reportLifecycle?.runs_missing_report?.length ?? 0,
+    reportOverwriteConflictCount: reportLifecycle?.report_overwrite_conflict_count ?? reportLifecycle?.report_overwrite_conflict_ids?.length ?? 0,
+    reportContractBlocked: reportContractCompliance?.blocked,
+    reportContractBlockedReasons: reportContractCompliance?.blocked_reasons ?? [],
+    reportContractCompleteCount: reportContractCompliance?.complete_report_count ?? 0,
+    reportContractDisplayOnly: reportContractCompliance?.display_only,
+    reportContractExecutionEnabled: reportContractCompliance?.execution_enabled,
+    reportContractIncompleteCount: reportContractCompliance?.incomplete_report_count ?? 0,
+    reportContractManualOnly: reportContractCompliance?.manual_review_only,
+    reportContractPrimaryId: reportContractCompliance?.primary_item_id ?? '',
+    reportContractPrimaryLabel:
+      reportContractCompliance?.primary_item_label ??
+      reportContractCompliance?.primary_item?.summary ??
+      'No report contract gaps recorded',
+    reportContractReportCount: reportContractCompliance?.report_count ?? 0,
+    reportContractWorkerDispatchEnabled: reportContractCompliance?.worker_dispatch_enabled,
+    reportCompletionBlocked: reportCompletionPath?.blocked,
+    reportCompletionBlockedCount: reportCompletionPath?.blocked_completion_count ?? 0,
+    reportCompletionBlockedReasons: reportCompletionPath?.blocked_reasons ?? [],
+    reportCompletionContractIncompleteCount: reportCompletionPath?.contract_incomplete_count ?? 0,
+    reportCompletionDisplayOnly: reportCompletionPath?.display_only,
+    reportCompletionDuplicateCount: reportCompletionPath?.duplicate_report_count ?? 0,
+    reportCompletionExecutionEnabled: reportCompletionPath?.execution_enabled,
+    reportCompletionIngestionBlockedCount: reportCompletionPath?.ingestion_blocked_count ?? 0,
+    reportCompletionLinkMismatchCount: reportCompletionPath?.link_mismatch_count ?? 0,
+    reportCompletionManualOnly: reportCompletionPath?.manual_review_only,
+    reportCompletionMissingReportCount: reportCompletionPath?.missing_report_count ?? 0,
+    reportCompletionNeedsReviewCount: reportCompletionPath?.needs_review_count ?? 0,
+    reportCompletionPrimaryLabel:
+      reportCompletionPath?.primary_item_label?.trim() ||
+      reportCompletionPath?.primary_item?.label?.trim() ||
+      'No report completion blockers recorded',
+    reportCompletionReadyCount: reportCompletionPath?.completion_ready_count ?? 0,
+    reportCompletionRejectedCount: reportCompletionPath?.rejected_report_count ?? 0,
+    reportCompletionTerminalCount: reportCompletionPath?.terminal_item_count ?? 0,
+    reportCompletionWorkerDispatchEnabled: reportCompletionPath?.worker_dispatch_enabled,
+    reportOpenCount: reportLifecycle?.open_report_ids?.length ?? 0,
+    reportRawCount: reportLifecycle?.raw_report_count ?? 0,
+    reportReviewQueueBlocked: reportReviewQueue?.blocked,
+    reportReviewQueueBlockedReasons: reportReviewQueue?.blocked_reasons ?? [],
+    reportReviewQueueCount: reportReviewQueue?.queue_count ?? reportReviewQueue?.items?.length ?? 0,
+    reportReviewQueueDisplayOnly: reportReviewQueue?.display_only,
+    reportReviewQueueDuplicateCount: reportReviewQueue?.duplicate_report_count ?? 0,
+    reportReviewQueueExecutionEnabled: reportReviewQueue?.execution_enabled,
+    reportReviewQueueManualOnly: reportReviewQueue?.manual_review_only,
+    reportReviewQueueMissingCount: reportReviewQueue?.missing_report_count ?? 0,
+    reportReviewQueueLinkMismatchCount: reportReviewQueue?.link_mismatch_count ?? 0,
+    reportReviewQueueNeedsReviewCount: reportReviewQueue?.needs_review_count ?? 0,
+    reportReviewQueuePrimaryId: reportReviewQueue?.primary_review_item_id ?? '',
+    reportReviewQueuePrimaryLabel:
+      reportReviewQueue?.primary_review_label ??
+      reportReviewQueue?.primary_review_item?.summary ??
+      'No report waiting for review',
+    reportReviewQueuePrimaryReason:
+      reportReviewQueue?.primary_review_reason ??
+      reportReviewQueue?.primary_review_item?.reason ??
+      'No report review queue blockers recorded.',
+    reportReviewQueueWorkerDispatchEnabled: reportReviewQueue?.worker_dispatch_enabled,
+    resultIngestionBlocked: resultIngestionContract?.blocked,
+    resultIngestionBlockedCount: resultIngestionContract?.blocked_report_count ?? 0,
+    resultIngestionBlockedReasons: resultIngestionContract?.blocked_reasons ?? [],
+    resultIngestionDisplayOnly: resultIngestionContract?.display_only,
+    resultIngestionDuplicateCount: resultIngestionContract?.duplicate_report_count ?? 0,
+    resultIngestionExecutionEnabled: resultIngestionContract?.execution_enabled,
+    resultIngestionForbiddenMetadataCount: resultIngestionContract?.forbidden_metadata_count ?? 0,
+    resultIngestionLinkMismatchCount: resultIngestionContract?.link_mismatch_count ?? 0,
+    resultIngestionManualOnly: resultIngestionContract?.manual_review_only,
+    resultIngestionMissingLinkCount: resultIngestionContract?.missing_link_count ?? 0,
+    resultIngestionMissingSafetyCount: resultIngestionContract?.missing_safety_confirmation_count ?? 0,
+    resultIngestionPrimaryLabel:
+      resultIngestionContract?.primary_item_label?.trim() ||
+      resultIngestionContract?.primary_item?.summary?.trim() ||
+      'No result ingestion blockers recorded',
+    resultIngestionReadyCount: resultIngestionContract?.ingestion_ready_count ?? 0,
+    resultIngestionReportCount: resultIngestionContract?.report_count ?? 0,
+    resultIngestionUnsafeRedactionCount: resultIngestionContract?.unsafe_redaction_count ?? 0,
+    resultIngestionWorkerDispatchEnabled: resultIngestionContract?.worker_dispatch_enabled,
+    reportReviewedCount: reportLifecycle?.reviewed_report_ids?.length ?? 0,
+    reportTerminalCount: reportLifecycle?.terminal_report_ids?.length ?? 0,
+    stopControlActiveCount: stopControl?.active_stop_count ?? 0,
+    stopControlBlocked: stopControl?.blocked,
+    stopControlBlockedReasons: stopControl?.blocked_reasons ?? [],
+    stopControlCount: stopControl?.stop_cancel_count ?? 0,
+    stopControlDisplayOnly: stopControl?.display_only,
+    stopControlExecutionEnabled: stopControl?.execution_enabled,
+    stopControlManualOnly: stopControl?.manual_review_only,
+    stopControlLinkMismatchCount: stopControl?.link_mismatch_count ?? 0,
+    stopControlNeedsReportCount: stopControl?.needs_report_count ?? 0,
+    stopControlNeedsReviewCount: stopControl?.needs_review_count ?? 0,
+    stopControlPrimaryLabel:
+      stopControl?.primary_item_label ??
+      stopControl?.primary_item?.label ??
+      'No stopped or cancelled work recorded',
+    stopControlTerminalCount: stopControl?.terminal_stop_count ?? 0,
+    stopControlWorkerDispatchEnabled: stopControl?.worker_dispatch_enabled,
+    runActiveCount: runLifecycle?.active_run_ids?.length ?? 0,
+    runBlockedReasons: runLifecycle?.blocked_reasons ?? [],
+    runDuplicateCount: runLifecycle?.duplicate_run_ids?.length ?? 0,
+    runLifecycleBlocked: runLifecycle?.blocked,
+    runLifecycleExecutionEnabled: runLifecycle?.execution_enabled,
+    runOneActiveMutationLaneRulePassed: runLifecycle?.one_active_mutation_lane_rule_passed,
+    runStopCancelCount: runLifecycle?.stop_cancel_run_ids?.length ?? 0,
+    runTerminalCount: runLifecycle?.terminal_run_ids?.length ?? 0,
+    runTerminalMissingLinkedCount,
+    runTerminalMissingReportCount: runLifecycle?.terminal_runs_missing_report?.length ?? 0,
+    rollbackBaselineWouldExecute: status.rollback_baseline?.would_execute,
+    scopedPrBlockedReasons: scopedPrEligibility?.blocked_reasons ?? [],
+    scopedPrBridgePermission: scopedPrEligibility?.bridge_permissions?.permission_classification ?? 'unknown',
+    scopedPrEligible: scopedPrEligibility?.eligible,
+    scopedPrExecutionEnabled: scopedPrEligibility?.execution_enabled,
+    scopedPrScopeCount,
+    scopedPrWouldCommit: scopedPrEligibility?.would_commit,
+    scopedPrWouldCreatePr: scopedPrEligibility?.would_create_pr,
+    staleWarnings: status.stale_context?.warnings ?? [],
+    toolPermissionBlockedCount: toolPermissions?.blocked_path_count ?? 0,
+    toolPermissionClassification: toolPermissions?.permission_classification ?? 'unknown',
+    toolPermissionWritePaths: toolPermissions?.write_capable_path_ids ?? [],
+    workerActiveCount: status.worker_node_orchestration?.active_count ?? 0,
+    workerBlockedReasons,
+    workerCapabilitySummary: workerPresence?.capability_summary ?? '',
+    workerContractDispatchEnabled: workerContract?.dispatch_enabled,
+    workerContractExecutionEnabled: workerContract?.execution_enabled,
+    workerContractHostLabel: workerContract?.worker_host_label ?? '',
+    workerContractManualHandoffOnly: workerContract?.manual_handoff_only,
+    workerContractSessionSendEnabled: workerContract?.session_send_enabled,
+    workerContractWorkerDispatchEnabled: workerContract?.worker_dispatch_enabled,
+    workerContractWouldDispatch: workerContract?.would_dispatch,
+    workerContractWouldExecute: workerContract?.would_execute,
+    workerContractWouldSessionSend: workerContract?.would_session_send,
+    workerDispatchEnabled: status.worker_node_orchestration?.worker_dispatch_enabled,
+    workerExecutionEnabled: status.worker_node_orchestration?.execution_enabled,
+    workerHostLabel: projectionRecordText(workerRecord, 'worker_host_label') || 'laptop-codex',
+    workerIdentity: projectionRecordText(workerRecord, 'worker_identity') || 'codex',
+    workerInstructionAvailable: workerInstruction?.available,
+    workerInstructionBlockedReasons: workerInstruction?.blocked_reasons ?? [],
+    workerInstructionDisplayOnly: workerInstruction?.display_only,
+    workerInstructionExecutionEnabled: workerInstruction?.execution_enabled,
+    workerInstructionManualHandoffOnly: workerInstruction?.manual_handoff_only,
+    workerInstructionPrompt: workerInstruction?.manual_handoff_prompt ?? 'No worker-node instruction preview recorded.',
+    workerInstructionReadyForHandoff: workerInstruction?.ready_for_handoff,
+    workerInstructionWorkerDispatchEnabled: workerInstruction?.worker_dispatch_enabled,
+    workerLatestObjective: projectionRecordText(workerRecord, 'objective'),
+    workerLatestStatus: projectionRecordText(workerRecord, 'status') || 'none',
+    workerPresenceBlockedReasons: workerPresence?.blocked_reasons ?? [],
+    workerPresenceDisplayOnly: workerPresence?.display_only,
+    workerPresenceExecutionEnabled: workerPresence?.execution_enabled,
+    workerPresenceLastSeen: workerPresence?.last_seen_at ?? '',
+    workerPresenceOnline: workerPresence?.online,
+    workerPresenceState: workerPresence?.presence_state ?? 'unknown',
+    workerPresenceWorkerDispatchEnabled: workerPresence?.worker_dispatch_enabled,
+    workerVersion: workerPresence?.worker_version ?? '',
+    workerReportContractStatus: projectionRecordText(workerRecord, 'report_contract_status') || 'not reported',
+    workerReportId: projectionRecordText(workerRecord, 'report_id'),
+    workerReportLinkMismatch,
+    workerReportLinkMismatchReason: projectionRecordText(workerRecord, 'report_link_mismatch_reason'),
+    workerReportLinkStatus,
+    workerReportReviewStatus: projectionRecordText(workerRecord, 'linked_report_review_status') || projectionRecordText(workerRecord, 'report_review_status') || 'not reviewed'
   }
 }
 
@@ -2136,6 +2756,13 @@ export function MissionControlView() {
       return
     }
 
+    const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus, snapshot.workspaceStatus)
+    if (!bridgeSafety.safe) {
+      setProjectRoomMessage(missionControlBridgeBlockedMessage(bridgeSafety))
+
+      return
+    }
+
     const requestId = bridgeRequestId()
     setProjectRoomSaving(true)
     setProjectRoomMessage('')
@@ -2171,6 +2798,13 @@ export function MissionControlView() {
   }
 
   async function runJennyOnce(project: MissionControlProjectRecord, requestId?: string) {
+    const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus, snapshot.workspaceStatus)
+    if (!bridgeSafety.safe) {
+      setProjectRoomMessage(missionControlBridgeBlockedMessage(bridgeSafety))
+
+      return
+    }
+
     const pendingRequestId = requestId || latestVisiblePendingGitHubBridgeMessageForProject(
       unwrapRecords(snapshot.githubBridgeStatus.visible_pending_messages),
       project.project_id
@@ -2259,6 +2893,13 @@ export function MissionControlView() {
   }
 
   async function queueHermesUpdateLane(project: MissionControlProjectRecord) {
+    const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus, snapshot.workspaceStatus)
+    if (!bridgeSafety.safe) {
+      setProjectRoomMessage(missionControlBridgeBlockedMessage(bridgeSafety))
+
+      return
+    }
+
     setProjectRoomSaving(true)
     setProjectRoomMessage('')
     setProjectRequest(HERMES_UPDATE_LANE_REQUEST)
@@ -2282,6 +2923,13 @@ export function MissionControlView() {
   }
 
   async function queueHermesStorageCleanupLane(project: MissionControlProjectRecord) {
+    const bridgeSafety = missionControlGitHubBridgeSafety(snapshot.githubBridgeStatus, snapshot.workspaceStatus)
+    if (!bridgeSafety.safe) {
+      setProjectRoomMessage(missionControlBridgeBlockedMessage(bridgeSafety))
+
+      return
+    }
+
     setProjectRoomSaving(true)
     setProjectRoomMessage('')
     setProjectRequest(HERMES_STORAGE_CLEANUP_LANE_REQUEST)
@@ -2582,6 +3230,7 @@ export function MissionControlView() {
               saving={projectRoomSaving}
               sessionGroup={sessionGroupForProject(selectedProject, snapshot.projectSessionGroups)}
               state={stateForProject(selectedProject, snapshot.projectStates)}
+              workspaceStatus={snapshot.workspaceStatus}
             />
           </div>
         </div>
@@ -2901,7 +3550,8 @@ function ProjectRoomsWorkspace({
   review,
   saving,
   sessionGroup,
-  state
+  state,
+  workspaceStatus
 }: {
   brief: MissionControlProjectBriefRecord | null
   bridgeRequests: MissionControlJennyBridgeRequestRecord[]
@@ -2935,6 +3585,7 @@ function ProjectRoomsWorkspace({
   saving: boolean
   sessionGroup: MissionControlProjectSessionGroup | null
   state: MissionControlProjectState | null
+  workspaceStatus: MissionControlWorkspaceStatus
 }) {
   const chatEndRef = useRef<HTMLDivElement | null>(null)
   const readiness = projectReadinessLabel(brief, review)
@@ -2974,6 +3625,8 @@ function ProjectRoomsWorkspace({
   const sendButtonLabel = jennySendButtonLabel(requestIntake)
   const latestReviewByResponseId = latestReplyReviewByResponseId(replyReviews)
   const bridgeError = normalizedBridgeError(bridgeStatus, githubBridgeStatus)
+  const githubBridgeSafety = missionControlGitHubBridgeSafety(githubBridgeStatus, workspaceStatus)
+  const bridgeActionDisabled = saving || paused || !githubBridgeSafety.safe
   const hasRunnablePendingMessage = Boolean(projectedVisiblePending ?? latestPending)
   const statusRecords = unwrapRecords(githubBridgeStatus.status_records)
   const statusSourceBridgeMessages = [
@@ -3333,6 +3986,11 @@ function ProjectRoomsWorkspace({
               Review the latest Jenny reply in the chat before acting on it.
             </p>
           ) : null}
+          {!githubBridgeSafety.safe ? (
+            <p className="mb-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200" role="status">
+              {missionControlBridgeBlockedMessage(githubBridgeSafety)}
+            </p>
+          ) : null}
           <label className="grid gap-1 text-sm font-medium">
             <span className="sr-only">Message Jenny</span>
             <textarea
@@ -3345,7 +4003,7 @@ function ProjectRoomsWorkspace({
           </label>
 
           <div className="mt-2 flex justify-end">
-            <button className="rounded-md border border-[#5ab896]/40 bg-[#5ab896]/10 px-5 py-2 text-sm font-semibold text-[#5ab896] hover:bg-[#5ab896]/15 disabled:opacity-60" disabled={saving || paused} onClick={onQueueBridge} type="button">
+            <button className="rounded-md border border-[#5ab896]/40 bg-[#5ab896]/10 px-5 py-2 text-sm font-semibold text-[#5ab896] hover:bg-[#5ab896]/15 disabled:opacity-60" disabled={bridgeActionDisabled} onClick={onQueueBridge} type="button">
               {sendButtonLabel}
             </button>
           </div>
@@ -3470,6 +4128,7 @@ function ProjectRoomsWorkspace({
             <Field label="challenge review" value={review ? `${review.decision_state ?? 'unknown'} / ${review.recommended_path ?? 'No recommended path recorded'}` : 'No challenge review recorded'} />
             <Field label="latest report contract" value={reportContractSummaryForState(state, report)} />
             <Field label="bridge mode" value={`manual relay: ${bridgeStatus.manual_start_only === false ? 'disabled' : 'manual-start only'} / GitHub: ${githubBridgeStatus.manual_start_only === false ? 'disabled' : 'manual-start only'}`} />
+            <Field label="GitHub safety" value={githubBridgeSafety.safe ? 'manual-only confirmed' : missionControlBridgeBlockedMessage(githubBridgeSafety)} />
           </div>
 
           <div className="mt-3 grid gap-2 md:grid-cols-4">
@@ -3497,7 +4156,7 @@ function ProjectRoomsWorkspace({
                     Starts a guarded update checklist for the VPS and laptop Hermes worker node. The bottom-bar desktop app version is separate from accepted-live/dashboard deploys. This queues a bridge request only; no runtime switch, restart, or laptop update happens here.
                   </p>
                 </div>
-                <button className="rounded-md border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300" disabled={saving} onClick={onQueueHermesUpdate} type="button">
+                <button className="rounded-md border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300" disabled={saving || !githubBridgeSafety.safe} onClick={onQueueHermesUpdate} type="button">
                   Start Hermes update lane
                 </button>
               </div>
@@ -3513,7 +4172,7 @@ function ProjectRoomsWorkspace({
                     Starts a guarded storage inventory for VPS programming buildup and laptop worker-node posture. This queues a request only; no files are deleted, moved, uploaded, pruned, restarted, or switched.
                   </p>
                 </div>
-                <button className="rounded-md border border-sky-500/40 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/10 disabled:opacity-60 dark:text-sky-300" disabled={saving} onClick={onQueueStorageCleanup} type="button">
+                <button className="rounded-md border border-sky-500/40 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/10 disabled:opacity-60 dark:text-sky-300" disabled={saving || !githubBridgeSafety.safe} onClick={onQueueStorageCleanup} type="button">
                   Start storage cleanup lane
                 </button>
               </div>
@@ -3572,6 +4231,7 @@ function ProjectRoomsWorkspace({
               </div>
               <div className="mt-3 grid gap-2 rounded-md border border-sky-500/20 bg-sky-500/5 p-2 text-xs md:grid-cols-2">
                 <Field label="GitHub mailbox" value={githubBridgeStatus.manual_start_only === false ? 'disabled' : 'manual-start only'} />
+                <Field label="GitHub safety" value={githubBridgeSafety.safe ? 'manual-only confirmed' : missionControlBridgeBlockedMessage(githubBridgeSafety)} />
                 <Field label="GitHub mode" value={githubBridgeStatus.mode || 'manual'} />
                 <Field
                   label="GitHub pending"
@@ -3819,17 +4479,305 @@ function ReportInput({
 
 function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeWorkspaceStatus> }) {
   const deploymentTone = status.deploymentGapState === 'deployed_and_accepted' ? 'good' : status.deploymentNeeded ? 'warn' : undefined
+  const provenanceTone = status.provenanceStatus === 'CLEAN_AND_ALIGNED' && status.provenanceBlocked === false ? 'good' : 'warn'
+  const autonomyLabel = status.autonomyEligible === true ? 'eligible preview only' : status.autonomyEligible === false ? 'blocked / no execution' : 'unknown / no execution'
+  const scopedPrLabel = status.scopedPrEligible === true ? `preview-ready / ${status.scopedPrScopeCount} scoped path${status.scopedPrScopeCount === 1 ? '' : 's'}` : status.scopedPrEligible === false ? 'blocked / no execution' : 'unknown / no execution'
+  const executionModeTone =
+    allFalse([
+      status.executionModeExecutionEnabled,
+      status.executionModeDispatchEnabled,
+      status.executionModeWorkerDispatchEnabled,
+      status.executionModeWouldExecute,
+      status.executionModeWouldDispatch,
+      status.executionModeWouldSessionSend
+    ])
+      ? status.executionModeBlockedReasons.length || status.executionModeHigherRisk
+        ? 'warn'
+        : 'good'
+      : 'warn'
+  const executionPacketTone =
+    allFalse([
+      status.executionPacketExecutionEnabled,
+      status.executionPacketDispatchEnabled,
+      status.executionPacketSessionSendEnabled,
+      status.executionPacketWorkerDispatchEnabled,
+      status.executionPacketWouldExecute,
+      status.executionPacketWouldDispatch,
+      status.executionPacketWouldSessionSend,
+      status.executionPacketBodyExecutionEnabled,
+      status.executionPacketBodyDispatchEnabled,
+      status.executionPacketBodySessionSendEnabled,
+      status.executionPacketBodyWorkerDispatchEnabled,
+      status.executionPacketBodyWouldExecute,
+      status.executionPacketBodyWouldDispatch,
+      status.executionPacketBodyWouldSessionSend,
+      status.workerContractExecutionEnabled,
+      status.workerContractDispatchEnabled,
+      status.workerContractSessionSendEnabled,
+      status.workerContractWorkerDispatchEnabled,
+      status.workerContractWouldExecute,
+      status.workerContractWouldDispatch,
+      status.workerContractWouldSessionSend
+    ])
+      ? status.executionPacketBlockedReasons.length
+        ? 'warn'
+        : 'good'
+      : 'warn'
+  const workerLockTone = status.workerExecutionEnabled === false && status.workerDispatchEnabled === false ? 'good' : 'warn'
+  const workerPresenceTone =
+    status.workerPresenceExecutionEnabled === false &&
+    status.workerPresenceWorkerDispatchEnabled === false &&
+    status.workerPresenceOnline === true
+      ? 'good'
+      : 'warn'
+  const childLockTone = status.childExecutionEnabled === false && status.childDispatchEnabled === false ? 'good' : 'warn'
+  const childInstructionTone =
+    status.childInstructionExecutionEnabled === false &&
+    status.childInstructionWorkerDispatchEnabled === false &&
+    status.childInstructionManualHandoffOnly === true
+      ? status.childInstructionBlockedReasons.length
+        ? 'warn'
+        : 'good'
+      : 'warn'
+  const toolPermissionTone = status.toolPermissionClassification === 'read_only_safe' || status.toolPermissionClassification === 'manual_only' ? 'good' : 'warn'
+  const approvalLifecycleTone = status.approvalLifecycleBlocked === false && status.approvalLifecycleExecutionEnabled === false ? 'good' : 'warn'
+  const runLifecycleTone = status.runLifecycleBlocked === false && status.runLifecycleExecutionEnabled === false && status.runOneActiveMutationLaneRulePassed !== false ? 'good' : 'warn'
+  const reportLifecycleTone = status.reportLifecycleBlocked === false && status.reportLifecycleExecutionEnabled === false ? 'good' : 'warn'
+  const reportReviewQueueTone =
+    status.reportReviewQueueExecutionEnabled === false &&
+    status.reportReviewQueueWorkerDispatchEnabled === false &&
+    status.reportReviewQueueManualOnly === true
+      ? status.reportReviewQueueBlocked || status.reportReviewQueueCount
+        ? 'warn'
+        : 'good'
+      : 'warn'
+  const resultIngestionTone =
+    status.resultIngestionExecutionEnabled === false &&
+    status.resultIngestionWorkerDispatchEnabled === false &&
+    status.resultIngestionManualOnly === true
+      ? status.resultIngestionBlocked || status.resultIngestionBlockedCount
+        ? 'warn'
+        : 'good'
+      : 'warn'
+  const reportContractTone =
+    status.reportContractExecutionEnabled === false &&
+    status.reportContractWorkerDispatchEnabled === false &&
+    status.reportContractManualOnly === true
+      ? status.reportContractBlocked || status.reportContractIncompleteCount
+        ? 'warn'
+        : 'good'
+      : 'warn'
+  const reportCompletionTone =
+    status.reportCompletionExecutionEnabled === false &&
+    status.reportCompletionWorkerDispatchEnabled === false &&
+    status.reportCompletionManualOnly === true
+      ? status.reportCompletionBlocked || status.reportCompletionBlockedCount
+        ? 'warn'
+        : 'good'
+      : 'warn'
+  const stopControlTone =
+    status.stopControlExecutionEnabled === false &&
+    status.stopControlWorkerDispatchEnabled === false &&
+    status.stopControlManualOnly === true
+      ? status.stopControlBlocked || status.stopControlCount
+        ? 'warn'
+        : 'good'
+      : 'warn'
+  const hardBoundaryTone =
+    status.hardBoundaryDisplayOnly === true &&
+    status.hardBoundaryExecutionEnabled === false &&
+    status.hardBoundaryWorkerDispatchEnabled === false &&
+    status.hardBoundaryExecutionReady === false &&
+    status.hardBoundaryLiveOperationsEnabled === false &&
+    status.hardBoundaryLiveOperationsGoal === false
+      ? status.hardBoundaryBlockedReasons.length || status.hardBoundaryLiveFlagViolationCount
+        ? 'warn'
+        : 'good'
+      : 'warn'
+  const nextSafeActionTone =
+    status.nextSafeActionExecutionEnabled === false &&
+    status.nextSafeActionDispatchEnabled === false &&
+    status.nextSafeActionWorkerDispatchEnabled === false
+      ? status.nextSafeActionsBlocked
+        ? 'warn'
+        : 'good'
+      : 'warn'
+  const operatorPacketTone =
+    allFalse([
+      status.operatorPacketExecutionEnabled,
+      status.operatorPacketDispatchEnabled,
+      status.operatorPacketSessionSendEnabled,
+      status.operatorPacketWorkerDispatchEnabled,
+      status.operatorPacketWouldExecute,
+      status.operatorPacketWouldDispatch,
+      status.operatorPacketWouldSessionSend
+    ]) &&
+    status.operatorPacketManualOnly === true &&
+    status.operatorPacketExecutionReady === false
+      ? status.operatorPacketBlockedReasons.length || status.operatorPacketExecutionLockBlockedReasons.length || status.operatorPacketJennyReviewRequired
+        ? 'warn'
+        : 'good'
+      : 'warn'
+  const readinessTone =
+    status.orchestrationReadinessExecutionEnabled === false &&
+    status.orchestrationReadinessDispatchEnabled === false &&
+    status.orchestrationReadinessWorkerDispatchEnabled === false &&
+    status.orchestrationReadinessExecutionReady === false
+      ? status.orchestrationReadinessBlockedReasons.length
+        ? 'warn'
+        : 'good'
+      : 'warn'
+  const runGraphTone =
+    status.orchestrationRunGraphExecutionEnabled === false &&
+    status.orchestrationRunGraphWorkerDispatchEnabled === false
+      ? status.orchestrationRunGraphBlockedReasons.length
+        ? 'warn'
+        : 'good'
+      : 'warn'
+  const workerInstructionTone =
+    status.workerInstructionExecutionEnabled === false &&
+    status.workerInstructionWorkerDispatchEnabled === false &&
+    status.workerInstructionManualHandoffOnly === true
+      ? status.workerInstructionBlockedReasons.length
+        ? 'warn'
+        : 'good'
+      : 'warn'
+
+  const childReportTone = reportLinkHealthy({
+    linkStatus: status.childReportLinkStatus,
+    mismatch: status.childReportLinkMismatch,
+    reportId: status.childReportId,
+    reviewStatus: status.childReportReviewStatus
+  })
+    ? 'good'
+    : 'warn'
+
+  const childReportValue = reportLinkValue({
+    linkStatus: status.childReportLinkStatus,
+    mismatch: status.childReportLinkMismatch,
+    mismatchReason: status.childReportLinkMismatchReason,
+    reportId: status.childReportId,
+    reviewStatus: status.childReportReviewStatus
+  })
+
+  const workerReportTone = reportLinkHealthy({
+    linkStatus: status.workerReportLinkStatus,
+    mismatch: status.workerReportLinkMismatch,
+    reportId: status.workerReportId,
+    reviewStatus: status.workerReportReviewStatus
+  })
+    ? 'good'
+    : 'warn'
+
+  const workerReportValue = `${status.workerReportContractStatus} / ${reportLinkValue({
+    linkStatus: status.workerReportLinkStatus,
+    mismatch: status.workerReportLinkMismatch,
+    mismatchReason: status.workerReportLinkMismatchReason,
+    reportId: status.workerReportId,
+    reviewStatus: status.workerReportReviewStatus
+  })}`
+  const baselineExecutionLockTone =
+    status.acceptedBaselineWouldExecute === true ||
+    status.rollbackBaselineWouldExecute === true ||
+    status.latestHandoffWouldExecute === true
+      ? 'warn'
+      : 'good'
+
   return (
     <div className="grid gap-3 rounded-xl border border-border/70 bg-background/40 p-4 md:grid-cols-3">
       <StatusItem label="Runtime Worktree Guard" tone={status.guard === 'pass' ? 'good' : 'warn'} value={status.guard} />
+      <StatusItem label="runtime provenance" tone={provenanceTone} value={labelText(status.provenanceStatus)} />
+      <StatusItem label="read-only autonomy" tone={status.autonomyEligible === true ? 'good' : 'warn'} value={autonomyLabel} />
       <StatusItem label="dispatch_in_gateway" tone={status.dispatch === false ? 'good' : 'warn'} value={yesNo(status.dispatch)} />
       <StatusItem label="active_lane_count" tone={status.activeLaneCount === 0 ? 'good' : 'warn'} value={String(status.activeLaneCount)} />
-      <StatusItem label="deploy state" tone={deploymentTone} value={status.deploymentGapState.replaceAll('_', ' ')} />
+      <StatusItem label="deploy state" tone={deploymentTone} value={labelText(status.deploymentGapState)} />
+      <StatusItem label="bridge permission" tone={status.bridgePermission === 'read_only_safe' ? 'good' : 'warn'} value={labelText(status.bridgePermission)} />
+      <StatusItem label="tool permissions" tone={toolPermissionTone} value={`${labelText(status.toolPermissionClassification)} / blocked paths ${status.toolPermissionBlockedCount}`} />
+      <StatusItem label="scoped PR lane" tone={status.scopedPrEligible === true ? 'good' : 'warn'} value={scopedPrLabel} />
+      <StatusItem label="scoped PR bridge" tone={status.scopedPrBridgePermission === 'read_only_safe' ? 'good' : 'warn'} value={labelText(status.scopedPrBridgePermission)} />
+      <StatusItem label="execution mode" tone={executionModeTone} value={`${labelText(status.executionModeFamily)} / preview ${yesNo(status.executionModePreviewReady)} / execution ${yesNo(status.executionModeExecutionEnabled)}`} />
+      <StatusItem label="execution packet" tone={executionPacketTone} value={`${labelText(status.executionPacketMode)} / eligible ${yesNo(status.executionPacketEligible)} / execute ${yesNo(status.executionPacketExecutionEnabled)}`} />
+      <StatusItem label="execution packet body locks" tone={executionPacketTone} value={`execute ${yesNo(status.executionPacketBodyExecutionEnabled)} / dispatch ${yesNo(status.executionPacketBodyDispatchEnabled)} / session ${yesNo(status.executionPacketBodySessionSendEnabled)} / worker ${yesNo(status.executionPacketBodyWorkerDispatchEnabled)}`} />
+      <StatusItem label="worker contract locks" tone={executionPacketTone} value={`execute ${yesNo(status.workerContractExecutionEnabled)} / dispatch ${yesNo(status.workerContractDispatchEnabled)} / session ${yesNo(status.workerContractSessionSendEnabled)} / worker ${yesNo(status.workerContractWorkerDispatchEnabled)}`} />
+      <StatusItem label="lifecycle projection" tone={status.appendOnlyProjection ? 'good' : 'warn'} value={`append-only ${yesNo(status.appendOnlyProjection)} / active mutation lanes ${status.activeMutationLaneCount}`} />
+      <StatusItem className="md:col-span-2" label="next safe action" tone={nextSafeActionTone} value={status.nextSafePrimaryAction} />
+      <StatusItem label="next action mode" tone={nextSafeActionTone} value={`display-only ${yesNo(status.nextSafeActionDisplayOnly)} / actions ${status.nextSafeActionCount}`} />
+      <StatusItem label="operator packet" tone={operatorPacketTone} value={`${labelText(status.operatorPacketState)} / approval required ${yesNo(status.operatorPacketApprovalRequired)} / display-only ${yesNo(status.operatorPacketDisplayOnly)}`} />
+      <StatusItem label="operator review gates" tone={operatorPacketTone} value={`Jenny review ${yesNo(status.operatorPacketJennyReviewRequired)} / execution-ready ${yesNo(status.operatorPacketExecutionReady)} / worker dispatch ${yesNo(status.operatorPacketWorkerDispatchEnabled)}`} />
+      <StatusItem label="operator packet locks" tone={operatorPacketTone} value={`execute ${yesNo(status.operatorPacketExecutionEnabled)} / dispatch ${yesNo(status.operatorPacketDispatchEnabled)} / session ${yesNo(status.operatorPacketSessionSendEnabled)} / worker ${yesNo(status.operatorPacketWorkerDispatchEnabled)} / would dispatch ${yesNo(status.operatorPacketWouldDispatch)} / would session ${yesNo(status.operatorPacketWouldSessionSend)}`} />
+      <StatusItem className="md:col-span-2" label="operator next instruction" tone={operatorPacketTone} value={status.operatorPacketNextInstruction} />
+      <StatusItem label="operator report links" tone={status.operatorPacketLinkMismatchCount ? 'warn' : 'good'} value={`mismatch ${status.operatorPacketLinkMismatchCount} / queue ${status.operatorPacketQueueLinkMismatchCount} / ingestion ${status.operatorPacketIngestionLinkMismatchCount} / completion ${status.operatorPacketCompletionLinkMismatchCount} / stop ${status.operatorPacketStopLinkMismatchCount}`} />
+      <StatusItem label="hard boundary" tone={hardBoundaryTone} value={`${labelText(status.hardBoundaryState)} / forbidden ${status.hardBoundaryForbiddenActionCount} / separate approval ${status.hardBoundarySeparateApprovalActionCount}`} />
+      <StatusItem label="hard boundary locks" tone={hardBoundaryTone} value={`execute ${yesNo(status.hardBoundaryExecutionEnabled)} / execution-ready ${yesNo(status.hardBoundaryExecutionReady)} / worker ${yesNo(status.hardBoundaryWorkerDispatchEnabled)} / live ops ${yesNo(status.hardBoundaryLiveOperationsEnabled)}`} />
+      <StatusItem className="md:col-span-2" label="orchestration readiness" tone={readinessTone} value={`read-only ${labelText(status.readinessReadOnlyState)} / scoped PR ${labelText(status.readinessScopedPrState)}`} />
+      <StatusItem label="worker readiness" tone={readinessTone} value={`laptop Codex ${labelText(status.readinessWorkerNodeState)} / execution-ready ${yesNo(status.orchestrationReadinessExecutionReady)}`} />
+      <StatusItem label="worker presence" tone={workerPresenceTone} value={`${labelText(status.workerPresenceState)} / online ${yesNo(status.workerPresenceOnline)}${status.workerPresenceLastSeen ? ` / seen ${status.workerPresenceLastSeen}` : ''}`} />
+      <StatusItem className="md:col-span-2" label="orchestration run graph" tone={runGraphTone} value={`nodes ${status.orchestrationRunGraphNodeCount} / edges ${status.orchestrationRunGraphEdgeCount}`} />
+      <StatusItem label="run graph nodes" tone={runGraphTone} value={`runs ${status.orchestrationRunGraphRunCount} / child ${status.orchestrationRunGraphChildCount} / worker ${status.orchestrationRunGraphWorkerCount} / reports ${status.orchestrationRunGraphReportCount}`} />
+      <StatusItem label="approval lifecycle" tone={approvalLifecycleTone} value={`available ${status.approvalAvailableCount} / pending ${status.approvalPendingCount} / expired ${status.approvalExpiredCount}`} />
+      <StatusItem label="approval gaps" tone={status.approvalDuplicateCount || status.approvalConsumedCount || status.approvalRejectedCount || status.approvalRunMissingIdCount || status.approvalMissingRecordCount || status.approvalUnavailableRunCount ? 'warn' : 'good'} value={`duplicates ${status.approvalDuplicateCount} / consumed ${status.approvalConsumedCount} / unavailable runs ${status.approvalUnavailableRunCount}`} />
+      <StatusItem label="run lifecycle" tone={runLifecycleTone} value={`active ${status.runActiveCount} / terminal ${status.runTerminalCount} / stop-cancel ${status.runStopCancelCount}`} />
+      <StatusItem label="run gaps" tone={status.runDuplicateCount || status.runTerminalMissingReportCount || status.runTerminalMissingLinkedCount || status.runOneActiveMutationLaneRulePassed === false ? 'warn' : 'good'} value={`duplicates ${status.runDuplicateCount} / missing reports ${status.runTerminalMissingReportCount} / stale links ${status.runTerminalMissingLinkedCount}`} />
+      <StatusItem label="report lifecycle" tone={reportLifecycleTone} value={`open ${status.reportOpenCount} / reviewed ${status.reportReviewedCount} / terminal ${status.reportTerminalCount}`} />
+      <StatusItem label="report gaps" tone={status.reportDuplicateCount || status.reportOverwriteConflictCount || status.reportMissingRunCount || status.reportMissingLinkedCount ? 'warn' : 'good'} value={`duplicates ${status.reportDuplicateCount} / overwrite conflicts ${status.reportOverwriteConflictCount} / missing ${status.reportMissingRunCount} / stale links ${status.reportMissingLinkedCount}`} />
+      <StatusItem label="report contract" tone={reportContractTone} value={`reports ${status.reportContractReportCount} / complete ${status.reportContractCompleteCount} / incomplete ${status.reportContractIncompleteCount}`} />
+      <StatusItem label="report completion" tone={reportCompletionTone} value={`ready ${status.reportCompletionReadyCount} / blocked ${status.reportCompletionBlockedCount} / terminal ${status.reportCompletionTerminalCount}`} />
+      <StatusItem label="report review queue" tone={reportReviewQueueTone} value={`items ${status.reportReviewQueueCount} / needs review ${status.reportReviewQueueNeedsReviewCount} / missing ${status.reportReviewQueueMissingCount} / mismatch ${status.reportReviewQueueLinkMismatchCount}`} />
+      <StatusItem label="result ingestion" tone={resultIngestionTone} value={`ready ${status.resultIngestionReadyCount} / blocked ${status.resultIngestionBlockedCount} / reports ${status.resultIngestionReportCount}`} />
+      <StatusItem label="stop/cancel control" tone={stopControlTone} value={`items ${status.stopControlCount} / stopping ${status.stopControlActiveCount} / terminal ${status.stopControlTerminalCount} / mismatch ${status.stopControlLinkMismatchCount}`} />
+      <StatusItem className="md:col-span-2" label="top report review" tone={reportReviewQueueTone} value={status.reportReviewQueuePrimaryLabel} />
       <StatusItem className="md:col-span-2" label="accepted runtime" value={status.runtime} />
+      <StatusItem label="baseline execute lock" tone={baselineExecutionLockTone} value={`accepted ${yesNo(status.acceptedBaselineWouldExecute)} / rollback ${yesNo(status.rollbackBaselineWouldExecute)} / handoff ${yesNo(status.latestHandoffWouldExecute)}`} />
       <StatusItem label="accepted-live head" value={status.head.slice(0, 12)} />
+      <StatusItem
+        label="default branch head"
+        tone={status.defaultBranchHead !== 'unknown' && status.sourceHead !== 'unknown' && status.defaultBranchHead !== status.sourceHead ? 'warn' : undefined}
+        value={status.defaultBranchHead.slice(0, 12)}
+      />
       <StatusItem label="deployed head" value={status.deployedHead.slice(0, 12)} />
       <StatusItem label="latest merged PR" value={status.latestMergedPr || 'unknown'} />
+      <StatusItem label="child-agent status" tone={childLockTone} value={`${status.childActiveCount} active / latest ${labelText(status.childLatestStatus)}`} />
+      <StatusItem className="md:col-span-2" label="child-agent objective" value={status.childLatestObjective || status.childLatestAgent} />
+      <StatusItem label="child-agent report" tone={childReportTone} value={childReportValue} />
+      <StatusItem label="child instruction preview" tone={childInstructionTone} value={`available ${yesNo(status.childInstructionAvailable)} / handoff ready ${yesNo(status.childInstructionReadyForHandoff)} / manual ${yesNo(status.childInstructionManualHandoffOnly)}`} />
+      <StatusItem className="md:col-span-2" label="child instruction prompt" tone={childInstructionTone} value={status.childInstructionPrompt} />
+      <StatusItem label="laptop Codex worker-node" tone={workerLockTone} value={`${status.workerHostLabel} / ${labelText(status.workerLatestStatus)}`} />
+      <StatusItem className="md:col-span-2" label="worker-node objective" value={status.workerLatestObjective || `${status.workerIdentity} has no assigned objective recorded`} />
+      <StatusItem label="worker-node report" tone={workerReportTone} value={workerReportValue} />
+      <StatusItem label="worker instruction preview" tone={workerInstructionTone} value={`available ${yesNo(status.workerInstructionAvailable)} / handoff ready ${yesNo(status.workerInstructionReadyForHandoff)} / manual ${yesNo(status.workerInstructionManualHandoffOnly)}`} />
+      <StatusItem className="md:col-span-2" label="worker-node blockers" tone={status.workerBlockedReasons.length ? 'warn' : 'good'} value={status.workerBlockedReasons.length ? status.workerBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="worker instruction prompt" tone={workerInstructionTone} value={status.workerInstructionPrompt} />
+      <StatusItem className="md:col-span-3" label="worker instruction blockers" tone={status.workerInstructionBlockedReasons.length ? 'warn' : 'good'} value={status.workerInstructionBlockedReasons.length ? status.workerInstructionBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="worker presence blockers" tone={status.workerPresenceBlockedReasons.length ? 'warn' : 'good'} value={status.workerPresenceBlockedReasons.length ? status.workerPresenceBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="desktop app install" tone="warn" value="separate laptop worker-node update; bottom-bar version is not changed by accepted-live/dashboard deploy" />
+      <StatusItem className="md:col-span-3" label="next action reasons" tone={status.nextSafeActionReasons.length ? 'warn' : 'good'} value={status.nextSafeActionReasons.length ? status.nextSafeActionReasons.join(', ') : status.nextSafePrimaryReason} />
+      <StatusItem className="md:col-span-3" label="operator summary" tone={operatorPacketTone} value={status.operatorPacketSummary} />
+      <StatusItem className="md:col-span-3" label="operator blockers" tone={status.operatorPacketBlockedReasons.length ? 'warn' : 'good'} value={status.operatorPacketBlockedReasons.length ? status.operatorPacketBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="operator execution locks" tone={status.operatorPacketExecutionLockBlockedReasons.length ? 'warn' : 'good'} value={status.operatorPacketExecutionLockBlockedReasons.length ? status.operatorPacketExecutionLockBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="hard boundary summary" tone={hardBoundaryTone} value={status.hardBoundarySummary} />
+      <StatusItem className="md:col-span-3" label="hard boundary blockers" tone={status.hardBoundaryBlockedReasons.length ? 'warn' : 'good'} value={status.hardBoundaryBlockedReasons.length ? status.hardBoundaryBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="projection execution locks" tone={status.projectionExecutionLockReasons.length ? 'warn' : 'good'} value={status.projectionExecutionLockReasons.length ? status.projectionExecutionLockReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="execution mode blockers" tone={status.executionModeBlockedReasons.length ? 'warn' : 'good'} value={status.executionModeBlockedReasons.length ? status.executionModeBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="protected execution markers" tone={status.executionModeProtectedMarkers.length ? 'warn' : 'good'} value={status.executionModeProtectedMarkers.length ? status.executionModeProtectedMarkers.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="execution packet blockers" tone={status.executionPacketBlockedReasons.length ? 'warn' : 'good'} value={status.executionPacketBlockedReasons.length ? status.executionPacketBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="execution lock blockers" tone={status.executionPacketLockReasons.length ? 'warn' : 'good'} value={status.executionPacketLockReasons.length ? status.executionPacketLockReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="orchestration summary" tone={readinessTone} value={status.orchestrationReadinessSummary} />
+      <StatusItem className="md:col-span-3" label="run graph blockers" tone={status.orchestrationRunGraphBlockedReasons.length ? 'warn' : 'good'} value={status.orchestrationRunGraphBlockedReasons.length ? status.orchestrationRunGraphBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="autonomy blockers" tone={status.autonomyBlockedReasons.length || status.provenanceReasons.length ? 'warn' : 'good'} value={[...status.provenanceReasons, ...status.autonomyBlockedReasons].length ? [...status.provenanceReasons, ...status.autonomyBlockedReasons].join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="approval blockers" tone={status.approvalBlockedReasons.length ? 'warn' : 'good'} value={status.approvalBlockedReasons.length ? status.approvalBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="run blockers" tone={status.runBlockedReasons.length ? 'warn' : 'good'} value={status.runBlockedReasons.length ? status.runBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="report review blockers" tone={status.reportLifecycleBlockedReasons.length ? 'warn' : 'good'} value={status.reportLifecycleBlockedReasons.length ? status.reportLifecycleBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="report contract blockers" tone={status.reportContractBlockedReasons.length ? 'warn' : 'good'} value={status.reportContractBlockedReasons.length ? status.reportContractBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="report completion blockers" tone={status.reportCompletionBlockedReasons.length ? 'warn' : 'good'} value={status.reportCompletionBlockedReasons.length ? status.reportCompletionBlockedReasons.join(', ') : status.reportCompletionPrimaryLabel} />
+      <StatusItem className="md:col-span-3" label="report completion gaps" tone={reportCompletionTone} value={`missing ${status.reportCompletionMissingReportCount} / review ${status.reportCompletionNeedsReviewCount} / rejected ${status.reportCompletionRejectedCount} / contract ${status.reportCompletionContractIncompleteCount} / ingestion ${status.reportCompletionIngestionBlockedCount} / mismatch ${status.reportCompletionLinkMismatchCount} / duplicates ${status.reportCompletionDuplicateCount}`} />
+      <StatusItem className="md:col-span-3" label="report queue reason" tone={reportReviewQueueTone} value={status.reportReviewQueueBlockedReasons.length ? status.reportReviewQueueBlockedReasons.join(', ') : status.reportReviewQueuePrimaryReason} />
+      <StatusItem className="md:col-span-3" label="result ingestion blockers" tone={status.resultIngestionBlockedReasons.length ? 'warn' : 'good'} value={status.resultIngestionBlockedReasons.length ? status.resultIngestionBlockedReasons.join(', ') : status.resultIngestionPrimaryLabel} />
+      <StatusItem className="md:col-span-3" label="result ingestion gaps" tone={resultIngestionTone} value={`duplicates ${status.resultIngestionDuplicateCount} / unlinked ${status.resultIngestionMissingLinkCount} / mismatch ${status.resultIngestionLinkMismatchCount} / redaction ${status.resultIngestionUnsafeRedactionCount} / metadata ${status.resultIngestionForbiddenMetadataCount} / safety ${status.resultIngestionMissingSafetyCount}`} />
+      <StatusItem className="md:col-span-3" label="stop/cancel blockers" tone={status.stopControlBlockedReasons.length ? 'warn' : 'good'} value={status.stopControlBlockedReasons.length ? status.stopControlBlockedReasons.join(', ') : status.stopControlPrimaryLabel} />
+      <StatusItem className="md:col-span-3" label="write-capable tool paths" tone={status.toolPermissionWritePaths.length ? 'warn' : 'good'} value={status.toolPermissionWritePaths.length ? status.toolPermissionWritePaths.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="scoped PR blockers" tone={status.scopedPrBlockedReasons.length ? 'warn' : 'good'} value={status.scopedPrBlockedReasons.length ? status.scopedPrBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="child-agent blockers" tone={status.childBlockedReasons.length ? 'warn' : 'good'} value={status.childBlockedReasons.length ? status.childBlockedReasons.join(', ') : 'none'} />
+      <StatusItem className="md:col-span-3" label="child instruction blockers" tone={status.childInstructionBlockedReasons.length ? 'warn' : 'good'} value={status.childInstructionBlockedReasons.length ? status.childInstructionBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="stale warnings" tone={status.staleWarnings.length ? 'warn' : 'good'} value={status.staleWarnings.length ? status.staleWarnings.join(', ') : 'none'} />
     </div>
   )
@@ -3854,9 +4802,11 @@ function HermesHealthDashboard({
     return state?.has_real_report || state?.latest_report || state?.latest_jenny_report || latestReportForProject(project.project_id, snapshot.reports)
   }).length
   const memoryErrors = snapshot.memoryStorage.errors ?? []
-  const safetyOk = status.guard === 'pass' && status.dispatch === false && status.activeLaneCount <= 1 && status.staleWarnings.length === 0
+  const safetyOk = status.guard === 'pass' && status.dispatch === false && status.activeLaneCount <= 1 && status.staleWarnings.length === 0 && status.provenanceBlocked === false && status.autonomyEligible !== false
   const blockingIssues = [
     bridgeError ? `Jenny bridge error: ${bridgeError}` : '',
+    status.provenanceBlocked ? `Runtime provenance blocked: ${status.provenanceStatus}` : '',
+    status.autonomyEligible === false ? `Read-only autonomy blocked: ${status.autonomyBlockedReasons[0] ?? 'backend eligibility gate failed'}` : '',
     status.guard !== 'pass' ? `Runtime guard is ${status.guard}` : '',
     status.dispatch !== false ? 'Dispatch safety is not confirmed off' : '',
     status.activeLaneCount > 1 ? `${status.activeLaneCount} active lanes recorded` : '',

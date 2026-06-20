@@ -38,6 +38,7 @@ def test_valid_lane_start_request_passes_as_default_off_dry_run_preflight():
     assert check.dirty_worktree_state == "clean"
     assert check.token_context_state == "bounded"
     assert check.metadata["default_off"] is True
+    assert check.metadata["would_execute"] is False
     assert check.metadata["dry_run_only"] is True
     assert check.metadata["enforces_runtime"] is False
     assert check.metadata["adapter"] == "mission_control.preflight.lane_start.v1"
@@ -129,7 +130,7 @@ def test_preflight_builds_task_control_envelope_and_calls_evaluator(monkeypatch)
             start_gate_id="start-gate:test",
             envelope_id=envelope.envelope_id,
             decision_state="pass",
-            metadata={"default_off": True, "enforces_runtime": False},
+            metadata={"default_off": True, "would_execute": False, "enforces_runtime": False},
         )
 
     monkeypatch.setattr(preflight, "evaluate_start_gate", fake_evaluator)
@@ -147,6 +148,7 @@ def test_preflight_builds_task_control_envelope_and_calls_evaluator(monkeypatch)
         "run targeted tests",
     ]
     assert check.metadata["dry_run_only"] is True
+    assert check.metadata["would_execute"] is False
     assert check.metadata["enforces_runtime"] is False
 
 
@@ -166,4 +168,5 @@ def test_adapter_does_not_write_records_or_call_runtime_surfaces(monkeypatch):
     check = evaluate_lane_start_preflight(_lane_start_request())
 
     assert check.decision_state == "pass"
+    assert check.metadata["would_execute"] is False
     assert check.metadata["dry_run_only"] is True

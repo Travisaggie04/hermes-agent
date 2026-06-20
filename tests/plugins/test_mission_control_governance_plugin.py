@@ -13,12 +13,14 @@ import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from mission_control.inert_contract import INERT_LIVE_OPERATION_FLAGS
 from mission_control.records import (
     AcceptedBaselineRecord,
     ApprovalRecord,
     ApprovalSlice,
     ArtifactRef,
     ChallengeReviewRecord,
+    ChildRunRecord,
     EvidenceCard,
     GoalContract,
     GitHubBridgeMailboxStatusRecord,
@@ -41,6 +43,7 @@ from mission_control.records import (
     StartGateCheck,
     TaskControlEnvelope,
     VerifierWorkflowEvidenceRecord,
+    WorkerNodeRunRecord,
 )
 
 
@@ -95,13 +98,16 @@ def test_workspace_project_api_creates_and_lists_append_only_records(plugin_api,
     assert payload["manual_copy_only"] is True
     assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
+    _assert_inert_workspace_payload(payload)
     assert payload["stored"] is True
     assert payload["record_type"] == "ProjectRecord"
     assert payload["project"]["name"] == "Hermes / Mission Control"
+    _assert_inert_record_metadata(payload["project"]["metadata"])
 
     records = JsonlRecordStore(plugin_api.record_store_path()).read_all(ProjectRecord)
     assert len(records) == 1
     assert records[0].name == "Hermes / Mission Control"
+    _assert_inert_record_metadata(records[0].metadata)
 
     listed = client.get("/api/plugins/mission-control-governance/workspace/projects")
     assert listed.status_code == 200
@@ -116,6 +122,7 @@ def test_workspace_project_template_seed_creates_defaults_and_skips_duplicates(p
     assert template_payload["stored"] is False
     assert template_payload["send_to_jenny_enabled"] is False
     assert template_payload["dispatch_enabled"] is False
+    _assert_inert_workspace_payload(template_payload)
     assert template_payload["count"] == 5
     assert {item["name"] for item in template_payload["templates"]} == {
         "Hermes / Mission Control",
@@ -126,6 +133,8 @@ def test_workspace_project_template_seed_creates_defaults_and_skips_duplicates(p
     }
     assert all(item["exists"] is False for item in template_payload["templates"])
     assert all(item["default_guards"] for item in template_payload["templates"])
+    for item in template_payload["templates"]:
+        _assert_inert_workspace_payload(item)
 
     seeded = client.post("/api/plugins/mission-control-governance/workspace/projects/seed-defaults", json={})
     assert seeded.status_code == 200
@@ -135,6 +144,7 @@ def test_workspace_project_template_seed_creates_defaults_and_skips_duplicates(p
     assert payload["manual_copy_only"] is True
     assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
+    _assert_inert_workspace_payload(payload)
     assert payload["stored"] is True
     assert payload["created_count"] == 5
     assert payload["skipped_count"] == 0
@@ -154,6 +164,8 @@ def test_workspace_project_template_seed_creates_defaults_and_skips_duplicates(p
     assert all(project.metadata.get("default_guards") for project in projects)
     assert all(project.metadata.get("send_to_jenny_enabled") is False for project in projects)
     assert all(project.metadata.get("dispatch_enabled") is False for project in projects)
+    for project in projects:
+        _assert_inert_record_metadata(project.metadata)
     hermes_project = next(project for project in projects if project.project_id == "project-hermes-mission-control")
     assert "Jenny OS native chat" in hermes_project.current_goal
     assert "Make Mission Control the obvious operating surface" not in hermes_project.current_goal
@@ -202,6 +214,7 @@ def test_workspace_project_brief_api_creates_lists_and_stays_inert(plugin_api, c
     assert payload["manual_copy_only"] is True
     assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
+    _assert_inert_workspace_payload(payload)
     assert payload["stored"] is True
     assert payload["record_type"] == "ProjectBriefRecord"
     assert payload["project_brief"]["project_id"] == "project-hermes-mission-control"
@@ -210,6 +223,7 @@ def test_workspace_project_brief_api_creates_lists_and_stays_inert(plugin_api, c
     assert len(records) == 1
     assert records[0].status == "active"
     assert records[0].forbidden_actions == ("dispatch", "session-send", "runtime switch")
+    _assert_inert_record_metadata(records[0].metadata)
 
     listed = client.get(
         "/api/plugins/mission-control-governance/workspace/project-briefs?project_id=project-hermes-mission-control"
@@ -246,6 +260,7 @@ def test_workspace_challenge_review_api_creates_lists_and_challenges_bad_directi
     assert payload["manual_copy_only"] is True
     assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
+    _assert_inert_workspace_payload(payload)
     assert payload["stored"] is True
     assert payload["record_type"] == "ChallengeReviewRecord"
     assert payload["challenge_review"]["decision_state"] == "wrong_approach_likely"
@@ -258,6 +273,7 @@ def test_workspace_challenge_review_api_creates_lists_and_challenges_bad_directi
     assert records[0].concerns == ("automation before observability", "public posting needs approval")
     assert records[0].challenge_categories == ("wrong_approach", "protected_surface")
     assert records[0].blocking_verdicts == ("blocks_lane_draft", "requires_travis_approval")
+    _assert_inert_record_metadata(records[0].metadata)
 
     listed = client.get(
         "/api/plugins/mission-control-governance/workspace/challenge-reviews?project_id=project-shorts-video"
@@ -323,15 +339,18 @@ def test_workspace_lane_request_api_creates_lists_and_stays_inert(plugin_api, cl
     assert payload["manual_copy_only"] is True
     assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
+    _assert_inert_workspace_payload(payload)
     assert payload["stored"] is True
     assert payload["record_type"] == "LaneRequestRecord"
     assert payload["lane_request"]["status"] == "draft"
     assert payload["lane_request"]["metadata"]["dispatch_enabled"] is False
+    _assert_inert_record_metadata(payload["lane_request"]["metadata"])
 
     records = JsonlRecordStore(plugin_api.record_store_path()).read_all(LaneRequestRecord)
     assert len(records) == 1
     assert records[0].title == "Read-only status refresh"
     assert records[0].forbidden_actions == ("dispatch", "execute", "queue mutation")
+    _assert_inert_record_metadata(records[0].metadata)
 
     listed = client.get("/api/plugins/mission-control-governance/workspace/lane-requests?project_id=project-hermes")
     assert listed.status_code == 200
@@ -366,17 +385,20 @@ def test_workspace_jenny_report_api_creates_lists_and_stays_inert(plugin_api, cl
     assert payload["manual_copy_only"] is True
     assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
+    _assert_inert_workspace_payload(payload)
     assert payload["stored"] is True
     assert payload["record_type"] == "JennyReportRecord"
     assert payload["report"]["project_id"] == "project-hermes"
     assert payload["report"]["lane_request_id"] == "lane-request-1"
     assert payload["report"]["metadata"]["dispatch_enabled"] is False
     assert payload["report"]["metadata"]["artifact_links"] == ["reports/hermes/status.md"]
+    _assert_inert_record_metadata(payload["report"]["metadata"])
 
     reports = JsonlRecordStore(plugin_api.record_store_path()).read_all(JennyReportRecord)
     assert len(reports) == 1
     assert reports[0].summary == "Jenny completed the read-only status refresh."
     assert reports[0].changed_files == ("mission_control/records/models.py",)
+    _assert_inert_record_metadata(reports[0].metadata)
 
     listed = client.get("/api/plugins/mission-control-governance/workspace/reports?project_id=project-hermes&lane_request_id=lane-request-1")
     assert listed.status_code == 200
@@ -402,14 +424,22 @@ def test_workspace_jenny_bridge_api_creates_lists_and_stays_inert(plugin_api, cl
     assert response.status_code == 200
     payload = response.json()
     assert payload["trusted_for_execution"] is False
+    assert payload["would_execute"] is False
     assert payload["execution_enabled"] is False
     assert payload["manual_copy_only"] is False
     assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
     assert payload["stored"] is True
     assert payload["record_type"] == "JennyBridgeMessageRequestRecord"
     assert payload["request"]["project_id"] == "project-hermes"
     assert payload["request"]["status"] == "queued"
+    assert payload["request"]["metadata"]["would_execute"] is False
+    assert payload["request"]["metadata"]["session_send_enabled"] is False
+    assert payload["request"]["metadata"]["worker_dispatch_enabled"] is False
+    assert payload["request"]["metadata"]["trusted_for_execution"] is False
+    assert payload["request"]["metadata"]["inert_context_only"] is True
     assert payload["request"]["metadata"]["requires_external_jenny_poller"] is True
     assert payload["request"]["metadata"]["user_message"] == "Review PR #75."
 
@@ -417,6 +447,8 @@ def test_workspace_jenny_bridge_api_creates_lists_and_stays_inert(plugin_api, cl
     assert len(requests) == 1
     assert requests[0].message == "Please review PR #75 and report whether it is safe to mark ready."
     assert requests[0].metadata["user_message"] == "Review PR #75."
+    assert requests[0].metadata["would_execute"] is False
+    assert requests[0].metadata["worker_dispatch_enabled"] is False
 
     listed = client.get(
         "/api/plugins/mission-control-governance/workspace/jenny-bridge/outbox?project_id=project-hermes&status=queued"
@@ -459,18 +491,28 @@ def test_workspace_jenny_bridge_api_creates_lists_and_stays_inert(plugin_api, cl
     assert inbound.status_code == 200
     inbound_payload = inbound.json()
     assert inbound_payload["trusted_for_execution"] is False
+    assert inbound_payload["would_execute"] is False
     assert inbound_payload["execution_enabled"] is False
     assert inbound_payload["manual_copy_only"] is False
     assert inbound_payload["send_to_jenny_enabled"] is False
     assert inbound_payload["dispatch_enabled"] is False
+    assert inbound_payload["session_send_enabled"] is False
+    assert inbound_payload["worker_dispatch_enabled"] is False
     assert inbound_payload["stored"] is True
     assert inbound_payload["record_type"] == "JennyBridgeMessageResponseRecord"
     assert inbound_payload["response"]["request_id"] == "bridge-request-1"
+    assert inbound_payload["response"]["metadata"]["would_execute"] is False
+    assert inbound_payload["response"]["metadata"]["session_send_enabled"] is False
+    assert inbound_payload["response"]["metadata"]["worker_dispatch_enabled"] is False
+    assert inbound_payload["response"]["metadata"]["trusted_for_execution"] is False
+    assert inbound_payload["response"]["metadata"]["inert_context_only"] is True
     assert inbound_payload["response"]["metadata"]["external_jenny_response"] is True
 
     responses = JsonlRecordStore(plugin_api.record_store_path()).read_all(JennyBridgeMessageResponseRecord)
     assert len(responses) == 1
     assert responses[0].message == "Safe to mark ready. No runtime behavior changed."
+    assert responses[0].metadata["would_execute"] is False
+    assert responses[0].metadata["worker_dispatch_enabled"] is False
 
     inbox = client.get(
         "/api/plugins/mission-control-governance/workspace/jenny-bridge/inbox?project_id=project-hermes&request_id=bridge-request-1"
@@ -522,18 +564,27 @@ def test_workspace_jenny_reply_reviews_append_operator_decisions_and_stay_inert(
     assert payload["display_only"] is True
     assert payload["manual_start_only"] is True
     assert payload["send_to_jenny_enabled"] is False
+    assert payload["would_execute"] is False
     assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
     assert payload["execution_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
     assert payload["worker_enabled"] is False
     assert payload["timer_enabled"] is False
     assert payload["record_type"] == "JennyReplyReviewRecord"
     assert payload["reply_review"]["response_id"] == "bridge-response-1"
     assert payload["reply_review"]["decision"] == "needs_evidence"
+    assert payload["reply_review"]["metadata"]["would_execute"] is False
+    assert payload["reply_review"]["metadata"]["session_send_enabled"] is False
+    assert payload["reply_review"]["metadata"]["worker_dispatch_enabled"] is False
     assert payload["reply_review"]["metadata"]["trusted_for_execution"] is False
+    assert payload["reply_review"]["metadata"]["inert_context_only"] is True
 
     reviews = JsonlRecordStore(plugin_api.record_store_path()).read_all(JennyReplyReviewRecord)
     assert len(reviews) == 1
     assert reviews[0].note == "Ask Jenny for exact files, checks, risks, and next safe lane."
+    assert reviews[0].metadata["would_execute"] is False
+    assert reviews[0].metadata["worker_dispatch_enabled"] is False
 
     listed = client.get(
         "/api/plugins/mission-control-governance/workspace/jenny-reply-reviews?project_id=project-hermes&response_id=bridge-response-1"
@@ -583,6 +634,7 @@ def test_workspace_jenny_bridge_poller_status_is_read_only(plugin_api, client):
                 "manual_start_only": True,
                 "dispatch_enabled": False,
                 "session_send_enabled": False,
+                "worker_dispatch_enabled": False,
                 "worker_enabled": False,
                 "timer_enabled": False,
             },
@@ -597,9 +649,14 @@ def test_workspace_jenny_bridge_poller_status_is_read_only(plugin_api, client):
     assert payload["stored"] is False
     assert payload["display_only"] is True
     assert payload["manual_start_only"] is True
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["would_execute"] is False
+    assert payload["execution_enabled"] is False
     assert payload["dispatch_enabled"] is False
     assert payload["send_to_jenny_enabled"] is False
     assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
     assert payload["worker_enabled"] is False
     assert payload["timer_enabled"] is False
     assert payload["pending_count"] == 1
@@ -675,8 +732,13 @@ def test_workspace_github_bridge_status_is_read_only_and_manual_only(plugin_api,
     assert payload["stored"] is False
     assert payload["display_only"] is True
     assert payload["manual_start_only"] is True
+    assert payload["trusted_for_execution"] is False
+    assert payload["inert_context_only"] is True
+    assert payload["would_execute"] is False
+    assert payload["execution_enabled"] is False
     assert payload["dispatch_enabled"] is False
     assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
     assert payload["worker_enabled"] is False
     assert payload["timer_enabled"] is False
     assert payload["daemon_enabled"] is False
@@ -841,6 +903,7 @@ def test_workspace_async_agent_status_is_read_only_and_status_only(plugin_api, c
     assert payload["stored"] is False
     assert payload["manual_start_only"] is True
     assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
     assert payload["worker_enabled"] is False
     assert payload["timer_enabled"] is False
     assert payload["daemon_enabled"] is False
@@ -897,10 +960,15 @@ def test_workspace_github_bridge_outbox_create_posts_one_mailbox_message(plugin_
     assert response.status_code == 200
     payload = response.json()
     assert payload["stored"] is True
-    assert payload["send_to_jenny_enabled"] is True
+    assert payload["bridge_permission_classification"] == "write_capable_not_safe_for_autonomy"
+    assert payload["write_capable_not_safe_for_autonomy"] is True
+    assert payload["read_only_safe"] is False
+    assert payload["autonomy_safe"] is False
+    assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
     assert payload["session_send_enabled"] is False
     assert payload["execution_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
     assert payload["worker_enabled"] is False
     assert payload["timer_enabled"] is False
     assert payload["daemon_enabled"] is False
@@ -952,6 +1020,7 @@ def test_workspace_github_bridge_answer_once_runs_single_manual_answer(plugin_ap
             "dispatch_enabled": False,
             "session_send_enabled": False,
             "execution_enabled": False,
+            "worker_dispatch_enabled": False,
             "worker_enabled": False,
             "timer_enabled": False,
             "answered": True,
@@ -991,10 +1060,15 @@ def test_workspace_github_bridge_answer_once_runs_single_manual_answer(plugin_ap
     assert payload["manual_start_only"] is True
     assert payload["manual_hermes_answer_enabled"] is True
     assert payload["requires_explicit_manual_confirmation"] is True
-    assert payload["send_to_jenny_enabled"] is True
+    assert payload["bridge_permission_classification"] == "write_capable_not_safe_for_autonomy"
+    assert payload["write_capable_not_safe_for_autonomy"] is True
+    assert payload["read_only_safe"] is False
+    assert payload["autonomy_safe"] is False
+    assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
     assert payload["session_send_enabled"] is False
     assert payload["execution_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
     assert payload["worker_enabled"] is False
     assert payload["timer_enabled"] is False
     assert payload["daemon_enabled"] is False
@@ -1008,10 +1082,54 @@ def _assert_inert_workspace_payload(payload):
     assert payload["display_only"] is True
     assert payload["manual_copy_only"] is True
     assert payload["send_to_jenny_enabled"] is False
+    assert payload["would_dispatch"] is False
+    assert payload["would_session_send"] is False
     assert payload["dispatch_enabled"] is False
+    assert payload["dispatch_in_gateway"] is False
+    assert payload["dispatch_state"] is False
+    assert payload["execution_ready"] is False
+    assert payload["live_operations_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["worker_enabled"] is False
+    assert payload["workers_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
+    assert payload["timer_enabled"] is False
+    assert payload["daemon_enabled"] is False
+    assert payload["waha_enabled"] is False
+    assert payload["social_enabled"] is False
+    assert payload["payment_enabled"] is False
+    assert payload["queue_mutation_enabled"] is False
+    assert payload["model_routing_enabled"] is False
+    assert payload["would_execute"] is False
     assert payload["execution_enabled"] is False
     assert payload["trusted_for_execution"] is False
     assert payload["inert_context_only"] is True
+
+
+def _assert_inert_record_metadata(metadata):
+    assert metadata["would_execute"] is False
+    assert metadata["would_dispatch"] is False
+    assert metadata["would_session_send"] is False
+    assert metadata["execution_enabled"] is False
+    assert metadata["dispatch_enabled"] is False
+    assert metadata["dispatch_in_gateway"] is False
+    assert metadata["dispatch_state"] is False
+    assert metadata["execution_ready"] is False
+    assert metadata["live_operations_enabled"] is False
+    assert metadata["send_to_jenny_enabled"] is False
+    assert metadata["session_send_enabled"] is False
+    assert metadata["worker_enabled"] is False
+    assert metadata["workers_enabled"] is False
+    assert metadata["worker_dispatch_enabled"] is False
+    assert metadata["timer_enabled"] is False
+    assert metadata["daemon_enabled"] is False
+    assert metadata["waha_enabled"] is False
+    assert metadata["social_enabled"] is False
+    assert metadata["payment_enabled"] is False
+    assert metadata["queue_mutation_enabled"] is False
+    assert metadata["model_routing_enabled"] is False
+    assert metadata["trusted_for_execution"] is False
+    assert metadata["inert_context_only"] is True
 
 
 def test_control_plane_records_round_trip_and_register():
@@ -1128,6 +1246,7 @@ def test_control_plane_append_endpoints_store_temp_records_and_stay_inert(plugin
     assert approval_payload["stored"] is True
     assert approval_payload["record_type"] == "ApprovalRecord"
     assert approval_payload["approval"]["approval_mode"] == "one_time"
+    _assert_inert_record_metadata(approval_payload["approval"]["metadata"])
 
     run = client.post(
         "/api/plugins/mission-control-governance/workspace/runs/create",
@@ -1158,6 +1277,7 @@ def test_control_plane_append_endpoints_store_temp_records_and_stay_inert(plugin
     assert run_payload["stored"] is True
     assert run_payload["record_type"] == "RunRecord"
     assert run_payload["run"]["execution_mode"] == "manual_copy"
+    _assert_inert_record_metadata(run_payload["run"]["metadata"])
 
     report = client.post(
         "/api/plugins/mission-control-governance/workspace/reports/ingest",
@@ -1184,10 +1304,18 @@ def test_control_plane_append_endpoints_store_temp_records_and_stay_inert(plugin
     _assert_inert_workspace_payload(report_payload)
     assert report_payload["stored"] is True
     assert report_payload["record_type"] == "ReportRecord"
+    _assert_inert_record_metadata(report_payload["report"]["metadata"])
 
-    assert len(JsonlRecordStore(plugin_api.record_store_path()).read_all(ApprovalRecord)) == 1
-    assert len(JsonlRecordStore(plugin_api.record_store_path()).read_all(RunRecord)) == 1
-    assert len(JsonlRecordStore(plugin_api.record_store_path()).read_all(ReportRecord)) == 1
+    store = JsonlRecordStore(plugin_api.record_store_path())
+    approvals = store.read_all(ApprovalRecord)
+    runs = store.read_all(RunRecord)
+    reports = store.read_all(ReportRecord)
+    assert len(approvals) == 1
+    assert len(runs) == 1
+    assert len(reports) == 1
+    _assert_inert_record_metadata(approvals[0].metadata)
+    _assert_inert_record_metadata(runs[0].metadata)
+    _assert_inert_record_metadata(reports[0].metadata)
 
 
 def test_control_plane_validation_rejects_broad_or_executable_approvals(client):
@@ -1266,8 +1394,40 @@ def test_control_plane_validation_rejects_invalid_statuses_and_execution_modes(c
 def test_control_plane_backend_does_not_wire_session_send_or_dispatch():
     source = API_PATH.read_text(encoding="utf-8")
     control_plane_source = source[source.index('@router.get("/workspace/approvals")') : source.index('@router.get("/records")')]
-    forbidden = ["session_send", "session-send", "dispatch_task", "send_to_jenny_enabled\": True", "dispatch_enabled\": True"]
+    forbidden = [
+        "session_send",
+        "session-send",
+        "dispatch_task",
+        "send_to_jenny_enabled\": True",
+        "dispatch_enabled\": True",
+    ]
+    forbidden_action_routes = [
+        '@router.post("/workspace-status/execute")',
+        '@router.post("/workspace-status/approve")',
+        '@router.post("/workspace-status/deploy")',
+        '@router.post("/workspace-status/restart")',
+        '@router.post("/workspace-status/runtime-switch")',
+        '@router.post("/workspace-status/accepted-baseline/append")',
+        '@router.post("/workspace-status/state-db/mutate")',
+        '@router.post("/workspace-status/config/mutate")',
+        '@router.post("/workspace-status/records/mutate")',
+        '@router.post("/workspace-status/dispatch")',
+        '@router.post("/workspace-status/session-send")',
+        '@router.post("/workspace-status/worker-dispatch")',
+        '@router.post("/workspace-status/worker/activate")',
+        '@router.post("/workspace-status/timer/activate")',
+        '@router.post("/workspace-status/queue/activate")',
+        '@router.post("/workspace-status/model-routing")',
+        '@router.post("/workspace-status/model-routing/activate")',
+        '@router.post("/workspace-status/waha")',
+        '@router.post("/workspace-status/waha/activate")',
+        '@router.post("/workspace-status/social")',
+        '@router.post("/workspace-status/social/post")',
+        '@router.post("/workspace-status/payment")',
+        '@router.post("/workspace-status/payment/charge")',
+    ]
     assert not any(fragment in control_plane_source for fragment in forbidden)
+    assert not any(fragment in source for fragment in forbidden_action_routes)
 
 
 def test_session_project_link_record_serializes_deserializes():
@@ -1354,10 +1514,12 @@ def test_workspace_session_project_link_api_and_projection_rules(plugin_api, cli
     assert payload["manual_copy_only"] is True
     assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
+    _assert_inert_workspace_payload(payload)
     assert payload["stored"] is True
     assert payload["record_type"] == "SessionProjectLinkRecord"
     assert payload["session_project_link"]["durable_session_id"] == "session-root"
     assert payload["session_project_link"]["metadata"]["auto_inferred"] is False
+    _assert_inert_record_metadata(payload["session_project_link"]["metadata"])
 
     links = client.get("/api/plugins/mission-control-governance/workspace/session-project-links")
     assert links.status_code == 200
@@ -1409,6 +1571,7 @@ def test_session_project_link_accepts_legacy_desktop_native_method_but_rejects_u
     assert record["link_method"] == "manual"
     assert record["metadata"]["normalized_link_method_from"] == "desktop-native-chat"
     assert record["metadata"]["dispatch_enabled"] is False
+    _assert_inert_record_metadata(record["metadata"])
 
     invalid = client.post(
         "/api/plugins/mission-control-governance/workspace/session-project-links/create",
@@ -1917,6 +2080,7 @@ def test_pr_merge_verifier_gate_evaluate_valid_state_stores_nothing(client):
             "verifier_id": "jenny-verifier",
             "would_block": False,
             "blocked_actions": [],
+            "would_execute": False,
             "dry_run_only": True,
             "enforces_runtime": False,
             "observed_state_raw": {"secret": "must not be exposed"},
@@ -1930,6 +2094,7 @@ def test_pr_merge_verifier_gate_evaluate_valid_state_stores_nothing(client):
     assert payload["stored"] is False
     assert payload["decision_state"] == "warn"
     assert payload["would_block"] is False
+    assert payload["would_execute"] is False
     assert payload["dry_run_only"] is True
     assert payload["enforces_runtime"] is False
     assert "observed_state_raw" not in str(payload)
@@ -1959,6 +2124,7 @@ def test_pr_merge_verifier_gate_evaluate_hash_mismatch_blocks(client):
             "verifier_id": "jenny-verifier",
             "would_block": False,
             "blocked_actions": [],
+            "would_execute": False,
             "dry_run_only": True,
             "enforces_runtime": False,
         },
@@ -2004,11 +2170,12 @@ def _valid_pr_merge_visibility_body() -> dict[str, object]:
                 "head_commit": "abc123",
                 "packet_hash": "sha256:packet",
                 "implementer_id": "jenny-implementer",
-                "verifier_id": "jenny-verifier",
-                "would_block": False,
-                "blocked_actions": [],
-                "dry_run_only": True,
-                "enforces_runtime": False,
+            "verifier_id": "jenny-verifier",
+            "would_block": False,
+            "blocked_actions": [],
+            "would_execute": False,
+            "dry_run_only": True,
+            "enforces_runtime": False,
             },
         },
     }
@@ -2058,6 +2225,7 @@ def test_pr_merge_gate_visibility_valid_packet_shows_fields_and_allows(client):
     assert payload["packet_hash"] == "sha256:packet"
     assert payload["evidence_record_id"] == "evidence-38"
     assert payload["blocked_actions"] == []
+    assert payload["would_execute"] is False
     assert payload["dry_run_only"] is True
     assert payload["enforces_runtime"] is False
 
@@ -2192,7 +2360,11 @@ def test_lane_handoff_draft_builder_bundle_is_inert_and_copy_only():
         "dispatch_in_gateway=false",
         "display_only=true",
         "dry_run_only=true",
+        "would_execute=false",
         "execution_enabled=false",
+        "dispatch_enabled=false",
+        "session_send_enabled=false",
+        "worker_dispatch_enabled=false",
         "model_routing=false",
         "queue_mutation=false",
         "waha_mutation=false",
@@ -2425,7 +2597,11 @@ def test_autonomy_readiness_ledger_bundle_is_static_display_only():
         "PR #48 / lane-handoff builder safely deployed",
         "display_only=true",
         "dry_run_only=true",
+        "would_execute=false",
         "execution_enabled=false",
+        "dispatch_enabled=false",
+        "session_send_enabled=false",
+        "worker_dispatch_enabled=false",
         "dispatch_in_gateway=false",
         "model_routing=false",
         "queue_mutation=false",
@@ -2503,6 +2679,11 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/pr-merge-verifier-gate": {"GET"},
         "/workspace-status": {"GET"},
         "/workspace-status/preview": {"POST"},
+        "/workspace/runtime-provenance/preview": {"POST"},
+        "/workspace/autonomy-eligibility/preview": {"POST"},
+        "/workspace/scoped-pr-eligibility/preview": {"POST"},
+        "/workspace/tool-permissions/preview": {"POST"},
+        "/workspace/execution-packet/preview": {"POST"},
         "/pr-merge-verifier-gate/evaluate": {"POST"},
         "/pr-merge-verifier-gate/visibility": {"POST"},
         "/verifier-workflow/evidence": {"GET"},
@@ -2545,6 +2726,10 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/runs/create": {"POST"},
         "/workspace/report-inbox": {"GET"},
         "/workspace/reports/ingest": {"POST"},
+        "/workspace/child-runs": {"GET"},
+        "/workspace/child-runs/create": {"POST"},
+        "/workspace/worker-node-runs": {"GET"},
+        "/workspace/worker-node-runs/create": {"POST"},
         "/workspace/session-project-links": {"GET"},
         "/workspace/session-project-links/create": {"POST"},
         "/workspace/project-sessions": {"GET"},
@@ -2582,6 +2767,8 @@ def test_api_routes_are_get_only(plugin_api, client):
         "/workspace/approvals",
         "/workspace/runs",
         "/workspace/report-inbox",
+        "/workspace/child-runs",
+        "/workspace/worker-node-runs",
         "/workspace/session-project-links",
         "/workspace/project-sessions",
         "/workspace/project-state",
@@ -2638,16 +2825,14 @@ def test_api_routes_are_get_only(plugin_api, client):
         assert response.status_code == 405
 
 
-def test_health_is_read_only_and_inert(client):
+def test_health_is_read_only_and_inert(plugin_api, client):
     response = client.get("/api/plugins/mission-control-governance/health")
 
     assert response.status_code == 200
     assert response.json() == {
+        **plugin_api.INERT_FLAGS,
         "ok": True,
         "plugin": "mission-control-governance",
-        "trusted_for_execution": False,
-        "inert_context_only": True,
-        "execution_enabled": False,
     }
 
 
@@ -2754,14 +2939,12 @@ def test_bounded_records_detail_index_remains_available_and_sanitized(plugin_api
     assert "secret governance transcript" not in lowered
 
 
-def test_start_gate_returns_no_active_envelope_for_missing_store(client):
+def test_start_gate_returns_no_active_envelope_for_missing_store(plugin_api, client):
     response = client.get("/api/plugins/mission-control-governance/start-gate")
 
     assert response.status_code == 200
     assert response.json() == {
-        "trusted_for_execution": False,
-        "inert_context_only": True,
-        "execution_enabled": False,
+        **plugin_api.INERT_FLAGS,
         "store_status": "missing",
         "error": None,
         "has_active_envelope": False,
@@ -4007,12 +4190,11 @@ def test_domain_governance_endpoint_exposes_waha_hard_wall_policy_as_display_onl
     assert policy["memory_policy"]["required_namespace"] == "waha"
     assert policy["model_policy_placeholder"]["approved_models_required"] is True
     assert policy["verifier_policy"]["waha_technical_verifier_required"] is True
-    assert policy["enforcement"] == {
-        "trusted_for_execution": False,
-        "inert_context_only": True,
-        "enforcement_enabled": False,
-        "display_only": True,
-    }
+    for key, value in INERT_LIVE_OPERATION_FLAGS.items():
+        assert policy["enforcement"][key] is value
+    assert policy["enforcement"]["enforcement_enabled"] is False
+    assert policy["enforcement"]["dry_run_only"] is True
+    assert policy["enforcement"]["display_only"] is True
     assert "allowed_roots" in policy["unresolved_required_before_enforcement"]
 
 
@@ -4088,7 +4270,7 @@ def test_empty_store_returns_empty_inert_payload(client):
     assert records["execution_enabled"] is False
 
 
-def test_empty_store_returns_empty_approval_and_evidence_payloads(client):
+def test_empty_store_returns_empty_approval_and_evidence_payloads(plugin_api, client):
     approvals = client.get("/api/plugins/mission-control-governance/approval-slices")
     evidence = client.get("/api/plugins/mission-control-governance/evidence-cards")
     actions = client.get("/api/plugins/mission-control-governance/operator-actions")
@@ -4097,9 +4279,7 @@ def test_empty_store_returns_empty_approval_and_evidence_payloads(client):
     assert evidence.status_code == 200
     assert actions.status_code == 200
     assert approvals.json() == {
-        "trusted_for_execution": False,
-        "inert_context_only": True,
-        "execution_enabled": False,
+        **plugin_api.INERT_FLAGS,
         "store_status": "missing",
         "error": None,
         "source": "none",
@@ -4107,9 +4287,7 @@ def test_empty_store_returns_empty_approval_and_evidence_payloads(client):
         "approval_slices": [],
     }
     assert evidence.json() == {
-        "trusted_for_execution": False,
-        "inert_context_only": True,
-        "execution_enabled": False,
+        **plugin_api.INERT_FLAGS,
         "store_status": "missing",
         "error": None,
         "source": "none",
@@ -4117,9 +4295,7 @@ def test_empty_store_returns_empty_approval_and_evidence_payloads(client):
         "evidence_cards": [],
     }
     assert actions.json() == {
-        "trusted_for_execution": False,
-        "inert_context_only": True,
-        "execution_enabled": False,
+        **plugin_api.INERT_FLAGS,
         "store_status": "missing",
         "error": None,
         "source": "none",
@@ -4526,7 +4702,7 @@ def test_dashboard_bundle_registers_read_only_tab_only():
         "put(",
         "patch(",
         "delete(",
-        "execute",
+        "execute(",
         "approve(",
         "deny(",
         "transcript",
@@ -4650,14 +4826,12 @@ def test_dashboard_operating_workspace_panel_is_bounded_display_only():
         assert control + "(" not in lowered
 
 
-def test_operator_actions_empty_missing_store_returns_bounded_empty_payload(client):
+def test_operator_actions_empty_missing_store_returns_bounded_empty_payload(plugin_api, client):
     response = client.get("/api/plugins/mission-control-governance/operator-actions")
 
     assert response.status_code == 200
     assert response.json() == {
-        "trusted_for_execution": False,
-        "inert_context_only": True,
-        "execution_enabled": False,
+        **plugin_api.INERT_FLAGS,
         "store_status": "missing",
         "error": None,
         "source": "none",
@@ -4837,6 +5011,25 @@ def test_workspace_status_endpoint_returns_display_only_status(client):
     assert "accepted_baseline" in payload
     assert "rollback_baseline" in payload
     assert "stale_context" in payload
+    hard_boundary = payload["hard_boundary_contract"]
+    assert hard_boundary["source"] == "mission_control_hard_boundary_contract_v1"
+    assert hard_boundary["display_only"] is True
+    assert hard_boundary["trusted_for_execution"] is False
+    assert hard_boundary["execution_enabled"] is False
+    assert hard_boundary["dispatch_enabled"] is False
+    assert hard_boundary["session_send_enabled"] is False
+    assert hard_boundary["worker_dispatch_enabled"] is False
+    assert hard_boundary["live_operations_goal"] is False
+    assert hard_boundary["live_operations_enabled"] is False
+    assert hard_boundary["separate_approval_required"] is True
+    assert "PR merge" in hard_boundary["separate_approval_actions"]
+    assert "live deploy" in hard_boundary["forbidden_actions"]
+    operator_packet = payload["operator_decision_packet"]
+    assert operator_packet["source"] == "mission_control_operator_decision_packet_v1"
+    assert operator_packet["display_only"] is True
+    assert operator_packet["execution_enabled"] is False
+    assert operator_packet["worker_dispatch_enabled"] is False
+    assert isinstance(operator_packet["execution_lock_blocked_reasons"], list)
 
 
 def test_workspace_status_preview_is_caller_supplied_and_stores_nothing(plugin_api, client):
@@ -4864,9 +5057,110 @@ def test_workspace_status_preview_is_caller_supplied_and_stores_nothing(plugin_a
     assert "baseline_mismatch" in warnings
     assert "active_lane_count_exceeds_max" in warnings
     assert "dispatch_not_false" in warnings
+    hard_boundary = payload["hard_boundary_contract"]
+    assert hard_boundary["source"] == "mission_control_hard_boundary_contract_v1"
+    assert hard_boundary["display_only"] is True
+    assert hard_boundary["trusted_for_execution"] is False
+    assert hard_boundary["execution_enabled"] is False
+    assert hard_boundary["dispatch_enabled"] is False
+    assert hard_boundary["session_send_enabled"] is False
+    assert hard_boundary["worker_dispatch_enabled"] is False
+    assert hard_boundary["live_operations_goal"] is False
+    assert hard_boundary["live_operations_enabled"] is False
+    assert hard_boundary["separate_approval_required"] is True
+    assert "live deploy" in hard_boundary["forbidden_actions"]
+    assert "PR merge" in hard_boundary["separate_approval_actions"]
+    assert payload["next_safe_actions"]["source"] == "mission_control_next_safe_actions_v1"
+    assert payload["orchestration_readiness"]["source"] == "mission_control_orchestration_readiness_v1"
+    assert payload["operator_decision_packet"]["source"] == "mission_control_operator_decision_packet_v1"
+    assert payload["operator_decision_packet"]["execution_ready"] is False
+    assert payload["operator_decision_packet"]["approval_required"] is True
     rendered = str(payload).lower()
     assert "must not be stored or exposed" not in rendered
     assert "secret-token-value" not in rendered
+    assert plugin_api.record_store_path().exists() is False
+
+
+def test_workspace_status_preview_hard_boundary_blocks_live_flag_attempts(plugin_api, client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace-status/preview",
+        json={
+            "execution_packet_preview": {
+                "mode": "worker_node",
+                "would_dispatch": "true",
+                "worker_dispatch_enabled": "true",
+                "worker_node": {
+                    "worker_dispatch_enabled": "true",
+                    "presence_status": "online",
+                    "objective": "Inspect Mission Control report status.",
+                    "parent_run_id": "run-worker-preview",
+                },
+                "run": {
+                    "run_id": "run-worker-preview",
+                    "lane_type": "read_only_lane",
+                    "objective": "Inspect Mission Control report status.",
+                },
+                "lane": {
+                    "lane_type": "read_only_lane",
+                    "objective": "Inspect Mission Control report status.",
+                },
+                "report_contract": {
+                    "required": True,
+                    "tests_required": True,
+                    "review_required": True,
+                },
+            },
+            "control_plane_lifecycle": {"active_mutation_lane_count": 0},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stored"] is False
+    assert payload["source"] == "caller_supplied_workspace_status_preview"
+    packet = payload["execution_packet_preview"]
+    assert packet["would_dispatch"] is False
+    assert packet["worker_dispatch_enabled"] is False
+    assert packet["packet"]["worker_node_contract"]["worker_dispatch_enabled"] is False
+    assert "would_dispatch must remain false in previews" in packet["blocked_reasons"]
+    assert "worker dispatch must stay disabled" in packet["blocked_reasons"]
+    hard_boundary = payload["hard_boundary_contract"]
+    assert hard_boundary["state"] == "live_flag_violation"
+    assert hard_boundary["blocked"] is True
+    assert hard_boundary["live_flag_violations"] == [
+        "execution packet would_dispatch must remain disabled",
+        "execution packet worker_dispatch_enabled must remain disabled",
+    ]
+    assert hard_boundary["execution_enabled"] is False
+    assert hard_boundary["dispatch_enabled"] is False
+    assert hard_boundary["session_send_enabled"] is False
+    assert hard_boundary["worker_dispatch_enabled"] is False
+    next_safe_actions = payload["next_safe_actions"]
+    assert next_safe_actions["source"] == "mission_control_next_safe_actions_v1"
+    assert next_safe_actions["primary_action_id"] == "review_hard_boundary_contract"
+    assert next_safe_actions["primary_action"]["manual_only"] is True
+    assert next_safe_actions["execution_enabled"] is False
+    readiness = payload["orchestration_readiness"]
+    assert readiness["source"] == "mission_control_orchestration_readiness_v1"
+    assert readiness["states"] == {
+        "supervised_read_only_autonomy": "blocked",
+        "scoped_pr_creation": "blocked",
+        "laptop_codex_worker_node": "blocked",
+    }
+    assert "execution packet would_dispatch must remain disabled" in readiness["blocked_reasons"]
+    assert readiness["execution_ready"] is False
+    operator_packet = payload["operator_decision_packet"]
+    assert operator_packet["source"] == "mission_control_operator_decision_packet_v1"
+    assert operator_packet["state"] == "blocked"
+    assert operator_packet["jenny_review_required"] is True
+    assert operator_packet["next_safe_action_id"] == "review_hard_boundary_contract"
+    assert operator_packet["hard_boundary_live_flag_violation_count"] == 2
+    assert operator_packet["execution_lock_blocked_reasons"] == [
+        "execution packet would_dispatch must remain disabled",
+        "execution packet worker_dispatch_enabled must remain disabled",
+    ]
+    assert operator_packet["execution_ready"] is False
+    assert operator_packet["worker_dispatch_enabled"] is False
     assert plugin_api.record_store_path().exists() is False
 
 
@@ -4898,14 +5192,658 @@ def test_workspace_status_preview_flags_accepted_live_ahead_of_deployed_dashboar
     assert plugin_api.record_store_path().exists() is False
 
 
+def test_workspace_status_preview_flags_source_default_head_drift(plugin_api, client):
+    head = "8ef64e370a51bc19e97fec1526f5bb3d42025a09"
+    default_head = "fe18ce20d6044dd91d115286e949366477a8706b"
+    runtime = {
+        "path": "/home/jenny/.hermes/hermes-runtime-current",
+        "exists": True,
+        "git_healthy": True,
+        "head": head,
+        "dirty_files": [],
+        "untracked_files": [],
+        "error": "",
+    }
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace-status/preview",
+        json={
+            "accepted_baseline": {
+                "head": head,
+                "runtime_path": "/home/jenny/.hermes/hermes-runtime-current",
+            },
+            "rollback_baseline": {
+                "head": head,
+                "runtime_path": "/home/jenny/.hermes/hermes-runtime-rollback",
+                "clean": True,
+            },
+            "source_control": {
+                "accepted_live_head": head,
+                "default_branch_head": default_head,
+            },
+            "dashboard_runtime": runtime,
+            "gateway_runtime": runtime,
+            "rollback_runtime": {**runtime, "path": "/home/jenny/.hermes/hermes-runtime-rollback"},
+            "safety": {"dispatch_in_gateway": False},
+            "lane": {"active_lane_count": 0, "max_active_lane": 1, "declared_baseline_head": head},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    provenance = payload["runtime_provenance"]
+    warnings = set(payload["stale_context"]["warnings"])
+    assert payload["stored"] is False
+    assert payload["source"] == "caller_supplied_workspace_status_preview"
+    assert payload["source_control"]["default_branch_head"] == default_head
+    assert provenance["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
+    assert provenance["primary_status"] == "SOURCE_DEFAULT_DRIFT"
+    assert provenance["default_branch_head"] == default_head
+    assert "SOURCE_DEFAULT_DRIFT" in provenance["statuses"]
+    assert "source HEAD does not match default branch HEAD" in provenance["autonomy_blocked_reasons"]
+    assert "SOURCE_DEFAULT_DRIFT" in warnings
+    assert "source HEAD does not match default branch HEAD" in warnings
+    assert plugin_api.record_store_path().exists() is False
+
+
+def test_runtime_provenance_preview_is_inert_and_stores_nothing(plugin_api, client):
+    head = "8ef64e370a51bc19e97fec1526f5bb3d42025a09"
+    runtime = {
+        "path": "/home/jenny/.hermes/hermes-runtime-current",
+        "exists": True,
+        "git_healthy": True,
+        "head": head,
+        "dirty_files": [],
+        "untracked_files": [],
+        "error": "",
+    }
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/runtime-provenance/preview",
+        json={
+            "source": {"head": head},
+            "accepted_baseline": runtime,
+            "dashboard_runtime": runtime,
+            "gateway_runtime": runtime,
+            "rollback_runtime": runtime,
+            "dispatch_in_gateway": False,
+            "active_lane_count": 0,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "caller_supplied_runtime_provenance_preview"
+    assert payload["stored"] is False
+    assert payload["display_only"] is True
+    assert payload["dry_run_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["primary_status"] == "CLEAN_AND_ALIGNED"
+    assert payload["autonomy_blocked"] is False
+    assert plugin_api.record_store_path().exists() is False
+
+
+def test_runtime_provenance_preview_blocks_source_default_head_drift(plugin_api, client):
+    head = "8ef64e370a51bc19e97fec1526f5bb3d42025a09"
+    default_head = "fe18ce20d6044dd91d115286e949366477a8706b"
+    runtime = {
+        "path": "/home/jenny/.hermes/hermes-runtime-current",
+        "exists": True,
+        "git_healthy": True,
+        "head": head,
+        "dirty_files": [],
+        "untracked_files": [],
+        "error": "",
+    }
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/runtime-provenance/preview",
+        json={
+            "source": {"head": head, "default_branch_head": default_head},
+            "accepted_baseline": runtime,
+            "dashboard_runtime": runtime,
+            "gateway_runtime": runtime,
+            "rollback_runtime": runtime,
+            "dispatch_in_gateway": False,
+            "active_lane_count": 0,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "caller_supplied_runtime_provenance_preview"
+    assert payload["stored"] is False
+    assert payload["display_only"] is True
+    assert payload["dry_run_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
+    assert payload["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
+    assert payload["primary_status"] == "SOURCE_DEFAULT_DRIFT"
+    assert payload["default_branch_head"] == default_head
+    assert "SOURCE_DEFAULT_DRIFT" in payload["statuses"]
+    assert "source HEAD does not match default branch HEAD" in payload["autonomy_blocked_reasons"]
+    assert plugin_api.record_store_path().exists() is False
+
+
+def test_read_only_autonomy_preview_is_inert_and_stores_nothing(plugin_api, client):
+    forbidden_actions = [
+        "file write",
+        "commit",
+        "PR creation",
+        "merge",
+        "deploy",
+        "restart",
+        "runtime switch",
+        "Waha",
+        "social",
+        "payment",
+        "model routing",
+        "queue mutation",
+        "worker",
+        "timer",
+        "daemon",
+        "dispatch",
+        "session-send",
+    ]
+
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/autonomy-eligibility/preview",
+        json={
+            "runtime_provenance": {
+                "primary_status": "CLEAN_AND_ALIGNED",
+                "autonomy_blocked": False,
+                "autonomy_blocked_reasons": [],
+            },
+            "approval": {
+                "approval_id": "approval-read-only-1",
+                "status": "approved",
+                "approval_mode": "one_time",
+                "approval_scope": "project-hermes-mission-control:read-only-inspection",
+                "action_class": "read_only_inspection",
+                "expires_at": "2099-01-01T00:00:00Z",
+                "consumed_at": "",
+            },
+            "run": {
+                "run_id": "run-read-only-1",
+                "project_id": "project-hermes-mission-control",
+                "approval_id": "approval-read-only-1",
+                "lane_type": "read_only_inspection",
+                "status": "requested",
+                "dispatch_state": False,
+                "forbidden_actions": forbidden_actions,
+            },
+            "lane": {
+                "lane_type": "read_only_inspection",
+                "forbidden_actions": forbidden_actions,
+            },
+            "bridge": {"manual_start_only": True},
+            "report_inbox_ready": True,
+            "active_mutation_lane_count": 0,
+            "capabilities": {},
+            "now": "2026-06-19T00:00:00Z",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "caller_supplied_read_only_autonomy_preview"
+    assert payload["stored"] is False
+    assert payload["eligible"] is True
+    assert payload["would_execute"] is False
+    assert payload["dry_run_only"] is True
+    assert payload["execution_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert plugin_api.record_store_path().exists() is False
+
+
+def test_scoped_pr_and_execution_packet_previews_are_inert_and_store_nothing(plugin_api, client):
+    forbidden_actions = [
+        "merge",
+        "deploy",
+        "restart",
+        "runtime switch",
+        "Waha",
+        "social",
+        "payment",
+        "model routing",
+        "queue mutation",
+        "worker",
+        "timer",
+        "daemon",
+        "dispatch",
+        "session-send",
+    ]
+    payload = {
+        "mode": "scoped_pr",
+        "runtime_provenance": {
+            "primary_status": "CLEAN_AND_ALIGNED",
+            "autonomy_blocked": False,
+            "autonomy_blocked_reasons": [],
+        },
+        "approval": {
+            "approval_id": "approval-pr-1",
+            "status": "approved",
+            "approval_mode": "one_time",
+            "approval_scope": "project-hermes-mission-control:scoped-pr:mission_control/",
+            "action_class": "pr_creation",
+            "approved_files": ["mission_control/autonomy_eligibility.py"],
+            "expires_at": "2099-01-01T00:00:00Z",
+        },
+        "run": {
+            "run_id": "run-pr-1",
+            "project_id": "project-hermes-mission-control",
+            "approval_id": "approval-pr-1",
+            "lane_type": "pr_creation",
+            "status": "requested",
+            "dispatch_state": False,
+            "forbidden_actions": forbidden_actions,
+        },
+        "lane": {
+            "lane_type": "pr_creation",
+            "allowed_files": ["mission_control/autonomy_eligibility.py"],
+            "forbidden_actions": forbidden_actions,
+            "tests_required": True,
+            "review_required": True,
+        },
+        "report_contract": {"required": True, "tests_required": True, "review_required": True},
+        "active_mutation_lane_count": 1,
+        "bridge": {"manual_start_only": True},
+        "capabilities": {},
+        "now": "2026-06-19T00:00:00Z",
+    }
+
+    scoped = client.post(
+        "/api/plugins/mission-control-governance/workspace/scoped-pr-eligibility/preview",
+        json=payload,
+    )
+    packet = client.post(
+        "/api/plugins/mission-control-governance/workspace/execution-packet/preview",
+        json=payload,
+    )
+    worker_packet = client.post(
+        "/api/plugins/mission-control-governance/workspace/execution-packet/preview",
+        json={
+            **payload,
+            "mode": "worker_node",
+            "run": {
+                **payload["run"],
+                "objective": "Prepare a bounded scoped PR packet.",
+            },
+            "worker_node": {
+                "parent_run_id": "run-pr-1",
+                "worker_identity": "codex",
+                "worker_host_label": "laptop-codex",
+                "worker_kind": "laptop_codex",
+                "presence_status": "online",
+            },
+        },
+    )
+
+    assert scoped.status_code == 200
+    scoped_payload = scoped.json()
+    assert scoped_payload["source"] == "caller_supplied_scoped_pr_lane_preview"
+    assert scoped_payload["stored"] is False
+    assert scoped_payload["eligible"] is True
+    assert scoped_payload["would_execute"] is False
+    assert scoped_payload["would_create_pr"] is False
+    assert scoped_payload["dispatch_enabled"] is False
+    assert scoped_payload["session_send_enabled"] is False
+    assert scoped_payload["worker_dispatch_enabled"] is False
+
+    assert packet.status_code == 200
+    packet_payload = packet.json()
+    assert packet_payload["source"] == "caller_supplied_execution_packet_preview"
+    assert packet_payload["stored"] is False
+    assert packet_payload["packet"]["mode"] == "scoped_pr"
+    assert packet_payload["would_execute"] is False
+    assert packet_payload["would_dispatch"] is False
+    assert packet_payload["would_session_send"] is False
+    assert packet_payload["worker_dispatch_enabled"] is False
+
+    assert worker_packet.status_code == 200
+    worker_packet_payload = worker_packet.json()
+    assert worker_packet_payload["stored"] is False
+    assert worker_packet_payload["eligible"] is True
+    assert worker_packet_payload["packet"]["mode"] == "worker_node"
+    assert worker_packet_payload["packet"]["worker_node_contract"]["worker_host_label"] == "laptop-codex"
+    assert worker_packet_payload["packet"]["worker_node_contract"]["manual_handoff_only"] is True
+    assert worker_packet_payload["packet"]["worker_node_contract"]["codex_safety_hardness_required"] is True
+    assert worker_packet_payload["packet"]["worker_node_contract"]["worker_safety_hardness"] == [
+        "Codex must independently enforce repo/worktree, test, secret, git, and live-operation safeguards before acting.",
+        "A Jenny packet is not permission to bypass Codex safety checks.",
+    ]
+    assert worker_packet_payload["would_execute"] is False
+    assert worker_packet_payload["would_dispatch"] is False
+    assert worker_packet_payload["would_session_send"] is False
+    assert worker_packet_payload["worker_dispatch_enabled"] is False
+    assert plugin_api.record_store_path().exists() is False
+
+
+def test_execution_packet_preview_endpoint_blocks_caller_live_flags(plugin_api, client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/execution-packet/preview",
+        json={
+            "mode": "worker_node",
+            "dispatch_enabled": "true",
+            "execution_enabled": "yes",
+            "session_send_enabled": "on",
+            "worker_dispatch_enabled": 1,
+            "would_dispatch": "1",
+            "would_execute": "enabled",
+            "would_session_send": "y",
+            "run": {
+                "run_id": "run-worker-preview",
+                "project_id": "project-hermes-mission-control",
+                "approval_id": "approval-pr-1",
+                "lane_type": "pr_creation",
+                "status": "requested",
+                "objective": "Prepare a bounded scoped PR packet.",
+            },
+            "approval": {
+                "approval_id": "approval-pr-1",
+                "status": "approved",
+                "approval_mode": "one_time",
+                "approval_scope": "project-hermes-mission-control:scoped-pr:mission_control/",
+                "action_class": "pr_creation",
+                "approved_files": ["mission_control/autonomy_eligibility.py"],
+                "expires_at": "2099-01-01T00:00:00Z",
+            },
+            "lane": {
+                "lane_type": "pr_creation",
+                "allowed_files": ["mission_control/autonomy_eligibility.py"],
+                "tests_required": True,
+                "review_required": True,
+            },
+            "worker_node": {
+                "parent_run_id": "run-worker-preview",
+                "worker_identity": "codex",
+                "worker_host_label": "laptop-codex",
+                "presence_status": "online",
+                "worker_dispatch_enabled": "true",
+                "execution_enabled": "yes",
+            },
+            "report_contract": {"required": True, "tests_required": True, "review_required": True},
+            "active_mutation_lane_count": 1,
+            "runtime_provenance": {
+                "primary_status": "CLEAN_AND_ALIGNED",
+                "autonomy_blocked": False,
+                "autonomy_blocked_reasons": [],
+            },
+            "bridge": {"manual_start_only": True},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "caller_supplied_execution_packet_preview"
+    assert payload["stored"] is False
+    assert payload["display_only"] is True
+    assert payload["trusted_for_execution"] is False
+    assert payload["eligible"] is False
+    assert payload["would_execute"] is False
+    assert payload["would_dispatch"] is False
+    assert payload["would_session_send"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
+    assert payload["packet"]["would_execute"] is False
+    assert payload["packet"]["would_dispatch"] is False
+    assert payload["packet"]["would_session_send"] is False
+    assert payload["packet"]["execution_enabled"] is False
+    assert payload["packet"]["dispatch_enabled"] is False
+    assert payload["packet"]["session_send_enabled"] is False
+    assert payload["packet"]["worker_dispatch_enabled"] is False
+    worker_contract = payload["packet"]["worker_node_contract"]
+    assert worker_contract["would_execute"] is False
+    assert worker_contract["would_dispatch"] is False
+    assert worker_contract["would_session_send"] is False
+    assert worker_contract["worker_dispatch_enabled"] is False
+    assert "would_execute must remain false in previews" in payload["blocked_reasons"]
+    assert "would_dispatch must remain false in previews" in payload["blocked_reasons"]
+    assert "would_session_send must remain false in previews" in payload["blocked_reasons"]
+    assert "execution_enabled must remain false" in payload["blocked_reasons"]
+    assert "dispatch_enabled must remain false" in payload["blocked_reasons"]
+    assert "session_send_enabled must remain false" in payload["blocked_reasons"]
+    assert "worker_dispatch_enabled must remain false" in payload["blocked_reasons"]
+    assert "worker dispatch must stay disabled" in payload["blocked_reasons"]
+    assert "worker execution must stay disabled" in payload["blocked_reasons"]
+    assert plugin_api.record_store_path().exists() is False
+
+
+def test_tool_permission_preview_classifies_write_paths_and_stores_nothing(plugin_api, client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/tool-permissions/preview",
+        json={
+            "paths": [
+                {"path_id": "audit_read", "read_only_safe": True, "tools": ["read_file"]},
+                {"path_id": "manual_relay", "manual_start_only": True, "append_records": True},
+                {"path_id": "laptop_codex", "worker_node_path": True, "write_capable_tools": True},
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "mission_control_control_path_permission_preview_v1"
+    assert payload["stored"] is False
+    assert payload["permission_classification"] == "write_capable_not_safe_for_autonomy"
+    assert payload["execution_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
+    assert "laptop_codex" in payload["write_capable_path_ids"]
+    classifications = {path["path_id"]: path["permission_classification"] for path in payload["paths"]}
+    assert classifications["audit_read"] == "read_only_safe"
+    assert classifications["manual_relay"] == "manual_only"
+    assert classifications["laptop_codex"] == "write_capable_not_safe_for_autonomy"
+    assert plugin_api.record_store_path().exists() is False
+
+
+def test_child_and_worker_node_run_records_stay_inert(plugin_api, client):
+    child_response = client.post(
+        "/api/plugins/mission-control-governance/workspace/child-runs/create",
+        json={
+            "child_run_id": "child-run-1",
+            "parent_run_id": "run-parent-1",
+            "project_id": "project-hermes-mission-control",
+            "agent_identity": "jenny-child",
+            "delegation_source": "mission-control-preview",
+            "objective": "Inspect bounded context.",
+            "allowed_actions": ["read files"],
+            "forbidden_actions": ["dispatch", "deploy"],
+            "status": "running",
+            "dispatch_enabled": True,
+            "worker_dispatch_enabled": True,
+            "waha_enabled": True,
+            "social_enabled": True,
+            "payment_enabled": True,
+            "queue_mutation_enabled": True,
+            "model_routing_enabled": True,
+        },
+    )
+    worker_response = client.post(
+        "/api/plugins/mission-control-governance/workspace/worker-node-runs/create",
+        json={
+            "worker_run_id": "worker-run-1",
+            "parent_run_id": "run-parent-1",
+            "project_id": "project-hermes-mission-control",
+            "worker_identity": "codex",
+            "worker_host_label": "laptop-codex",
+            "objective": "Prepare a scoped PR.",
+            "blocked_reasons": ["worker node offline"],
+            "status": "blocked",
+            "worker_dispatch_enabled": True,
+            "worker_enabled": True,
+            "workers_enabled": True,
+            "timer_enabled": True,
+            "daemon_enabled": True,
+            "waha_enabled": True,
+            "social_enabled": True,
+            "payment_enabled": True,
+            "queue_mutation_enabled": True,
+            "model_routing_enabled": True,
+        },
+    )
+
+    assert child_response.status_code == 200
+    child_payload = child_response.json()
+    _assert_inert_workspace_payload(child_payload)
+    assert child_payload["stored"] is True
+    assert child_payload["dispatch_enabled"] is False
+    assert child_payload["session_send_enabled"] is False
+    assert child_payload["worker_dispatch_enabled"] is False
+    assert child_payload["child_run"]["metadata"]["dispatch_enabled"] is False
+    assert child_payload["child_run"]["metadata"]["worker_dispatch_enabled"] is False
+    _assert_inert_record_metadata(child_payload["child_run"]["metadata"])
+
+    assert worker_response.status_code == 200
+    worker_payload = worker_response.json()
+    _assert_inert_workspace_payload(worker_payload)
+    assert worker_payload["stored"] is True
+    assert worker_payload["dispatch_enabled"] is False
+    assert worker_payload["session_send_enabled"] is False
+    assert worker_payload["worker_dispatch_enabled"] is False
+    assert worker_payload["worker_node_run"]["worker_host_label"] == "laptop-codex"
+    assert worker_payload["worker_node_run"]["worker_dispatch_enabled"] is False
+    assert worker_payload["worker_node_run"]["metadata"]["worker_dispatch_enabled"] is False
+    _assert_inert_record_metadata(worker_payload["worker_node_run"]["metadata"])
+
+    child_runs = client.get("/api/plugins/mission-control-governance/workspace/child-runs")
+    worker_runs = client.get("/api/plugins/mission-control-governance/workspace/worker-node-runs")
+    assert child_runs.status_code == 200
+    assert child_runs.json()["count"] == 1
+    assert child_runs.json()["child_runs"][0]["record_type"] == "ChildRunRecord"
+    assert worker_runs.status_code == 200
+    assert worker_runs.json()["count"] == 1
+    assert worker_runs.json()["worker_node_runs"][0]["record_type"] == "WorkerNodeRunRecord"
+
+    records = JsonlRecordStore(plugin_api.record_store_path())
+    stored_child_runs = records.read_all(ChildRunRecord)
+    stored_worker_runs = records.read_all(WorkerNodeRunRecord)
+    assert len(stored_child_runs) == 1
+    assert len(stored_worker_runs) == 1
+    _assert_inert_record_metadata(stored_child_runs[0].metadata)
+    _assert_inert_record_metadata(stored_worker_runs[0].metadata)
+
+
+def test_control_plane_record_create_redacts_secret_like_text_and_drops_metadata(plugin_api, client):
+    fake_values = (
+        "fake-cookie-for-test",
+        "fake-api-key-for-test",
+        "fake-env-secret-for-test",
+        "fake-authorization-for-test",
+    )
+    report_response = client.post(
+        "/api/plugins/mission-control-governance/workspace/reports/ingest",
+        json={
+            "report_id": "report-sensitive-input",
+            "run_id": "run-sensitive-input",
+            "project_id": "project-hermes-mission-control",
+            "summary": "Report summary session_cookie=fake-cookie-for-test",
+            "result": "Observed auth_header=fake-authorization-for-test but must redact it.",
+            "metadata": {
+                "OpenAI-API-Key": "fake-api-key-for-test",
+                "env.secret": "fake-env-secret-for-test",
+                "session_cookie": "fake-cookie-for-test",
+            },
+        },
+    )
+    child_response = client.post(
+        "/api/plugins/mission-control-governance/workspace/child-runs/create",
+        json={
+            "child_run_id": "child-sensitive-input",
+            "parent_run_id": "run-sensitive-input",
+            "project_id": "project-hermes-mission-control",
+            "agent_identity": "jenny-child",
+            "objective": "Inspect context api_key=fake-api-key-for-test",
+            "metadata": {"session_cookie": "fake-cookie-for-test"},
+        },
+    )
+    worker_response = client.post(
+        "/api/plugins/mission-control-governance/workspace/worker-node-runs/create",
+        json={
+            "worker_run_id": "worker-sensitive-input",
+            "parent_run_id": "run-sensitive-input",
+            "project_id": "project-hermes-mission-control",
+            "worker_identity": "codex",
+            "worker_host_label": "laptop-codex",
+            "objective": "Prepare scoped packet env_secret=fake-env-secret-for-test",
+            "metadata": {"Authorization": "fake-authorization-for-test"},
+        },
+    )
+
+    assert report_response.status_code == 200
+    assert child_response.status_code == 200
+    assert worker_response.status_code == 200
+    for payload in (report_response.json(), child_response.json(), worker_response.json()):
+        _assert_inert_workspace_payload(payload)
+        rendered = str(payload)
+        for value in fake_values:
+            assert value not in rendered
+
+    records = JsonlRecordStore(plugin_api.record_store_path())
+    report = records.read_all(ReportRecord)[0]
+    child = records.read_all(ChildRunRecord)[0]
+    worker = records.read_all(WorkerNodeRunRecord)[0]
+    for record in (report, child, worker):
+        rendered = str(record.to_dict())
+        for value in fake_values:
+            assert value not in rendered
+        _assert_inert_record_metadata(record.metadata)
+    assert "openai_api_key" not in {key.lower().replace("-", "_").replace(".", "_") for key in report.metadata}
+    assert "env_secret" not in {key.lower().replace("-", "_").replace(".", "_") for key in report.metadata}
+    assert "session_cookie" not in {key.lower().replace("-", "_").replace(".", "_") for key in child.metadata}
+    assert "authorization" not in {key.lower().replace("-", "_").replace(".", "_") for key in worker.metadata}
+
+
 def test_workspace_status_has_no_action_routes(client):
-    for path in (
+    forbidden_paths = (
         "/api/plugins/mission-control-governance/workspace-status/execute",
         "/api/plugins/mission-control-governance/workspace-status/approve",
         "/api/plugins/mission-control-governance/workspace-status/deploy",
+        "/api/plugins/mission-control-governance/workspace-status/restart",
+        "/api/plugins/mission-control-governance/workspace-status/runtime-switch",
+        "/api/plugins/mission-control-governance/workspace-status/accepted-baseline/append",
+        "/api/plugins/mission-control-governance/workspace-status/state-db/mutate",
+        "/api/plugins/mission-control-governance/workspace-status/config/mutate",
+        "/api/plugins/mission-control-governance/workspace-status/records/mutate",
+        "/api/plugins/mission-control-governance/workspace-status/dispatch",
+        "/api/plugins/mission-control-governance/workspace-status/session-send",
+        "/api/plugins/mission-control-governance/workspace-status/worker-dispatch",
+        "/api/plugins/mission-control-governance/workspace-status/worker/activate",
+        "/api/plugins/mission-control-governance/workspace-status/timer/activate",
+        "/api/plugins/mission-control-governance/workspace-status/queue/activate",
+        "/api/plugins/mission-control-governance/workspace-status/waha/activate",
+        "/api/plugins/mission-control-governance/workspace-status/social/post",
+        "/api/plugins/mission-control-governance/workspace-status/payment/charge",
+        "/api/plugins/mission-control-governance/workspace-status/model-routing/activate",
+    )
+    for path in forbidden_paths:
+        for method in ("POST", "PUT", "PATCH", "DELETE"):
+            response = client.request(method, path, json={})
+            assert response.status_code == 404, f"{method} {path} should not be wired"
+
+    source = API_PATH.read_text(encoding="utf-8")
+    for forbidden_suffix in (
+        "/workspace-status/accepted-baseline/append",
+        "/workspace-status/state-db/mutate",
+        "/workspace-status/config/mutate",
+        "/workspace-status/records/mutate",
+        "/workspace-status/worker/activate",
+        "/workspace-status/timer/activate",
+        "/workspace-status/queue/activate",
+        "/workspace-status/waha/activate",
+        "/workspace-status/social/post",
+        "/workspace-status/payment/charge",
+        "/workspace-status/model-routing/activate",
     ):
-        response = client.post(path, json={})
-        assert response.status_code == 404
+        assert forbidden_suffix not in source
 
 
 def test_workspace_status_get_includes_latest_handoff_record_without_mutation(plugin_api, client):
@@ -4940,6 +5878,7 @@ def test_workspace_status_get_includes_latest_handoff_record_without_mutation(pl
     assert payload["latest_handoff"]["present"] is True
     assert payload["latest_handoff"]["handoff_id"] == "handoff-001"
     assert payload["latest_handoff"]["target_id"] == "45"
+    assert payload["latest_handoff"]["would_execute"] is False
     assert payload["latest_handoff"]["display_only"] is True
     assert payload["stored"] is False
 
@@ -4968,6 +5907,7 @@ def test_workspace_status_preview_remains_unstored_with_caller_supplied_handoff(
     assert payload["stored"] is False
     assert payload["latest_handoff"]["present"] is True
     assert payload["latest_handoff"]["handoff_id"] == "preview-001"
+    assert payload["latest_handoff"]["would_execute"] is False
     assert payload["latest_handoff"]["dry_run_only"] is True
     assert payload["latest_handoff"]["enforces_runtime"] is False
     assert payload["latest_handoff"]["display_only"] is True
@@ -5020,6 +5960,7 @@ def test_workspace_status_get_uses_latest_accepted_baseline_record_without_mutat
     assert payload["rollback_baseline"]["runtime_path"] == "/home/jenny/.hermes/hermes-runtime-workspaceui-d11681f"
     assert payload["rollback_baseline"]["head"] == "d11681f81c7cd16a99c53649f157040b2d10a89f"
     assert payload["display_only"] is True
+    assert payload["accepted_baseline"]["would_execute"] is False
     assert payload["dry_run_only"] is True
     assert payload["enforces_runtime"] is False
     assert payload["record_store"]["status"] == "ok"
