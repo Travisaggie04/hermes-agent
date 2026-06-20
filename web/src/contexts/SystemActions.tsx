@@ -91,6 +91,14 @@ export function SystemActionsProvider({
             });
             return;
           }
+          if (!resp.ok) {
+            setToast({
+              type: "error",
+              message: resp.message ?? `${t.status.actionFailed}: ${resp.error ?? "update blocked"}`,
+            });
+            setActiveAction(action);
+            return;
+          }
           setActiveAction(action);
         }
       } catch (err) {

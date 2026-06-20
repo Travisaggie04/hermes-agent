@@ -940,6 +940,66 @@ beforeEach(() => {
     },
     safety: { dispatch_in_gateway: false, send_to_jenny_enabled: false },
     stale_context: { warnings: [] },
+    codex_worker_node_status: {
+      blocked: true,
+      blocked_reasons: ['Codex worker-node dispatch is separate from runtime updates and remains disabled'],
+      dispatch_allowed: false,
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      external_update_triggered: false,
+      heartbeat_status: 'unknown',
+      old_hermes_worker_node_deprecated: true,
+      old_hermes_worker_node_status: 'deprecated_not_an_executor',
+      online: false,
+      registered: true,
+      session_send_enabled: false,
+      source: 'mission_control_codex_worker_node_status_v1',
+      state: 'offline',
+      stored: false,
+      trusted_for_execution: false,
+      update_lane: 'manual_external_codex_worker_node_update_only',
+      worker_dispatch_enabled: false,
+      worker_node_dispatch: false,
+      would_dispatch: false,
+      would_execute: false,
+      would_session_send: false,
+      would_update_worker_node: false
+    },
+    runtime_update_status: {
+      baseline_append_policy: 'exactly one AcceptedBaselineRecord append after a separately approved successful dashboard/gateway live update',
+      baseline_append_required: true,
+      blocked: true,
+      blocked_reasons: ['runtime update requires a separate explicit live-ops approval'],
+      codex_worker_node_dispatch: false,
+      codex_worker_node_status: 'offline',
+      dashboard_update_needed: true,
+      dispatch_enabled: false,
+      display_only: true,
+      dry_run_only: true,
+      execution_enabled: false,
+      external_app_update: 'manual_external_not_triggered',
+      external_app_update_triggered: false,
+      gateway_update_needed: true,
+      legacy_hermes_worker_node: 'deprecated_not_an_executor',
+      live_ops_lane_required: true,
+      manual_review_only: true,
+      old_hermes_worker_node_deprecated: true,
+      session_send_enabled: false,
+      source: 'mission_control_runtime_update_status_v1',
+      stored: false,
+      trusted_for_execution: false,
+      worker_dispatch_enabled: false,
+      worker_node_dispatch: false,
+      would_append_baseline: false,
+      would_dispatch: false,
+      would_execute: false,
+      would_restart: false,
+      would_session_send: false,
+      would_switch_runtime: false,
+      would_update_runtime: false
+    },
     tool_permission_classification: {
       blocked_path_count: 1,
       dispatch_enabled: false,
@@ -2022,7 +2082,19 @@ describe('MissionControlView', () => {
     expect(screen.getByText('deployed head')).toBeTruthy()
     expect(screen.getByText('9f8863c0bf28')).toBeTruthy()
     expect(screen.getByText('desktop app install')).toBeTruthy()
-    expect(screen.getByText('separate laptop worker-node update; bottom-bar version is not changed by accepted-live/dashboard deploy')).toBeTruthy()
+    expect(screen.getByText('separate external desktop app and Codex worker-node update; bottom-bar version is not changed by accepted-live dashboard/gateway runtime updates')).toBeTruthy()
+    expect(screen.getByText('runtime update lane')).toBeTruthy()
+    expect(screen.getByText('would update no / restart no / switch no')).toBeTruthy()
+    expect(screen.getByText('runtime baseline append')).toBeTruthy()
+    expect(screen.getByText('required after approved success yes / would append no')).toBeTruthy()
+    expect(screen.getByText('external app update')).toBeTruthy()
+    expect(screen.getAllByText('manual_external_not_triggered').length).toBeGreaterThan(0)
+    expect(screen.getByText('Codex worker-node update')).toBeTruthy()
+    expect(screen.getByText('offline / registered yes / would update no')).toBeTruthy()
+    expect(screen.getByText('Codex worker dispatch')).toBeTruthy()
+    expect(screen.getByText('dispatch no / allowed no / heartbeat unknown')).toBeTruthy()
+    expect(screen.getByText('legacy Hermes worker node')).toBeTruthy()
+    expect(screen.getAllByText('deprecated_not_an_executor').length).toBeGreaterThan(0)
     expect(screen.queryByText('⌘K Command palette')).toBeNull()
     expect(screen.queryByText('All systems')).toBeNull()
     expect(screen.getByText('Outbound to Jenny')).toBeTruthy()
@@ -2053,15 +2125,15 @@ describe('MissionControlView', () => {
     expect(screen.getByText('Kanban parked for later')).toBeTruthy()
     expect(screen.getByText('Advanced diagnostic records')).toBeTruthy()
     expect(screen.getAllByRole('heading', { name: 'Hermes / Mission Control' }).length).toBeGreaterThan(0)
-    expect(screen.getByText('Hermes update lane')).toBeTruthy()
+    expect(screen.getByText('Hermes runtime update lane')).toBeTruthy()
     expect(screen.getByText('Backend execution disabled - autonomy controls locked')).toBeTruthy()
     expect(screen.getByText('execution_enabled=false / dispatch_enabled=false / session_send_enabled=false / worker_dispatch_enabled=false')).toBeTruthy()
     expect(screen.getByText(/Runtime provenance can be clean while Jenny send, reply, worker dispatch, scoped PR, merge, deploy, restart, and runtime-switch controls remain locked/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Send blocked - backend execution disabled' })).toHaveProperty('disabled', true)
     expect(screen.getByText('Send locked - backend execution disabled; draft text only.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Hermes update lane locked' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Runtime update lane locked' })).toHaveProperty('disabled', true)
     expect(screen.getByRole('button', { name: 'Storage cleanup lane locked' })).toHaveProperty('disabled', true)
-    expect(screen.getByText(/bottom-bar desktop app version is separate from accepted-live\/dashboard deploys/)).toBeTruthy()
+    expect(screen.getByText(/desktop app updater and laptop Codex worker-node update are separate external\/manual lanes/)).toBeTruthy()
     expect(screen.getAllByText('report contract').length).toBeGreaterThan(0)
     expect(screen.getByText('latest report contract')).toBeTruthy()
     expect(screen.getAllByText(/Missing:.*evidence.*tests/).length).toBeGreaterThan(0)
@@ -2414,7 +2486,7 @@ describe('MissionControlView', () => {
       })
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Hermes update lane locked' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Runtime update lane locked' }))
     fireEvent.click(screen.getByRole('button', { name: 'Storage cleanup lane locked' }))
     expect(createMissionControlGitHubBridgeRequest).not.toHaveBeenCalled()
     expect(createMissionControlJennyBridgeRequest).not.toHaveBeenCalled()
@@ -2945,7 +3017,7 @@ describe('MissionControlView', () => {
       'Runtime provenance can be clean while Jenny send, reply, worker dispatch, scoped PR, merge, deploy, restart, and runtime-switch controls remain locked.',
       'Send blocked - backend execution disabled',
       'Send locked',
-      'Hermes update lane locked',
+      'Runtime update lane locked',
       'Storage cleanup lane locked',
       'const githubBridgeSafety = missionControlGitHubBridgeSafety(githubBridgeStatus, workspaceStatus)',
       'const autonomyControlSafety = missionControlAutonomyControlSafety(workspaceSummary)',

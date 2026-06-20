@@ -93,12 +93,12 @@ const REAL_PROJECT_IDS = [
 ]
 const HERMES_PROJECT_ID = 'project-hermes-mission-control'
 const HERMES_UPDATE_LANE_REQUEST = [
-  'Start a safe Hermes update readiness lane for the VPS and laptop Hermes worker node.',
-  'Inventory the existing VPS-triggered laptop worker-node update path and current installed versions first.',
-  'Treat the native laptop desktop app bottom-bar version as a separate installed worker-node version; accepted-live merges and dashboard-only deploys do not update that installed app.',
-  'Prepare a non-live VPS dashboard runtime at accepted-live and validate it before any dashboard-only switch.',
-  'Keep gateway update as a separate explicit lane.',
-  'Do not trigger the laptop worker-node update automatically, restart/switch gateway, dispatch, send sessions, use Waha/social/payment/customer actions, enable new background workers/timers/daemons/cron, or inspect/print secrets.'
+  'Start a safe Hermes runtime update readiness lane for the VPS dashboard and gateway runtimes.',
+  'Inventory current dashboard/gateway runtime paths, heads, rollback path, and the separate laptop Codex worker-node readiness/update posture first.',
+  'Treat the native laptop desktop app updater and any laptop Codex worker-node update as separate external/manual lanes; accepted-live merges and dashboard/gateway live updates do not update that installed app.',
+  'Prepare non-live VPS dashboard and gateway runtimes at accepted-live and validate them before any switch.',
+  'Keep runtime switch, gateway restart, worker-node update, and baseline append as separate explicit live-ops approval steps.',
+  'Do not trigger external app update, laptop worker-node update, restart/switch gateway, dispatch, send sessions, use Waha/social/payment/customer actions, enable new background workers/timers/daemons/cron, or inspect/print secrets.'
 ].join(' ')
 const HERMES_STORAGE_CLEANUP_LANE_REQUEST = [
   'Start a safe Hermes storage cleanup lane for the VPS, with a target of about 50% disk usage when practical.',
@@ -1457,6 +1457,8 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
   const childInstruction = status.child_agent_instruction_preview
   const workerInstruction = status.worker_node_instruction_preview
   const workerPresence = status.worker_node_presence
+  const codexWorkerNodeStatus = status.codex_worker_node_status
+  const runtimeUpdateStatus = status.runtime_update_status
   const childRecord = latestProjectionRecord(status.child_agent_orchestration) as Record<string, unknown> | null
   const workerRecord = latestProjectionRecord(status.worker_node_orchestration) as Record<string, unknown> | null
   const childReportLinkStatus = projectionRecordText(childRecord, 'report_link_status') || 'no report id recorded'
@@ -1520,7 +1522,9 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     ...executionLockReasons('orchestration run graph', orchestrationRunGraph),
     ...executionLockReasons('child instruction', childInstruction),
     ...executionLockReasons('worker handoff', workerInstruction),
-    ...executionLockReasons('worker presence', workerPresence)
+    ...executionLockReasons('worker presence', workerPresence),
+    ...executionLockReasons('Codex worker-node update status', codexWorkerNodeStatus),
+    ...executionLockReasons('runtime update status', runtimeUpdateStatus)
   ])
   return {
     activeLaneCount: status.lane?.active_lane_count ?? 0,
@@ -1769,6 +1773,19 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     resultIngestionWorkerDispatchEnabled: resultIngestionContract?.worker_dispatch_enabled,
     reportReviewedCount: reportLifecycle?.reviewed_report_ids?.length ?? 0,
     reportTerminalCount: reportLifecycle?.terminal_report_ids?.length ?? 0,
+    runtimeUpdateBaselineAppendPolicy: runtimeUpdateStatus?.baseline_append_policy ?? 'No runtime update baseline policy recorded.',
+    runtimeUpdateBaselineAppendRequired: runtimeUpdateStatus?.baseline_append_required,
+    runtimeUpdateBlockedReasons: runtimeUpdateStatus?.blocked_reasons ?? [],
+    runtimeUpdateDashboardNeeded: runtimeUpdateStatus?.dashboard_update_needed,
+    runtimeUpdateExternalAppUpdate: runtimeUpdateStatus?.external_app_update ?? 'manual_external_not_triggered',
+    runtimeUpdateGatewayNeeded: runtimeUpdateStatus?.gateway_update_needed,
+    runtimeUpdateLiveOpsRequired: runtimeUpdateStatus?.live_ops_lane_required,
+    runtimeUpdateOldHermesWorkerNode: runtimeUpdateStatus?.legacy_hermes_worker_node ?? 'deprecated_not_an_executor',
+    runtimeUpdateWouldAppendBaseline: runtimeUpdateStatus?.would_append_baseline,
+    runtimeUpdateWouldRestart: runtimeUpdateStatus?.would_restart,
+    runtimeUpdateWouldSwitchRuntime: runtimeUpdateStatus?.would_switch_runtime,
+    runtimeUpdateWouldUpdateRuntime: runtimeUpdateStatus?.would_update_runtime,
+    runtimeUpdateWorkerDispatch: runtimeUpdateStatus?.worker_node_dispatch,
     stopControlActiveCount: stopControl?.active_stop_count ?? 0,
     stopControlBlocked: stopControl?.blocked,
     stopControlBlockedReasons: stopControl?.blocked_reasons ?? [],
@@ -1809,6 +1826,15 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     toolPermissionWritePaths: toolPermissions?.write_capable_path_ids ?? [],
     workerActiveCount: status.worker_node_orchestration?.active_count ?? 0,
     workerBlockedReasons,
+    codexWorkerNodeDispatchAllowed: codexWorkerNodeStatus?.dispatch_allowed,
+    codexWorkerNodeExternalUpdateTriggered: codexWorkerNodeStatus?.external_update_triggered,
+    codexWorkerNodeHeartbeatStatus: codexWorkerNodeStatus?.heartbeat_status ?? 'unknown',
+    codexWorkerNodeOldHermesStatus: codexWorkerNodeStatus?.old_hermes_worker_node_status ?? 'deprecated_not_an_executor',
+    codexWorkerNodeRegistered: codexWorkerNodeStatus?.registered,
+    codexWorkerNodeState: codexWorkerNodeStatus?.state ?? 'unknown',
+    codexWorkerNodeUpdateLane: codexWorkerNodeStatus?.update_lane ?? 'manual_external_codex_worker_node_update_only',
+    codexWorkerNodeWouldUpdate: codexWorkerNodeStatus?.would_update_worker_node,
+    codexWorkerNodeWorkerDispatch: codexWorkerNodeStatus?.worker_node_dispatch,
     workerCapabilitySummary: workerPresence?.capability_summary ?? '',
     workerContractDispatchEnabled: workerContract?.dispatch_enabled,
     workerContractExecutionEnabled: workerContract?.execution_enabled,
@@ -2542,19 +2568,19 @@ function buildJennyMailboxMessage({
 
 function buildHermesUpdateLanePacket(status: ReturnType<typeof summarizeWorkspaceStatus>): string {
   return [
-    'Hermes update lane request:',
+    'Hermes runtime update lane request:',
     '',
     HERMES_UPDATE_LANE_REQUEST,
     '',
     'Required safe sequence:',
-    '1. Read-only inventory of VPS dashboard/gateway runtime paths/heads and current package versions.',
-    '2. Read-only inventory of the existing VPS-triggered laptop worker-node update path and laptop installed version.',
-    '3. Prepare a non-live VPS dashboard runtime at accepted-live only after source and worker-node target are clear.',
-    '4. Validate markers, record compatibility, dashboard assets, and rollback path before any dashboard-only switch.',
-    '5. Keep gateway update and laptop worker-node update as separate explicit approval steps.',
+    '1. Read-only inventory of VPS dashboard/gateway runtime paths/heads, rollback path, and current package versions.',
+    '2. Read-only inventory of laptop Codex worker-node presence, heartbeat, capabilities, blockers, and any separate external update path.',
+    '3. Prepare non-live VPS dashboard and gateway runtimes at accepted-live only after source and target heads are clear.',
+    '4. Validate markers, record compatibility, dashboard assets, gateway importability, route smokes, and rollback path before any switch.',
+    '5. Switch/restart only through the approved live-ops lane, then smoke dashboard/gateway routes and append exactly one AcceptedBaselineRecord.',
     '',
-    'Allowed: read-only inventory, non-live runtime preparation, tests/checks, report exact next approval.',
-    'Forbidden: laptop worker-node auto-update, gateway restart/switch, dispatch, session sending, Waha/social/payment/customer action, new background worker/timer/daemon/cron, secrets, in-place runtime mutation.',
+    'Allowed: read-only inventory, non-live runtime preparation, tests/checks, exact next approval recommendation.',
+    'Forbidden: external app update, laptop worker-node auto-update, gateway restart/switch, dispatch, session sending, Waha/social/payment/customer action, new background worker/timer/daemon/cron, secrets, in-place runtime mutation.',
     '',
     `Current Mission Control safety status: guard=${status.guard}; dispatch=${yesNo(status.dispatch)}; active_lane_count=${status.activeLaneCount}.`
   ].join('\n')
@@ -3014,7 +3040,7 @@ export function MissionControlView() {
         user_message: HERMES_UPDATE_LANE_REQUEST
       })
       setSnapshot(await loadMissionControlSnapshot())
-      setProjectRoomMessage('Sent safe Hermes update lane to Jenny mailbox. It is append-only and does not update the laptop worker node, switch runtimes, or restart gateway.')
+      setProjectRoomMessage('Sent safe Hermes runtime update lane to Jenny mailbox. It is append-only and does not update the desktop app, update the laptop Codex worker-node, switch runtimes, append a baseline, or restart gateway.')
     } catch (err) {
       setProjectRoomMessage(jennyChatErrorMessage(err))
     } finally {
@@ -4284,9 +4310,9 @@ function ProjectRoomsWorkspace({
             <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h3 className="text-sm font-semibold">Hermes update lane</h3>
+                  <h3 className="text-sm font-semibold">Hermes runtime update lane</h3>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Starts a guarded update checklist for the VPS and laptop Hermes worker node. The bottom-bar desktop app version is separate from accepted-live/dashboard deploys. This queues a bridge request only; no runtime switch, restart, or laptop update happens here.
+                    Starts a guarded dashboard/gateway runtime checklist. The desktop app updater and laptop Codex worker-node update are separate external/manual lanes. This queues a bridge request only; no runtime switch, restart, baseline append, worker dispatch, or external update happens here.
                   </p>
                 </div>
                 <button
@@ -4296,7 +4322,7 @@ function ProjectRoomsWorkspace({
                   title={controlsLocked ? blockedControlMessage : 'Manual only - requires explicit operator action'}
                   type="button"
                 >
-                  {controlsLocked ? 'Hermes update lane locked' : 'Start Hermes update lane'}
+                  {controlsLocked ? 'Runtime update lane locked' : 'Start runtime update lane'}
                 </button>
               </div>
               {controlsLocked ? (
@@ -4886,6 +4912,12 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       />
       <StatusItem label="deployed head" value={status.deployedHead.slice(0, 12)} />
       <StatusItem label="latest merged PR" value={status.latestMergedPr || 'unknown'} />
+      <StatusItem label="runtime update lane" tone="warn" value={`would update ${yesNo(status.runtimeUpdateWouldUpdateRuntime)} / restart ${yesNo(status.runtimeUpdateWouldRestart)} / switch ${yesNo(status.runtimeUpdateWouldSwitchRuntime)}`} />
+      <StatusItem label="runtime baseline append" tone={status.runtimeUpdateBaselineAppendRequired ? 'warn' : 'good'} value={`required after approved success ${yesNo(status.runtimeUpdateBaselineAppendRequired)} / would append ${yesNo(status.runtimeUpdateWouldAppendBaseline)}`} />
+      <StatusItem label="external app update" tone="warn" value={status.runtimeUpdateExternalAppUpdate} />
+      <StatusItem label="Codex worker-node update" tone="warn" value={`${labelText(status.codexWorkerNodeState)} / registered ${yesNo(status.codexWorkerNodeRegistered)} / would update ${yesNo(status.codexWorkerNodeWouldUpdate)}`} />
+      <StatusItem label="Codex worker dispatch" tone={status.codexWorkerNodeWorkerDispatch || status.codexWorkerNodeDispatchAllowed ? 'warn' : 'good'} value={`dispatch ${yesNo(status.codexWorkerNodeWorkerDispatch)} / allowed ${yesNo(status.codexWorkerNodeDispatchAllowed)} / heartbeat ${labelText(status.codexWorkerNodeHeartbeatStatus)}`} />
+      <StatusItem className="md:col-span-2" label="legacy Hermes worker node" tone="warn" value={status.runtimeUpdateOldHermesWorkerNode} />
       <StatusItem label="child-agent status" tone={childLockTone} value={`${status.childActiveCount} active / latest ${labelText(status.childLatestStatus)}`} />
       <StatusItem className="md:col-span-2" label="child-agent objective" value={status.childLatestObjective || status.childLatestAgent} />
       <StatusItem label="child-agent report" tone={childReportTone} value={childReportValue} />
@@ -4899,7 +4931,7 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem className="md:col-span-3" label="worker instruction prompt" tone={workerInstructionTone} value={status.workerInstructionPrompt} />
       <StatusItem className="md:col-span-3" label="worker instruction blockers" tone={status.workerInstructionBlockedReasons.length ? 'warn' : 'good'} value={status.workerInstructionBlockedReasons.length ? status.workerInstructionBlockedReasons.join(', ') : 'none'} />
       <StatusItem className="md:col-span-3" label="worker presence blockers" tone={status.workerPresenceBlockedReasons.length ? 'warn' : 'good'} value={status.workerPresenceBlockedReasons.length ? status.workerPresenceBlockedReasons.join(', ') : 'none'} />
-      <StatusItem className="md:col-span-3" label="desktop app install" tone="warn" value="separate laptop worker-node update; bottom-bar version is not changed by accepted-live/dashboard deploy" />
+      <StatusItem className="md:col-span-3" label="desktop app install" tone="warn" value="separate external desktop app and Codex worker-node update; bottom-bar version is not changed by accepted-live dashboard/gateway runtime updates" />
       <StatusItem className="md:col-span-3" label="next action reasons" tone={status.nextSafeActionReasons.length ? 'warn' : 'good'} value={status.nextSafeActionReasons.length ? status.nextSafeActionReasons.join(', ') : status.nextSafePrimaryReason} />
       <StatusItem className="md:col-span-3" label="operator summary" tone={operatorPacketTone} value={status.operatorPacketSummary} />
       <StatusItem className="md:col-span-3" label="operator blockers" tone={status.operatorPacketBlockedReasons.length ? 'warn' : 'good'} value={status.operatorPacketBlockedReasons.length ? status.operatorPacketBlockedReasons.join(', ') : 'none'} />

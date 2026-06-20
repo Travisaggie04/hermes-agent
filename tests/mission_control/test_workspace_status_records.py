@@ -1815,7 +1815,11 @@ def test_record_sourced_workspace_status_projects_result_ingestion_contract(tmp_
             submitted_by="codex",
             submitted_from="laptop-codex",
             redaction_status="operator_supplied_redacted",
-            metadata={"safety_confirmation": "No live dispatch, deploy, restart, runtime switch, records, or secrets."},
+            metadata={
+                "no_secrets_printed": True,
+                "safety_confirmation": "No live dispatch, deploy, restart, runtime switch, records, or secrets.",
+                "secrets_access_allowed": False,
+            },
         )
     )
     store.append(
@@ -1841,12 +1845,35 @@ def test_record_sourced_workspace_status_projects_result_ingestion_contract(tmp_
                 "SessionCookie": "fake-cookie-for-test",
                 "env.secret": "fake-env-secret-for-test",
                 "raw_log": "forbidden",
+                "secrets_access_allowed": True,
+                "unknown_secret_marker": "fake-unknown-secret-for-test",
                 "token": "placeholder-token",
             },
         )
     )
 
     status = build_workspace_status_from_records(records_path=records_path)
+
+    runtime_update = status["runtime_update_status"]
+    assert runtime_update["source"] == "mission_control_runtime_update_status_v1"
+    assert runtime_update["display_only"] is True
+    assert runtime_update["would_update_runtime"] is False
+    assert runtime_update["would_restart"] is False
+    assert runtime_update["would_switch_runtime"] is False
+    assert runtime_update["would_append_baseline"] is False
+    assert runtime_update["worker_node_dispatch"] is False
+    assert runtime_update["external_app_update_triggered"] is False
+    assert runtime_update["old_hermes_worker_node_deprecated"] is True
+    assert runtime_update["baseline_append_policy"].startswith("exactly one AcceptedBaselineRecord append")
+
+    codex_worker_status = status["codex_worker_node_status"]
+    assert codex_worker_status["source"] == "mission_control_codex_worker_node_status_v1"
+    assert codex_worker_status["display_only"] is True
+    assert codex_worker_status["would_update_worker_node"] is False
+    assert codex_worker_status["worker_node_dispatch"] is False
+    assert codex_worker_status["dispatch_allowed"] is False
+    assert codex_worker_status["external_update_triggered"] is False
+    assert codex_worker_status["old_hermes_worker_node_deprecated"] is True
 
     ingestion = status["result_ingestion_contract"]
     assert ingestion["source"] == "mission_control_result_ingestion_contract_v1"
@@ -1878,8 +1905,10 @@ def test_record_sourced_workspace_status_projects_result_ingestion_contract(tmp_
         "env_secret",
         "openai_api_key",
         "raw_log",
+        "secrets_access_allowed",
         "sessioncookie",
         "token",
+        "unknown_secret_marker",
     ]
     expected_forbidden_reason = (
         "report_id report-unsafe metadata contains forbidden keys: "
@@ -1892,6 +1921,7 @@ def test_record_sourced_workspace_status_projects_result_ingestion_contract(tmp_
     assert items["report-ready"]["ingestion_ready"] is True
     assert items["report-ready"]["linked_record_type"] == "worker_node_run"
     assert items["report-ready"]["safety_confirmation_present"] is True
+    assert items["report-ready"]["forbidden_metadata_keys"] == []
     assert items["report-unsafe"]["ingestion_ready"] is False
     assert items["report-unsafe"]["forbidden_metadata_keys"] == expected_forbidden_keys
     assert "placeholder-token" not in str(ingestion)
@@ -1899,6 +1929,7 @@ def test_record_sourced_workspace_status_projects_result_ingestion_contract(tmp_
     assert "fake-api-key-for-test" not in str(ingestion)
     assert "fake-cookie-for-test" not in str(ingestion)
     assert "fake-env-secret-for-test" not in str(ingestion)
+    assert "fake-unknown-secret-for-test" not in str(ingestion)
 
     next_safe_actions = status["next_safe_actions"]
     action_ids = {action["action_id"] for action in next_safe_actions["actions"]}

@@ -73,7 +73,7 @@ export const en: Translations = {
     backendOutOfDateTitle: 'Backend out of date',
     backendOutOfDateMessage:
       'Your Hermes backend is older than this desktop build and may not work correctly. Update to align them.',
-    updateHermes: 'Update Hermes',
+    updateHermes: 'Open updater',
     updateReadyTitle: 'Update ready',
     updateReadyMessage: count => `${count} new change${count === 1 ? '' : 's'} available.`,
     seeWhatsNew: "See what's new",
@@ -272,7 +272,7 @@ export const en: Translations = {
     },
     sectionEntries: {
       sessions: { title: 'Sessions panel', detail: 'Search, pin, and manage sessions' },
-      system: { title: 'System panel', detail: 'Gateway status, logs, restart/update' },
+      system: { title: 'System panel', detail: 'Gateway status, logs, external restart/update' },
       usage: { title: 'Usage panel', detail: 'Token, cost, and skill activity' }
     },
     providerNavigate: 'Navigate',
@@ -288,8 +288,8 @@ export const en: Translations = {
     gatewayRunning: 'Messaging gateway running',
     gatewayStopped: 'Messaging gateway stopped',
     hermesActiveSessions: (version, count) => `Hermes ${version} · Active sessions ${count}`,
-    restartMessaging: 'Restart messaging',
-    updateHermes: 'Update Hermes',
+    restartMessaging: 'Restart gateway (external)',
+    updateHermes: 'Backend self-update (external)',
     actionRunning: 'running',
     actionDone: 'done',
     actionFailed: 'failed',

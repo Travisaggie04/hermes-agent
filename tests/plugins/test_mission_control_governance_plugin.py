@@ -5072,6 +5072,17 @@ def test_workspace_status_preview_is_caller_supplied_and_stores_nothing(plugin_a
     assert "PR merge" in hard_boundary["separate_approval_actions"]
     assert payload["next_safe_actions"]["source"] == "mission_control_next_safe_actions_v1"
     assert payload["orchestration_readiness"]["source"] == "mission_control_orchestration_readiness_v1"
+    assert payload["runtime_update_status"]["source"] == "mission_control_runtime_update_status_v1"
+    assert payload["runtime_update_status"]["display_only"] is True
+    assert payload["runtime_update_status"]["would_update_runtime"] is False
+    assert payload["runtime_update_status"]["would_restart"] is False
+    assert payload["runtime_update_status"]["worker_node_dispatch"] is False
+    assert payload["runtime_update_status"]["external_app_update_triggered"] is False
+    assert payload["codex_worker_node_status"]["source"] == "mission_control_codex_worker_node_status_v1"
+    assert payload["codex_worker_node_status"]["display_only"] is True
+    assert payload["codex_worker_node_status"]["would_update_worker_node"] is False
+    assert payload["codex_worker_node_status"]["worker_node_dispatch"] is False
+    assert payload["codex_worker_node_status"]["dispatch_allowed"] is False
     assert payload["operator_decision_packet"]["source"] == "mission_control_operator_decision_packet_v1"
     assert payload["operator_decision_packet"]["execution_ready"] is False
     assert payload["operator_decision_packet"]["approval_required"] is True

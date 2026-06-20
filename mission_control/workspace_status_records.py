@@ -100,6 +100,10 @@ RESULT_INGESTION_FORBIDDEN_METADATA_KEY_MARKERS = (
     "secret",
     "token",
 )
+RESULT_INGESTION_SAFE_BOOLEAN_METADATA_KEYS = {
+    "no_secrets_printed": True,
+    "secrets_access_allowed": False,
+}
 MUTATION_LANE_TYPES = {
     "implementation",
     "pr_creation",
@@ -492,6 +496,8 @@ def decorate_workspace_status_operator_projections(status: dict[str, Any]) -> di
     status["hard_boundary_contract"] = _hard_boundary_contract_payload(status)
     status["next_safe_actions"] = _next_safe_actions_payload(status)
     status["orchestration_readiness"] = _orchestration_readiness_payload(status)
+    status["codex_worker_node_status"] = _codex_worker_node_status_payload(status)
+    status["runtime_update_status"] = _runtime_update_status_payload(status)
     status["child_agent_instruction_preview"] = _child_agent_instruction_preview(status)
     status["worker_node_instruction_preview"] = _worker_node_instruction_preview(status)
     status["operator_decision_packet"] = _operator_decision_packet_payload(status)
@@ -1996,13 +2002,34 @@ def _result_ingestion_contract_payload(
 
 def _result_ingestion_forbidden_metadata_keys(metadata: dict[str, Any]) -> list[str]:
     keys: list[str] = []
-    for key in metadata:
+    for key, value in metadata.items():
         normalized = _normalized_metadata_key(key)
+        if _result_ingestion_safe_metadata_key(normalized, value):
+            continue
         if normalized in RESULT_INGESTION_FORBIDDEN_METADATA_KEYS or any(
             marker in normalized for marker in RESULT_INGESTION_FORBIDDEN_METADATA_KEY_MARKERS
         ):
             keys.append(normalized)
     return sorted(set(keys))
+
+
+def _result_ingestion_safe_metadata_key(normalized: str, value: Any) -> bool:
+    if normalized not in RESULT_INGESTION_SAFE_BOOLEAN_METADATA_KEYS:
+        return False
+    parsed = _metadata_bool(value)
+    return parsed is RESULT_INGESTION_SAFE_BOOLEAN_METADATA_KEYS[normalized]
+
+
+def _metadata_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off"}:
+            return False
+    return None
 
 
 def _normalized_metadata_key(value: Any) -> str:
@@ -2706,6 +2733,142 @@ def _worker_node_presence_payload(
         "capability_summary": _safe_text(worker_payload.get("capability_summary"), max_chars=800),
         "active_worker_node_run_count": len(active_worker_runs),
         "recorded_worker_node_run_count": len(worker_runs),
+    }
+
+
+def _codex_worker_node_status_payload(status: dict[str, Any]) -> dict[str, Any]:
+    presence = _mapping(status.get("worker_node_presence"))
+    orchestration = _mapping(status.get("worker_node_orchestration"))
+    readiness = _mapping(_mapping(status.get("orchestration_readiness")).get("laptop_codex_worker_node"))
+    recorded_count = _safe_int(presence.get("recorded_worker_node_run_count"))
+    active_count = _safe_int(presence.get("active_worker_node_run_count"))
+    worker_run_id = _safe_text(presence.get("worker_run_id"))
+    registered = recorded_count > 0 or bool(worker_run_id)
+    online = presence.get("online") is True
+    blockers = _unique_reasons(
+        [
+            *_text_list(presence.get("blocked_reasons")),
+            *_text_list(orchestration.get("blocked_reasons")),
+            *_text_list(readiness.get("blocked_reasons")),
+        ]
+    )
+    if not registered:
+        state = "missing"
+    elif not online:
+        state = "offline"
+    elif blockers:
+        state = "blocked"
+    else:
+        state = "registered_online_preview_only"
+
+    return {
+        **INERT_PROJECTION_FLAGS,
+        "source": "mission_control_codex_worker_node_status_v1",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "would_dispatch": False,
+        "would_session_send": False,
+        "would_update_worker_node": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "worker_node_dispatch": False,
+        "stored": False,
+        "dry_run_only": True,
+        "manual_handoff_only": True,
+        "state": state,
+        "registered": registered,
+        "online": online,
+        "active_worker_node_run_count": active_count,
+        "recorded_worker_node_run_count": recorded_count,
+        "worker_run_id": worker_run_id,
+        "worker_identity": _safe_text(presence.get("worker_identity")) or "codex",
+        "worker_host_label": _safe_text(presence.get("worker_host_label")) or "laptop-codex",
+        "worker_kind": _safe_text(presence.get("worker_kind")) or "laptop_codex",
+        "presence_state": _safe_text(presence.get("presence_state")) or "unknown",
+        "last_seen_at": _safe_text(presence.get("last_seen_at")),
+        "heartbeat_status": "fresh" if online else _safe_text(presence.get("presence_state")) or "unknown",
+        "capability_summary": _safe_text(presence.get("capability_summary"), max_chars=800),
+        "dispatch_allowed": False,
+        "dispatch_blocked_until": "separate explicit operator approval and a fresh worker-node readiness record",
+        "update_lane": "manual_external_codex_worker_node_update_only",
+        "external_update_triggered": False,
+        "old_hermes_worker_node_deprecated": True,
+        "old_hermes_worker_node_status": "deprecated_not_an_executor",
+        "blocked": True,
+        "blocked_reasons": _unique_reasons(
+            blockers
+            + [
+                "Codex worker-node dispatch is separate from runtime updates and remains disabled",
+                "legacy laptop Hermes worker-node updates are deprecated and not an executor path",
+            ]
+        ),
+    }
+
+
+def _runtime_update_status_payload(status: dict[str, Any]) -> dict[str, Any]:
+    runtime = _mapping(status.get("runtime_provenance"))
+    deployment = _mapping(status.get("deployment_gap"))
+    accepted_baseline = _mapping(status.get("accepted_baseline"))
+    worker_status = _mapping(status.get("codex_worker_node_status"))
+    accepted_head = _safe_text(
+        deployment.get("accepted_live_head")
+        or runtime.get("accepted_baseline_head")
+        or accepted_baseline.get("head")
+    )
+    dashboard_head = _safe_text(runtime.get("dashboard_head"))
+    gateway_head = _safe_text(runtime.get("gateway_head"))
+    dashboard_head_gap = bool(accepted_head and dashboard_head and dashboard_head != accepted_head)
+    gateway_update_needed = bool(accepted_head and gateway_head and gateway_head != accepted_head)
+    dashboard_update_needed = deployment.get("dashboard_deploy_needed") is True or dashboard_head_gap
+    baseline_append_required = dashboard_update_needed or gateway_update_needed
+
+    return {
+        **INERT_PROJECTION_FLAGS,
+        "source": "mission_control_runtime_update_status_v1",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "would_dispatch": False,
+        "would_session_send": False,
+        "would_update_runtime": False,
+        "would_restart": False,
+        "would_switch_runtime": False,
+        "would_append_baseline": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "worker_node_dispatch": False,
+        "stored": False,
+        "dry_run_only": True,
+        "manual_review_only": True,
+        "live_ops_lane_required": True,
+        "serial_live_update_required": True,
+        "accepted_live_head": accepted_head,
+        "dashboard_head": dashboard_head,
+        "gateway_head": gateway_head,
+        "dashboard_update_needed": dashboard_update_needed,
+        "gateway_update_needed": gateway_update_needed,
+        "baseline_append_required": baseline_append_required,
+        "baseline_append_policy": "exactly one AcceptedBaselineRecord append after a separately approved successful dashboard/gateway live update",
+        "codex_worker_node_status": _safe_text(worker_status.get("state")) or "unknown",
+        "codex_worker_node_dispatch": False,
+        "external_app_update": "manual_external_not_triggered",
+        "external_app_update_triggered": False,
+        "legacy_hermes_worker_node": "deprecated_not_an_executor",
+        "old_hermes_worker_node_deprecated": True,
+        "blocked": True,
+        "blocked_reasons": _unique_reasons(
+            [
+                "runtime update requires a separate explicit live-ops approval",
+                "dashboard runtime update, gateway runtime update, and desktop app update are separate lanes",
+                "baseline append is allowed only after successful approved dashboard/gateway live update",
+                "Codex worker-node dispatch remains disabled and separate from runtime update",
+            ]
+        ),
     }
 
 
