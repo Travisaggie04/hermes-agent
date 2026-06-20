@@ -365,6 +365,11 @@ def test_live_bridge_flags_override_read_only_safe_claim():
         "would_execute": True,
         "model_routing_enabled": True,
         "discord_automation_enabled": True,
+        "waha_enabled": True,
+        "social_enabled": True,
+        "payment_enabled": True,
+        "queue_mutation_enabled": True,
+        "workers_enabled": True,
     }
     bridge = classify_bridge_permissions(bridge_state)
     result = evaluate_read_only_autonomy_eligibility(
@@ -378,9 +383,19 @@ def test_live_bridge_flags_override_read_only_safe_claim():
     assert bridge["would_execute"] is False
     assert bridge["model_routing_enabled"] is False
     assert bridge["discord_automation_enabled"] is False
+    assert bridge["waha_enabled"] is False
+    assert bridge["social_enabled"] is False
+    assert bridge["payment_enabled"] is False
+    assert bridge["queue_mutation_enabled"] is False
+    assert bridge["workers_enabled"] is False
     assert any("would_execute must remain false in previews" in reason for reason in bridge["reasons"])
     assert any("model_routing_enabled must remain false" in reason for reason in bridge["reasons"])
     assert any("discord_automation_enabled must remain false" in reason for reason in bridge["reasons"])
+    assert any("waha_enabled must remain false" in reason for reason in bridge["reasons"])
+    assert any("social_enabled must remain false" in reason for reason in bridge["reasons"])
+    assert any("payment_enabled must remain false" in reason for reason in bridge["reasons"])
+    assert any("queue_mutation_enabled must remain false" in reason for reason in bridge["reasons"])
+    assert any("workers_enabled must remain false" in reason for reason in bridge["reasons"])
     assert result["eligible"] is False
     assert "bridge path is not read-only safe" in result["blocked_reasons"]
     assert any(reason.startswith("bridge: bridge live execution flags must be disabled") for reason in result["blocked_reasons"])
@@ -895,6 +910,28 @@ def test_permission_classifiers_treat_stringy_live_flags_as_unsafe():
     assert permissions["dispatch_enabled"] is False
     assert permissions["session_send_enabled"] is False
     assert permissions["worker_dispatch_enabled"] is False
+
+
+def test_control_path_blocks_top_level_platform_live_flag_aliases():
+    permissions = classify_control_path_permissions(
+        {
+            "path_id": "platform-live-path",
+            "read_only_safe": True,
+            "waha_enabled": "yes",
+            "social_enabled": True,
+            "payment_enabled": True,
+            "queue_mutation_enabled": "on",
+            "workers_enabled": 1,
+        }
+    )
+
+    _assert_inert_preview(permissions)
+    assert permissions["permission_classification"] == "write_capable_not_safe_for_autonomy"
+    assert permissions["read_only_safe"] is False
+    assert permissions["write_capable_path_ids"] == ["platform-live-path"]
+    assert "platform-live-path" in permissions["blocked_reasons"][0]
+    for marker in ("waha enabled", "social enabled", "payment enabled", "queue mutation enabled", "workers enabled"):
+        assert marker in permissions["paths"][0]["write_capability_markers"]
 
 
 def test_worker_node_execution_packet_preview_wraps_scoped_pr_without_dispatch():
