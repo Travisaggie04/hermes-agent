@@ -112,6 +112,13 @@ MUTATION_LANE_TYPES = {
     "queue_mutation",
     "worker_timer_enablement",
 }
+READ_ONLY_PREVIEW_LANE_TYPES = {"read_only_lane", "read_only_design", "read_only_inspection"}
+READ_ONLY_PREVIEW_REPORT_KINDS = {
+    "preview_readiness",
+    "read_only_preview_contract",
+    "supervised_read_only_preview_readiness",
+}
+READ_ONLY_PREVIEW_READY_STATUSES = {"accepted", "reviewed"}
 LIVE_EXECUTION_FLAG_NAMES = (
     "would_execute",
     "would_dispatch",
@@ -252,6 +259,7 @@ def build_workspace_status_from_records(
     if latest_handoff:
         status_input["latest_handoff"] = latest_handoff
 
+    reports_by_id, reports_by_run_id = _report_lookup_maps(recent_reports)
     active_runs = tuple(record for record in recent_runs if record.status in ACTIVE_RUN_STATUSES)
     active_mutation_runs = tuple(
         record
@@ -264,7 +272,49 @@ def build_workspace_status_from_records(
         if latest_active_run is not None
         else None
     )
+    latest_read_only_preview_run = (
+        latest_active_run
+        if latest_active_run is not None and _is_read_only_preview_run(latest_active_run)
+        else None
+    )
+    read_only_preview_report = _read_only_preview_report_for_run(
+        latest_read_only_preview_run,
+        reports_by_id=reports_by_id,
+        reports_by_run_id=reports_by_run_id,
+    )
+    read_only_preview_report_ready = _read_only_preview_report_ready(read_only_preview_report)
     if active_runs:
+        base_autonomy_input = (
+            status_input.get("autonomy_eligibility")
+            if isinstance(status_input.get("autonomy_eligibility"), dict)
+            else {}
+        )
+        report_for_eligibility = (
+            read_only_preview_report.to_dict()
+            if latest_read_only_preview_run is not None and read_only_preview_report is not None
+            else recent_reports[-1].to_dict()
+            if recent_reports
+            else {}
+        )
+        autonomy_eligibility_input = {
+            "approval": latest_approval.to_dict() if latest_approval else {},
+            "run": latest_active_run.to_dict(),
+            "report_inbox_ready": (
+                read_only_preview_report_ready
+                if latest_read_only_preview_run is not None
+                else store_status == "ok"
+            ),
+            "report_record_ready": read_only_preview_report_ready,
+            "report": report_for_eligibility,
+            "active_mutation_lane_count": len(active_mutation_runs),
+        }
+        if latest_read_only_preview_run is not None:
+            if not isinstance(base_autonomy_input.get("bridge"), dict):
+                autonomy_eligibility_input["bridge"] = _read_only_preview_bridge_profile()
+            if not isinstance(base_autonomy_input.get("tool_permissions"), (dict, list)):
+                autonomy_eligibility_input["tool_permissions"] = _read_only_preview_tool_profile()
+            if not isinstance(status_input.get("tool_permissions"), (dict, list)):
+                status_input["tool_permissions"] = _read_only_preview_tool_profile()
         status_input["lane"] = _merge_status_input(
             status_input.get("lane") if isinstance(status_input.get("lane"), dict) else {},
             {
@@ -277,14 +327,8 @@ def build_workspace_status_from_records(
             },
         )
         status_input["autonomy_eligibility"] = _merge_status_input(
-            status_input.get("autonomy_eligibility") if isinstance(status_input.get("autonomy_eligibility"), dict) else {},
-            {
-                "approval": latest_approval.to_dict() if latest_approval else {},
-                "run": latest_active_run.to_dict(),
-                "report_inbox_ready": store_status == "ok",
-                "report": recent_reports[-1].to_dict() if recent_reports else {},
-                "active_mutation_lane_count": len(active_mutation_runs),
-            },
+            base_autonomy_input,
+            autonomy_eligibility_input,
         )
     status_input["activity"] = _merge_status_input(
         status_input.get("activity") if isinstance(status_input.get("activity"), dict) else {},
@@ -299,7 +343,6 @@ def build_workspace_status_from_records(
 
     active_child_runs = tuple(record for record in recent_child_runs if record.status in ACTIVE_ORCHESTRATION_STATUSES)
     active_worker_runs = tuple(record for record in recent_worker_runs if record.status in ACTIVE_ORCHESTRATION_STATUSES)
-    reports_by_id, reports_by_run_id = _report_lookup_maps(recent_reports)
     status_input["execution_mode_classification"] = _record_execution_mode_classification_input(
         latest_active_run=latest_active_run,
         latest_approval=latest_approval,
@@ -313,6 +356,10 @@ def build_workspace_status_from_records(
     )
 
     status = build_workspace_status(status_input)
+    status["read_only_preview_report_contract"] = _read_only_preview_report_contract_payload(
+        latest_active_run=latest_read_only_preview_run,
+        report=read_only_preview_report,
+    )
     status["child_agent_orchestration"] = _orchestration_projection(
         records=recent_child_runs,
         active_records=active_child_runs,
@@ -448,6 +495,130 @@ def _latest_matching_approval(records: tuple[ApprovalRecord, ...], approval_id: 
         if record.approval_id == approval_id:
             return record
     return None
+
+
+def _is_read_only_preview_run(run: RunRecord) -> bool:
+    lane_type = _safe_text(run.lane_type)
+    return lane_type in READ_ONLY_PREVIEW_LANE_TYPES or lane_type.startswith("read_only")
+
+
+def _read_only_preview_bridge_profile() -> dict[str, Any]:
+    return {
+        "manual_copy_only": True,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "dispatch_in_gateway": False,
+        "session_send_enabled": False,
+        "send_to_jenny_enabled": False,
+        "worker_dispatch_enabled": False,
+        "append_records": False,
+        "stored": False,
+    }
+
+
+def _read_only_preview_tool_profile() -> dict[str, Any]:
+    return {
+        "paths": [
+            {
+                "path_id": "supervised_read_only_preview_packet",
+                "label": "Supervised read-only preview packet",
+                "read_only_safe": True,
+                "tools": [
+                    "read_workspace_status",
+                    "read_record_summary",
+                    "render_preview_packet",
+                ],
+            }
+        ]
+    }
+
+
+def _read_only_preview_report_for_run(
+    run: RunRecord | None,
+    *,
+    reports_by_id: dict[str, ReportRecord],
+    reports_by_run_id: dict[str, ReportRecord],
+) -> ReportRecord | None:
+    if run is None:
+        return None
+    for report_id in reversed(run.report_ids):
+        report = reports_by_id.get(report_id)
+        if report is not None and _is_read_only_preview_report(report):
+            return report
+    report = reports_by_run_id.get(run.run_id)
+    if report is not None and _is_read_only_preview_report(report):
+        return report
+    return None
+
+
+def _is_read_only_preview_report(report: ReportRecord) -> bool:
+    return _safe_text(report.report_kind) in READ_ONLY_PREVIEW_REPORT_KINDS
+
+
+def _read_only_preview_report_ready(report: ReportRecord | None) -> bool:
+    return not _read_only_preview_report_blockers(report=report)
+
+
+def _read_only_preview_report_blockers(*, report: ReportRecord | None) -> list[str]:
+    if report is None:
+        return ["preview readiness ReportRecord is required"]
+
+    blocked: list[str] = []
+    status = _safe_text(report.status)
+    metadata = report.metadata if isinstance(report.metadata, dict) else {}
+    if not _is_read_only_preview_report(report):
+        blocked.append("ReportRecord report_kind must be preview readiness only")
+    if status not in READ_ONLY_PREVIEW_READY_STATUSES:
+        blocked.append("ReportRecord status must be reviewed or accepted for preview readiness")
+    missing_contract_fields = _report_contract_missing_fields(report)
+    if missing_contract_fields:
+        blocked.append("ReportRecord contract is missing: " + ", ".join(missing_contract_fields))
+    if _flag_enabled(metadata.get("jenny_executed")):
+        blocked.append("ReportRecord must not claim Jenny executed")
+    if _flag_enabled(metadata.get("execution_ready")) or _flag_enabled(metadata.get("execution_enabled")):
+        blocked.append("ReportRecord must not mark execution ready")
+    if _flag_enabled(metadata.get("no_jenny_execution")) is not True:
+        blocked.append("ReportRecord must explicitly state no Jenny execution occurred")
+    for flag in _enabled_live_flag_names(report.to_dict(), metadata):
+        blocked.append(f"ReportRecord {flag} must remain disabled")
+    return _unique_reasons(blocked)
+
+
+def _read_only_preview_report_contract_payload(
+    *,
+    latest_active_run: RunRecord | None,
+    report: ReportRecord | None,
+) -> dict[str, Any]:
+    blocked_reasons: list[str] = []
+    if latest_active_run is None:
+        blocked_reasons.append("active read-only preview RunRecord is required")
+    blocked_reasons.extend(_read_only_preview_report_blockers(report=report))
+    unique_blocked_reasons = _unique_reasons(blocked_reasons)
+    report_payload = report.to_dict() if report is not None else {}
+    return {
+        **INERT_PROJECTION_FLAGS,
+        "source": "mission_control_read_only_preview_report_contract_v1",
+        "display_only": True,
+        "trusted_for_execution": False,
+        "would_execute": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "stored": False,
+        "dry_run_only": True,
+        "ready": not unique_blocked_reasons,
+        "blocked": bool(unique_blocked_reasons),
+        "blocked_reasons": unique_blocked_reasons,
+        "run_id": latest_active_run.run_id if latest_active_run is not None else "",
+        "report_id": _safe_text(report_payload.get("report_id")),
+        "report_kind": _safe_text(report_payload.get("report_kind")),
+        "report_status": _safe_text(report_payload.get("status")),
+        "report_received": report is not None,
+        "report_contract_ready": not _read_only_preview_report_blockers(report=report),
+        "preview_readiness_only": True,
+        "no_jenny_execution": True,
+    }
 
 
 def _record_execution_mode_classification_input(

@@ -86,12 +86,12 @@ def test_record_sourced_workspace_status_defaults_to_idle_and_dispatch_false():
     assert status["activity"]["active_runs"] == 0
     warnings = set(status["stale_context"]["warnings"])
     assert status["runtime_provenance"]["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
-    assert status["runtime_provenance"]["primary_status"] == "MISSING_RUNTIME_PATH"
+    assert status["runtime_provenance"]["primary_status"] == "UNRECORDED_RUNTIME"
     assert status["runtime_provenance"]["autonomy_blocked"] is True
     assert status["read_only_autonomy_eligibility"]["eligible"] is False
-    assert "MISSING_RUNTIME_PATH" in warnings
-    assert "dashboard runtime path is missing or absent" in warnings
-    assert "gateway runtime path is missing or absent" in warnings
+    assert "UNRECORDED_RUNTIME" in warnings
+    assert "dashboard runtime facts are unrecorded" in warnings
+    assert "gateway runtime facts are unrecorded" in warnings
     assert "source HEAD is missing" in warnings
     assert "runtime provenance is not clean" in warnings
 

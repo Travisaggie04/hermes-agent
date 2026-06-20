@@ -647,6 +647,37 @@ def test_read_only_eligibility_blocks_write_capable_tool_permissions():
     assert result["tool_permissions"]["permission_classification"] == "write_capable_not_safe_for_autonomy"
 
 
+def test_read_only_eligibility_accepts_inert_preview_packet_tool_permissions():
+    result = evaluate_read_only_autonomy_eligibility(
+        _eligible_preview_payload(
+            bridge={"manual_copy_only": True},
+            tool_permissions={
+                "paths": [
+                    {
+                        "path_id": "supervised_read_only_preview_packet",
+                        "label": "Supervised read-only preview packet",
+                        "read_only_safe": True,
+                        "tools": [
+                            "read_workspace_status",
+                            "read_record_summary",
+                            "render_preview_packet",
+                        ],
+                    }
+                ]
+            },
+        )
+    )
+
+    _assert_inert_preview(result)
+    _assert_inert_preview(result["tool_permissions"])
+    assert result["eligible"] is True
+    assert result["execution_ready"] is False
+    assert result["bridge_permissions"]["permission_classification"] == "manual_only"
+    assert result["tool_permissions"]["permission_classification"] == "read_only_safe"
+    assert result["tool_permissions"]["read_only_safe"] is True
+    assert result["blocked_reasons"] == []
+
+
 def test_eligibility_blocks_protected_capability_aliases():
     read_only = evaluate_read_only_autonomy_eligibility(
         _eligible_preview_payload(

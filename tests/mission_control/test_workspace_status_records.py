@@ -86,6 +86,30 @@ def _assert_execution_disabled(payload: dict[str, object]) -> None:
             assert payload[key] is False
 
 
+def _forbidden_actions() -> tuple[str, ...]:
+    return (
+        "file write",
+        "patch",
+        "shell",
+        "commit",
+        "PR creation",
+        "merge",
+        "deploy",
+        "restart",
+        "runtime switch",
+        "Waha",
+        "social",
+        "payment",
+        "model routing",
+        "queue mutation",
+        "worker dispatch",
+        "timer",
+        "daemon",
+        "dispatch",
+        "session-send",
+    )
+
+
 def test_record_sourced_workspace_status_uses_latest_baseline_and_idle_when_no_runs(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"
     store = JsonlRecordStore(records_path)
@@ -121,6 +145,7 @@ def test_record_sourced_workspace_status_uses_latest_baseline_and_idle_when_no_r
     assert status["activity"]["active_runs"] == 0
     assert status["control_plane_records"]["active_run_count"] == 0
     assert status["record_store"]["status"] == "ok"
+    assert status["tool_permission_classification"]["permission_classification"] == "write_capable_not_safe_for_autonomy"
     assert "accepted_baseline_source_missing" not in status["stale_context"]["warnings"]
     _assert_inert_projection(status["control_plane_lifecycle"])
     hard_boundary = status["hard_boundary_contract"]
@@ -190,6 +215,166 @@ def test_record_sourced_workspace_status_treats_previous_rollback_as_available(t
     assert "rollback runtime is stale relative to source HEAD" not in status["stale_context"]["warnings"]
     _assert_execution_disabled(provenance)
     _assert_execution_disabled(status["read_only_autonomy_eligibility"])
+
+
+def test_record_sourced_read_only_preview_records_make_supervised_preview_ready(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    approval_id = "approval-read-only-preview"
+    run_id = "run-read-only-preview"
+    report_id = "report-read-only-preview-contract"
+    store.append(_reconciled_baseline_record())
+    store.append(
+        ApprovalRecord(
+            approval_id=approval_id,
+            project_id="project-hermes-mission-control",
+            run_id=run_id,
+            action_class="read_only_inspection",
+            approval_scope=f"project-hermes-mission-control:supervised-read-only-preview:{HEAD}",
+            approved_actions=("render supervised read-only preview packet",),
+            forbidden_actions=_forbidden_actions(),
+            status="approved",
+            approval_mode="one_time",
+            approved_by="operator",
+            approval_source="manual",
+            approved_at="2026-06-19T00:00:00Z",
+            expires_at="2099-01-01T00:00:00Z",
+            baseline_runtime_path="/runtime/accepted",
+            baseline_head=HEAD,
+        )
+    )
+    store.append(
+        RunRecord(
+            run_id=run_id,
+            project_id="project-hermes-mission-control",
+            approval_id=approval_id,
+            lane_type="read_only_inspection",
+            title="Supervised read-only preview readiness",
+            objective="Build an inert preview-readiness packet without executing Jenny.",
+            status="requested",
+            execution_mode="manual_copy",
+            allowed_actions=("render supervised read-only preview packet",),
+            forbidden_actions=_forbidden_actions(),
+            baseline_runtime_path="/runtime/accepted",
+            baseline_head=HEAD,
+            runtime_guard_state="CLEAN_AND_ALIGNED",
+            dispatch_state=False,
+            safety_gate_status="preview_ready",
+            report_ids=(report_id,),
+            metadata={
+                "would_execute": False,
+                "execution_enabled": False,
+                "dispatch_enabled": False,
+                "session_send_enabled": False,
+                "worker_dispatch_enabled": False,
+            },
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id=report_id,
+            run_id=run_id,
+            approval_id=approval_id,
+            project_id="project-hermes-mission-control",
+            status="reviewed",
+            report_kind="read_only_preview_contract",
+            summary="Preview readiness contract is present for supervised read-only autonomy.",
+            result="Readiness contract only; no Jenny execution occurred.",
+            risks=("Execution remains disabled and a later explicit lane is required before any run.",),
+            tests=("record-sourced workspace status preview-readiness projection",),
+            next_recommended_lane="Stop before execution and request explicit approval for any Jenny run.",
+            evidence_refs=("accepted baseline accepted-current", f"runtime head {HEAD}"),
+            submitted_by="operator",
+            submitted_from="manual-record-only-preview",
+            reviewed_at="2026-06-19T00:01:00Z",
+            reviewed_by="operator",
+            metadata={
+                "safety_confirmation": "No Jenny execution, dispatch, session-send, worker dispatch, or mutation occurred.",
+                "no_jenny_execution": True,
+                "would_execute": False,
+                "execution_enabled": False,
+                "dispatch_enabled": False,
+                "session_send_enabled": False,
+                "worker_dispatch_enabled": False,
+            },
+        )
+    )
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    assert status["runtime_provenance"]["primary_status"] == "CLEAN_AND_ALIGNED"
+    assert status["tool_permission_classification"]["permission_classification"] == "read_only_safe"
+    assert status["tool_permission_classification"]["read_only_safe"] is True
+    assert status["read_only_preview_report_contract"]["ready"] is True
+    read_only = status["read_only_autonomy_eligibility"]
+    assert read_only["eligible"] is True
+    assert read_only["execution_ready"] is False
+    assert read_only["bridge_permissions"]["permission_classification"] == "manual_only"
+    assert read_only["tool_permissions"]["permission_classification"] == "read_only_safe"
+    assert "bridge path is manual-only; preview must not execute" in read_only["warnings"]
+    readiness = status["orchestration_readiness"]
+    assert readiness["states"]["supervised_read_only_autonomy"] == "preview_ready"
+    assert readiness["supervised_read_only_autonomy"]["execution_ready"] is False
+    assert readiness["states"]["scoped_pr_creation"] == "blocked"
+    assert readiness["states"]["laptop_codex_worker_node"] == "blocked"
+    assert status["scoped_pr_lane_eligibility"]["eligible"] is False
+    for projection in (
+        status,
+        status["read_only_autonomy_eligibility"],
+        status["tool_permission_classification"],
+        status["execution_packet_preview"],
+        status["read_only_preview_report_contract"],
+    ):
+        _assert_execution_disabled(projection)
+
+
+def test_record_sourced_read_only_preview_requires_explicit_report_contract(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    approval_id = "approval-read-only-preview"
+    store.append(_reconciled_baseline_record())
+    store.append(
+        ApprovalRecord(
+            approval_id=approval_id,
+            project_id="project-hermes-mission-control",
+            action_class="read_only_inspection",
+            approval_scope=f"project-hermes-mission-control:supervised-read-only-preview:{HEAD}",
+            approved_actions=("render supervised read-only preview packet",),
+            forbidden_actions=_forbidden_actions(),
+            status="approved",
+            approval_mode="one_time",
+            expires_at="2099-01-01T00:00:00Z",
+            baseline_runtime_path="/runtime/accepted",
+            baseline_head=HEAD,
+        )
+    )
+    store.append(
+        RunRecord(
+            run_id="run-read-only-preview",
+            project_id="project-hermes-mission-control",
+            approval_id=approval_id,
+            lane_type="read_only_inspection",
+            status="requested",
+            execution_mode="manual_copy",
+            allowed_actions=("render supervised read-only preview packet",),
+            forbidden_actions=_forbidden_actions(),
+            baseline_runtime_path="/runtime/accepted",
+            baseline_head=HEAD,
+            dispatch_state=False,
+        )
+    )
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    assert status["tool_permission_classification"]["permission_classification"] == "read_only_safe"
+    assert status["read_only_preview_report_contract"]["ready"] is False
+    assert "preview readiness ReportRecord is required" in status["read_only_preview_report_contract"]["blocked_reasons"]
+    read_only = status["read_only_autonomy_eligibility"]
+    assert read_only["eligible"] is False
+    assert "report inbox must be ready" in read_only["blocked_reasons"]
+    assert read_only["tool_permissions"]["permission_classification"] == "read_only_safe"
+    assert status["orchestration_readiness"]["states"]["supervised_read_only_autonomy"] == "blocked"
+    _assert_execution_disabled(read_only)
 
 
 def test_legacy_baseline_without_service_runtime_facts_is_unrecorded(tmp_path):
