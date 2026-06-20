@@ -5,11 +5,12 @@ the legacy laptop Hermes worker node, and Jenny's VPS runtimes. It does not
 approve an update, deploy, restart, runtime switch, laptop worker-node trigger,
 record mutation, dispatch/session-send, Waha action, or gateway change.
 
-Update 2026-06-17: the Jenny OS architecture now treats the laptop Hermes
-worker-node path as legacy. The intended laptop worker is Codex, used
-opportunistically when the laptop is online. Keep normal Hermes Desktop
-available, but do not re-enable the separate laptop Hermes worker-node
-autostart unless a future lane explicitly chooses that architecture again.
+Update 2026-06-20: the Mission Control update contract distinguishes three
+separate lanes: VPS dashboard/gateway runtime updates, external desktop app
+self-updates, and laptop Codex worker-node readiness/update posture. The
+legacy laptop Hermes worker-node path is deprecated and is not an executor
+path. Codex worker-node dispatch remains disabled unless a separate explicit
+operator approval and fresh readiness record enable a manual handoff.
 
 ## Local Accepted-Live Checkout
 
@@ -54,13 +55,13 @@ restart or switch either service.
 
 - The desktop footer showing `v0.16.0` is consistent with the CLI/runtime
   package version, not necessarily the Electron desktop package version.
-- A current accepted-live branch or dashboard-only deploy does not update the
-  native laptop desktop app shown in the footer. That footer belongs to the
-  installed laptop app / worker-node path and must be updated through the
-  separate VPS-triggered worker-node update lane.
-- The laptop worker-node updater may be using an installer/update channel that
-  is separate from GitHub Releases. That channel still needs to be identified
-  before changing laptop or VPS versions.
+- A current accepted-live branch or dashboard/gateway live runtime update does
+  not update the native laptop desktop app shown in the footer. That footer
+  belongs to the installed desktop app updater path and stays external/manual.
+- Codex worker-node readiness/update posture is tracked separately from the
+  desktop app updater. Presence, heartbeat, capabilities, blockers, and report
+  contract readiness must be clear before any manual handoff. Worker dispatch
+  remains disabled by default.
 - Travis clarified that the laptop Hermes install had been used as a worker
   node and that the VPS historically triggered laptop Hermes updates. That path
   remains useful historical context, but the current plan is to retire the
@@ -74,34 +75,30 @@ restart or switch either service.
 
 ## Recommended Safe Update Sequence
 
-1. Identify the VPS-triggered legacy laptop worker-node updater source,
-   command, target version, and rollback path before re-enabling or triggering
-   any worker-node update.
-2. Keep any legacy laptop worker-node update/re-enable action as a separate
-   explicit approval step; do not trigger it as part of dashboard-only Mission
-   Control deployment.
-3. Smoke-check laptop Mission Control after a separately approved worker-node
-   update:
-   - app opens,
-   - Mission Control renders,
-   - GitHub/Jenny bridge status renders,
-   - dispatch/session-send remains disabled unless separately approved.
-4. For the VPS, prepare a non-live runtime at the chosen target.
-5. Validate the non-live runtime before any switch:
+1. Inventory the current VPS dashboard and gateway runtime paths, heads,
+   rollback path, package versions, and service state.
+2. Inventory Codex worker-node presence, heartbeat, capabilities, blockers,
+   and report contract readiness. Do not trigger a worker-node update or
+   dispatch.
+3. Keep external desktop app self-update and any laptop Codex worker-node
+   update as separate explicit/manual lanes.
+4. Prepare non-live VPS dashboard and gateway runtimes at the chosen target.
+5. Validate the non-live runtimes before any switch:
    - record store reads current and legacy records,
    - Mission Control assets contain expected markers,
-   - dashboard starts and serves read-only status routes.
-6. Switch `hermes-dashboard.service` only if the lane explicitly approves a
-   dashboard-only runtime switch.
-7. Do not restart or switch `hermes-gateway.service` without a separate gateway
-   lane and explicit approval.
-8. Append exactly one accepted-baseline record only after a successful
-   dashboard validation and smoke check.
+   - dashboard starts and serves read-only status routes,
+   - gateway imports and starts in the prepared runtime when gateway work is
+     included.
+6. Switch/restart dashboard and gateway only through the approved live-ops lane.
+7. Smoke-check dashboard and gateway routes after the switch.
+8. Append exactly one accepted-baseline record only after successful approved
+   dashboard/gateway validation and smoke checks.
 
 ## Hard Stops
 
 - No gateway restart in the version-readiness lane.
-- No laptop worker-node update trigger in the version-readiness lane.
+- No external desktop app update trigger in the runtime-readiness lane.
+- No Codex worker-node update or dispatch trigger in the runtime-readiness lane.
 - No dispatch/session-send.
 - No Waha/social posting/scheduler actions.
 - No checkout/payment/customer/outreach changes.
@@ -111,7 +108,8 @@ restart or switch either service.
 
 ## Next Recommended Lane
 
-Run a VPS-triggered laptop worker-node updater-source inventory. The output
-should name the updater command/manifest/source, proposed worker-node version,
-whether the update affects only the desktop shell or also the Hermes runtime,
-and the rollback path before any update is triggered.
+Run a read-only runtime and worker-node readiness inventory. The output should
+name dashboard/gateway runtime paths and heads, rollback paths, Codex
+worker-node presence/heartbeat/capabilities/blockers, and the exact separate
+approval needed before any live runtime switch, baseline append, external
+desktop update, or worker-node update is triggered.

@@ -1088,6 +1088,60 @@ export interface MissionControlWorkerNodePresence {
   would_execute?: boolean
 }
 
+export interface MissionControlCodexWorkerNodeStatus extends MissionControlExecutionLockFields {
+  active_worker_node_run_count?: number
+  blocked?: boolean
+  blocked_reasons?: string[]
+  capability_summary?: string
+  dispatch_allowed?: boolean
+  dispatch_blocked_until?: string
+  external_update_triggered?: boolean
+  heartbeat_status?: string
+  last_seen_at?: string
+  old_hermes_worker_node_deprecated?: boolean
+  old_hermes_worker_node_status?: string
+  online?: boolean
+  presence_state?: string
+  recorded_worker_node_run_count?: number
+  registered?: boolean
+  source?: string
+  state?: string
+  update_lane?: string
+  worker_host_label?: string
+  worker_identity?: string
+  worker_kind?: string
+  worker_node_dispatch?: boolean
+  worker_run_id?: string
+  would_update_worker_node?: boolean
+}
+
+export interface MissionControlRuntimeUpdateStatus extends MissionControlExecutionLockFields {
+  accepted_live_head?: string
+  baseline_append_policy?: string
+  baseline_append_required?: boolean
+  blocked?: boolean
+  blocked_reasons?: string[]
+  codex_worker_node_dispatch?: boolean
+  codex_worker_node_status?: string
+  dashboard_head?: string
+  dashboard_update_needed?: boolean
+  external_app_update?: string
+  external_app_update_triggered?: boolean
+  gateway_head?: string
+  gateway_update_needed?: boolean
+  legacy_hermes_worker_node?: string
+  live_ops_lane_required?: boolean
+  manual_review_only?: boolean
+  old_hermes_worker_node_deprecated?: boolean
+  serial_live_update_required?: boolean
+  source?: string
+  worker_node_dispatch?: boolean
+  would_append_baseline?: boolean
+  would_restart?: boolean
+  would_switch_runtime?: boolean
+  would_update_runtime?: boolean
+}
+
 export interface MissionControlOrchestrationRunGraphNode {
   label?: string
   node_id?: string
@@ -1621,6 +1675,7 @@ export interface MissionControlWorkspaceStatus {
     latest_runs_by_id?: Record<string, Record<string, unknown>>
     source?: string
   }
+  codex_worker_node_status?: MissionControlCodexWorkerNodeStatus
   deployment_gap?: { dashboard_deploy_needed?: boolean; deployed_head?: string; accepted_live_head?: string; latest_merged_pr?: string; state?: string }
   execution_mode_classification?: MissionControlExecutionModeClassification
   execution_packet_preview?: MissionControlExecutionPacketPreview
@@ -1675,6 +1730,7 @@ export interface MissionControlWorkspaceStatus {
     statuses?: string[]
     warnings?: string[]
   }
+  runtime_update_status?: MissionControlRuntimeUpdateStatus
   runtime_worktree_guard?: { decision_state?: string; reason?: string }
   rollback_baseline?: MissionControlWorkspaceBaseline
   safety?: {

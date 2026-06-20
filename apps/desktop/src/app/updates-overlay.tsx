@@ -192,7 +192,7 @@ function IdleView({
 
         <DialogTitle className="text-center text-xl">New update available</DialogTitle>
         <DialogDescription className="text-center text-sm">
-          A new version of Hermes is ready to install.
+          A new desktop app update is ready to install. This is separate from Mission Control runtime updates and Codex worker-node updates.
         </DialogDescription>
       </div>
 
@@ -214,7 +214,7 @@ function IdleView({
 
       <div className="grid gap-2">
         <Button className="font-semibold" onClick={onInstall} size="lg">
-          Update now
+          Install desktop app update
         </Button>
         <button
           className="text-center text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"

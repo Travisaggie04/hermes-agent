@@ -422,6 +422,16 @@ export default function SystemPage() {
         );
         return;
       }
+      if (!resp.ok) {
+        if (resp.name) {
+          setActiveAction(resp.name);
+        }
+        showToast(
+          resp.message ?? `Backend self-update blocked: ${resp.error ?? "unknown"}`,
+          "error",
+        );
+        return;
+      }
       setActiveAction(resp.name ?? "hermes-update");
       showToast("Update started", "success");
     } catch (e) {
@@ -510,13 +520,13 @@ export default function SystemPage() {
         open={updateConfirmOpen}
         onCancel={() => setUpdateConfirmOpen(false)}
         onConfirm={() => void applyUpdate()}
-        title="Update Hermes?"
+        title="Run backend self-update?"
         description={
           updateInfo && updateInfo.behind && updateInfo.behind > 0
-            ? `This will run 'hermes update' (${updateInfo.update_command}) and pull ${updateInfo.behind} new commit${updateInfo.behind === 1 ? "" : "s"}. The gateway restarts when the update finishes; the current session keeps its prompt cache until then.`
-            : `This will run 'hermes update' (${updateInfo?.update_command ?? "hermes update"}) and restart the gateway when it finishes.`
+            ? `This external maintenance action runs 'hermes update' (${updateInfo.update_command}) and pulls ${updateInfo.behind} new commit${updateInfo.behind === 1 ? "" : "s"}. It is separate from Mission Control dashboard/gateway runtime updates, AcceptedBaselineRecord appends, and Codex worker-node updates. The gateway restarts when the backend update finishes.`
+            : `This external maintenance action runs 'hermes update' (${updateInfo?.update_command ?? "hermes update"}) and restarts the gateway when it finishes. It is separate from Mission Control dashboard/gateway runtime updates, AcceptedBaselineRecord appends, and Codex worker-node updates.`
         }
-        confirmLabel="Update now"
+        confirmLabel="Run backend self-update"
       />
 
       <DeleteConfirmDialog
@@ -768,7 +778,7 @@ export default function SystemPage() {
                   prefix={<Download className="h-3.5 w-3.5" />}
                   onClick={() => setUpdateConfirmOpen(true)}
                 >
-                  Update now
+                  Run backend self-update
                 </Button>
               )}
               {updateInfo &&
