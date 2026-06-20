@@ -24,7 +24,7 @@ _STATUS_PRIORITY = (
     "SOURCE_DEFAULT_DRIFT",
     "DASHBOARD_GATEWAY_DRIFT",
     "SOURCE_CURRENT_BUT_BASELINE_STALE",
-    "ROLLBACK_STALE",
+    "ROLLBACK_HEAD_UNKNOWN",
 )
 
 _BROAD_APPROVAL_VALUES = {"*", "all", "any", "global", "everything", "unlimited", "blanket"}
@@ -457,6 +457,7 @@ def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) ->
     ]
 
     statuses: list[str] = []
+    informational_statuses: list[str] = []
     reasons: list[str] = []
     blocked_reasons: list[str] = []
     runtimes: dict[str, dict[str, Any]] = {}
@@ -483,6 +484,9 @@ def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) ->
         if summary["dirty"]:
             _add(statuses, "DIRTY_RUNTIME")
             _add(blocked_reasons, f"{name} runtime has dirty or untracked files")
+        if name == "rollback" and _rollback_head_is_unknown(summary):
+            _add(statuses, "ROLLBACK_HEAD_UNKNOWN")
+            _add(blocked_reasons, "rollback runtime HEAD is missing or invalid")
 
     if not source_head:
         _add(blocked_reasons, "source HEAD is missing")
@@ -512,10 +516,18 @@ def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) ->
     if source_head and gateway_head and source_head != gateway_head:
         _add(statuses, "DASHBOARD_GATEWAY_DRIFT")
         _add(blocked_reasons, "gateway runtime HEAD does not match source HEAD")
-    if source_head and rollback_head and source_head != rollback_head:
-        _add(statuses, "ROLLBACK_STALE")
-        _add(reasons, "rollback runtime HEAD is stale relative to source HEAD")
-        _add(blocked_reasons, "rollback runtime is stale relative to source HEAD")
+    rollback_summary = runtimes.get("rollback", {})
+    if (
+        source_head
+        and rollback_head
+        and source_head != rollback_head
+        and _rollback_runtime_is_available(rollback_summary)
+    ):
+        _add(informational_statuses, "ROLLBACK_AVAILABLE_PREVIOUS_VERSION")
+        _add(reasons, "rollback runtime is a clean previous version")
+        rollback_summary["availability"] = "previous_version"
+    elif _rollback_runtime_is_available(rollback_summary):
+        rollback_summary["availability"] = "current_version"
 
     if _flag_enabled(state.get("dispatch_state")) or _flag_enabled(state.get("dispatch_in_gateway")):
         _add(blocked_reasons, "dispatch is enabled")
@@ -531,6 +543,7 @@ def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) ->
         "status": PROVENANCE_BLOCKED if autonomy_blocked else PROVENANCE_CLEAN,
         "primary_status": _primary_status(statuses),
         "statuses": statuses,
+        "informational_statuses": informational_statuses,
         "autonomy_blocked": autonomy_blocked,
         "autonomy_blocked_reasons": blocked_reasons,
         "warnings": reasons,
@@ -1436,6 +1449,7 @@ def _runtime_summary(name: str, runtime: dict[str, Any]) -> dict[str, Any]:
     path = _safe_text(runtime.get("path") or runtime.get("runtime_path"))
     exists = runtime.get("exists")
     git_healthy = runtime.get("git_healthy")
+    head = _safe_text(runtime.get("head"))
     dirty_files = tuple(_safe_text(item) for item in _as_list(runtime.get("dirty_files")) if _safe_text(item))
     untracked_files = tuple(_safe_text(item) for item in _as_list(runtime.get("untracked_files")) if _safe_text(item))
     status_short = tuple(_safe_text(item) for item in _as_list(runtime.get("status_short")) if _safe_text(item))
@@ -1466,7 +1480,8 @@ def _runtime_summary(name: str, runtime: dict[str, Any]) -> dict[str, Any]:
         "path": path,
         "exists": exists if isinstance(exists, bool) else None,
         "git_healthy": git_healthy if isinstance(git_healthy, bool) else None,
-        "head": _safe_text(runtime.get("head")),
+        "head": head,
+        "head_valid": _is_full_sha(head),
         "status_short": list(status_short),
         "dirty_files": list(dirty_files),
         "untracked_files": list(untracked_files),
@@ -1476,7 +1491,35 @@ def _runtime_summary(name: str, runtime: dict[str, Any]) -> dict[str, Any]:
         "missing_path": missing_path,
         "unrecorded": unrecorded,
         "state": state,
+        "availability": "unavailable",
     }
+
+
+def _rollback_head_is_unknown(summary: dict[str, Any]) -> bool:
+    if summary.get("name") != "rollback":
+        return False
+    if summary.get("unrecorded") or summary.get("missing_path"):
+        return False
+    if summary.get("broken_git_metadata") or summary.get("dirty"):
+        return False
+    return summary.get("head_valid") is not True
+
+
+def _rollback_runtime_is_available(summary: dict[str, Any]) -> bool:
+    return (
+        summary.get("name") == "rollback"
+        and bool(summary.get("path"))
+        and summary.get("head_valid") is True
+        and summary.get("unrecorded") is not True
+        and summary.get("missing_path") is not True
+        and summary.get("broken_git_metadata") is not True
+        and summary.get("dirty") is not True
+    )
+
+
+def _is_full_sha(value: str) -> bool:
+    text = _safe_text(value).lower()
+    return len(text) == 40 and all(char in "0123456789abcdef" for char in text)
 
 
 def _bridge_result(classification: str, read_only_safe: bool, reasons: list[str]) -> dict[str, Any]:

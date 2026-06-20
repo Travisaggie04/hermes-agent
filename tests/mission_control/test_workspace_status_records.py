@@ -22,6 +22,7 @@ from mission_control.workspace_status_records import (
 
 
 HEAD = "8ef64e370a51bc19e97fec1526f5bb3d42025a09"
+OLD_HEAD = "fe18ce20d6044dd91d115286e949366477a8706b"
 
 
 def _assert_inert_projection(payload: dict[str, object]) -> None:
@@ -163,6 +164,32 @@ def test_record_sourced_workspace_status_projects_reconciled_runtime_facts(tmp_p
         status["execution_packet_preview"],
     ):
         _assert_execution_disabled(projection)
+
+
+def test_record_sourced_workspace_status_treats_previous_rollback_as_available(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        _reconciled_baseline_record(
+            rollback_head=OLD_HEAD,
+            rollback_runtime=_runtime("/runtime/rollback", OLD_HEAD),
+        )
+    )
+
+    status = build_workspace_status_from_records(records_path=records_path)
+    provenance = status["runtime_provenance"]
+
+    assert provenance["primary_status"] == "CLEAN_AND_ALIGNED"
+    assert provenance["autonomy_blocked"] is False
+    assert provenance["statuses"] == ["CLEAN_AND_ALIGNED"]
+    assert "ROLLBACK_STALE" not in provenance["statuses"]
+    assert "ROLLBACK_AVAILABLE_PREVIOUS_VERSION" in provenance["informational_statuses"]
+    assert status["rollback_runtime"]["availability"] == "previous_version"
+    assert status["rollback_runtime"]["state"] == "clean"
+    assert "ROLLBACK_STALE" not in status["stale_context"]["warnings"]
+    assert "rollback runtime is stale relative to source HEAD" not in status["stale_context"]["warnings"]
+    _assert_execution_disabled(provenance)
+    _assert_execution_disabled(status["read_only_autonomy_eligibility"])
 
 
 def test_legacy_baseline_without_service_runtime_facts_is_unrecorded(tmp_path):
