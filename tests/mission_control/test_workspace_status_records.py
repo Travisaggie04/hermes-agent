@@ -318,6 +318,15 @@ def test_record_sourced_read_only_preview_records_make_supervised_preview_ready(
     assert readiness["states"]["scoped_pr_creation"] == "blocked"
     assert readiness["states"]["laptop_codex_worker_node"] == "blocked"
     assert status["scoped_pr_lane_eligibility"]["eligible"] is False
+    packet = status["execution_packet_preview"]
+    assert packet["eligible"] is True
+    assert packet["blocked_reasons"] == []
+    assert packet["packet"]["mode"] == "read_only"
+    assert packet["packet"]["run_id"] == run_id
+    assert packet["packet"]["approval_id"] == approval_id
+    assert packet["packet"]["would_execute"] is False
+    assert packet["trusted_for_execution"] is False
+    assert "bridge path is manual-only; preview must not execute" in packet["warnings"]
     for projection in (
         status,
         status["read_only_autonomy_eligibility"],
@@ -373,8 +382,14 @@ def test_record_sourced_read_only_preview_requires_explicit_report_contract(tmp_
     assert read_only["eligible"] is False
     assert "report inbox must be ready" in read_only["blocked_reasons"]
     assert read_only["tool_permissions"]["permission_classification"] == "read_only_safe"
+    packet = status["execution_packet_preview"]
+    assert packet["eligible"] is False
+    assert "report inbox must be ready" in packet["blocked_reasons"]
+    assert "bridge path is not read-only safe" not in packet["blocked_reasons"]
+    assert "bridge: bridge safety is not proven; defaulting to blocked" not in packet["blocked_reasons"]
     assert status["orchestration_readiness"]["states"]["supervised_read_only_autonomy"] == "blocked"
     _assert_execution_disabled(read_only)
+    _assert_execution_disabled(packet)
 
 
 def test_legacy_baseline_without_service_runtime_facts_is_unrecorded(tmp_path):
