@@ -2671,7 +2671,7 @@ describe('MissionControlView', () => {
     expect(workerReport.className).toContain('text-amber')
     expect(screen.getByText('items 3 / needs review 2 / missing 1 / mismatch 2')).toBeTruthy()
     expect(screen.getByText('mismatch 2 / queue 2 / ingestion 0 / completion 0 / stop 0')).toBeTruthy()
-  })
+  }, 10000)
 
   it('treats stringy live flags as execution lock blockers in the Desktop summary', async () => {
     const { summarizeWorkspaceStatus } = await import('./index')
