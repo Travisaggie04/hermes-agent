@@ -1139,7 +1139,7 @@ beforeEach(() => {
       to_agent: 'jenny'
     },
     record_type: 'GitHubBridgeMessageRecord',
-    send_to_jenny_enabled: true,
+    send_to_jenny_enabled: false,
     stored: true
   })
   createMissionControlJennyReplyReview.mockResolvedValue({
@@ -1234,7 +1234,7 @@ beforeEach(() => {
       status: 'replied',
       to_agent: 'travis'
     },
-    send_to_jenny_enabled: true,
+    send_to_jenny_enabled: false,
     stored: true,
     worker_enabled: false,
     timer_enabled: false
@@ -2587,7 +2587,7 @@ describe('MissionControlView', () => {
         status: 'replied',
         to_agent: 'travis'
       },
-      send_to_jenny_enabled: true,
+      send_to_jenny_enabled: false,
       stored: true,
       timer_enabled: false,
       worker_enabled: false

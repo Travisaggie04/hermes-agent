@@ -960,7 +960,11 @@ def test_workspace_github_bridge_outbox_create_posts_one_mailbox_message(plugin_
     assert response.status_code == 200
     payload = response.json()
     assert payload["stored"] is True
-    assert payload["send_to_jenny_enabled"] is True
+    assert payload["bridge_permission_classification"] == "write_capable_not_safe_for_autonomy"
+    assert payload["write_capable_not_safe_for_autonomy"] is True
+    assert payload["read_only_safe"] is False
+    assert payload["autonomy_safe"] is False
+    assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
     assert payload["session_send_enabled"] is False
     assert payload["execution_enabled"] is False
@@ -1056,7 +1060,11 @@ def test_workspace_github_bridge_answer_once_runs_single_manual_answer(plugin_ap
     assert payload["manual_start_only"] is True
     assert payload["manual_hermes_answer_enabled"] is True
     assert payload["requires_explicit_manual_confirmation"] is True
-    assert payload["send_to_jenny_enabled"] is True
+    assert payload["bridge_permission_classification"] == "write_capable_not_safe_for_autonomy"
+    assert payload["write_capable_not_safe_for_autonomy"] is True
+    assert payload["read_only_safe"] is False
+    assert payload["autonomy_safe"] is False
+    assert payload["send_to_jenny_enabled"] is False
     assert payload["dispatch_enabled"] is False
     assert payload["session_send_enabled"] is False
     assert payload["execution_enabled"] is False

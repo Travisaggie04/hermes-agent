@@ -4002,11 +4002,16 @@ async def workspace_github_bridge_outbox_create(request: Request) -> dict[str, A
 
     return {
         **INERT_FLAGS,
+        **result,
         "stored": True,
         "display_only": False,
         "manual_start_only": True,
         "manual_copy_only": False,
-        "send_to_jenny_enabled": True,
+        "bridge_permission_classification": "write_capable_not_safe_for_autonomy",
+        "write_capable_not_safe_for_autonomy": True,
+        "read_only_safe": False,
+        "autonomy_safe": False,
+        "send_to_jenny_enabled": False,
         "dispatch_enabled": False,
         "session_send_enabled": False,
         "execution_enabled": False,
@@ -4015,7 +4020,6 @@ async def workspace_github_bridge_outbox_create(request: Request) -> dict[str, A
         "timer_enabled": False,
         "daemon_enabled": False,
         "github_bridge_enabled": True,
-        **result,
     }
 
 
@@ -4044,13 +4048,18 @@ async def workspace_github_bridge_answer_once(request: Request) -> dict[str, Any
 
     return {
         **INERT_FLAGS,
+        **result,
         "stored": True,
         "display_only": False,
         "manual_start_only": True,
         "manual_hermes_answer_enabled": True,
         "requires_explicit_manual_confirmation": True,
         "manual_copy_only": False,
-        "send_to_jenny_enabled": True,
+        "bridge_permission_classification": "write_capable_not_safe_for_autonomy",
+        "write_capable_not_safe_for_autonomy": True,
+        "read_only_safe": False,
+        "autonomy_safe": False,
+        "send_to_jenny_enabled": False,
         "dispatch_enabled": False,
         "session_send_enabled": False,
         "execution_enabled": False,
@@ -4059,7 +4068,6 @@ async def workspace_github_bridge_answer_once(request: Request) -> dict[str, Any
         "timer_enabled": False,
         "daemon_enabled": False,
         "github_bridge_enabled": True,
-        **result,
     }
 
 
