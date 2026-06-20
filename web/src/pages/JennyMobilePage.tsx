@@ -208,7 +208,36 @@ interface MobileWorkerNodeOrchestration extends MobileExecutionLockSource {
   latest_by_id?: Record<string, Record<string, unknown>>;
 }
 
+interface MobileBridgePermission extends MobileExecutionLockSource {
+  blocked_reasons?: string[];
+  legacy_permission_classification?: string;
+  manual_only?: boolean;
+  permission_classification?: string;
+  read_only_safe?: boolean;
+  reasons?: string[];
+}
+
+interface MobileReadinessGate extends MobileExecutionLockSource {
+  blocked?: boolean;
+  blocked_reasons?: string[];
+  bridge_permissions?: MobileBridgePermission;
+  eligible?: boolean;
+  preview_ready?: boolean;
+  state?: string;
+  warnings?: string[];
+}
+
+interface MobileToolPermissionClassification extends MobileExecutionLockSource {
+  blocked_path_count?: number;
+  blocked_reasons?: string[];
+  legacy_permission_classification?: string;
+  manual_only_path_count?: number;
+  path_count?: number;
+  permission_classification?: string;
+}
+
 interface MobileWorkspaceStatus {
+  bridge_permissions?: MobileBridgePermission;
   hard_boundary_contract?: MobileExecutionLockSource & {
     blocked?: boolean;
     blocked_reasons?: string[];
@@ -224,8 +253,14 @@ interface MobileWorkspaceStatus {
       supervised_read_only_autonomy?: string;
     };
   };
+  read_only_autonomy_eligibility?: MobileReadinessGate;
   report_lifecycle?: MobileReportLifecycle;
   safety?: MobileExecutionLockSource;
+  scoped_pr_lane_eligibility?: MobileReadinessGate & {
+    would_commit?: unknown;
+    would_create_pr?: unknown;
+  };
+  tool_permission_classification?: MobileToolPermissionClassification;
   worker_node_instruction_preview?: MobileWorkerNodeInstructionPreview;
   worker_node_orchestration?: MobileWorkerNodeOrchestration;
   worker_node_presence?: MobileWorkerNodePresence;
@@ -594,6 +629,14 @@ function mobileRecordText(record: Record<string, unknown> | undefined, field: st
   return "";
 }
 
+function mobileStateLabel(value: string | undefined, fallback = "unknown"): string {
+  return (value?.trim() || fallback).replaceAll("_", " ");
+}
+
+function mobilePermissionClassification(permission: MobileBridgePermission | undefined): string {
+  return permission?.permission_classification || permission?.legacy_permission_classification || "unknown_blocked";
+}
+
 function mobileWorkspaceSafety(status: MobileWorkspaceStatus | null): MobileBridgeSafety {
   const reasons: string[] = [];
   if (!status) {
@@ -622,6 +665,67 @@ function mobileWorkspaceSafety(status: MobileWorkspaceStatus | null): MobileBrid
   reasons.push(...mobileExecutionLockReasons("worker_node_presence", status?.worker_node_presence));
   reasons.push(...mobileExecutionLockReasons("worker_node_orchestration", status?.worker_node_orchestration));
   reasons.push(...mobileExecutionLockReasons("worker_node_instruction_preview", status?.worker_node_instruction_preview));
+
+  const readinessStates = status?.orchestration_readiness?.states;
+  if (readinessStates?.supervised_read_only_autonomy !== "preview_ready") {
+    reasons.push(`supervised read-only autonomy ${mobileStateLabel(readinessStates?.supervised_read_only_autonomy)}`);
+  }
+  if (readinessStates?.scoped_pr_creation !== "preview_ready") {
+    reasons.push(`scoped PR creation ${mobileStateLabel(readinessStates?.scoped_pr_creation)}`);
+  }
+
+  const readOnly = status?.read_only_autonomy_eligibility;
+  if (!readOnly) {
+    reasons.push("read-only autonomy eligibility not loaded");
+  } else {
+    if (readOnly.eligible !== true || readOnly.preview_ready !== true) {
+      reasons.push("supervised read-only autonomy blocked");
+    }
+    reasons.push(...(readOnly.blocked_reasons ?? []));
+    reasons.push(...mobileExecutionLockReasons("read-only autonomy", readOnly));
+  }
+
+  const scopedPr = status?.scoped_pr_lane_eligibility;
+  if (!scopedPr) {
+    reasons.push("scoped PR creation eligibility not loaded");
+  } else {
+    if (scopedPr.eligible !== true || scopedPr.preview_ready !== true) {
+      reasons.push("scoped PR creation blocked");
+    }
+    reasons.push(...(scopedPr.blocked_reasons ?? []));
+    reasons.push(...mobileExecutionLockReasons("scoped PR creation", scopedPr));
+    if (mobileLiveFlagEnabled(scopedPr.would_create_pr)) reasons.push("scoped PR creation would_create_pr must remain false");
+    if (mobileLiveFlagEnabled(scopedPr.would_commit)) reasons.push("scoped PR creation would_commit must remain false");
+  }
+
+  const bridgePermission = readOnly?.bridge_permissions ?? status?.bridge_permissions;
+  if (!bridgePermission) {
+    reasons.push("bridge permission classification not loaded");
+  } else {
+    const classification = mobilePermissionClassification(bridgePermission);
+    if (bridgePermission.read_only_safe !== true) {
+      reasons.push(`bridge classification ${classification}`);
+    }
+    reasons.push(...(bridgePermission.reasons ?? []));
+    reasons.push(...(bridgePermission.blocked_reasons ?? []));
+    reasons.push(...mobileExecutionLockReasons("bridge permissions", bridgePermission));
+  }
+
+  const toolPermissions = status?.tool_permission_classification;
+  if (!toolPermissions) {
+    reasons.push("tool permission classification not loaded");
+  } else {
+    const blockedPathCount = toolPermissions.blocked_path_count ?? 0;
+    const classification = toolPermissions.permission_classification || toolPermissions.legacy_permission_classification || "unknown_blocked";
+    if (classification !== "read_only_safe") {
+      reasons.push(`tool safety not proven: ${classification}`);
+    }
+    if (blockedPathCount > 0) {
+      reasons.push(`${blockedPathCount} tool paths are not safe for autonomy`);
+    }
+    reasons.push(...(toolPermissions.blocked_reasons ?? []));
+    reasons.push(...mobileExecutionLockReasons("tool permissions", toolPermissions));
+  }
 
   const uniqueReasons = [...new Set(reasons)];
   return { reasons: uniqueReasons, safe: uniqueReasons.length === 0 };
@@ -1170,9 +1274,11 @@ export default function JennyMobilePage() {
                         className="rounded-full bg-black/15 px-2 py-0.5 text-[0.7rem] font-semibold text-zinc-950 disabled:opacity-50"
                         type="button"
                         disabled={replyingRequestId !== "" || sending || !mobileSafety.safe}
+                        aria-label={mobileSafety.safe ? "Get reply" : "Get reply blocked - backend execution disabled"}
                         onClick={() => void runJennyOnce(selectedProject.project_id, message.requestId ?? "")}
+                        title={mobileSafety.safe ? "Manual foreground reply only" : `Backend execution disabled: ${mobileSafety.reasons[0] ?? "autonomy preview is not approved"}`}
                       >
-                        {message.status === "failed" ? "Retry" : "Get reply"}
+                        {mobileSafety.safe ? (message.status === "failed" ? "Retry" : "Get reply") : "Reply locked"}
                       </button>
                     ) : null}
                   </div>
@@ -1239,6 +1345,27 @@ export default function JennyMobilePage() {
             </label>
           </div>
 
+          {!mobileSafety.safe ? (
+            <section
+              aria-label="Jenny mobile controls blocked"
+              className="mb-2 rounded-2xl border border-amber-400/30 bg-amber-950/35 px-3 py-2 text-xs text-amber-100"
+              role="status"
+            >
+              <p className="font-semibold">Backend execution disabled - Jenny controls locked</p>
+              <p className="mt-1 leading-snug">
+                Runtime can be clean while supervised read-only autonomy, scoped PR creation, dispatch, session-send, and worker dispatch remain blocked.
+              </p>
+              <p className="mt-1 font-semibold leading-snug">
+                execution_enabled=false / dispatch_enabled=false / session_send_enabled=false / worker_dispatch_enabled=false
+              </p>
+              <ul className="mt-1 list-disc space-y-1 pl-4">
+                {mobileSafety.reasons.slice(0, 4).map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
           <div className="flex min-w-0 items-end gap-2">
             <button
               type="button"
@@ -1259,7 +1386,7 @@ export default function JennyMobilePage() {
                   void sendMessage();
                 }
               }}
-              placeholder="Ask Jenny"
+              placeholder={mobileSafety.safe ? "Ask Jenny" : "Draft only - backend execution disabled"}
               rows={1}
               value={composer}
             />
@@ -1268,11 +1395,18 @@ export default function JennyMobilePage() {
               type="submit"
               className="mb-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-full bg-emerald-400 text-zinc-950 disabled:bg-zinc-800 disabled:text-zinc-500"
               disabled={sendDisabled}
-              aria-label="Send Jenny message"
+              aria-label={mobileSafety.safe ? "Send Jenny message" : "Send Jenny message blocked - backend execution disabled"}
+              title={mobileSafety.safe ? "Manual foreground only - no dispatch/session-send" : `Backend execution disabled: ${mobileSafety.reasons[0] ?? "autonomy preview is not approved"}`}
             >
               {sending || replyingRequestId ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
             </button>
           </div>
+          <p className={cn(
+            "mt-1 text-[0.68rem]",
+            mobileSafety.safe ? "text-emerald-300" : "text-amber-200",
+          )}>
+            {mobileSafety.safe ? "Manual only - no dispatch/session-send/worker dispatch." : "Send locked - backend execution disabled; draft text only."}
+          </p>
         </div>
       </form>
 

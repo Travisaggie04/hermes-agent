@@ -284,6 +284,34 @@ interface CompactBridgeSafety {
   safe: boolean;
 }
 
+interface CompactBridgePermission extends CompactExecutionLockSource {
+  blocked_reasons?: string[];
+  legacy_permission_classification?: string;
+  manual_only?: boolean;
+  permission_classification?: string;
+  read_only_safe?: boolean;
+  reasons?: string[];
+}
+
+interface CompactReadinessGate extends CompactExecutionLockSource {
+  blocked?: boolean;
+  blocked_reasons?: string[];
+  bridge_permissions?: CompactBridgePermission;
+  eligible?: boolean;
+  preview_ready?: boolean;
+  state?: string;
+  warnings?: string[];
+}
+
+interface CompactToolPermissionClassification extends CompactExecutionLockSource {
+  blocked_path_count?: number;
+  blocked_reasons?: string[];
+  legacy_permission_classification?: string;
+  manual_only_path_count?: number;
+  path_count?: number;
+  permission_classification?: string;
+}
+
 interface GitHubBridgeMailboxStatusRecord {
   created_at?: string;
   handled_request_id?: string;
@@ -418,6 +446,7 @@ interface WorkspaceStatus {
     state?: string;
   };
   lane?: { active_lane_count?: number };
+  bridge_permissions?: CompactBridgePermission;
   next_safe_actions?: {
     action_count?: number;
     blocked?: boolean;
@@ -431,6 +460,7 @@ interface WorkspaceStatus {
     worker_dispatch_enabled?: boolean;
     worker_enabled?: boolean;
   };
+  read_only_autonomy_eligibility?: CompactReadinessGate;
   operator_decision_packet?: {
     blocked?: boolean;
     blocked_reasons?: string[];
@@ -591,7 +621,12 @@ interface WorkspaceStatus {
     worker_enabled?: unknown;
     workers_enabled?: unknown;
   };
+  scoped_pr_lane_eligibility?: CompactReadinessGate & {
+    would_commit?: boolean;
+    would_create_pr?: boolean;
+  };
   stale_context?: { warnings?: string[] };
+  tool_permission_classification?: CompactToolPermissionClassification;
   worker_node_presence?: {
     blocked?: boolean;
     blocked_reasons?: string[];
@@ -1577,6 +1612,89 @@ function compactBridgeBlockedMessage(safety: CompactBridgeSafety): string {
   return `Manual Jenny bridge blocked: ${safety.reasons[0] ?? "bridge safety is not confirmed"}`;
 }
 
+function compactPermissionClassification(permission: CompactBridgePermission | undefined): string {
+  return permission?.permission_classification || permission?.legacy_permission_classification || "unknown_blocked";
+}
+
+function compactAutonomyLockout(status: WorkspaceStatus | undefined): CompactBridgeSafety {
+  const reasons: string[] = [];
+  if (!status) {
+    reasons.push("workspace status not loaded");
+  }
+
+  const readiness = status?.orchestration_readiness;
+  const readinessStates = readiness?.states;
+  const readOnlyState = compactStateLabel(readinessStates?.supervised_read_only_autonomy);
+  const scopedPrState = compactStateLabel(readinessStates?.scoped_pr_creation);
+  if (readinessStates?.supervised_read_only_autonomy !== "preview_ready") {
+    reasons.push(`supervised read-only autonomy ${readOnlyState}`);
+  }
+  if (readinessStates?.scoped_pr_creation !== "preview_ready") {
+    reasons.push(`scoped PR creation ${scopedPrState}`);
+  }
+
+  const readOnly = status?.read_only_autonomy_eligibility;
+  if (!readOnly) {
+    reasons.push("read-only autonomy eligibility not loaded");
+  } else {
+    if (readOnly.eligible !== true || readOnly.preview_ready !== true) {
+      reasons.push("supervised read-only autonomy blocked");
+    }
+    reasons.push(...(readOnly.blocked_reasons ?? []));
+    reasons.push(...compactExecutionLockReasons("read-only autonomy", readOnly));
+  }
+
+  const scopedPr = status?.scoped_pr_lane_eligibility;
+  if (!scopedPr) {
+    reasons.push("scoped PR creation eligibility not loaded");
+  } else {
+    if (scopedPr.eligible !== true || scopedPr.preview_ready !== true) {
+      reasons.push("scoped PR creation blocked");
+    }
+    reasons.push(...(scopedPr.blocked_reasons ?? []));
+    reasons.push(...compactExecutionLockReasons("scoped PR creation", scopedPr));
+    if (compactLiveFlagEnabled(scopedPr.would_create_pr)) reasons.push("scoped PR creation would_create_pr must remain false");
+    if (compactLiveFlagEnabled(scopedPr.would_commit)) reasons.push("scoped PR creation would_commit must remain false");
+  }
+
+  const bridgePermission = readOnly?.bridge_permissions ?? status?.bridge_permissions;
+  if (!bridgePermission) {
+    reasons.push("bridge permission classification not loaded");
+  } else {
+    const classification = compactPermissionClassification(bridgePermission);
+    if (bridgePermission.read_only_safe !== true) {
+      reasons.push(`bridge classification ${classification}`);
+    }
+    reasons.push(...(bridgePermission.reasons ?? []));
+    reasons.push(...(bridgePermission.blocked_reasons ?? []));
+    reasons.push(...compactExecutionLockReasons("bridge permissions", bridgePermission));
+  }
+
+  const toolPermissions = status?.tool_permission_classification;
+  if (!toolPermissions) {
+    reasons.push("tool permission classification not loaded");
+  } else {
+    const blockedPathCount = toolPermissions.blocked_path_count ?? 0;
+    const classification = toolPermissions.permission_classification || toolPermissions.legacy_permission_classification || "unknown_blocked";
+    if (classification !== "read_only_safe") {
+      reasons.push(`tool safety not proven: ${classification}`);
+    }
+    if (blockedPathCount > 0) {
+      reasons.push(`${blockedPathCount} tool paths are not safe for autonomy`);
+    }
+    reasons.push(...(toolPermissions.blocked_reasons ?? []));
+    reasons.push(...compactExecutionLockReasons("tool permissions", toolPermissions));
+  }
+
+  reasons.push(...compactExecutionLockReasons("orchestration_readiness", readiness));
+  const uniqueReasons = [...new Set(reasons.filter(Boolean))];
+  return { reasons: uniqueReasons, safe: uniqueReasons.length === 0 };
+}
+
+function compactAutonomyBlockedMessage(safety: CompactBridgeSafety): string {
+  return `Backend execution disabled: ${safety.reasons[0] ?? "autonomy preview is not approved"}`;
+}
+
 function noReplyStatusMessage(error: unknown): string {
   const rawError = error ?? "no matching pending request";
   if (isNoPendingBridgeError(rawError)) {
@@ -2542,6 +2660,11 @@ export default function MissionControlCompactPage() {
       setRoomMessage(compactBridgeBlockedMessage(bridgeSafety));
       return;
     }
+    const autonomyLockout = compactAutonomyLockout(snapshot?.workspaceStatus);
+    if (!autonomyLockout.safe) {
+      setRoomMessage(compactAutonomyBlockedMessage(autonomyLockout));
+      return;
+    }
     const requestId = bridgeRequestId();
     setRoomBusy(true);
     setRoomMessage("");
@@ -2584,6 +2707,11 @@ export default function MissionControlCompactPage() {
     const bridgeSafety = compactGitHubBridgeSafety(snapshot?.githubBridgeStatus, snapshot?.workspaceStatus);
     if (!bridgeSafety.safe) {
       setRoomMessage(compactBridgeBlockedMessage(bridgeSafety));
+      return;
+    }
+    const autonomyLockout = compactAutonomyLockout(snapshot?.workspaceStatus);
+    if (!autonomyLockout.safe) {
+      setRoomMessage(compactAutonomyBlockedMessage(autonomyLockout));
       return;
     }
     const pendingRequestId = requestId || latestVisiblePendingGitHubBridgeMessageForProject(
@@ -2700,6 +2828,11 @@ export default function MissionControlCompactPage() {
       setRoomMessage(compactBridgeBlockedMessage(bridgeSafety));
       return;
     }
+    const autonomyLockout = compactAutonomyLockout(snapshot?.workspaceStatus);
+    if (!autonomyLockout.safe) {
+      setRoomMessage(compactAutonomyBlockedMessage(autonomyLockout));
+      return;
+    }
     setRoomBusy(true);
     setRoomMessage("");
     setProjectRequest(HERMES_UPDATE_LANE_REQUEST);
@@ -2729,6 +2862,11 @@ export default function MissionControlCompactPage() {
     const bridgeSafety = compactGitHubBridgeSafety(snapshot?.githubBridgeStatus, snapshot?.workspaceStatus);
     if (!bridgeSafety.safe) {
       setRoomMessage(compactBridgeBlockedMessage(bridgeSafety));
+      return;
+    }
+    const autonomyLockout = compactAutonomyLockout(snapshot?.workspaceStatus);
+    if (!autonomyLockout.safe) {
+      setRoomMessage(compactAutonomyBlockedMessage(autonomyLockout));
       return;
     }
     setRoomBusy(true);
@@ -3332,9 +3470,16 @@ function CompactProjectRoom({
   const latestReviewByResponseId = latestReplyReviewByResponseId(replyReviews);
   const bridgeError = normalizedBridgeError(bridgeStatus, githubBridgeStatus);
   const githubBridgeSafety = compactGitHubBridgeSafety(githubBridgeStatus, workspaceStatus);
-  const bridgeActionDisabled = busy || paused || !githubBridgeSafety.safe;
+  const autonomyLockout = compactAutonomyLockout(workspaceStatus);
+  const controlsLocked = !githubBridgeSafety.safe || !autonomyLockout.safe;
+  const bridgeActionDisabled = busy || paused || controlsLocked;
   const hasRunnablePendingMessage = Boolean(projectedVisiblePending ?? latestPending);
-  const canRunForegroundReply = !paused && githubBridgeSafety.safe && (hasRunnablePendingMessage || pendingCount > 0);
+  const canRunForegroundReply = !paused && !controlsLocked && (hasRunnablePendingMessage || pendingCount > 0);
+  const blockedControlReasons = [...new Set([...githubBridgeSafety.reasons, ...autonomyLockout.reasons])];
+  const blockedControlPrimaryReason = !githubBridgeSafety.safe
+    ? compactBridgeBlockedMessage(githubBridgeSafety)
+    : compactAutonomyBlockedMessage(autonomyLockout);
+  const controlModeLabel = controlsLocked ? "Backend execution disabled" : "Manual only - no dispatch/session-send";
   const statusRecords = unwrapRecords(githubBridgeStatus.status_records);
   const statusSourceBridgeMessages = [
     ...visibleGitHubBridgeMessages,
@@ -3752,6 +3897,18 @@ function CompactProjectRoom({
               {compactBridgeBlockedMessage(githubBridgeSafety)}
             </p>
           ) : null}
+          {!autonomyLockout.safe ? (
+            <section className="mb-2 max-w-full rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 [overflow-wrap:anywhere] dark:text-amber-100" role="status" aria-label="Autonomy controls blocked">
+              <p className="font-semibold">Backend execution disabled - autonomy is blocked</p>
+              <p className="mt-1 leading-snug">Runtime provenance can be clean while Jenny send, reply, worker dispatch, scoped PR, merge, deploy, restart, and runtime-switch controls remain locked.</p>
+              <p className="mt-1 font-semibold leading-snug">execution_enabled=false / dispatch_enabled=false / session_send_enabled=false / worker_dispatch_enabled=false</p>
+              <ul className="mt-1 list-disc space-y-1 pl-4">
+                {autonomyLockout.reasons.slice(0, 5).map(reason => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
           <div className="mb-2 grid min-w-0 max-w-full grid-cols-2 gap-1.5 text-[0.68rem]" aria-label="Compact chat tools">
             <label className="min-w-0">
               <span className="mb-1 block font-semibold uppercase tracking-[0.14em] text-[#a59783]">Model</span>
@@ -3802,8 +3959,15 @@ function CompactProjectRoom({
             </label>
 
             <div className="flex min-w-0 shrink-0 justify-end">
-              <button className="min-h-11 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:opacity-60 dark:text-emerald-300" disabled={bridgeActionDisabled} onClick={onQueueBridge} type="button">
-                {sendButtonLabel}
+              <button
+                aria-label={controlsLocked ? "Send blocked - backend execution disabled" : sendButtonLabel}
+                className="min-h-11 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-300"
+                disabled={bridgeActionDisabled}
+                onClick={onQueueBridge}
+                title={controlsLocked ? blockedControlPrimaryReason : "Manual only - no dispatch/session-send"}
+                type="button"
+              >
+                {controlsLocked ? "Send locked" : sendButtonLabel}
               </button>
             </div>
           </div>
@@ -3811,13 +3975,23 @@ function CompactProjectRoom({
             <span className="min-w-0 max-w-full rounded-full border border-[#f3ebda]/10 bg-[#0e0b12]/70 px-2 py-1 text-[#a59783] [overflow-wrap:anywhere]">
               {runSettingsLabel}
             </span>
+            <span className={cn(
+              "min-w-0 max-w-full rounded-full border px-2 py-1 font-semibold [overflow-wrap:anywhere]",
+              controlsLocked
+                ? "border-amber-500/35 bg-amber-500/10 text-amber-800 dark:text-amber-200"
+                : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+            )}>
+              {controlModeLabel}
+            </span>
             <button
-              className="min-h-9 rounded-full border border-sky-500/35 bg-sky-500/10 px-3 py-1.5 font-semibold text-sky-700 hover:bg-sky-500/15 disabled:opacity-60 dark:text-sky-300"
+              aria-label={controlsLocked ? "Get reply blocked - backend execution disabled" : "Get reply"}
+              className="min-h-9 rounded-full border border-sky-500/35 bg-sky-500/10 px-3 py-1.5 font-semibold text-sky-700 hover:bg-sky-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:text-sky-300"
               disabled={busy || !canRunForegroundReply}
               onClick={onRunJennyOnce}
+              title={controlsLocked ? blockedControlPrimaryReason : "Manual foreground reply only"}
               type="button"
             >
-              Get reply
+              {controlsLocked ? "Get reply locked" : "Get reply"}
             </button>
             <button
               className="min-h-9 rounded-full border border-[#f3ebda]/15 bg-[#0e0b12]/70 px-3 py-1.5 font-semibold text-[#c9b8a2] hover:bg-[#251d2c]/70 disabled:opacity-60"
@@ -3954,17 +4128,22 @@ function CompactProjectRoom({
             <section className="mt-3 rounded-xl border border-border/70 bg-card/60 p-3">
               <h3 className="text-sm font-semibold">Maintenance lanes</h3>
               <p className="mt-1 text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                These only queue guarded Jenny requests. They do not restart, update, delete files, or switch runtimes.
+                These only queue guarded Jenny requests when the backend says the preview lane is safe. They do not restart, update, delete files, or switch runtimes.
               </p>
+              {controlsLocked ? (
+                <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-800 [overflow-wrap:anywhere] dark:text-amber-100">
+                  Maintenance lane controls locked: {blockedControlReasons[0] ?? "backend execution disabled"}. Manual only; requires explicit operator approval.
+                </p>
+              ) : null}
               <div className="mt-2 grid min-w-0 gap-2 sm:flex sm:flex-wrap">
                 {onQueueHermesUpdate ? (
-                  <button className="w-full rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:opacity-60 dark:text-amber-300 sm:w-auto" disabled={busy || !githubBridgeSafety.safe} onClick={onQueueHermesUpdate} type="button">
-                    Start Hermes update lane
+                  <button className="w-full rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:text-amber-300 sm:w-auto" disabled={busy || controlsLocked} onClick={onQueueHermesUpdate} title={controlsLocked ? blockedControlPrimaryReason : "Manual only - requires explicit operator action"} type="button">
+                    {controlsLocked ? "Hermes update lane locked" : "Start Hermes update lane"}
                   </button>
                 ) : null}
                 {onQueueStorageCleanup ? (
-                  <button className="w-full rounded-xl border border-sky-500/40 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/10 disabled:opacity-60 dark:text-sky-300 sm:w-auto" disabled={busy || !githubBridgeSafety.safe} onClick={onQueueStorageCleanup} type="button">
-                    Start storage cleanup lane
+                  <button className="w-full rounded-xl border border-sky-500/40 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:text-sky-300 sm:w-auto" disabled={busy || controlsLocked} onClick={onQueueStorageCleanup} title={controlsLocked ? blockedControlPrimaryReason : "Manual only - requires explicit operator action"} type="button">
+                    {controlsLocked ? "Storage cleanup lane locked" : "Start storage cleanup lane"}
                   </button>
                 ) : null}
               </div>
