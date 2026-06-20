@@ -11,14 +11,13 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-_INERT_STORAGE_FLAGS: dict[str, Any] = {
-    "trusted_for_execution": False,
-    "inert_context_only": True,
-    "would_execute": False,
-    "enforcement_enabled": False,
-    "dry_run_only": True,
-    "display_only": True,
-}
+from mission_control.inert_contract import inert_live_operation_flags
+
+_INERT_STORAGE_FLAGS: dict[str, Any] = inert_live_operation_flags(
+    enforcement_enabled=False,
+    dry_run_only=True,
+    display_only=True,
+)
 
 STORAGE_GUARD_POLICY: dict[str, Any] = {
     "guard_id": "storage_guard_v1",
@@ -485,13 +484,12 @@ def evaluate_storage_guard(observed_state: dict[str, Any] | None) -> dict[str, A
         decision_state = "warn"
 
     return {
+        **_INERT_STORAGE_FLAGS,
         "decision_state": decision_state,
         "would_block": would_block,
         "reasons": reasons,
         "blocked_actions": blocked_actions,
         "required_approvals": required_approvals,
         "unresolved_policy_fields": list(policy["unresolved_policy_fields"]),
-        "would_execute": False,
-        "dry_run_only": True,
         "enforces_runtime": False,
     }

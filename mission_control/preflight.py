@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from mission_control.inert_contract import inert_live_operation_flags
 from mission_control.records import StartGateCheck, TaskControlEnvelope
 from mission_control.start_gate import evaluate_start_gate
 
@@ -56,7 +57,7 @@ def build_task_control_envelope(lane_start: Mapping[str, Any]) -> TaskControlEnv
             "requested_actions": list(requested_actions),
             "preflight_adapter": ADAPTER_POLICY,
             "default_off": DEFAULT_OFF,
-            "would_execute": WOULD_EXECUTE,
+            **inert_live_operation_flags(),
             "dry_run_only": DRY_RUN_ONLY,
             "enforces_runtime": ENFORCES_RUNTIME,
         },
@@ -74,7 +75,7 @@ def _with_preflight_flags(check: StartGateCheck) -> StartGateCheck:
     metadata.update(
         {
             "default_off": DEFAULT_OFF,
-            "would_execute": WOULD_EXECUTE,
+            **inert_live_operation_flags(),
             "dry_run_only": DRY_RUN_ONLY,
             "enforces_runtime": ENFORCES_RUNTIME,
             "adapter": ADAPTER_POLICY,

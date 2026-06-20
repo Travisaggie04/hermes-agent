@@ -13,6 +13,7 @@ import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from mission_control.inert_contract import INERT_LIVE_OPERATION_FLAGS
 from mission_control.records import (
     AcceptedBaselineRecord,
     ApprovalRecord,
@@ -4181,13 +4182,11 @@ def test_domain_governance_endpoint_exposes_waha_hard_wall_policy_as_display_onl
     assert policy["memory_policy"]["required_namespace"] == "waha"
     assert policy["model_policy_placeholder"]["approved_models_required"] is True
     assert policy["verifier_policy"]["waha_technical_verifier_required"] is True
-    assert policy["enforcement"] == {
-        "trusted_for_execution": False,
-        "inert_context_only": True,
-        "would_execute": False,
-        "enforcement_enabled": False,
-        "display_only": True,
-    }
+    for key, value in INERT_LIVE_OPERATION_FLAGS.items():
+        assert policy["enforcement"][key] is value
+    assert policy["enforcement"]["enforcement_enabled"] is False
+    assert policy["enforcement"]["dry_run_only"] is True
+    assert policy["enforcement"]["display_only"] is True
     assert "allowed_roots" in policy["unresolved_required_before_enforcement"]
 
 

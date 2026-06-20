@@ -10,6 +10,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from mission_control.inert_contract import inert_live_operation_flags
+
 
 WAHA_HARD_WALL_POLICY: dict[str, Any] = {
     "domain_id": "waha",
@@ -48,13 +50,11 @@ WAHA_HARD_WALL_POLICY: dict[str, Any] = {
     "verifier_policy": {
         "waha_technical_verifier_required": True,
     },
-    "enforcement": {
-        "trusted_for_execution": False,
-        "inert_context_only": True,
-        "would_execute": False,
-        "enforcement_enabled": False,
-        "display_only": True,
-    },
+    "enforcement": inert_live_operation_flags(
+        enforcement_enabled=False,
+        dry_run_only=True,
+        display_only=True,
+    ),
     "unresolved_required_before_enforcement": (
         "allowed_roots",
         "approved_models",
