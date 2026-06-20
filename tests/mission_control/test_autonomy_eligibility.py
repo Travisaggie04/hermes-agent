@@ -294,13 +294,103 @@ def test_unrecorded_runtime_blocks_without_missing_path_status():
     assert result["runtimes"]["gateway"]["unrecorded"] is True
 
 
-def test_rollback_stale_is_surfaced_and_blocks_autonomy():
+def test_clean_previous_version_rollback_is_informational_not_blocking():
     result = evaluate_runtime_provenance(
         _clean_runtime_state(rollback_runtime=_runtime("/runtime/rollback", OLD_HEAD))
     )
 
-    assert "ROLLBACK_STALE" in result["statuses"]
-    assert "rollback runtime is stale relative to source HEAD" in result["autonomy_blocked_reasons"]
+    assert result["status"] == "CLEAN_AND_ALIGNED"
+    assert result["primary_status"] == "CLEAN_AND_ALIGNED"
+    assert result["autonomy_blocked"] is False
+    assert result["statuses"] == ["CLEAN_AND_ALIGNED"]
+    assert "ROLLBACK_STALE" not in result["statuses"]
+    assert "ROLLBACK_AVAILABLE_PREVIOUS_VERSION" in result["informational_statuses"]
+    assert "rollback runtime is a clean previous version" in result["warnings"]
+    assert result["runtimes"]["rollback"]["availability"] == "previous_version"
+    assert result["would_execute"] is False
+    assert result["dispatch_enabled"] is False
+    assert result["session_send_enabled"] is False
+    assert result["worker_dispatch_enabled"] is False
+
+
+def test_missing_rollback_runtime_path_blocks_autonomy():
+    result = evaluate_runtime_provenance(_clean_runtime_state(rollback_runtime={"exists": False}))
+
+    assert "MISSING_RUNTIME_PATH" in result["statuses"]
+    assert "rollback runtime path is missing or absent" in result["autonomy_blocked_reasons"]
+    assert "ROLLBACK_AVAILABLE_PREVIOUS_VERSION" not in result["informational_statuses"]
+
+
+def test_broken_rollback_git_metadata_blocks_autonomy():
+    result = evaluate_runtime_provenance(
+        _clean_runtime_state(
+            rollback_runtime=_runtime(
+                "/runtime/rollback",
+                OLD_HEAD,
+                git_healthy=False,
+                error="fatal: not a git repository: /runtime/rollback",
+            )
+        )
+    )
+
+    assert "BROKEN_GIT_METADATA" in result["statuses"]
+    assert "rollback git metadata is broken" in result["autonomy_blocked_reasons"]
+    assert "ROLLBACK_AVAILABLE_PREVIOUS_VERSION" not in result["informational_statuses"]
+
+
+def test_dirty_rollback_runtime_blocks_autonomy():
+    result = evaluate_runtime_provenance(
+        _clean_runtime_state(
+            rollback_runtime=_runtime(
+                "/runtime/rollback",
+                OLD_HEAD,
+                status_short=["## HEAD (no branch)", " M mission_control/autonomy_eligibility.py"],
+            )
+        )
+    )
+
+    assert "DIRTY_RUNTIME" in result["statuses"]
+    assert "rollback runtime has dirty or untracked files" in result["autonomy_blocked_reasons"]
+    assert "ROLLBACK_AVAILABLE_PREVIOUS_VERSION" not in result["informational_statuses"]
+
+
+def test_unknown_rollback_head_blocks_autonomy():
+    result = evaluate_runtime_provenance(
+        _clean_runtime_state(rollback_runtime=_runtime("/runtime/rollback", ""))
+    )
+
+    assert "ROLLBACK_HEAD_UNKNOWN" in result["statuses"]
+    assert "rollback runtime HEAD is missing or invalid" in result["autonomy_blocked_reasons"]
+    assert "ROLLBACK_AVAILABLE_PREVIOUS_VERSION" not in result["informational_statuses"]
+
+
+def test_malformed_rollback_head_blocks_autonomy():
+    result = evaluate_runtime_provenance(
+        _clean_runtime_state(rollback_runtime=_runtime("/runtime/rollback", "not-a-sha"))
+    )
+
+    assert "ROLLBACK_HEAD_UNKNOWN" in result["statuses"]
+    assert "rollback runtime HEAD is missing or invalid" in result["autonomy_blocked_reasons"]
+    assert "ROLLBACK_AVAILABLE_PREVIOUS_VERSION" not in result["informational_statuses"]
+
+
+def test_read_only_preview_with_previous_rollback_remains_inert_and_eligible():
+    result = evaluate_read_only_autonomy_eligibility(
+        _eligible_preview_payload(
+            runtime_provenance=evaluate_runtime_provenance(
+                _clean_runtime_state(rollback_runtime=_runtime("/runtime/rollback", OLD_HEAD))
+            )
+        )
+    )
+
+    assert result["eligible"] is True
+    assert result["runtime_provenance"]["primary_status"] == "CLEAN_AND_ALIGNED"
+    assert "ROLLBACK_AVAILABLE_PREVIOUS_VERSION" in result["runtime_provenance"]["informational_statuses"]
+    assert result["would_execute"] is False
+    assert result["execution_enabled"] is False
+    assert result["dispatch_enabled"] is False
+    assert result["session_send_enabled"] is False
+    assert result["worker_dispatch_enabled"] is False
 
 
 def test_approved_read_only_lane_preview_is_inert_and_eligible():
