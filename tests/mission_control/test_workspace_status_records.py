@@ -483,7 +483,30 @@ def test_guarded_read_only_status_report_runs_once_and_closes_run(tmp_path):
     assert result["run_id"] == record_set.run.run_id
     assert result["approval_id"] == record_set.approval.approval_id
     assert result["report_id"].startswith("report-pr402-supervised-read-only-status-result-")
-    assert "Accepted runtime/head: /runtime/accepted" in result["status_report"]
+    report = result["status_report"]
+    assert "Operator summary: SAFE for this one supervised read-only status report" in report
+    assert "Accepted runtime/head: /runtime/accepted" in report
+    assert "Record counts: total=4" in report
+    assert "AcceptedBaselineRecord=1" in report
+    assert "ApprovalRecord=1" in report
+    assert "RunRecord=1" in report
+    assert "ReportRecord=1" in report
+    assert "ApprovalSlice=0" in report
+    assert "JennyReportRecord=0" in report
+    assert "WorkerNodeRunRecord=0" in report
+    assert "Lane state: report-time active lanes=1; current run active=true; post-run active lanes=expected 0" in report
+    assert "report-time may include this running status report" in report
+    assert "Read-only autonomy blockers: []" in report
+    assert "Scoped PR blockers:" in report
+    assert "Worker-node/laptop blockers:" in report
+    assert "Live operations blockers: deploy/restart/runtime-switch/baseline append" in report
+    assert "External action blockers: Waha/social/payment/model-routing/queue remain disabled" in report
+    assert "Safety verification: approved record appends only; source/runtime files edited=no" in report
+    assert "git commits/PRs=no" in report
+    assert "secrets printed=no" in report
+    assert "Next recommended action:" in report
+    assert "token" not in report.lower()
+    assert ".env" not in report
     after = build_workspace_status_from_records(
         {"now": "2026-06-19T12:07:00Z"},
         records_path=records_path,

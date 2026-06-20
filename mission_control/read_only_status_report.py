@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import uuid
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from mission_control.records import ApprovalRecord, JsonlRecordStore, ReportRecord, RunRecord
+from mission_control.records import (
+    ApprovalRecord,
+    JsonlRecordStore,
+    ReportRecord,
+    RunRecord,
+)
+from mission_control.records.models import RECORD_TYPES
 from mission_control.workspace_status_records import build_workspace_status_from_records, default_record_store_path
 
 
@@ -20,7 +27,7 @@ REPORT_CONTRACT_KIND = "supervised_read_only_status_report_contract"
 REPORT_RESULT_KIND = "supervised_read_only_status_report_result"
 
 FORBIDDEN_ACTIONS = (
-    "file writes",
+    "source/runtime file writes outside approved Mission Control record appends",
     "shell/write/patch tools",
     "patch",
     "shell",
@@ -166,7 +173,7 @@ def build_record_set(
             "jenny_executed": False,
             "safety_confirmation": (
                 "No Jenny execution, dispatch, session-send, worker dispatch, "
-                "file write, shell, patch, external side effect, or secrets access occurred."
+                "source/runtime edit, shell, patch, external side effect, or secrets access occurred."
             ),
         },
     )
@@ -240,6 +247,7 @@ def run_once_if_trusted(
         return _blocked("execution packet is missing run_id or approval_id", status)
 
     result_report_id = f"report-pr402-supervised-read-only-status-result-{uuid.uuid4().hex[:12]}"
+    store = JsonlRecordStore(path)
     report = ReportRecord(
         report_id=result_report_id,
         run_id=run_id,
@@ -248,7 +256,7 @@ def run_once_if_trusted(
         status="accepted",
         report_kind=REPORT_RESULT_KIND,
         summary="Jenny supervised read-only status report completed without external side effects.",
-        result=_status_report_text(status),
+        result=_status_report_text(status, record_counts=_record_counts(store), current_run_id=run_id),
         blockers=tuple(status.get("operator_decision_packet", {}).get("blocked_reasons", ())[:8])
         if isinstance(status.get("operator_decision_packet"), dict)
         else (),
@@ -262,7 +270,9 @@ def run_once_if_trusted(
         metadata={
             "one_run_only": True,
             "read_only_status_report_only": True,
-            "no_file_edits": True,
+            "approved_record_appends_only": True,
+            "no_unapproved_file_edits": True,
+            "no_source_or_runtime_file_edits": True,
             "no_git_changes": True,
             "no_dispatch": True,
             "no_session_send": True,
@@ -271,7 +281,7 @@ def run_once_if_trusted(
             "no_secrets_printed": True,
             "safety_confirmation": (
                 "The guarded backend appended only this status report result and terminal "
-                "RunRecord update; no dispatch, session-send, worker dispatch, file write, "
+                "RunRecord update; no source/runtime edit, dispatch, session-send, worker dispatch, "
                 "shell, patch, external side effect, or secrets access occurred."
             ),
             "timeout_seconds": timeout_seconds,
@@ -309,7 +319,6 @@ def run_once_if_trusted(
             "worker_dispatch_enabled": False,
         },
     )
-    store = JsonlRecordStore(path)
     report_index = store.append(report)
     run_index = store.append(completed_run)
     return {
@@ -326,28 +335,79 @@ def run_once_if_trusted(
     }
 
 
-def _status_report_text(status: dict[str, Any]) -> str:
+def _status_report_text(
+    status: dict[str, Any],
+    *,
+    record_counts: dict[str, int],
+    current_run_id: str,
+) -> str:
     baseline = _mapping(status.get("accepted_baseline_record"))
     dashboard = _mapping(status.get("dashboard_runtime"))
     gateway = _mapping(status.get("gateway_runtime"))
     runtime = _mapping(status.get("runtime_provenance"))
     readiness = _mapping(status.get("orchestration_readiness"))
     records = _mapping(status.get("control_plane_records"))
+    run_lifecycle = _mapping(status.get("run_lifecycle"))
     states = _mapping(readiness.get("states"))
+    packet = _mapping(status.get("execution_packet_preview"))
+    active_runs = _safe_int(records.get("active_run_count"))
+    active_run_ids = tuple(str(run_id) for run_id in run_lifecycle.get("active_run_ids", ()) if run_id)
+    current_run_is_active = current_run_id in active_run_ids or (
+        not active_run_ids and records.get("latest_active_run_id") == current_run_id
+    )
+    post_run_active_runs = max(active_runs - 1, 0) if current_run_is_active else active_runs
+    summary = (
+        "SAFE for this one supervised read-only status report; broader autonomy remains blocked."
+        if packet.get("trusted_for_execution") is True and packet.get("one_run_authorized") is True
+        else "BLOCKED until an exact one-run read-only packet is approved."
+    )
+    readonly = _mapping(readiness.get("supervised_read_only_autonomy"))
+    scoped_pr = _mapping(readiness.get("scoped_pr_creation"))
+    worker = _mapping(readiness.get("laptop_codex_worker_node"))
     return "\n".join(
         [
+            f"Operator summary: {summary}",
             f"Accepted runtime/head: {baseline.get('runtime_path', '')} {baseline.get('head', '')}",
             f"Dashboard runtime/head: {dashboard.get('path', '')} {dashboard.get('head', '')}",
             f"Gateway runtime/head: {gateway.get('path', '')} {gateway.get('head', '')}",
             f"Latest baseline ID: {baseline.get('baseline_id', '')}",
             f"Rollback: {runtime.get('informational_statuses', [])}",
-            f"Record activity: active runs {records.get('active_run_count', '')}, pending approvals {records.get('pending_approval_count', '')}, available approvals {records.get('available_approval_count', '')}",
+            "Record counts: "
+            + ", ".join(f"{name}={count}" for name, count in record_counts.items()),
+            (
+                "Lane state: "
+                f"report-time active lanes={active_runs}; "
+                f"current run active={str(current_run_is_active).lower()}; "
+                f"post-run active lanes=expected {post_run_active_runs} after terminal RunRecord append; "
+                "report-time may include this running status report."
+            ),
+            f"Record activity: pending approvals {records.get('pending_approval_count', '')}, available approvals {records.get('available_approval_count', '')}",
             "Flags: dispatch=false, session-send=false, worker-dispatch=false",
             f"Supervised read-only autonomy: {states.get('supervised_read_only_autonomy', '')}",
             f"Scoped PR classification: {states.get('scoped_pr_creation', '')}",
+            f"Read-only autonomy blockers: {readonly.get('blocked_reasons', [])}",
+            f"Scoped PR blockers: {scoped_pr.get('blocked_reasons', [])}",
+            f"Worker-node/laptop blockers: {worker.get('blocked_reasons', [])}",
+            "Live operations blockers: deploy/restart/runtime-switch/baseline append are not approved for this lane.",
+            "External action blockers: Waha/social/payment/model-routing/queue remain disabled.",
+            "UI/operator concerns: keep blocked controls explicit and review this report before another lane.",
+            (
+                "Safety verification: approved record appends only; source/runtime files edited=no; "
+                "git commits/PRs=no; deploy/restart/runtime switch=no; baseline append=no; "
+                "dispatch/session-send/worker=no; external actions=no; secrets printed=no."
+            ),
             f"Remaining blockers: {readiness.get('blocked_reasons', [])}",
+            "Next recommended action: review this report, then approve one bounded read-only lane if the report is acceptable.",
         ]
     )
+
+
+def _record_counts(store: JsonlRecordStore) -> dict[str, int]:
+    records = store.read_all()
+    by_type = Counter(getattr(record, "record_type", type(record).__name__) for record in records)
+    counts = {"total": len(records)}
+    counts.update({record_type: by_type.get(record_type, 0) for record_type in RECORD_TYPES})
+    return counts
 
 
 def _blocked(reason: str, status: dict[str, Any]) -> dict[str, Any]:
@@ -362,6 +422,13 @@ def _blocked(reason: str, status: dict[str, Any]) -> dict[str, Any]:
 
 def _mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _iso(value: datetime) -> str:
