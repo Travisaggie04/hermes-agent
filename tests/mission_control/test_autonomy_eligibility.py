@@ -96,6 +96,23 @@ def _forbidden_actions():
     ]
 
 
+def _read_only_packet_tool_profile():
+    return {
+        "paths": [
+            {
+                "path_id": "supervised_read_only_preview_packet",
+                "label": "Supervised read-only preview packet",
+                "read_only_safe": True,
+                "tools": [
+                    "read_workspace_status",
+                    "read_record_summary",
+                    "render_preview_packet",
+                ],
+            }
+        ]
+    }
+
+
 def _eligible_preview_payload(**overrides):
     payload = {
         "runtime_provenance": evaluate_runtime_provenance(_clean_runtime_state()),
@@ -124,6 +141,7 @@ def _eligible_preview_payload(**overrides):
         "report_inbox_ready": True,
         "active_mutation_lane_count": 0,
         "bridge": {"manual_start_only": True, "dispatch_enabled": False, "session_send_enabled": False},
+        "tool_permissions": _read_only_packet_tool_profile(),
         "capabilities": {},
         "now": "2026-06-19T00:00:00Z",
     }
@@ -934,6 +952,134 @@ def test_execution_packet_preview_is_never_an_execution_path():
     assert result["dispatch_enabled"] is False
     assert result["session_send_enabled"] is False
     assert result["worker_dispatch_enabled"] is False
+
+
+def test_read_only_execution_packet_allows_manual_bridge_with_read_only_safe_packet_path():
+    result = build_execution_packet_preview(_eligible_preview_payload(mode="read_only"))
+
+    _assert_inert_preview(result)
+    _assert_inert_preview(result["packet"])
+    assert result["eligible"] is True
+    assert result["packet"]["mode"] == "read_only"
+    assert result["packet"]["run_id"] == "run-read-only-1"
+    assert result["packet"]["approval_id"] == "approval-read-only-1"
+    assert result["packet"]["would_execute"] is False
+    assert result["packet"]["execution_enabled"] is False
+    assert result["blocked_reasons"] == []
+    assert "bridge path is manual-only; preview must not execute" in result["warnings"]
+    assert result["trusted_for_execution"] is False
+    assert result["would_execute"] is False
+    assert result["execution_enabled"] is False
+    assert result["dispatch_enabled"] is False
+    assert result["session_send_enabled"] is False
+    assert result["worker_dispatch_enabled"] is False
+
+
+def test_read_only_execution_packet_requires_explicit_read_only_safe_tool_profile():
+    payload = _eligible_preview_payload(mode="read_only")
+    payload.pop("tool_permissions")
+
+    result = build_execution_packet_preview(payload)
+
+    _assert_inert_preview(result)
+    _assert_inert_preview(result["packet"])
+    assert result["eligible"] is False
+    assert "read-only execution packet requires a read-only-safe tool profile" in result["blocked_reasons"]
+    assert result["would_execute"] is False
+    assert result["execution_enabled"] is False
+
+
+def test_read_only_execution_packet_blocks_unsafe_bridge_even_with_safe_packet_path():
+    result = build_execution_packet_preview(
+        _eligible_preview_payload(
+            mode="read_only",
+            bridge={"manual_hermes_answer_enabled": True},
+        )
+    )
+
+    _assert_inert_preview(result)
+    _assert_inert_preview(result["packet"])
+    assert result["eligible"] is False
+    assert "bridge path is not read-only safe" in result["blocked_reasons"]
+    assert "bridge: bridge can execute or write an external/response record" in result["blocked_reasons"]
+
+
+def test_read_only_execution_packet_blocks_unknown_tool_profile():
+    result = build_execution_packet_preview(
+        _eligible_preview_payload(
+            mode="read_only",
+            tool_permissions={"paths": [{"path_id": "unknown-preview-path", "capability_inheritance": "unknown"}]},
+        )
+    )
+
+    _assert_inert_preview(result)
+    _assert_inert_preview(result["packet"])
+    assert result["eligible"] is False
+    assert "tool permission paths are not read-only safe" in result["blocked_reasons"]
+    assert "read-only execution packet requires a read-only-safe tool profile" in result["blocked_reasons"]
+    assert "unknown-preview-path: path capability inheritance is unknown" in result["blocked_reasons"]
+
+
+def test_read_only_execution_packet_preserves_core_safety_blockers():
+    cases = [
+        (
+            {"approval": {}},
+            "exact approved ApprovalRecord is required",
+        ),
+        (
+            {"run": {}},
+            "valid RunRecord is required",
+        ),
+        (
+            {"report_inbox_ready": False, "report": {}},
+            "report inbox must be ready",
+        ),
+        (
+            {
+                "run": {
+                    "run_id": "run-read-only-1",
+                    "project_id": "project-hermes-mission-control",
+                    "approval_id": "approval-read-only-1",
+                    "lane_type": "read_only_inspection",
+                    "status": "requested",
+                    "dispatch_state": False,
+                    "forbidden_actions": ["merge"],
+                },
+                "lane": {"lane_type": "read_only_inspection", "forbidden_actions": ["merge"]},
+            },
+            "forbidden actions missing mutation classes",
+        ),
+        (
+            {
+                "runtime_provenance": evaluate_runtime_provenance(
+                    _clean_runtime_state(
+                        dashboard_runtime=_runtime(
+                            "/runtime/dashboard",
+                            HEAD,
+                            status_short=["## HEAD (no branch)", " M mission_control/autonomy_eligibility.py"],
+                        )
+                    )
+                )
+            },
+            "runtime provenance is not clean",
+        ),
+        (
+            {"dispatch_enabled": True, "session_send_enabled": True, "worker_dispatch_enabled": True},
+            "dispatch_enabled must remain false",
+        ),
+    ]
+
+    for overrides, expected_reason in cases:
+        result = build_execution_packet_preview(_eligible_preview_payload(mode="read_only", **overrides))
+
+        _assert_inert_preview(result)
+        _assert_inert_preview(result["packet"])
+        assert result["eligible"] is False
+        assert any(expected_reason in reason for reason in result["blocked_reasons"])
+        assert result["would_execute"] is False
+        assert result["dispatch_enabled"] is False
+        assert result["session_send_enabled"] is False
+        assert result["worker_dispatch_enabled"] is False
 
 
 def test_execution_packet_preview_rejects_requested_live_action_flags():

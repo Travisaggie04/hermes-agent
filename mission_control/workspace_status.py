@@ -467,12 +467,21 @@ def _execution_packet_preview_input(
     tool_permission_classification: dict[str, Any],
 ) -> dict[str, Any]:
     section = _section(source, "execution_packet_preview")
+    autonomy = _section(source, "autonomy_eligibility")
     lane = _section(section, "lane") or _section(source, "lane")
     run = _section(section, "run")
     worker_node = _section(section, "worker_node")
     packet_tool_permissions = section.get("tool_permissions")
     if not isinstance(packet_tool_permissions, (dict, list)):
-        packet_tool_permissions = tool_permission_classification
+        autonomy_tool_permissions = autonomy.get("tool_permissions")
+        source_tool_permissions = source.get("tool_permissions")
+        if (
+            not isinstance(source_tool_permissions, (dict, list))
+            and isinstance(autonomy_tool_permissions, (dict, list))
+        ):
+            packet_tool_permissions = autonomy_tool_permissions
+        else:
+            packet_tool_permissions = tool_permission_classification
     mode = _safe_text(section.get("mode") or section.get("execution_mode"))
     lane_type = _safe_text(
         run.get("lane_type")
@@ -489,17 +498,28 @@ def _execution_packet_preview_input(
         else:
             mode = "blocked"
 
+    extra: dict[str, Any] = {
+        "mode": mode,
+        "runtime_provenance": runtime_provenance,
+        "tool_permissions": packet_tool_permissions,
+        "active_mutation_lane_count": _safe_int(
+            _section(source, "control_plane_lifecycle").get("active_mutation_lane_count"),
+            default=_safe_int(autonomy.get("active_mutation_lane_count"), default=0),
+        ),
+    }
+    if mode == "read_only":
+        for key in ("approval", "run", "report", "bridge", "capabilities"):
+            if not _section(section, key) and _section(autonomy, key):
+                extra[key] = _section(autonomy, key)
+        if not _section(section, "lane") and _section(autonomy, "lane"):
+            extra["lane"] = _section(autonomy, "lane")
+        for key in ("report_inbox_ready", "report_record_ready"):
+            if key not in section and key in autonomy:
+                extra[key] = autonomy.get(key)
+
     return _merge_dicts(
         section,
-        {
-            "mode": mode,
-            "runtime_provenance": runtime_provenance,
-            "tool_permissions": packet_tool_permissions,
-            "active_mutation_lane_count": _safe_int(
-                _section(source, "control_plane_lifecycle").get("active_mutation_lane_count"),
-                default=0,
-            ),
-        },
+        extra,
     )
 
 

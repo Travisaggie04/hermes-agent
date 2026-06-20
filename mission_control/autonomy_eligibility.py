@@ -946,6 +946,8 @@ def build_execution_packet_preview(observed_state: dict[str, Any] | None = None)
         }
     )
     blocked_reasons = list(eligibility.get("blocked_reasons") or ())
+    if mode == "read_only":
+        _check_read_only_packet_tool_profile(state, blocked_reasons)
     _check_preview_disabled_flags(
         blocked_reasons,
         state,
@@ -1148,6 +1150,16 @@ def _check_tool_permissions_for_read_only(tool_permissions: dict[str, Any], bloc
             _add(blocked, str(reason))
     elif classification == "manual_only":
         _add(warnings, "tool permission paths are manual-only; preview must not execute")
+
+
+def _check_read_only_packet_tool_profile(state: dict[str, Any], blocked: list[str]) -> None:
+    raw_permissions = state.get("tool_permissions")
+    if not isinstance(raw_permissions, (dict, list)):
+        _add(blocked, "read-only execution packet requires a read-only-safe tool profile")
+        return
+    tool_permissions = _optional_tool_permissions(state)
+    if _safe_text(tool_permissions.get("permission_classification")) != "read_only_safe":
+        _add(blocked, "read-only execution packet requires a read-only-safe tool profile")
 
 
 def _add_bridge_blocked_reasons(blocked: list[str], bridge: dict[str, Any]) -> None:
