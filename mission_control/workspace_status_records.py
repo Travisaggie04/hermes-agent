@@ -2191,6 +2191,7 @@ def _report_completion_path_payload(
             parent_run_id="",
             status=run.status,
             label=run.title or run.objective or run.run_id,
+            run=run,
             report=report,
             duplicate_report_ids=duplicate_report_ids,
         )
@@ -2212,6 +2213,7 @@ def _report_completion_path_payload(
             parent_run_id=child.parent_run_id,
             status=child.status,
             label=child.objective or child.agent_identity or child.child_run_id,
+            run=None,
             report=report,
             duplicate_report_ids=duplicate_report_ids,
         )
@@ -2233,6 +2235,7 @@ def _report_completion_path_payload(
             parent_run_id=worker.parent_run_id,
             status=worker.status,
             label=worker.objective or worker.assigned_packet_summary or worker.worker_run_id,
+            run=None,
             report=report,
             duplicate_report_ids=duplicate_report_ids,
         )
@@ -2281,6 +2284,74 @@ def _report_completion_path_payload(
     }
 
 
+def _legacy_safe_read_only_preview_closure(
+    *,
+    record_type: str,
+    status: str,
+    run: RunRecord | None,
+    report: ReportRecord | None,
+) -> bool:
+    if record_type != "run" or run is None or report is None:
+        return False
+    if status not in {"stopped", "cancelled"}:
+        return False
+    if not _is_read_only_preview_run(run) or not _is_read_only_preview_report(report):
+        return False
+    if _read_only_preview_report_blockers(report=report):
+        return False
+    metadata = run.metadata if isinstance(run.metadata, dict) else {}
+    if _flag_enabled(metadata.get("no_jenny_execution")) is not True:
+        return False
+    if _flag_enabled(metadata.get("jenny_executed")):
+        return False
+    if _enabled_live_flag_names(run.to_dict(), metadata):
+        return False
+    stop_reason = _safe_text(run.stop_reason).lower()
+    return "no execution" in stop_reason or "no jenny execution" in stop_reason
+
+
+def _legacy_safe_status_report_result(report: ReportRecord | None) -> bool:
+    if report is None:
+        return False
+    if _safe_text(report.report_kind) != "supervised_read_only_status_report_result":
+        return False
+    if _linked_report_review_status(report) != "accepted":
+        return False
+    metadata = report.metadata if isinstance(report.metadata, dict) else {}
+    required_true_flags = (
+        "one_run_only",
+        "read_only_status_report_only",
+        "no_git_changes",
+        "no_dispatch",
+        "no_session_send",
+        "no_worker_dispatch",
+        "no_external_side_effects",
+        "no_secrets_printed",
+    )
+    if any(_flag_enabled(metadata.get(flag)) is not True for flag in required_true_flags):
+        return False
+    file_safety_confirmed = (
+        _flag_enabled(metadata.get("no_file_edits")) is True
+        or (
+            _flag_enabled(metadata.get("approved_record_appends_only")) is True
+            and _flag_enabled(metadata.get("no_unapproved_file_edits")) is True
+            and _flag_enabled(metadata.get("no_source_or_runtime_file_edits")) is True
+        )
+    )
+    if not file_safety_confirmed:
+        return False
+    if _enabled_live_flag_names(report.to_dict(), metadata):
+        return False
+    if _result_ingestion_forbidden_metadata_keys(metadata):
+        return False
+    if not _result_ingestion_safety_confirmation_present(metadata):
+        return False
+    return (
+        _safe_text(report.submitted_from) == "mission_control_guarded_one_run_backend"
+        and _safe_text(report.reviewed_by) == "mission-control-gate"
+    )
+
+
 def _report_completion_path_item(
     *,
     record_type: str,
@@ -2288,6 +2359,7 @@ def _report_completion_path_item(
     parent_run_id: str,
     status: str,
     label: str,
+    run: RunRecord | None,
     report: ReportRecord | None,
     duplicate_report_ids: set[str],
 ) -> dict[str, Any]:
@@ -2309,6 +2381,16 @@ def _report_completion_path_item(
         else ""
     )
     blocked_reasons: list[str] = []
+    legacy_safe_preview_closure = _legacy_safe_read_only_preview_closure(
+        record_type=record_type,
+        status=status,
+        run=run,
+        report=report,
+    )
+    legacy_safe_status_report_result = _legacy_safe_status_report_result(report)
+    completion_contract_missing_fields = [
+        field for field in contract_missing_fields if not (legacy_safe_status_report_result and field == "tests")
+    ]
 
     if report is None:
         blocked_reasons.append(f"{record_type} {record_id} has no linked completion report")
@@ -2318,16 +2400,19 @@ def _report_completion_path_item(
         blocked_reasons.append(link_mismatch_reason)
 
     if report is not None and review_status != "accepted":
-        if review_status in {"rejected", "superseded"}:
+        if legacy_safe_preview_closure:
+            pass
+        elif review_status in {"rejected", "superseded"}:
             blocked_reasons.append(f"report_id {report_id} completion report is {review_status}")
         elif review_status == "reviewed":
             blocked_reasons.append(f"report_id {report_id} completion report is reviewed but not accepted")
         else:
             blocked_reasons.append(f"report_id {report_id} still needs Jenny review before completion")
     if contract_missing_fields:
-        blocked_reasons.append(
-            f"report_id {report_id} missing completion contract fields: {', '.join(contract_missing_fields)}"
-        )
+        if completion_contract_missing_fields:
+            blocked_reasons.append(
+                f"report_id {report_id} missing completion contract fields: {', '.join(completion_contract_missing_fields)}"
+            )
     if report is not None and redaction_status not in RESULT_INGESTION_ACCEPTED_REDACTION_STATUSES:
         blocked_reasons.append(f"report_id {report_id} redaction_status {redaction_status or 'missing'} is not accepted")
     if forbidden_metadata_keys:
@@ -2355,8 +2440,11 @@ def _report_completion_path_item(
         "report_id": report_id,
         "report_link_status": report_link_status,
         "report_review_status": review_status,
-        "report_contract_complete": report is not None and not contract_missing_fields,
+        "report_contract_complete": report is not None and not completion_contract_missing_fields,
         "contract_missing_fields": contract_missing_fields,
+        "completion_contract_missing_fields": completion_contract_missing_fields,
+        "legacy_safe_preview_closure": legacy_safe_preview_closure,
+        "legacy_safe_status_report_result": legacy_safe_status_report_result,
         "result_ingestion_ready": result_ingestion_ready,
         "duplicate_report": duplicate_report,
         "report_link_mismatch": bool(link_mismatch_reason),

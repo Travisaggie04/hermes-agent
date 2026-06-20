@@ -529,6 +529,14 @@ def test_guarded_read_only_status_report_runs_once_and_closes_run(tmp_path):
     latest_run = after["control_plane_lifecycle"]["latest_runs_by_id"][record_set.run.run_id]
     assert latest_run["status"] == "completed"
     assert latest_run["result_record_ids"] == [result["report_id"]]
+    generated_report = next(
+        report for report in JsonlRecordStore(records_path).read_all(ReportRecord) if report.report_id == result["report_id"]
+    )
+    assert generated_report.tests == (
+        "guarded read-only status-report backend trusted one-run packet and appended only approved records",
+    )
+    assert after["report_completion_path"]["blocked_completion_count"] == 0
+    assert after["report_completion_path"]["completion_ready_count"] == 1
     assert after["run_lifecycle"]["append_only_run_update_ids"] == [record_set.run.run_id]
     assert after["run_lifecycle"]["run_update_conflict_ids"] == []
     assert after["control_plane_records"]["active_run_count"] == 0
@@ -2439,6 +2447,167 @@ def test_record_sourced_workspace_status_projects_report_completion_path(tmp_pat
     assert "report_id report-reviewed-only completion report is reviewed but not accepted" in operator_packet["report_completion_blocked_reasons"]
     assert "Report completion path: 1 ready, 4 blocked." in operator_packet["plain_language_summary"]
     assert operator_packet["jenny_review_required"] is True
+
+
+def test_report_completion_path_allows_only_safe_legacy_read_only_reports(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    disabled_flags = {
+        "would_execute": False,
+        "execution_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+    }
+    safe_status_report_metadata = {
+        "one_run_only": True,
+        "read_only_status_report_only": True,
+        "no_file_edits": True,
+        "no_git_changes": True,
+        "no_dispatch": True,
+        "no_session_send": True,
+        "no_worker_dispatch": True,
+        "no_external_side_effects": True,
+        "no_secrets_printed": True,
+        "safety_confirmation": "Only approved read-only status-report records were appended; no secrets.",
+        **disabled_flags,
+    }
+    store.append(
+        RunRecord(
+            run_id="run-safe-preview-closed",
+            project_id="project-hermes-mission-control",
+            lane_type="read_only_inspection",
+            title="Safe closed read-only preview",
+            status="stopped",
+            execution_mode="manual_copy",
+            stop_reason="preview run closed before execution; no execution occurred",
+            report_ids=("report-safe-preview-contract",),
+            metadata={
+                "no_jenny_execution": True,
+                "jenny_executed": False,
+                **disabled_flags,
+            },
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-safe-preview-contract",
+            run_id="run-safe-preview-closed",
+            project_id="project-hermes-mission-control",
+            status="reviewed",
+            report_kind="read_only_preview_contract",
+            summary="Preview contract closed safely without execution.",
+            result="Contract only; no Jenny execution occurred.",
+            risks=("execution remains disabled",),
+            tests=("record-sourced preview contract check",),
+            next_recommended_lane="Request a fresh explicit approval before any execution.",
+            evidence_refs=("operator stop reason",),
+            reviewed_at="2026-06-19T10:00:00Z",
+            reviewed_by="operator",
+            redaction_status="operator_supplied_redacted",
+            metadata={
+                "safety_confirmation": "No execution, dispatch, session-send, worker dispatch, or secrets.",
+                "no_jenny_execution": True,
+                **disabled_flags,
+            },
+        )
+    )
+    store.append(
+        RunRecord(
+            run_id="run-safe-status-result",
+            project_id="project-hermes-mission-control",
+            lane_type="supervised_read_only_status_report",
+            status="completed",
+            execution_mode="one_run_read_only",
+            stop_reason="completed one supervised read-only status report",
+            report_ids=("report-safe-status-result",),
+            result_record_ids=("report-safe-status-result",),
+            metadata={
+                "one_run_only": True,
+                "read_only_status_report_only": True,
+                **disabled_flags,
+            },
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-safe-status-result",
+            run_id="run-safe-status-result",
+            project_id="project-hermes-mission-control",
+            status="accepted",
+            report_kind="supervised_read_only_status_report_result",
+            summary="Legacy generated status report completed safely.",
+            result="Operator summary, record counts, blockers, safety verification, and next action.",
+            blockers=("broader autonomy remains blocked",),
+            next_recommended_lane="Review this read-only status report.",
+            evidence_refs=("workspace status projection",),
+            submitted_by="jenny-supervised-read-only",
+            submitted_from="mission_control_guarded_one_run_backend",
+            reviewed_at="2026-06-19T10:01:00Z",
+            reviewed_by="mission-control-gate",
+            redaction_status="operator_supplied_redacted",
+            metadata=safe_status_report_metadata,
+        )
+    )
+    store.append(
+        RunRecord(
+            run_id="run-unsafe-status-result",
+            project_id="project-hermes-mission-control",
+            lane_type="supervised_read_only_status_report",
+            status="completed",
+            execution_mode="one_run_read_only",
+            stop_reason="completed one supervised read-only status report",
+            report_ids=("report-unsafe-status-result",),
+            result_record_ids=("report-unsafe-status-result",),
+            metadata={"one_run_only": True, "read_only_status_report_only": True, **disabled_flags},
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id="report-unsafe-status-result",
+            run_id="run-unsafe-status-result",
+            project_id="project-hermes-mission-control",
+            status="accepted",
+            report_kind="supervised_read_only_status_report_result",
+            summary="Unsafe status result tries to use legacy compatibility.",
+            result="Looks like a status report but is missing a preserved safety assertion.",
+            blockers=("broader autonomy remains blocked",),
+            next_recommended_lane="Reject this report.",
+            evidence_refs=("workspace status projection",),
+            submitted_by="jenny-supervised-read-only",
+            submitted_from="mission_control_guarded_one_run_backend",
+            reviewed_at="2026-06-19T10:02:00Z",
+            reviewed_by="mission-control-gate",
+            redaction_status="operator_supplied_redacted",
+            metadata={**safe_status_report_metadata, "no_git_changes": False},
+        )
+    )
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    completion = status["report_completion_path"]
+    assert completion["terminal_item_count"] == 3
+    assert completion["completion_ready_count"] == 2
+    assert completion["blocked_completion_count"] == 1
+    assert completion["contract_incomplete_count"] == 1
+    items = {item["item_id"]: item for item in completion["items"]}
+    safe_preview = items["report-completion:run:run-safe-preview-closed"]
+    assert safe_preview["completion_ready"] is True
+    assert safe_preview["legacy_safe_preview_closure"] is True
+    assert safe_preview["report_review_status"] == "reviewed"
+    safe_status = items["report-completion:run:run-safe-status-result"]
+    assert safe_status["completion_ready"] is True
+    assert safe_status["legacy_safe_status_report_result"] is True
+    assert safe_status["contract_missing_fields"] == ["tests"]
+    assert safe_status["completion_contract_missing_fields"] == []
+    unsafe_status = items["report-completion:run:run-unsafe-status-result"]
+    assert unsafe_status["completion_ready"] is False
+    assert unsafe_status["legacy_safe_status_report_result"] is False
+    assert unsafe_status["completion_contract_missing_fields"] == ["tests"]
+    assert (
+        "report_id report-unsafe-status-result missing completion contract fields: tests"
+        in completion["blocked_reasons"]
+    )
 
 
 def test_record_sourced_workspace_status_projects_stop_cancel_control(tmp_path):
