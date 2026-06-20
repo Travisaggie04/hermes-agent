@@ -1073,9 +1073,24 @@ def _assert_inert_workspace_payload(payload):
     assert payload["display_only"] is True
     assert payload["manual_copy_only"] is True
     assert payload["send_to_jenny_enabled"] is False
+    assert payload["would_dispatch"] is False
+    assert payload["would_session_send"] is False
     assert payload["dispatch_enabled"] is False
+    assert payload["dispatch_in_gateway"] is False
+    assert payload["dispatch_state"] is False
+    assert payload["execution_ready"] is False
+    assert payload["live_operations_enabled"] is False
     assert payload["session_send_enabled"] is False
+    assert payload["worker_enabled"] is False
+    assert payload["workers_enabled"] is False
     assert payload["worker_dispatch_enabled"] is False
+    assert payload["timer_enabled"] is False
+    assert payload["daemon_enabled"] is False
+    assert payload["waha_enabled"] is False
+    assert payload["social_enabled"] is False
+    assert payload["payment_enabled"] is False
+    assert payload["queue_mutation_enabled"] is False
+    assert payload["model_routing_enabled"] is False
     assert payload["would_execute"] is False
     assert payload["execution_enabled"] is False
     assert payload["trusted_for_execution"] is False
@@ -1084,10 +1099,26 @@ def _assert_inert_workspace_payload(payload):
 
 def _assert_inert_record_metadata(metadata):
     assert metadata["would_execute"] is False
+    assert metadata["would_dispatch"] is False
+    assert metadata["would_session_send"] is False
     assert metadata["execution_enabled"] is False
     assert metadata["dispatch_enabled"] is False
+    assert metadata["dispatch_in_gateway"] is False
+    assert metadata["dispatch_state"] is False
+    assert metadata["execution_ready"] is False
+    assert metadata["live_operations_enabled"] is False
+    assert metadata["send_to_jenny_enabled"] is False
     assert metadata["session_send_enabled"] is False
+    assert metadata["worker_enabled"] is False
+    assert metadata["workers_enabled"] is False
     assert metadata["worker_dispatch_enabled"] is False
+    assert metadata["timer_enabled"] is False
+    assert metadata["daemon_enabled"] is False
+    assert metadata["waha_enabled"] is False
+    assert metadata["social_enabled"] is False
+    assert metadata["payment_enabled"] is False
+    assert metadata["queue_mutation_enabled"] is False
+    assert metadata["model_routing_enabled"] is False
     assert metadata["trusted_for_execution"] is False
     assert metadata["inert_context_only"] is True
 
@@ -2785,20 +2816,14 @@ def test_api_routes_are_get_only(plugin_api, client):
         assert response.status_code == 405
 
 
-def test_health_is_read_only_and_inert(client):
+def test_health_is_read_only_and_inert(plugin_api, client):
     response = client.get("/api/plugins/mission-control-governance/health")
 
     assert response.status_code == 200
     assert response.json() == {
+        **plugin_api.INERT_FLAGS,
         "ok": True,
         "plugin": "mission-control-governance",
-        "trusted_for_execution": False,
-        "inert_context_only": True,
-        "would_execute": False,
-        "execution_enabled": False,
-        "dispatch_enabled": False,
-        "session_send_enabled": False,
-        "worker_dispatch_enabled": False,
     }
 
 
@@ -2905,18 +2930,12 @@ def test_bounded_records_detail_index_remains_available_and_sanitized(plugin_api
     assert "secret governance transcript" not in lowered
 
 
-def test_start_gate_returns_no_active_envelope_for_missing_store(client):
+def test_start_gate_returns_no_active_envelope_for_missing_store(plugin_api, client):
     response = client.get("/api/plugins/mission-control-governance/start-gate")
 
     assert response.status_code == 200
     assert response.json() == {
-        "trusted_for_execution": False,
-        "inert_context_only": True,
-        "would_execute": False,
-        "execution_enabled": False,
-        "dispatch_enabled": False,
-        "session_send_enabled": False,
-        "worker_dispatch_enabled": False,
+        **plugin_api.INERT_FLAGS,
         "store_status": "missing",
         "error": None,
         "has_active_envelope": False,
@@ -4244,7 +4263,7 @@ def test_empty_store_returns_empty_inert_payload(client):
     assert records["execution_enabled"] is False
 
 
-def test_empty_store_returns_empty_approval_and_evidence_payloads(client):
+def test_empty_store_returns_empty_approval_and_evidence_payloads(plugin_api, client):
     approvals = client.get("/api/plugins/mission-control-governance/approval-slices")
     evidence = client.get("/api/plugins/mission-control-governance/evidence-cards")
     actions = client.get("/api/plugins/mission-control-governance/operator-actions")
@@ -4253,13 +4272,7 @@ def test_empty_store_returns_empty_approval_and_evidence_payloads(client):
     assert evidence.status_code == 200
     assert actions.status_code == 200
     assert approvals.json() == {
-        "trusted_for_execution": False,
-        "inert_context_only": True,
-        "would_execute": False,
-        "execution_enabled": False,
-        "dispatch_enabled": False,
-        "session_send_enabled": False,
-        "worker_dispatch_enabled": False,
+        **plugin_api.INERT_FLAGS,
         "store_status": "missing",
         "error": None,
         "source": "none",
@@ -4267,13 +4280,7 @@ def test_empty_store_returns_empty_approval_and_evidence_payloads(client):
         "approval_slices": [],
     }
     assert evidence.json() == {
-        "trusted_for_execution": False,
-        "inert_context_only": True,
-        "would_execute": False,
-        "execution_enabled": False,
-        "dispatch_enabled": False,
-        "session_send_enabled": False,
-        "worker_dispatch_enabled": False,
+        **plugin_api.INERT_FLAGS,
         "store_status": "missing",
         "error": None,
         "source": "none",
@@ -4281,13 +4288,7 @@ def test_empty_store_returns_empty_approval_and_evidence_payloads(client):
         "evidence_cards": [],
     }
     assert actions.json() == {
-        "trusted_for_execution": False,
-        "inert_context_only": True,
-        "would_execute": False,
-        "execution_enabled": False,
-        "dispatch_enabled": False,
-        "session_send_enabled": False,
-        "worker_dispatch_enabled": False,
+        **plugin_api.INERT_FLAGS,
         "store_status": "missing",
         "error": None,
         "source": "none",
@@ -4818,18 +4819,12 @@ def test_dashboard_operating_workspace_panel_is_bounded_display_only():
         assert control + "(" not in lowered
 
 
-def test_operator_actions_empty_missing_store_returns_bounded_empty_payload(client):
+def test_operator_actions_empty_missing_store_returns_bounded_empty_payload(plugin_api, client):
     response = client.get("/api/plugins/mission-control-governance/operator-actions")
 
     assert response.status_code == 200
     assert response.json() == {
-        "trusted_for_execution": False,
-        "inert_context_only": True,
-        "would_execute": False,
-        "execution_enabled": False,
-        "dispatch_enabled": False,
-        "session_send_enabled": False,
-        "worker_dispatch_enabled": False,
+        **plugin_api.INERT_FLAGS,
         "store_status": "missing",
         "error": None,
         "source": "none",
@@ -5658,6 +5653,11 @@ def test_child_and_worker_node_run_records_stay_inert(plugin_api, client):
             "status": "running",
             "dispatch_enabled": True,
             "worker_dispatch_enabled": True,
+            "waha_enabled": True,
+            "social_enabled": True,
+            "payment_enabled": True,
+            "queue_mutation_enabled": True,
+            "model_routing_enabled": True,
         },
     )
     worker_response = client.post(
@@ -5672,6 +5672,15 @@ def test_child_and_worker_node_run_records_stay_inert(plugin_api, client):
             "blocked_reasons": ["worker node offline"],
             "status": "blocked",
             "worker_dispatch_enabled": True,
+            "worker_enabled": True,
+            "workers_enabled": True,
+            "timer_enabled": True,
+            "daemon_enabled": True,
+            "waha_enabled": True,
+            "social_enabled": True,
+            "payment_enabled": True,
+            "queue_mutation_enabled": True,
+            "model_routing_enabled": True,
         },
     )
 

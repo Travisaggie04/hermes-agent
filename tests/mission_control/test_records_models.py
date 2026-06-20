@@ -37,10 +37,26 @@ from mission_control.records.models import (
 
 def _assert_inert_execution_metadata(metadata):
     assert metadata["would_execute"] is False
+    assert metadata["would_dispatch"] is False
+    assert metadata["would_session_send"] is False
     assert metadata["execution_enabled"] is False
     assert metadata["dispatch_enabled"] is False
+    assert metadata["dispatch_in_gateway"] is False
+    assert metadata["dispatch_state"] is False
+    assert metadata["execution_ready"] is False
+    assert metadata["live_operations_enabled"] is False
+    assert metadata["send_to_jenny_enabled"] is False
     assert metadata["session_send_enabled"] is False
+    assert metadata["worker_enabled"] is False
+    assert metadata["workers_enabled"] is False
     assert metadata["worker_dispatch_enabled"] is False
+    assert metadata["timer_enabled"] is False
+    assert metadata["daemon_enabled"] is False
+    assert metadata["waha_enabled"] is False
+    assert metadata["social_enabled"] is False
+    assert metadata["payment_enabled"] is False
+    assert metadata["queue_mutation_enabled"] is False
+    assert metadata["model_routing_enabled"] is False
     assert metadata["trusted_for_execution"] is False
     assert metadata["inert_context_only"] is True
 
@@ -1011,7 +1027,15 @@ def test_child_run_record_round_trips_orchestration_status_and_forces_disabled_f
         report_id="report-child-1",
         result_record_id="result-child-1",
         depends_on_child_run_ids=("child-run-0",),
-        metadata={"dispatch_enabled": True, "worker_dispatch_enabled": True},
+        metadata={
+            "dispatch_enabled": True,
+            "worker_dispatch_enabled": True,
+            "waha_enabled": True,
+            "social_enabled": True,
+            "payment_enabled": True,
+            "queue_mutation_enabled": True,
+            "model_routing_enabled": True,
+        },
     )
 
     data = record.to_dict()
@@ -1048,7 +1072,19 @@ def test_worker_node_run_record_round_trips_laptop_codex_state_and_forces_disabl
         worker_version="codex-desktop-1.2.3",
         capability_summary="repo-local engineering worker with guarded shell and patch tools",
         worker_dispatch_enabled=True,
-        metadata={"execution_enabled": True, "dispatch_enabled": True},
+        metadata={
+            "execution_enabled": True,
+            "dispatch_enabled": True,
+            "worker_enabled": True,
+            "workers_enabled": True,
+            "timer_enabled": True,
+            "daemon_enabled": True,
+            "waha_enabled": True,
+            "social_enabled": True,
+            "payment_enabled": True,
+            "queue_mutation_enabled": True,
+            "model_routing_enabled": True,
+        },
     )
 
     data = record.to_dict()
