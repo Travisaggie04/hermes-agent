@@ -40,6 +40,12 @@ def _baseline_payload(**overrides):
         "safety": {
             "dispatch_in_gateway": False,
             "workers_enabled": False,
+            "worker_enabled": False,
+            "timer_enabled": False,
+            "daemon_enabled": False,
+            "waha_enabled": False,
+            "social_enabled": False,
+            "payment_enabled": False,
             "queue_mutation_enabled": False,
             "model_routing_enabled": False,
             "enforcement_enabled": False,
@@ -578,6 +584,12 @@ def test_workspace_status_record_source_defaults_lane_to_idle_and_matching_basel
     assert status["stale_context"]["baseline_mismatch"] is False
     assert status["safety"]["dispatch_in_gateway"] is False
     assert status["safety"]["workers_enabled"] is False
+    assert status["safety"]["worker_enabled"] is False
+    assert status["safety"]["timer_enabled"] is False
+    assert status["safety"]["daemon_enabled"] is False
+    assert status["safety"]["waha_enabled"] is False
+    assert status["safety"]["social_enabled"] is False
+    assert status["safety"]["payment_enabled"] is False
     assert status["safety"]["queue_mutation_enabled"] is False
     assert status["safety"]["model_routing_enabled"] is False
     assert status["safety"]["enforcement_enabled"] is False
@@ -589,6 +601,52 @@ def test_workspace_status_record_source_defaults_lane_to_idle_and_matching_basel
     assert status["display_only"] is True
     assert status["dry_run_only"] is True
     assert status["enforces_runtime"] is False
+
+
+def test_workspace_status_surfaces_truthy_live_safety_flags_as_warnings():
+    status = build_workspace_status(
+        _baseline_payload(
+            safety={
+                "dispatch_in_gateway": "yes",
+                "workers_enabled": "enabled",
+                "worker_enabled": "true",
+                "timer_enabled": 1,
+                "daemon_enabled": "on",
+                "waha_enabled": "y",
+                "social_enabled": True,
+                "payment_enabled": "1",
+                "queue_mutation_enabled": "true",
+                "model_routing_enabled": "yes",
+            }
+        )
+    )
+
+    warnings = set(status["stale_context"]["warnings"])
+    assert status["safety"]["dispatch_in_gateway"] is True
+    assert status["safety"]["workers_enabled"] is True
+    assert status["safety"]["worker_enabled"] is True
+    assert status["safety"]["timer_enabled"] is True
+    assert status["safety"]["daemon_enabled"] is True
+    assert status["safety"]["waha_enabled"] is True
+    assert status["safety"]["social_enabled"] is True
+    assert status["safety"]["payment_enabled"] is True
+    assert status["safety"]["queue_mutation_enabled"] is True
+    assert status["safety"]["model_routing_enabled"] is True
+    assert "dispatch_not_false" in warnings
+    assert "workers_enabled_not_false" in warnings
+    assert "worker_enabled_not_false" in warnings
+    assert "timer_enabled_not_false" in warnings
+    assert "daemon_enabled_not_false" in warnings
+    assert "waha_enabled_not_false" in warnings
+    assert "social_enabled_not_false" in warnings
+    assert "payment_enabled_not_false" in warnings
+    assert "queue_mutation_enabled_not_false" in warnings
+    assert "model_routing_enabled_not_false" in warnings
+    assert status["would_execute"] is False
+    assert status["execution_enabled"] is False
+    assert status["dispatch_enabled"] is False
+    assert status["session_send_enabled"] is False
+    assert status["worker_dispatch_enabled"] is False
 
 
 def test_workspace_status_record_source_preserves_caller_supplied_active_lane():

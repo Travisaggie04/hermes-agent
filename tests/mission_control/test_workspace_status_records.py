@@ -149,6 +149,67 @@ def test_hard_boundary_contract_blocks_sanitized_live_flag_reasons():
     assert hard_boundary["blocked_reasons"] == hard_boundary["live_flag_violations"]
 
 
+def test_hard_boundary_contract_blocks_live_safety_flags():
+    status = decorate_workspace_status_operator_projections(
+        build_workspace_status(
+            {
+                "accepted_baseline": {
+                    "runtime_path": "/runtime/accepted",
+                    "head": "8ef64e370a51bc19e97fec1526f5bb3d42025a09",
+                },
+                "rollback_baseline": {
+                    "runtime_path": "/runtime/rollback",
+                    "head": "8ef64e370a51bc19e97fec1526f5bb3d42025a09",
+                },
+                "lane": {
+                    "declared_baseline_head": "8ef64e370a51bc19e97fec1526f5bb3d42025a09",
+                    "max_active_lane": 1,
+                    "active_lane_count": 0,
+                },
+                "safety": {
+                    "workers_enabled": "yes",
+                    "worker_enabled": "true",
+                    "timer_enabled": 1,
+                    "daemon_enabled": "enabled",
+                    "waha_enabled": "on",
+                    "social_enabled": "y",
+                    "payment_enabled": True,
+                    "queue_mutation_enabled": "1",
+                    "model_routing_enabled": "yes",
+                },
+            }
+        )
+    )
+
+    hard_boundary = status["hard_boundary_contract"]
+    _assert_inert_projection(hard_boundary)
+    assert hard_boundary["state"] == "live_flag_violation"
+    assert hard_boundary["blocked"] is True
+    assert hard_boundary["live_flag_violations"] == [
+        "safety worker_enabled must remain disabled",
+        "safety workers_enabled must remain disabled",
+        "safety timer_enabled must remain disabled",
+        "safety daemon_enabled must remain disabled",
+        "safety waha_enabled must remain disabled",
+        "safety social_enabled must remain disabled",
+        "safety payment_enabled must remain disabled",
+        "safety queue_mutation_enabled must remain disabled",
+        "safety model_routing_enabled must remain disabled",
+    ]
+    assert hard_boundary["blocked_reasons"] == hard_boundary["live_flag_violations"]
+    assert hard_boundary["live_flag_violation_count"] == 9
+    readiness = status["orchestration_readiness"]
+    assert readiness["blocked"] is True
+    assert readiness["states"]["supervised_read_only_autonomy"] == "blocked"
+    assert readiness["states"]["scoped_pr_creation"] == "blocked"
+    assert readiness["states"]["laptop_codex_worker_node"] == "blocked"
+    assert "safety workers_enabled must remain disabled" in readiness["blocked_reasons"]
+    operator_packet = status["operator_decision_packet"]
+    assert operator_packet["state"] == "blocked"
+    assert operator_packet["jenny_review_required"] is True
+    assert "safety model_routing_enabled must remain disabled" in operator_packet["execution_lock_blocked_reasons"]
+
+
 def test_operator_projection_decorator_adds_preview_rollups_to_pure_status():
     status = decorate_workspace_status_operator_projections(
         build_workspace_status(

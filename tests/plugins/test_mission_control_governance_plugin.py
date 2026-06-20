@@ -5522,6 +5522,98 @@ def test_scoped_pr_and_execution_packet_previews_are_inert_and_store_nothing(plu
     assert plugin_api.record_store_path().exists() is False
 
 
+def test_execution_packet_preview_endpoint_blocks_caller_live_flags(plugin_api, client):
+    response = client.post(
+        "/api/plugins/mission-control-governance/workspace/execution-packet/preview",
+        json={
+            "mode": "worker_node",
+            "dispatch_enabled": "true",
+            "execution_enabled": "yes",
+            "session_send_enabled": "on",
+            "worker_dispatch_enabled": 1,
+            "would_dispatch": "1",
+            "would_execute": "enabled",
+            "would_session_send": "y",
+            "run": {
+                "run_id": "run-worker-preview",
+                "project_id": "project-hermes-mission-control",
+                "approval_id": "approval-pr-1",
+                "lane_type": "pr_creation",
+                "status": "requested",
+                "objective": "Prepare a bounded scoped PR packet.",
+            },
+            "approval": {
+                "approval_id": "approval-pr-1",
+                "status": "approved",
+                "approval_mode": "one_time",
+                "approval_scope": "project-hermes-mission-control:scoped-pr:mission_control/",
+                "action_class": "pr_creation",
+                "approved_files": ["mission_control/autonomy_eligibility.py"],
+                "expires_at": "2099-01-01T00:00:00Z",
+            },
+            "lane": {
+                "lane_type": "pr_creation",
+                "allowed_files": ["mission_control/autonomy_eligibility.py"],
+                "tests_required": True,
+                "review_required": True,
+            },
+            "worker_node": {
+                "parent_run_id": "run-worker-preview",
+                "worker_identity": "codex",
+                "worker_host_label": "laptop-codex",
+                "presence_status": "online",
+                "worker_dispatch_enabled": "true",
+                "execution_enabled": "yes",
+            },
+            "report_contract": {"required": True, "tests_required": True, "review_required": True},
+            "active_mutation_lane_count": 1,
+            "runtime_provenance": {
+                "primary_status": "CLEAN_AND_ALIGNED",
+                "autonomy_blocked": False,
+                "autonomy_blocked_reasons": [],
+            },
+            "bridge": {"manual_start_only": True},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "caller_supplied_execution_packet_preview"
+    assert payload["stored"] is False
+    assert payload["display_only"] is True
+    assert payload["trusted_for_execution"] is False
+    assert payload["eligible"] is False
+    assert payload["would_execute"] is False
+    assert payload["would_dispatch"] is False
+    assert payload["would_session_send"] is False
+    assert payload["execution_enabled"] is False
+    assert payload["dispatch_enabled"] is False
+    assert payload["session_send_enabled"] is False
+    assert payload["worker_dispatch_enabled"] is False
+    assert payload["packet"]["would_execute"] is False
+    assert payload["packet"]["would_dispatch"] is False
+    assert payload["packet"]["would_session_send"] is False
+    assert payload["packet"]["execution_enabled"] is False
+    assert payload["packet"]["dispatch_enabled"] is False
+    assert payload["packet"]["session_send_enabled"] is False
+    assert payload["packet"]["worker_dispatch_enabled"] is False
+    worker_contract = payload["packet"]["worker_node_contract"]
+    assert worker_contract["would_execute"] is False
+    assert worker_contract["would_dispatch"] is False
+    assert worker_contract["would_session_send"] is False
+    assert worker_contract["worker_dispatch_enabled"] is False
+    assert "would_execute must remain false in previews" in payload["blocked_reasons"]
+    assert "would_dispatch must remain false in previews" in payload["blocked_reasons"]
+    assert "would_session_send must remain false in previews" in payload["blocked_reasons"]
+    assert "execution_enabled must remain false" in payload["blocked_reasons"]
+    assert "dispatch_enabled must remain false" in payload["blocked_reasons"]
+    assert "session_send_enabled must remain false" in payload["blocked_reasons"]
+    assert "worker_dispatch_enabled must remain false" in payload["blocked_reasons"]
+    assert "worker dispatch must stay disabled" in payload["blocked_reasons"]
+    assert "worker execution must stay disabled" in payload["blocked_reasons"]
+    assert plugin_api.record_store_path().exists() is False
+
+
 def test_tool_permission_preview_classifies_write_paths_and_stores_nothing(plugin_api, client):
     response = client.post(
         "/api/plugins/mission-control-governance/workspace/tool-permissions/preview",

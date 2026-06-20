@@ -83,6 +83,12 @@ _DEFAULT_STATUS: dict[str, Any] = {
     "safety": {
         "dispatch_in_gateway": False,
         "workers_enabled": False,
+        "worker_enabled": False,
+        "timer_enabled": False,
+        "daemon_enabled": False,
+        "waha_enabled": False,
+        "social_enabled": False,
+        "payment_enabled": False,
         "queue_mutation_enabled": False,
         "model_routing_enabled": False,
         "enforcement_enabled": False,
@@ -252,6 +258,19 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         warnings.append("baseline_mismatch")
     if safety.get("dispatch_in_gateway") is not False:
         warnings.append("dispatch_not_false")
+    for flag in (
+        "workers_enabled",
+        "worker_enabled",
+        "timer_enabled",
+        "daemon_enabled",
+        "waha_enabled",
+        "social_enabled",
+        "payment_enabled",
+        "queue_mutation_enabled",
+        "model_routing_enabled",
+    ):
+        if safety.get(flag) is not False:
+            warnings.append(f"{flag}_not_false")
     if lane["active_lane_count"] > lane["max_active_lane"]:
         warnings.append("active_lane_count_exceeds_max")
     if activity["active_workers"] > 0 or activity["active_tasks"] > 0 or activity["active_runs"] > 0:
@@ -566,6 +585,16 @@ def _safe_bool(value: Any, default: bool = False) -> bool:
     return default
 
 
+def _live_flag_enabled(value: Any) -> bool:
+    if value is True:
+        return True
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on", "enabled"}
+    return False
+
+
 def _safe_int(value: Any, default: int = 0) -> int:
     if isinstance(value, bool):
         return default
@@ -629,10 +658,16 @@ def _lane_section(section: dict[str, Any], *, defaults: dict[str, Any]) -> dict[
 def _safety_section(section: dict[str, Any], *, defaults: dict[str, Any]) -> dict[str, Any]:
     merged = _merge_dicts(defaults, section)
     return {
-        "dispatch_in_gateway": _safe_bool(merged.get("dispatch_in_gateway"), default=False),
-        "workers_enabled": _safe_bool(merged.get("workers_enabled"), default=False),
-        "queue_mutation_enabled": _safe_bool(merged.get("queue_mutation_enabled"), default=False),
-        "model_routing_enabled": _safe_bool(merged.get("model_routing_enabled"), default=False),
+        "dispatch_in_gateway": _live_flag_enabled(merged.get("dispatch_in_gateway")),
+        "workers_enabled": _live_flag_enabled(merged.get("workers_enabled")),
+        "worker_enabled": _live_flag_enabled(merged.get("worker_enabled")),
+        "timer_enabled": _live_flag_enabled(merged.get("timer_enabled")),
+        "daemon_enabled": _live_flag_enabled(merged.get("daemon_enabled")),
+        "waha_enabled": _live_flag_enabled(merged.get("waha_enabled")),
+        "social_enabled": _live_flag_enabled(merged.get("social_enabled")),
+        "payment_enabled": _live_flag_enabled(merged.get("payment_enabled")),
+        "queue_mutation_enabled": _live_flag_enabled(merged.get("queue_mutation_enabled")),
+        "model_routing_enabled": _live_flag_enabled(merged.get("model_routing_enabled")),
         "enforcement_enabled": False,
     }
 
