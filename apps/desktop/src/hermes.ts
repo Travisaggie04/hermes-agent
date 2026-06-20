@@ -1428,9 +1428,13 @@ export interface MissionControlAsyncAgentStatusResponse {
   current_mode?: string
   daemon_enabled?: boolean
   dispatch_enabled?: boolean
+  dispatch_in_gateway?: boolean
+  dispatch_state?: boolean | string
   display_only?: boolean
   execution_enabled?: boolean
+  execution_ready?: boolean
   inert_context_only?: boolean
+  live_operations_enabled?: boolean
   manual_copy_only?: boolean
   manual_start_only?: boolean
   model_routing_enabled?: boolean
@@ -1447,7 +1451,9 @@ export interface MissionControlAsyncAgentStatusResponse {
   timer_enabled?: boolean
   trusted_for_execution?: boolean
   waha_enabled?: boolean
+  would_dispatch?: boolean
   would_execute?: boolean
+  would_session_send?: boolean
   worker_dispatch_enabled?: boolean
   worker_enabled?: boolean
   workers_enabled?: boolean

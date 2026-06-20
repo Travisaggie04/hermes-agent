@@ -8,8 +8,14 @@ describe('asyncAgentLiveSafetyReason', () => {
       asyncAgentLiveSafetyReason({
         async_agent_controls_available: true,
         async_agent_controls_enabled: false,
+        would_dispatch: false,
+        would_session_send: false,
         dispatch_enabled: false,
+        dispatch_in_gateway: false,
+        dispatch_state: false,
         execution_enabled: false,
+        execution_ready: false,
+        live_operations_enabled: false,
         send_to_jenny_enabled: false,
         session_send_enabled: false,
         trusted_for_execution: false,
@@ -23,8 +29,15 @@ describe('asyncAgentLiveSafetyReason', () => {
   it('blocks presentation as ready when any live async-agent flag is enabled', () => {
     for (const flag of [
       'async_agent_controls_enabled',
+      'would_dispatch',
+      'would_execute',
+      'would_session_send',
       'dispatch_enabled',
+      'dispatch_in_gateway',
+      'dispatch_state',
       'execution_enabled',
+      'execution_ready',
+      'live_operations_enabled',
       'send_to_jenny_enabled',
       'session_send_enabled',
       'worker_dispatch_enabled',
@@ -37,8 +50,7 @@ describe('asyncAgentLiveSafetyReason', () => {
       'queue_mutation_enabled',
       'social_enabled',
       'waha_enabled',
-      'trusted_for_execution',
-      'would_execute'
+      'trusted_for_execution'
     ] as const) {
       expect(asyncAgentLiveSafetyReason({ [flag]: true })).toBe('live async-agent controls are not confirmed off')
     }

@@ -2,8 +2,15 @@ import type { MissionControlAsyncAgentStatusResponse } from '@/hermes'
 
 const ASYNC_AGENT_LIVE_FLAGS: Array<keyof MissionControlAsyncAgentStatusResponse> = [
   'async_agent_controls_enabled',
+  'would_dispatch',
+  'would_execute',
+  'would_session_send',
   'dispatch_enabled',
+  'dispatch_in_gateway',
+  'dispatch_state',
   'execution_enabled',
+  'execution_ready',
+  'live_operations_enabled',
   'send_to_jenny_enabled',
   'session_send_enabled',
   'worker_dispatch_enabled',
@@ -16,8 +23,7 @@ const ASYNC_AGENT_LIVE_FLAGS: Array<keyof MissionControlAsyncAgentStatusResponse
   'queue_mutation_enabled',
   'social_enabled',
   'waha_enabled',
-  'trusted_for_execution',
-  'would_execute'
+  'trusted_for_execution'
 ]
 
 export function asyncAgentLiveSafetyReason(status?: MissionControlAsyncAgentStatusResponse | null): string {
