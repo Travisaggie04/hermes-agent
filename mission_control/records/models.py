@@ -2230,6 +2230,37 @@ class MissionBrief:
 _MAX_HANDOFF_TEXT_CHARS = 160
 _MAX_HANDOFF_PATH_CHARS = 240
 _MAX_HANDOFF_WARNINGS = 20
+_MAX_RUNTIME_LIST_ITEMS = 20
+
+_RUNTIME_TEXT_KEYS = {
+    "branch",
+    "error",
+    "latest_merged_pr",
+    "path",
+    "runtime_path",
+    "state",
+    "status",
+}
+_RUNTIME_SHA_KEYS = {
+    "default_branch_head",
+    "head",
+}
+_RUNTIME_BOOL_KEYS = {
+    "broken_git_metadata",
+    "clean",
+    "dirty",
+    "exists",
+    "git_healthy",
+    "missing_path",
+    "recorded",
+    "unrecorded",
+}
+_RUNTIME_LIST_KEYS = {
+    "dirty_files",
+    "merged_prs_after_accepted_baseline",
+    "status_short",
+    "untracked_files",
+}
 
 
 def _bounded_handoff_text(value: Any, max_chars: int = _MAX_HANDOFF_TEXT_CHARS) -> str:
@@ -2260,6 +2291,41 @@ def _bounded_handoff_warnings(value: Any) -> tuple[str, ...]:
     return tuple(output)
 
 
+def _bounded_runtime_list(value: Any) -> list[str]:
+    output: list[str] = []
+    for item in _tuple(value):
+        text = _bounded_handoff_text(item)
+        if text and text not in output:
+            output.append(text)
+        if len(output) >= _MAX_RUNTIME_LIST_ITEMS:
+            break
+    return output
+
+
+def _bounded_runtime_section(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    section: dict[str, Any] = {}
+    for key in sorted(_RUNTIME_TEXT_KEYS):
+        if key in value:
+            max_chars = (
+                _MAX_HANDOFF_PATH_CHARS
+                if key in {"path", "runtime_path"}
+                else _MAX_HANDOFF_TEXT_CHARS
+            )
+            section[key] = _bounded_handoff_text(value.get(key), max_chars)
+    for key in sorted(_RUNTIME_SHA_KEYS):
+        if key in value:
+            section[key] = _normalize_packet_sha(value.get(key))
+    for key in sorted(_RUNTIME_BOOL_KEYS):
+        if key in value and isinstance(value.get(key), bool):
+            section[key] = value[key]
+    for key in sorted(_RUNTIME_LIST_KEYS):
+        if key in value:
+            section[key] = _bounded_runtime_list(value.get(key))
+    return section
+
+
 @dataclass(frozen=True)
 class AcceptedBaselineRecord:
     baseline_id: str = ""
@@ -2273,6 +2339,10 @@ class AcceptedBaselineRecord:
     active_kanban: int = 0
     max_active_lane: int = 1
     issue: str = ""
+    source_runtime: dict[str, Any] = field(default_factory=dict)
+    dashboard_runtime: dict[str, Any] = field(default_factory=dict)
+    gateway_runtime: dict[str, Any] = field(default_factory=dict)
+    rollback_runtime: dict[str, Any] = field(default_factory=dict)
     display_only: bool = True
     would_execute: bool = False
     dry_run_only: bool = True
@@ -2292,13 +2362,17 @@ class AcceptedBaselineRecord:
         object.__setattr__(self, "active_kanban", _bounded_handoff_int(self.active_kanban, default=0))
         object.__setattr__(self, "max_active_lane", _bounded_handoff_int(self.max_active_lane, default=1) or 1)
         object.__setattr__(self, "issue", _bounded_handoff_text(self.issue))
+        object.__setattr__(self, "source_runtime", _bounded_runtime_section(self.source_runtime))
+        object.__setattr__(self, "dashboard_runtime", _bounded_runtime_section(self.dashboard_runtime))
+        object.__setattr__(self, "gateway_runtime", _bounded_runtime_section(self.gateway_runtime))
+        object.__setattr__(self, "rollback_runtime", _bounded_runtime_section(self.rollback_runtime))
         object.__setattr__(self, "display_only", True)
         object.__setattr__(self, "would_execute", False)
         object.__setattr__(self, "dry_run_only", True)
         object.__setattr__(self, "enforces_runtime", False)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "baseline_id": self.baseline_id,
             "recorded_at": self.recorded_at,
             "source": self.source,
@@ -2315,6 +2389,15 @@ class AcceptedBaselineRecord:
             "dry_run_only": True,
             "enforces_runtime": False,
         }
+        if self.source_runtime:
+            payload["source_runtime"] = self.source_runtime
+        if self.dashboard_runtime:
+            payload["dashboard_runtime"] = self.dashboard_runtime
+        if self.gateway_runtime:
+            payload["gateway_runtime"] = self.gateway_runtime
+        if self.rollback_runtime:
+            payload["rollback_runtime"] = self.rollback_runtime
+        return payload
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AcceptedBaselineRecord:
@@ -2330,6 +2413,10 @@ class AcceptedBaselineRecord:
             active_kanban=data.get("active_kanban", 0),
             max_active_lane=data.get("max_active_lane", 1),
             issue=data.get("issue", ""),
+            source_runtime=data.get("source_runtime") or {},
+            dashboard_runtime=data.get("dashboard_runtime") or {},
+            gateway_runtime=data.get("gateway_runtime") or {},
+            rollback_runtime=data.get("rollback_runtime") or {},
             display_only=True,
             would_execute=False,
             dry_run_only=True,

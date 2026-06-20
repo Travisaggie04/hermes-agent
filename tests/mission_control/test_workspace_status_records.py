@@ -21,6 +21,9 @@ from mission_control.workspace_status_records import (
 )
 
 
+HEAD = "8ef64e370a51bc19e97fec1526f5bb3d42025a09"
+
+
 def _assert_inert_projection(payload: dict[str, object]) -> None:
     assert payload["display_only"] is True
     assert payload["trusted_for_execution"] is False
@@ -34,6 +37,52 @@ def _assert_inert_projection(payload: dict[str, object]) -> None:
     assert payload["worker_dispatch_enabled"] is False
     assert payload["stored"] is False
     assert payload["dry_run_only"] is True
+
+
+def _runtime(path: str, head: str = HEAD, **overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "path": path,
+        "exists": True,
+        "git_healthy": True,
+        "head": head,
+        "status_short": ["## HEAD (no branch)"],
+        "dirty_files": [],
+        "untracked_files": [],
+        "error": "",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _reconciled_baseline_record(**overrides: object) -> AcceptedBaselineRecord:
+    payload: dict[str, object] = {
+        "baseline_id": "accepted-current",
+        "runtime_path": "/runtime/accepted",
+        "head": HEAD,
+        "rollback_runtime_path": "/runtime/rollback",
+        "rollback_head": HEAD,
+        "dispatch_in_gateway": False,
+        "active_kanban": 0,
+        "max_active_lane": 1,
+        "source_runtime": {"head": HEAD, "default_branch_head": HEAD},
+        "dashboard_runtime": _runtime("/runtime/dashboard", HEAD),
+        "gateway_runtime": _runtime("/runtime/gateway", HEAD),
+        "rollback_runtime": _runtime("/runtime/rollback", HEAD),
+    }
+    payload.update(overrides)
+    return AcceptedBaselineRecord(**payload)
+
+
+def _assert_execution_disabled(payload: dict[str, object]) -> None:
+    for key in (
+        "would_execute",
+        "execution_enabled",
+        "dispatch_enabled",
+        "session_send_enabled",
+        "worker_dispatch_enabled",
+    ):
+        if key in payload:
+            assert payload[key] is False
 
 
 def test_record_sourced_workspace_status_uses_latest_baseline_and_idle_when_no_runs(tmp_path):
@@ -85,6 +134,122 @@ def test_record_sourced_workspace_status_uses_latest_baseline_and_idle_when_no_r
     assert "live deploy" in hard_boundary["forbidden_actions"]
     assert "9121 /api/status gate" in hard_boundary["forbidden_actions"]
     assert "PR merge" in hard_boundary["separate_approval_actions"]
+
+
+def test_record_sourced_workspace_status_projects_reconciled_runtime_facts(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(_reconciled_baseline_record())
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    assert status["accepted_baseline_source"] == "record"
+    assert status["runtime_provenance"]["primary_status"] == "CLEAN_AND_ALIGNED"
+    assert status["runtime_provenance"]["autonomy_blocked"] is False
+    assert "MISSING_RUNTIME_PATH" not in status["runtime_provenance"]["statuses"]
+    assert "MISSING_RUNTIME_PATH" not in status["stale_context"]["warnings"]
+    assert "UNRECORDED_RUNTIME" not in status["runtime_provenance"]["statuses"]
+    assert status["dashboard_runtime"]["state"] == "clean"
+    assert status["dashboard_runtime"]["path"] == "/runtime/dashboard"
+    assert status["gateway_runtime"]["state"] == "clean"
+    assert status["gateway_runtime"]["path"] == "/runtime/gateway"
+    assert status["source_runtime"]["state"] == "recorded"
+    assert status["read_only_autonomy_eligibility"]["eligible"] is False
+    for projection in (
+        status,
+        status["runtime_provenance"],
+        status["read_only_autonomy_eligibility"],
+        status["scoped_pr_lane_eligibility"],
+        status["execution_packet_preview"],
+    ):
+        _assert_execution_disabled(projection)
+
+
+def test_legacy_baseline_without_service_runtime_facts_is_unrecorded(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        AcceptedBaselineRecord(
+            baseline_id="accepted-legacy",
+            runtime_path="/runtime/accepted",
+            head=HEAD,
+            rollback_runtime_path="/runtime/rollback",
+            rollback_head=HEAD,
+        )
+    )
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    warnings = set(status["stale_context"]["warnings"])
+    assert "UNRECORDED_RUNTIME" in warnings
+    assert "MISSING_RUNTIME_PATH" not in warnings
+    assert "UNRECORDED_RUNTIME" in status["runtime_provenance"]["statuses"]
+    assert "MISSING_RUNTIME_PATH" not in status["runtime_provenance"]["statuses"]
+    assert status["dashboard_runtime"]["state"] == "unrecorded"
+    assert status["dashboard_runtime"]["unrecorded"] is True
+    assert status["gateway_runtime"]["state"] == "unrecorded"
+    assert status["gateway_runtime"]["unrecorded"] is True
+    assert status["runtime_provenance"]["autonomy_blocked"] is True
+
+
+def test_record_sourced_status_missing_accepted_runtime_path_still_blocks(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(_reconciled_baseline_record(runtime_path=""))
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    assert "MISSING_RUNTIME_PATH" in status["runtime_provenance"]["statuses"]
+    assert "MISSING_RUNTIME_PATH" in status["stale_context"]["warnings"]
+    assert (
+        "accepted_baseline runtime path is missing or absent"
+        in status["runtime_provenance"]["autonomy_blocked_reasons"]
+    )
+    assert status["runtime_provenance"]["runtimes"]["accepted_baseline"]["state"] == "missing"
+
+
+def test_record_sourced_status_broken_gateway_metadata_blocks(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        _reconciled_baseline_record(
+            gateway_runtime=_runtime(
+                "/runtime/gateway",
+                HEAD,
+                git_healthy=False,
+                error="fatal: not a git repository: /runtime/gateway",
+            )
+        )
+    )
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    assert "BROKEN_GIT_METADATA" in status["runtime_provenance"]["statuses"]
+    assert "GATEWAY_UNTRUSTED" in status["runtime_provenance"]["statuses"]
+    assert "gateway git metadata is broken" in status["runtime_provenance"]["autonomy_blocked_reasons"]
+    assert status["gateway_runtime"]["state"] == "broken_git_metadata"
+
+
+def test_record_sourced_status_dirty_dashboard_runtime_blocks(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        _reconciled_baseline_record(
+            dashboard_runtime=_runtime(
+                "/runtime/dashboard",
+                HEAD,
+                status_short=["## HEAD (no branch)", " M package-lock.json"],
+                dirty_files=[" M package-lock.json"],
+            )
+        )
+    )
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    assert "DIRTY_RUNTIME" in status["runtime_provenance"]["statuses"]
+    assert "dashboard runtime has dirty or untracked files" in status["runtime_provenance"]["autonomy_blocked_reasons"]
+    assert status["dashboard_runtime"]["state"] == "dirty"
+    assert status["dashboard_runtime"]["dirty"] is True
 
 
 def test_hard_boundary_contract_blocks_truthy_live_flags():
@@ -394,7 +559,8 @@ def test_record_sourced_workspace_status_projects_real_active_runs_and_approvals
     assert status["control_plane_records"]["pending_approval_count"] == 1
     warnings = set(status["stale_context"]["warnings"])
     assert "active_workers_tasks_or_runs_present" in warnings
-    assert "MISSING_RUNTIME_PATH" in warnings
+    assert "UNRECORDED_RUNTIME" in warnings
+    assert "MISSING_RUNTIME_PATH" not in warnings
     assert status["runtime_provenance"]["autonomy_blocked"] is True
     assert status["read_only_autonomy_eligibility"]["eligible"] is False
 

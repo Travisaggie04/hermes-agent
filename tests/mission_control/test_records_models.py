@@ -978,6 +978,71 @@ def test_accepted_baseline_record_round_trips_and_forces_inert_flags():
     assert RECORD_TYPES["AcceptedBaselineRecord"] is AcceptedBaselineRecord
 
 
+def test_accepted_baseline_record_round_trips_runtime_fact_sections():
+    record = AcceptedBaselineRecord.from_dict(
+        {
+            "baseline_id": "baseline-runtime-facts",
+            "runtime_path": "/runtime/accepted",
+            "head": "8ef64e370a51bc19e97fec1526f5bb3d42025a09",
+            "rollback_runtime_path": "/runtime/rollback",
+            "rollback_head": "8ef64e370a51bc19e97fec1526f5bb3d42025a09",
+            "source_runtime": {
+                "head": "8ef64e370a51bc19e97fec1526f5bb3d42025a09",
+                "default_branch_head": "8ef64e370a51bc19e97fec1526f5bb3d42025a09",
+                "latest_merged_pr": "396",
+                "token": "placeholder-token",
+            },
+            "dashboard_runtime": {
+                "path": "/runtime/dashboard",
+                "head": "8ef64e370a51bc19e97fec1526f5bb3d42025a09",
+                "exists": True,
+                "git_healthy": True,
+                "status_short": ["## HEAD (no branch)", "## HEAD (no branch)"],
+                "api_response": {"raw": "forbidden"},
+            },
+            "gateway_runtime": {
+                "path": "/runtime/gateway",
+                "head": "not-a-sha",
+                "broken_git_metadata": True,
+                "error": "fatal: not a git repository",
+            },
+            "rollback_runtime": {
+                "path": "/runtime/rollback",
+                "head": "8ef64e370a51bc19e97fec1526f5bb3d42025a09",
+                "dirty_files": [f"file-{index}" for index in range(25)],
+            },
+        }
+    )
+
+    data = record.to_dict()
+
+    assert data["source_runtime"] == {
+        "head": "8ef64e370a51bc19e97fec1526f5bb3d42025a09",
+        "default_branch_head": "8ef64e370a51bc19e97fec1526f5bb3d42025a09",
+        "latest_merged_pr": "396",
+    }
+    assert data["dashboard_runtime"] == {
+        "path": "/runtime/dashboard",
+        "head": "8ef64e370a51bc19e97fec1526f5bb3d42025a09",
+        "exists": True,
+        "git_healthy": True,
+        "status_short": ["## HEAD (no branch)"],
+    }
+    assert data["gateway_runtime"] == {
+        "path": "/runtime/gateway",
+        "head": "",
+        "broken_git_metadata": True,
+        "error": "fatal: not a git repository",
+    }
+    assert data["rollback_runtime"]["path"] == "/runtime/rollback"
+    assert data["rollback_runtime"]["head"] == "8ef64e370a51bc19e97fec1526f5bb3d42025a09"
+    assert len(data["rollback_runtime"]["dirty_files"]) == 20
+    rendered = str(data).lower()
+    assert "placeholder-token" not in rendered
+    assert "api_response" not in rendered
+    assert AcceptedBaselineRecord.from_dict(data) == record
+
+
 def test_accepted_baseline_record_sanitizes_bounds_shas_and_forbidden_fields():
     record = AcceptedBaselineRecord.from_dict({
         "baseline_id": "b" * 500,

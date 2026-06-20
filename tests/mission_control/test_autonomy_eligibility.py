@@ -282,6 +282,18 @@ def test_missing_runtime_path_blocks_autonomy():
     assert "gateway runtime path is missing or absent" in result["autonomy_blocked_reasons"]
 
 
+def test_unrecorded_runtime_blocks_without_missing_path_status():
+    result = evaluate_runtime_provenance(
+        _clean_runtime_state(gateway_runtime={"recorded": False, "state": "unrecorded"})
+    )
+
+    assert "UNRECORDED_RUNTIME" in result["statuses"]
+    assert "MISSING_RUNTIME_PATH" not in result["statuses"]
+    assert "gateway runtime facts are unrecorded" in result["autonomy_blocked_reasons"]
+    assert result["runtimes"]["gateway"]["state"] == "unrecorded"
+    assert result["runtimes"]["gateway"]["unrecorded"] is True
+
+
 def test_rollback_stale_is_surfaced_and_blocks_autonomy():
     result = evaluate_runtime_provenance(
         _clean_runtime_state(rollback_runtime=_runtime("/runtime/rollback", OLD_HEAD))
