@@ -112,11 +112,19 @@ MUTATION_LANE_TYPES = {
     "queue_mutation",
     "worker_timer_enablement",
 }
-READ_ONLY_PREVIEW_LANE_TYPES = {"read_only_lane", "read_only_design", "read_only_inspection"}
+READ_ONLY_PREVIEW_LANE_TYPES = {
+    "read_only_lane",
+    "read_only_design",
+    "read_only_inspection",
+    "read_only_status_report",
+    "supervised_read_only_status_report",
+}
 READ_ONLY_PREVIEW_REPORT_KINDS = {
     "preview_readiness",
     "read_only_preview_contract",
     "supervised_read_only_preview_readiness",
+    "read_only_status_report_contract",
+    "supervised_read_only_status_report_contract",
 }
 READ_ONLY_PREVIEW_READY_STATUSES = {"accepted", "reviewed"}
 LIVE_EXECUTION_FLAG_NAMES = (
@@ -267,10 +275,21 @@ def build_workspace_status_from_records(
         if record.lane_type in MUTATION_LANE_TYPES or record.dispatch_state is True
     )
     latest_active_run = active_runs[-1] if active_runs else None
+    duplicate_approval_ids = _duplicate_record_ids(recent_approvals_raw, "approval_id")
     latest_approval = (
         _latest_matching_approval(recent_approvals, latest_active_run.approval_id)
         if latest_active_run is not None
         else None
+    )
+    latest_approval_record_count = (
+        _record_id_count(recent_approvals_raw, "approval_id", latest_active_run.approval_id)
+        if latest_active_run is not None
+        else 0
+    )
+    latest_run_record_count = (
+        _record_id_count(recent_runs_raw, "run_id", latest_active_run.run_id)
+        if latest_active_run is not None
+        else 0
     )
     latest_read_only_preview_run = (
         latest_active_run
@@ -299,6 +318,10 @@ def build_workspace_status_from_records(
         autonomy_eligibility_input = {
             "approval": latest_approval.to_dict() if latest_approval else {},
             "run": latest_active_run.to_dict(),
+            "approval_record_count_for_id": latest_approval_record_count,
+            "approval_id_duplicated": latest_active_run.approval_id in duplicate_approval_ids,
+            "duplicate_approval_ids": duplicate_approval_ids,
+            "run_record_count_for_id": latest_run_record_count,
             "report_inbox_ready": (
                 read_only_preview_report_ready
                 if latest_read_only_preview_run is not None
@@ -351,6 +374,9 @@ def build_workspace_status_from_records(
     status_input["execution_packet_preview"] = _record_execution_packet_preview_input(
         latest_active_run=latest_active_run,
         latest_approval=latest_approval,
+        approval_record_count_for_id=latest_approval_record_count,
+        run_record_count_for_id=latest_run_record_count,
+        duplicate_approval_ids=duplicate_approval_ids,
         active_mutation_lane_count=len(active_mutation_runs),
         active_worker_runs=active_worker_runs,
     )
@@ -639,7 +665,7 @@ def _record_execution_mode_classification_input(
         mode = "worker_node"
     elif lane_type in {"pr_creation", "scoped_pr"}:
         mode = "scoped_pr"
-    elif lane_type in {"read_only_lane", "read_only_design", "read_only_inspection"} or lane_type.startswith("read_only"):
+    elif lane_type in READ_ONLY_PREVIEW_LANE_TYPES or lane_type.startswith("read_only"):
         mode = "read_only"
     else:
         mode = _safe_text(run_payload.get("execution_mode"))
@@ -664,6 +690,9 @@ def _record_execution_packet_preview_input(
     *,
     latest_active_run: RunRecord | None,
     latest_approval: ApprovalRecord | None,
+    approval_record_count_for_id: int,
+    run_record_count_for_id: int,
+    duplicate_approval_ids: list[str],
     active_mutation_lane_count: int,
     active_worker_runs: tuple[WorkerNodeRunRecord, ...],
 ) -> dict[str, Any]:
@@ -680,7 +709,7 @@ def _record_execution_packet_preview_input(
         mode = "worker_node"
     elif lane_type in {"pr_creation", "scoped_pr"}:
         mode = "scoped_pr"
-    elif lane_type in {"read_only_lane", "read_only_design", "read_only_inspection"} or lane_type.startswith("read_only"):
+    elif lane_type in READ_ONLY_PREVIEW_LANE_TYPES or lane_type.startswith("read_only"):
         mode = "read_only"
     else:
         mode = "blocked"
@@ -705,6 +734,10 @@ def _record_execution_packet_preview_input(
         "approval": approval_payload,
         "lane": lane_payload,
         "worker_node": worker_payload,
+        "approval_record_count_for_id": approval_record_count_for_id,
+        "run_record_count_for_id": run_record_count_for_id,
+        "approval_id_duplicated": _safe_text(approval_payload.get("approval_id")) in duplicate_approval_ids,
+        "duplicate_approval_ids": duplicate_approval_ids,
         "report_contract": {
             "required": contract_required,
             "tests_required": mode in {"scoped_pr", "worker_node"},
@@ -822,8 +855,19 @@ def _approval_lifecycle_payload(
             runs_with_unavailable_approval[run.run_id] = run.approval_id
 
     duplicate_approval_ids = _duplicate_record_ids(raw_approvals, "approval_id")
+    active_approval_ids = [
+        run.approval_id
+        for run in runs
+        if run.status in ACTIVE_RUN_STATUSES and run.approval_id
+    ]
+    latest_active_approval_id = active_approval_ids[-1] if active_approval_ids else ""
+    active_duplicate_approval_ids = [
+        approval_id
+        for approval_id in duplicate_approval_ids
+        if approval_id == latest_active_approval_id
+    ]
     blocked_reasons: list[str] = []
-    for approval_id in duplicate_approval_ids:
+    for approval_id in active_duplicate_approval_ids:
         blocked_reasons.append(f"approval_id {approval_id} has multiple append-only records")
     for run_id in runs_missing_approval_id:
         blocked_reasons.append(f"active run_id {run_id} has no approval_id")
@@ -846,6 +890,12 @@ def _approval_lifecycle_payload(
         "rejected_or_cancelled_approval_ids": rejected_or_cancelled_approval_ids,
         "terminal_approval_ids": terminal_approval_ids,
         "duplicate_approval_ids": duplicate_approval_ids,
+        "active_duplicate_approval_ids": active_duplicate_approval_ids,
+        "historical_duplicate_approval_ids": [
+            approval_id
+            for approval_id in duplicate_approval_ids
+            if approval_id not in active_duplicate_approval_ids
+        ],
         "runs_by_approval_id": runs_by_approval_id,
         "runs_missing_approval_id": runs_missing_approval_id,
         "runs_with_missing_approval_record": runs_with_missing_approval_record,
@@ -891,8 +941,9 @@ def _run_lifecycle_payload(
             terminal_runs_with_missing_linked_report_ids[run.run_id] = missing_report_ids
 
     duplicate_run_ids = _duplicate_record_ids(raw_runs, "run_id")
+    run_update_conflicts = _run_update_conflicts(raw_runs)
     blocked_reasons: list[str] = []
-    for run_id in duplicate_run_ids:
+    for run_id in run_update_conflicts:
         blocked_reasons.append(f"run_id {run_id} has multiple append-only records")
     if active_mutation_lane_count > 1:
         blocked_reasons.append("active mutation lane count exceeds one")
@@ -916,11 +967,47 @@ def _run_lifecycle_payload(
         "terminal_run_ids": terminal_run_ids,
         "stop_cancel_run_ids": stop_cancel_run_ids,
         "duplicate_run_ids": duplicate_run_ids,
+        "append_only_run_update_ids": [
+            run_id for run_id in duplicate_run_ids if run_id not in run_update_conflicts
+        ],
+        "run_update_conflict_ids": list(run_update_conflicts),
+        "run_update_conflicts": run_update_conflicts,
         "terminal_runs_missing_report": terminal_runs_missing_report,
         "terminal_runs_with_missing_linked_report_ids": terminal_runs_with_missing_linked_report_ids,
         "blocked": bool(blocked_reasons),
         "blocked_reasons": blocked_reasons,
     }
+
+
+def _run_update_conflicts(raw_runs: tuple[RunRecord, ...]) -> dict[str, list[str]]:
+    grouped: dict[str, list[RunRecord]] = {}
+    for run in raw_runs:
+        run_id = _safe_text(run.run_id)
+        if run_id:
+            grouped.setdefault(run_id, []).append(run)
+
+    immutable_fields = (
+        "project_id",
+        "approval_id",
+        "lane_request_id",
+        "lane_type",
+        "execution_mode",
+        "baseline_runtime_path",
+        "baseline_head",
+        "dispatch_state",
+    )
+    conflicts: dict[str, list[str]] = {}
+    for run_id, runs_for_id in grouped.items():
+        if len(runs_for_id) < 2:
+            continue
+        differing = [
+            field_name
+            for field_name in immutable_fields
+            if len({_report_field_fingerprint(getattr(run, field_name, "")) for run in runs_for_id}) > 1
+        ]
+        if differing:
+            conflicts[run_id] = differing
+    return conflicts
 
 
 def _report_lifecycle_payload(
@@ -3456,6 +3543,17 @@ def _duplicate_record_ids(records: tuple[Any, ...], field_name: str) -> list[str
         if record_id:
             counts[record_id] = counts.get(record_id, 0) + 1
     return [record_id for record_id, count in counts.items() if count > 1]
+
+
+def _record_id_count(records: tuple[Any, ...], field_name: str, record_id: str) -> int:
+    expected = _safe_text(record_id)
+    if not expected:
+        return 0
+    return sum(
+        1
+        for record in records
+        if _safe_text(getattr(record, field_name, "")) == expected
+    )
 
 
 def _report_lookup_maps(

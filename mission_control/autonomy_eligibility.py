@@ -30,8 +30,25 @@ _STATUS_PRIORITY = (
 _BROAD_APPROVAL_VALUES = {"*", "all", "any", "global", "everything", "unlimited", "blanket"}
 
 _ACTIVE_RUN_STATUSES = {"requested", "preflight_passed", "running", "stopping"}
-_READ_ONLY_LANE_TYPES = {"read_only_lane", "read_only_design", "read_only_inspection"}
+_READ_ONLY_ONE_RUN_LANE_TYPES = {
+    "read_only_status_report",
+    "supervised_read_only_status_report",
+}
+_READ_ONLY_LANE_TYPES = {
+    "read_only_lane",
+    "read_only_design",
+    "read_only_inspection",
+    *_READ_ONLY_ONE_RUN_LANE_TYPES,
+}
 _APPROVED_ACTION_CLASSES = _READ_ONLY_LANE_TYPES
+_READ_ONLY_ONE_RUN_EXECUTION_MODES = {
+    "one_run_read_only",
+    "supervised_one_run_read_only",
+}
+_READ_ONLY_ONE_RUN_REPORT_KINDS = {
+    "read_only_status_report_contract",
+    "supervised_read_only_status_report_contract",
+}
 
 _MUTATION_FORBIDDEN_CLASSES = (
     ("write", "file write", "file-write"),
@@ -824,6 +841,7 @@ def evaluate_read_only_autonomy_eligibility(observed_state: dict[str, Any] | Non
         _add(warnings, "bridge path is manual-only; preview must not execute")
     if tool_permissions:
         _check_tool_permissions_for_read_only(tool_permissions, blocked, warnings)
+    _check_approval_lifecycle_uniqueness(state, approval, blocked)
 
     return {
         **INERT_PREVIEW_FLAGS,
@@ -948,6 +966,7 @@ def build_execution_packet_preview(observed_state: dict[str, Any] | None = None)
     blocked_reasons = list(eligibility.get("blocked_reasons") or ())
     if mode == "read_only":
         _check_read_only_packet_tool_profile(state, blocked_reasons)
+        _check_read_only_one_run_authorization(state, blocked_reasons)
     _check_preview_disabled_flags(
         blocked_reasons,
         state,
@@ -970,6 +989,23 @@ def build_execution_packet_preview(observed_state: dict[str, Any] | None = None)
         "child_run_contract": _section(state, "child_run_contract"),
         "worker_node_contract": _worker_node_contract(state),
     }
+    one_run_authorized = (
+        mode == "read_only"
+        and not blocked_reasons
+        and _read_only_one_run_requested(state)
+    )
+    if one_run_authorized:
+        packet = {
+            **packet,
+            "one_run_authorized": True,
+            "one_run_authorization_scope": "supervised_read_only_status_report",
+            "status_report_only": True,
+            "uses_bridge": False,
+            "uses_dispatch": False,
+            "uses_session_send": False,
+            "uses_worker_dispatch": False,
+            "uses_write_tools": False,
+        }
     return {
         **INERT_PREVIEW_FLAGS,
         "source": "mission_control_execution_packet_preview_v1",
@@ -978,7 +1014,9 @@ def build_execution_packet_preview(observed_state: dict[str, Any] | None = None)
         "warnings": list(eligibility.get("warnings") or ()),
         "packet": packet,
         "display_only": True,
-        "trusted_for_execution": False,
+        "trusted_for_execution": one_run_authorized,
+        "one_run_authorized": one_run_authorized,
+        "one_run_authorization_scope": "supervised_read_only_status_report" if one_run_authorized else "",
         "would_execute": False,
         "would_dispatch": False,
         "would_session_send": False,
@@ -1160,6 +1198,86 @@ def _check_read_only_packet_tool_profile(state: dict[str, Any], blocked: list[st
     tool_permissions = _optional_tool_permissions(state)
     if _safe_text(tool_permissions.get("permission_classification")) != "read_only_safe":
         _add(blocked, "read-only execution packet requires a read-only-safe tool profile")
+
+
+def _check_approval_lifecycle_uniqueness(state: dict[str, Any], approval: dict[str, Any], blocked: list[str]) -> None:
+    approval_id = _safe_text(approval.get("approval_id"))
+    duplicate_ids = {
+        _safe_text(item)
+        for item in _as_list(state.get("duplicate_approval_ids"))
+        if _safe_text(item)
+    }
+    if approval_id and (
+        approval_id in duplicate_ids
+        or _flag_enabled(state.get("approval_id_duplicated"))
+        or _safe_int(state.get("approval_record_count_for_id"), default=1) > 1
+    ):
+        _add(blocked, f"approval_id {approval_id} is duplicated and ambiguous")
+
+
+def _read_only_one_run_requested(state: dict[str, Any]) -> bool:
+    run = _section(state, "run")
+    lane = _section(state, "lane")
+    metadata = _section(run, "metadata")
+    lane_type = _safe_text(run.get("lane_type") or lane.get("lane_type"))
+    execution_mode = _safe_text(
+        run.get("execution_mode")
+        or lane.get("execution_mode")
+        or state.get("execution_mode")
+    )
+    return (
+        _flag_enabled(state.get("one_run_authorization_requested"))
+        or _flag_enabled(state.get("one_run_requested"))
+        or _safe_bool(metadata.get("one_run_only")) is True
+        or lane_type in _READ_ONLY_ONE_RUN_LANE_TYPES
+        or execution_mode in _READ_ONLY_ONE_RUN_EXECUTION_MODES
+    )
+
+
+def _check_read_only_one_run_authorization(state: dict[str, Any], blocked: list[str]) -> None:
+    if not _read_only_one_run_requested(state):
+        return
+
+    approval = _section(state, "approval")
+    run = _section(state, "run")
+    lane = _section(state, "lane")
+    report = _section(state, "report")
+    metadata = _section(run, "metadata")
+    lane_type = _safe_text(run.get("lane_type") or lane.get("lane_type"))
+    execution_mode = _safe_text(run.get("execution_mode") or lane.get("execution_mode") or state.get("execution_mode"))
+    approval_id = _safe_text(approval.get("approval_id"))
+    approval_run_id = _safe_text(approval.get("run_id"))
+    run_id = _safe_text(run.get("run_id"))
+    report_run_id = _safe_text(report.get("run_id"))
+    report_approval_id = _safe_text(report.get("approval_id"))
+    scope = _safe_text(approval.get("approval_scope"))
+    approved_actions = " ".join(
+        _safe_text(item).lower()
+        for item in _as_list(approval.get("approved_actions"))
+    )
+
+    if lane_type not in _READ_ONLY_ONE_RUN_LANE_TYPES:
+        _add(blocked, "one-run read-only packet requires supervised read-only status-report lane_type")
+    if execution_mode not in _READ_ONLY_ONE_RUN_EXECUTION_MODES:
+        _add(blocked, "one-run read-only packet requires one-run read-only execution_mode")
+    if "supervised_read_only_status_report" not in scope:
+        _add(blocked, "one-run approval scope must be exact supervised_read_only_status_report")
+    if "status" not in approved_actions or "report" not in approved_actions:
+        _add(blocked, "one-run approval must approve only the read-only status report")
+    if approval_run_id != run_id:
+        _add(blocked, "one-run approval must be bound to the exact RunRecord")
+    if _safe_int(state.get("run_record_count_for_id"), default=1) > 1:
+        _add(blocked, "one-run RunRecord id has prior append-only updates; create a fresh run_id")
+    if _safe_bool(metadata.get("one_run_only")) is not True:
+        _add(blocked, "one-run RunRecord metadata must set one_run_only=true")
+    if report_run_id != run_id:
+        _add(blocked, "read-only status report contract must link to the exact RunRecord")
+    if report_approval_id != approval_id:
+        _add(blocked, "read-only status report contract must link to the exact ApprovalRecord")
+    if _safe_text(report.get("report_kind")) not in _READ_ONLY_ONE_RUN_REPORT_KINDS:
+        _add(blocked, "read-only status report contract kind is required")
+    if _flag_enabled(_section(report, "metadata").get("jenny_executed")):
+        _add(blocked, "read-only status report contract must not claim Jenny already executed")
 
 
 def _add_bridge_blocked_reasons(blocked: list[str], bridge: dict[str, Any]) -> None:

@@ -247,6 +247,7 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
                     _section(source, "control_plane_lifecycle").get("active_mutation_lane_count"),
                     default=0,
                 ),
+                "now": _safe_text(source.get("now")),
             },
         )
     )
@@ -259,6 +260,7 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
                     _section(source, "control_plane_lifecycle").get("active_mutation_lane_count"),
                     default=0,
                 ),
+                "now": _safe_text(source.get("now")),
             },
         )
     )
@@ -493,7 +495,16 @@ def _execution_packet_preview_input(
             mode = "worker_node"
         elif lane_type in {"pr_creation", "scoped_pr"}:
             mode = "scoped_pr"
-        elif lane_type in {"read_only_lane", "read_only_design", "read_only_inspection"} or lane_type.startswith("read_only"):
+        elif (
+            lane_type in {
+                "read_only_lane",
+                "read_only_design",
+                "read_only_inspection",
+                "read_only_status_report",
+                "supervised_read_only_status_report",
+            }
+            or lane_type.startswith("read_only")
+        ):
             mode = "read_only"
         else:
             mode = "blocked"
@@ -502,6 +513,7 @@ def _execution_packet_preview_input(
         "mode": mode,
         "runtime_provenance": runtime_provenance,
         "tool_permissions": packet_tool_permissions,
+        "now": _safe_text(source.get("now") or autonomy.get("now")),
         "active_mutation_lane_count": _safe_int(
             _section(source, "control_plane_lifecycle").get("active_mutation_lane_count"),
             default=_safe_int(autonomy.get("active_mutation_lane_count"), default=0),
@@ -514,6 +526,14 @@ def _execution_packet_preview_input(
         if not _section(section, "lane") and _section(autonomy, "lane"):
             extra["lane"] = _section(autonomy, "lane")
         for key in ("report_inbox_ready", "report_record_ready"):
+            if key not in section and key in autonomy:
+                extra[key] = autonomy.get(key)
+        for key in (
+            "approval_record_count_for_id",
+            "approval_id_duplicated",
+            "duplicate_approval_ids",
+            "run_record_count_for_id",
+        ):
             if key not in section and key in autonomy:
                 extra[key] = autonomy.get(key)
 
