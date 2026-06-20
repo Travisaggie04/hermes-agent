@@ -306,8 +306,10 @@ interface CompactReadinessGate extends CompactExecutionLockSource {
 interface CompactToolPermissionClassification extends CompactExecutionLockSource {
   blocked_path_count?: number;
   blocked_reasons?: string[];
+  legacy_permission_classification?: string;
   manual_only_path_count?: number;
   path_count?: number;
+  permission_classification?: string;
 }
 
 interface GitHubBridgeMailboxStatusRecord {
@@ -1635,7 +1637,7 @@ function compactAutonomyLockout(status: WorkspaceStatus | undefined): CompactBri
   if (!readOnly) {
     reasons.push("read-only autonomy eligibility not loaded");
   } else {
-    if (readOnly.eligible !== true && readOnly.preview_ready !== true) {
+    if (readOnly.eligible !== true || readOnly.preview_ready !== true) {
       reasons.push("supervised read-only autonomy blocked");
     }
     reasons.push(...(readOnly.blocked_reasons ?? []));
@@ -1646,7 +1648,7 @@ function compactAutonomyLockout(status: WorkspaceStatus | undefined): CompactBri
   if (!scopedPr) {
     reasons.push("scoped PR creation eligibility not loaded");
   } else {
-    if (scopedPr.eligible !== true && scopedPr.preview_ready !== true) {
+    if (scopedPr.eligible !== true || scopedPr.preview_ready !== true) {
       reasons.push("scoped PR creation blocked");
     }
     reasons.push(...(scopedPr.blocked_reasons ?? []));
@@ -1673,6 +1675,10 @@ function compactAutonomyLockout(status: WorkspaceStatus | undefined): CompactBri
     reasons.push("tool permission classification not loaded");
   } else {
     const blockedPathCount = toolPermissions.blocked_path_count ?? 0;
+    const classification = toolPermissions.permission_classification || toolPermissions.legacy_permission_classification || "unknown_blocked";
+    if (classification !== "read_only_safe") {
+      reasons.push(`tool safety not proven: ${classification}`);
+    }
     if (blockedPathCount > 0) {
       reasons.push(`${blockedPathCount} tool paths are not safe for autonomy`);
     }
