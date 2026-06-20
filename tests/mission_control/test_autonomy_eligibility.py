@@ -25,8 +25,21 @@ def _assert_inert_preview(payload):
     assert payload["would_session_send"] is False
     assert payload["execution_enabled"] is False
     assert payload["dispatch_enabled"] is False
+    assert payload["dispatch_in_gateway"] is False
+    assert payload["dispatch_state"] is False
+    assert payload["execution_ready"] is False
+    assert payload["live_operations_enabled"] is False
     assert payload["session_send_enabled"] is False
+    assert payload["worker_enabled"] is False
+    assert payload["workers_enabled"] is False
     assert payload["worker_dispatch_enabled"] is False
+    assert payload["timer_enabled"] is False
+    assert payload["daemon_enabled"] is False
+    assert payload["waha_enabled"] is False
+    assert payload["social_enabled"] is False
+    assert payload["payment_enabled"] is False
+    assert payload["queue_mutation_enabled"] is False
+    assert payload["model_routing_enabled"] is False
     assert payload["stored"] is False
     assert payload["dry_run_only"] is True
 
@@ -889,6 +902,48 @@ def test_execution_packet_preview_rejects_stringy_live_action_flags():
     assert result["dispatch_enabled"] is False
     assert result["session_send_enabled"] is False
     assert result["worker_dispatch_enabled"] is False
+
+
+def test_execution_packet_preview_rejects_top_level_platform_live_flags():
+    result = build_execution_packet_preview(
+        _eligible_pr_preview_payload(
+            mode="scoped_pr",
+            dispatch_in_gateway="true",
+            dispatch_state="enabled",
+            execution_ready=True,
+            live_operations_enabled="yes",
+            worker_enabled=True,
+            workers_enabled=1,
+            timer_enabled="on",
+            daemon_enabled="enabled",
+            waha_enabled="yes",
+            social_enabled=True,
+            payment_enabled=True,
+            queue_mutation_enabled="on",
+            model_routing_enabled="true",
+        )
+    )
+
+    _assert_inert_preview(result)
+    _assert_inert_preview(result["packet"])
+    _assert_inert_preview(result["packet"]["worker_node_contract"])
+    assert result["eligible"] is False
+    for reason in (
+        "dispatch_in_gateway must remain false",
+        "dispatch_state must remain false",
+        "execution_ready must remain false",
+        "live_operations_enabled must remain false",
+        "worker_enabled must remain false",
+        "workers_enabled must remain false",
+        "timer_enabled must remain false",
+        "daemon_enabled must remain false",
+        "waha_enabled must remain false",
+        "social_enabled must remain false",
+        "payment_enabled must remain false",
+        "queue_mutation_enabled must remain false",
+        "model_routing_enabled must remain false",
+    ):
+        assert reason in result["blocked_reasons"]
 
 
 def test_permission_classifiers_treat_stringy_live_flags_as_unsafe():
