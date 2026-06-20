@@ -949,10 +949,20 @@ beforeEach(() => {
       dry_run_only: true,
       execution_enabled: false,
       external_update_triggered: false,
+      dispatch_blockers: ['Codex worker-node dispatch is disabled', 'Codex worker-node heartbeat is not fresh'],
+      dispatch_state: 'DISPATCH_DISABLED',
+      heartbeat_age_seconds: null,
       heartbeat_status: 'unknown',
+      capabilities_advertised: ['read-only repo inspection'],
+      capabilities_allowed: ['status display', 'manual handoff preview'],
+      capabilities_blocked: ['worker dispatch', 'mutation worker execution'],
+      mutation_worker_execution_allowed: false,
+      next_safe_action: 'Bring the registered Codex worker-node online out of band and record a fresh heartbeat; dispatch remains disabled.',
       old_hermes_worker_node_deprecated: true,
       old_hermes_worker_node_status: 'deprecated_not_an_executor',
       online: false,
+      read_only_worker_execution_allowed: false,
+      readiness_state: 'REGISTERED_OFFLINE',
       registered: true,
       session_send_enabled: false,
       source: 'mission_control_codex_worker_node_status_v1',
@@ -2089,11 +2099,19 @@ describe('MissionControlView', () => {
     expect(screen.getByText('required after approved success yes / would append no')).toBeTruthy()
     expect(screen.getByText('external app update')).toBeTruthy()
     expect(screen.getAllByText('manual_external_not_triggered').length).toBeGreaterThan(0)
-    expect(screen.getByText('Codex worker-node update')).toBeTruthy()
-    expect(screen.getByText('offline / registered yes / would update no')).toBeTruthy()
+    expect(screen.getByText('Codex worker-node readiness')).toBeTruthy()
+    expect(screen.getByText('REGISTERED OFFLINE / registered yes / online no')).toBeTruthy()
+    expect(screen.getByText('Codex worker heartbeat')).toBeTruthy()
+    expect(screen.getByText('unknown / age missing')).toBeTruthy()
     expect(screen.getByText('Codex worker dispatch')).toBeTruthy()
-    expect(screen.getByText('dispatch no / allowed no / heartbeat unknown')).toBeTruthy()
-    expect(screen.getByText('legacy Hermes worker node')).toBeTruthy()
+    expect(screen.getByText('DISPATCH DISABLED / dispatch no / allowed no')).toBeTruthy()
+    expect(screen.getByText('Codex worker execution')).toBeTruthy()
+    expect(screen.getByText('read-only no / mutation no / would update no')).toBeTruthy()
+    expect(screen.getByText('Codex worker capabilities')).toBeTruthy()
+    expect(screen.getByText('advertised read-only repo inspection / allowed status display, manual handoff preview / blocked worker dispatch, mutation worker execution')).toBeTruthy()
+    expect(screen.getByText('Codex worker next action')).toBeTruthy()
+    expect(screen.getByText('Bring the registered Codex worker-node online out of band and record a fresh heartbeat; dispatch remains disabled.')).toBeTruthy()
+    expect(screen.getByText('legacy Hermes worker-node deprecation')).toBeTruthy()
     expect(screen.getAllByText('deprecated_not_an_executor').length).toBeGreaterThan(0)
     expect(screen.queryByText('⌘K Command palette')).toBeNull()
     expect(screen.queryByText('All systems')).toBeNull()

@@ -1060,58 +1060,99 @@ export interface MissionControlWorkerNodeInstructionPreview {
 
 export interface MissionControlWorkerNodePresence {
   active_worker_node_run_count?: number
+  advertised_max_concurrent_mutation_lanes?: number
+  advertised_max_concurrent_read_only_lanes?: number
   blocked?: boolean
   blocked_reasons?: string[]
+  capabilities_advertised?: string[]
+  capabilities_allowed?: string[]
+  capabilities_blocked?: string[]
   capability_summary?: string
   dispatch_enabled?: boolean
+  display_name?: string
   display_only?: boolean
   dry_run_only?: boolean
   execution_enabled?: boolean
+  heartbeat_age_seconds?: number | null
+  heartbeat_status?: string
+  last_heartbeat_at?: string
   last_seen_age_seconds?: number | null
   last_seen_at?: string
+  legacy_hermes_worker_node_record?: boolean
   online?: boolean
   parent_run_id?: string
   presence_state?: string
   presence_status?: string
+  project_scope?: string[]
   recorded_worker_node_run_count?: number
+  registered?: boolean
   session_send_enabled?: boolean
   source?: string
+  source_of_truth?: string
   stale_after_seconds?: number
   stored?: boolean
+  safety_notes?: string[]
+  lane_scope?: string[]
   trusted_for_execution?: boolean
   worker_dispatch_enabled?: boolean
   worker_host_label?: string
+  worker_id?: string
   worker_identity?: string
   worker_kind?: string
   worker_run_id?: string
+  worker_type?: string
   worker_version?: string
   would_execute?: boolean
 }
 
 export interface MissionControlCodexWorkerNodeStatus extends MissionControlExecutionLockFields {
   active_worker_node_run_count?: number
+  advertised_max_concurrent_mutation_lanes?: number
+  advertised_max_concurrent_read_only_lanes?: number
   blocked?: boolean
   blocked_reasons?: string[]
+  capabilities_advertised?: string[]
+  capabilities_allowed?: string[]
+  capabilities_blocked?: string[]
   capability_summary?: string
   dispatch_allowed?: boolean
+  dispatch_blockers?: string[]
   dispatch_blocked_until?: string
+  dispatch_state?: string
+  display_name?: string
   external_update_triggered?: boolean
+  heartbeat_age_seconds?: number | null
   heartbeat_status?: string
+  last_heartbeat_at?: string
   last_seen_at?: string
+  lane_scope?: string[]
+  max_concurrent_mutation_lanes?: number
+  max_concurrent_read_only_lanes?: number
+  mutation_worker_execution_allowed?: boolean
+  next_safe_action?: string
   old_hermes_worker_node_deprecated?: boolean
   old_hermes_worker_node_status?: string
   online?: boolean
   presence_state?: string
+  presence_status?: string
+  project_scope?: string[]
+  read_only_capable?: boolean
+  read_only_worker_execution_allowed?: boolean
   recorded_worker_node_run_count?: number
   registered?: boolean
+  readiness_state?: string
+  safety_notes?: string[]
   source?: string
+  source_of_truth?: string
   state?: string
   update_lane?: string
   worker_host_label?: string
+  worker_id?: string
   worker_identity?: string
   worker_kind?: string
   worker_node_dispatch?: boolean
   worker_run_id?: string
+  worker_type?: string
   would_update_worker_node?: boolean
 }
 

@@ -44,12 +44,12 @@ const REAL_PROJECT_IDS = [
 ] as const;
 const HERMES_PROJECT_ID = "project-hermes-mission-control";
 const HERMES_UPDATE_LANE_REQUEST = [
-  "Start a safe Hermes update readiness lane for the VPS and laptop Hermes worker node.",
-  "Inventory the existing VPS-triggered laptop worker-node update path and current installed versions first.",
+  "Start a safe Hermes runtime update readiness lane for the VPS and separate Codex worker-node readiness.",
+  "Inventory current dashboard/gateway runtime paths, heads, rollback path, and laptop Codex worker-node registration and heartbeat posture first.",
   "Treat the native laptop desktop app bottom-bar version as a separate installed worker-node version; accepted-live merges and dashboard-only deploys do not update that installed app.",
   "Prepare a non-live VPS dashboard runtime at accepted-live and validate it before any dashboard-only switch.",
   "Keep gateway update as a separate explicit lane.",
-  "Do not trigger the laptop worker-node update automatically, restart/switch gateway, dispatch, send sessions, use Waha/social/payment/customer actions, enable new background workers/timers/daemons/cron, or inspect/print secrets.",
+  "Do not trigger a laptop Codex worker-node update/start, restart/switch gateway, dispatch, send sessions, use Waha/social/payment/customer actions, enable new background workers/timers/daemons/cron, or inspect/print secrets.",
 ].join(" ");
 const HERMES_STORAGE_CLEANUP_LANE_REQUEST = [
   "Start a safe Hermes storage cleanup lane for the VPS, with a target of about 50% disk usage when practical.",
@@ -627,13 +627,39 @@ interface WorkspaceStatus {
   };
   stale_context?: { warnings?: string[] };
   tool_permission_classification?: CompactToolPermissionClassification;
+  codex_worker_node_status?: CompactExecutionLockSource & {
+    blocked_reasons?: string[];
+    capabilities_advertised?: string[];
+    capabilities_allowed?: string[];
+    capabilities_blocked?: string[];
+    dispatch_allowed?: boolean;
+    dispatch_blockers?: string[];
+    dispatch_state?: string;
+    heartbeat_age_seconds?: number | null;
+    heartbeat_status?: string;
+    mutation_worker_execution_allowed?: boolean;
+    next_safe_action?: string;
+    online?: boolean;
+    read_only_worker_execution_allowed?: boolean;
+    readiness_state?: string;
+    registered?: boolean;
+    state?: string;
+    worker_node_dispatch?: boolean;
+  };
   worker_node_presence?: {
     blocked?: boolean;
     blocked_reasons?: string[];
+    capabilities_advertised?: string[];
+    capabilities_allowed?: string[];
+    capabilities_blocked?: string[];
     dispatch_enabled?: boolean;
     execution_enabled?: boolean;
+    heartbeat_age_seconds?: number | null;
+    heartbeat_status?: string;
+    last_heartbeat_at?: string;
     online?: boolean;
     presence_state?: string;
+    registered?: boolean;
     session_send_enabled?: boolean;
     would_execute?: boolean;
     worker_dispatch_enabled?: boolean;
@@ -2368,13 +2394,13 @@ function buildHermesUpdateLanePacket(workspaceStatus: WorkspaceStatus): string {
     "",
     "Required safe sequence:",
     "1. Read-only inventory of VPS dashboard/gateway runtime paths/heads and current package versions.",
-    "2. Read-only inventory of the existing VPS-triggered laptop worker-node update path and laptop installed version.",
-    "3. Prepare a non-live VPS dashboard runtime at accepted-live only after source and worker-node target are clear.",
+    "2. Read-only inventory of Codex worker-node registration, heartbeat, capabilities, blockers, and any separate external update posture.",
+    "3. Prepare a non-live VPS dashboard runtime at accepted-live only after source and worker-node readiness target are clear.",
     "4. Validate markers, record compatibility, dashboard assets, and rollback path before any dashboard-only switch.",
-    "5. Keep gateway update and laptop worker-node update as separate explicit approval steps.",
+    "5. Keep gateway update and Codex worker-node update/start as separate explicit approval steps.",
     "",
     "Allowed: read-only inventory, non-live runtime preparation, tests/checks, report exact next approval.",
-    "Forbidden: laptop worker-node auto-update, gateway restart/switch, dispatch, session sending, Waha/social/payment/customer action, new background worker/timer/daemon/cron, secrets, in-place runtime mutation.",
+    "Forbidden: laptop Codex worker-node auto-update/start, gateway restart/switch, dispatch, session sending, Waha/social/payment/customer action, new background worker/timer/daemon/cron, secrets, in-place runtime mutation.",
     "",
     `Current Mission Control safety status: ${safetySummary(workspaceStatus)}`,
   ].join("\n");
@@ -4467,6 +4493,7 @@ function CompactHermesHealthDashboard({
   const stopControl = status.orchestration_stop_control;
   const workerInstruction = status.worker_node_instruction_preview;
   const workerPresence = status.worker_node_presence;
+  const codexWorkerNodeStatus = status.codex_worker_node_status;
   const resultIngestion = status.result_ingestion_contract;
   const reportCompletion = status.report_completion_path;
   const reportLifecycle = status.report_lifecycle;
@@ -4532,7 +4559,10 @@ function CompactHermesHealthDashboard({
   const operatorExecutionLockBlockedReasons = operatorPacket?.execution_lock_blocked_reasons ?? [];
   const readinessLockReasons = compactExecutionLockReasons("Preview readiness", readiness);
   const workerInstructionLockReasons = compactExecutionLockReasons("Worker handoff", workerInstruction);
-  const workerLockReasons = compactExecutionLockReasons("Worker node", workerPresence);
+  const workerLockReasons = [
+    ...compactExecutionLockReasons("Worker node", workerPresence),
+    ...compactExecutionLockReasons("Codex worker-node", codexWorkerNodeStatus),
+  ];
   const workspaceSafetyFlagReasons = compactWorkspaceSafetyFlagReasons(status);
   const ingestionLockReasons = compactExecutionLockReasons("Result ingestion", resultIngestion);
   const completionLockReasons = compactExecutionLockReasons("Report completion", reportCompletion);
@@ -4665,7 +4695,7 @@ function CompactHermesHealthDashboard({
       : "good";
   const workerTone: CompactHealthTone = workerLockReasons.length
     ? "bad"
-    : workerPresence?.online
+    : codexWorkerNodeStatus?.online
       ? "good"
       : "warn";
   const ingestionTone: CompactHealthTone = ingestionLockReasons.length
@@ -4707,6 +4737,25 @@ function CompactHermesHealthDashboard({
     workerInstruction?.manual_handoff_prompt,
     "No worker-node instruction preview recorded.",
   ].find(Boolean) ?? "No worker-node instruction preview recorded.", 260);
+  const workerStatusDetail = compactText([
+    firstReason(codexWorkerNodeStatus?.dispatch_blockers, ""),
+    firstReason(codexWorkerNodeStatus?.blocked_reasons, ""),
+    codexWorkerNodeStatus?.next_safe_action,
+    firstReason(workerPresence?.blocked_reasons, ""),
+    "Codex worker-node remains blocked until registration, heartbeat, and separate dispatch approval are all present.",
+  ].find(Boolean), 260);
+  const workerCapabilityDetail = compactText([
+    (codexWorkerNodeStatus?.capabilities_advertised ?? []).length
+      ? `Advertised: ${codexWorkerNodeStatus?.capabilities_advertised?.join(", ")}.`
+      : "",
+    (codexWorkerNodeStatus?.capabilities_allowed ?? []).length
+      ? `Allowed: ${codexWorkerNodeStatus?.capabilities_allowed?.join(", ")}.`
+      : "",
+    (codexWorkerNodeStatus?.capabilities_blocked ?? []).length
+      ? `Blocked: ${codexWorkerNodeStatus?.capabilities_blocked?.join(", ")}.`
+      : "",
+    "No worker capabilities are recorded.",
+  ].find(Boolean), 260);
   const approvalLifecycleDetail = compactText([
     ...approvalLifecycleLockReasons,
     firstReason(approvalLifecycle?.blocked_reasons, ""),
@@ -4877,10 +4926,22 @@ function CompactHermesHealthDashboard({
           value={`available ${workerInstruction?.available ? "yes" : "no"} / handoff ${workerInstruction?.ready_for_handoff ? "yes" : "no"} / manual ${workerInstruction?.manual_handoff_only === false ? "no" : "yes"}`}
         />
         <CompactHealthTile
-          detail={workerPresence?.blocked_reasons?.length ? firstReason(workerPresence.blocked_reasons, "Worker-node presence needs review.") : `${workerPresence?.worker_host_label ?? "laptop Codex"} ${workerPresence?.online ? "is online" : "is not confirmed online"}.`}
-          label="Worker node"
+          detail={workerStatusDetail}
+          label="Codex worker-node"
           tone={workerTone}
-          value={`${compactStateLabel(workerPresenceState)} / online ${workerPresence?.online ? "yes" : "no"}`}
+          value={`${compactStateLabel(codexWorkerNodeStatus?.readiness_state ?? workerPresenceState)} / registered ${codexWorkerNodeStatus?.registered ? "yes" : "no"} / online ${codexWorkerNodeStatus?.online ? "yes" : "no"}`}
+        />
+        <CompactHealthTile
+          detail={`Dispatch allowed ${codexWorkerNodeStatus?.dispatch_allowed ? "yes" : "no"}; read-only execution ${codexWorkerNodeStatus?.read_only_worker_execution_allowed ? "yes" : "no"}; mutation execution ${codexWorkerNodeStatus?.mutation_worker_execution_allowed ? "yes" : "no"}.`}
+          label="Codex dispatch"
+          tone={codexWorkerNodeStatus?.dispatch_allowed || codexWorkerNodeStatus?.worker_node_dispatch ? "bad" : "good"}
+          value={`${compactStateLabel(codexWorkerNodeStatus?.dispatch_state ?? "DISPATCH_DISABLED")} / heartbeat ${compactStateLabel(codexWorkerNodeStatus?.heartbeat_status ?? "missing")} / age ${codexWorkerNodeStatus?.heartbeat_age_seconds == null ? "missing" : `${codexWorkerNodeStatus.heartbeat_age_seconds}s`}`}
+        />
+        <CompactHealthTile
+          detail={workerCapabilityDetail}
+          label="Codex capabilities"
+          tone="warn"
+          value={`advertised ${codexWorkerNodeStatus?.capabilities_advertised?.length ?? 0} / allowed ${codexWorkerNodeStatus?.capabilities_allowed?.length ?? 0} / blocked ${codexWorkerNodeStatus?.capabilities_blocked?.length ?? 0}`}
         />
         <CompactHealthTile
           detail={reportReviewQueueDetail}

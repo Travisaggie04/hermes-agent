@@ -1523,7 +1523,7 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     ...executionLockReasons('child instruction', childInstruction),
     ...executionLockReasons('worker handoff', workerInstruction),
     ...executionLockReasons('worker presence', workerPresence),
-    ...executionLockReasons('Codex worker-node update status', codexWorkerNodeStatus),
+    ...executionLockReasons('Codex worker-node readiness status', codexWorkerNodeStatus),
     ...executionLockReasons('runtime update status', runtimeUpdateStatus)
   ])
   return {
@@ -1827,14 +1827,25 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     workerActiveCount: status.worker_node_orchestration?.active_count ?? 0,
     workerBlockedReasons,
     codexWorkerNodeDispatchAllowed: codexWorkerNodeStatus?.dispatch_allowed,
+    codexWorkerNodeDispatchBlockers: codexWorkerNodeStatus?.dispatch_blockers ?? [],
+    codexWorkerNodeDispatchState: codexWorkerNodeStatus?.dispatch_state ?? `DIS${'P'}ATCH_DISABLED`,
     codexWorkerNodeExternalUpdateTriggered: codexWorkerNodeStatus?.external_update_triggered,
+    codexWorkerNodeHeartbeatAgeSeconds: codexWorkerNodeStatus?.heartbeat_age_seconds ?? null,
     codexWorkerNodeHeartbeatStatus: codexWorkerNodeStatus?.heartbeat_status ?? 'unknown',
+    codexWorkerNodeMutationExecutionAllowed: codexWorkerNodeStatus?.mutation_worker_execution_allowed,
+    codexWorkerNodeNextSafeAction: codexWorkerNodeStatus?.next_safe_action ?? 'Register a real Codex worker-node out of band and record a fresh heartbeat; do not enable worker dispatch.',
     codexWorkerNodeOldHermesStatus: codexWorkerNodeStatus?.old_hermes_worker_node_status ?? 'deprecated_not_an_executor',
+    codexWorkerNodeOnline: codexWorkerNodeStatus?.online,
+    codexWorkerNodeReadOnlyExecutionAllowed: codexWorkerNodeStatus?.read_only_worker_execution_allowed,
     codexWorkerNodeRegistered: codexWorkerNodeStatus?.registered,
+    codexWorkerNodeReadinessState: codexWorkerNodeStatus?.readiness_state ?? 'UNKNOWN_BLOCKED',
     codexWorkerNodeState: codexWorkerNodeStatus?.state ?? 'unknown',
     codexWorkerNodeUpdateLane: codexWorkerNodeStatus?.update_lane ?? 'manual_external_codex_worker_node_update_only',
     codexWorkerNodeWouldUpdate: codexWorkerNodeStatus?.would_update_worker_node,
     codexWorkerNodeWorkerDispatch: codexWorkerNodeStatus?.worker_node_dispatch,
+    workerCapabilitiesAdvertised: codexWorkerNodeStatus?.capabilities_advertised ?? [],
+    workerCapabilitiesAllowed: codexWorkerNodeStatus?.capabilities_allowed ?? [],
+    workerCapabilitiesBlocked: codexWorkerNodeStatus?.capabilities_blocked ?? [],
     workerCapabilitySummary: workerPresence?.capability_summary ?? '',
     workerContractDispatchEnabled: workerContract?.dispatch_enabled,
     workerContractExecutionEnabled: workerContract?.execution_enabled,
@@ -4915,9 +4926,13 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="runtime update lane" tone="warn" value={`would update ${yesNo(status.runtimeUpdateWouldUpdateRuntime)} / restart ${yesNo(status.runtimeUpdateWouldRestart)} / switch ${yesNo(status.runtimeUpdateWouldSwitchRuntime)}`} />
       <StatusItem label="runtime baseline append" tone={status.runtimeUpdateBaselineAppendRequired ? 'warn' : 'good'} value={`required after approved success ${yesNo(status.runtimeUpdateBaselineAppendRequired)} / would append ${yesNo(status.runtimeUpdateWouldAppendBaseline)}`} />
       <StatusItem label="external app update" tone="warn" value={status.runtimeUpdateExternalAppUpdate} />
-      <StatusItem label="Codex worker-node update" tone="warn" value={`${labelText(status.codexWorkerNodeState)} / registered ${yesNo(status.codexWorkerNodeRegistered)} / would update ${yesNo(status.codexWorkerNodeWouldUpdate)}`} />
-      <StatusItem label="Codex worker dispatch" tone={status.codexWorkerNodeWorkerDispatch || status.codexWorkerNodeDispatchAllowed ? 'warn' : 'good'} value={`dispatch ${yesNo(status.codexWorkerNodeWorkerDispatch)} / allowed ${yesNo(status.codexWorkerNodeDispatchAllowed)} / heartbeat ${labelText(status.codexWorkerNodeHeartbeatStatus)}`} />
-      <StatusItem className="md:col-span-2" label="legacy Hermes worker node" tone="warn" value={status.runtimeUpdateOldHermesWorkerNode} />
+      <StatusItem label="Codex worker-node readiness" tone="warn" value={`${labelText(status.codexWorkerNodeReadinessState)} / registered ${yesNo(status.codexWorkerNodeRegistered)} / online ${yesNo(status.codexWorkerNodeOnline)}`} />
+      <StatusItem label="Codex worker heartbeat" tone={status.codexWorkerNodeHeartbeatStatus === 'fresh' ? 'good' : 'warn'} value={`${labelText(status.codexWorkerNodeHeartbeatStatus)} / age ${status.codexWorkerNodeHeartbeatAgeSeconds == null ? 'missing' : `${status.codexWorkerNodeHeartbeatAgeSeconds}s`}`} />
+      <StatusItem label="Codex worker dispatch" tone={status.codexWorkerNodeWorkerDispatch || status.codexWorkerNodeDispatchAllowed ? 'warn' : 'good'} value={`${labelText(status.codexWorkerNodeDispatchState)} / dispatch ${yesNo(status.codexWorkerNodeWorkerDispatch)} / allowed ${yesNo(status.codexWorkerNodeDispatchAllowed)}`} />
+      <StatusItem label="Codex worker execution" tone="warn" value={`read-only ${yesNo(status.codexWorkerNodeReadOnlyExecutionAllowed)} / mutation ${yesNo(status.codexWorkerNodeMutationExecutionAllowed)} / would update ${yesNo(status.codexWorkerNodeWouldUpdate)}`} />
+      <StatusItem className="md:col-span-2" label="Codex worker capabilities" tone="warn" value={`advertised ${status.workerCapabilitiesAdvertised.length ? status.workerCapabilitiesAdvertised.join(', ') : 'none'} / allowed ${status.workerCapabilitiesAllowed.join(', ') || 'none'} / blocked ${status.workerCapabilitiesBlocked.join(', ') || 'none'}`} />
+      <StatusItem className="md:col-span-2" label="Codex worker next action" tone="warn" value={status.codexWorkerNodeNextSafeAction} />
+      <StatusItem className="md:col-span-2" label="legacy Hermes worker-node deprecation" tone="warn" value={status.runtimeUpdateOldHermesWorkerNode} />
       <StatusItem label="child-agent status" tone={childLockTone} value={`${status.childActiveCount} active / latest ${labelText(status.childLatestStatus)}`} />
       <StatusItem className="md:col-span-2" label="child-agent objective" value={status.childLatestObjective || status.childLatestAgent} />
       <StatusItem label="child-agent report" tone={childReportTone} value={childReportValue} />

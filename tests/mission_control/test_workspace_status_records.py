@@ -1231,14 +1231,26 @@ def test_record_sourced_workspace_status_projects_worker_node_presence(tmp_path)
             worker_run_id="worker-run-online",
             parent_run_id="run-parent",
             project_id="project-hermes-mission-control",
+            worker_id="codex-worker-laptop",
+            worker_type="codex",
+            display_name="Laptop Codex worker-node",
             worker_identity="codex",
             worker_host_label="laptop-codex",
             status="running",
             objective="Prepare scoped engineering evidence.",
             presence_status="online",
+            last_heartbeat_at="2026-06-19T12:00:00Z",
             last_seen_at="2026-06-19T12:00:00Z",
             worker_version="codex-desktop-1.2.3",
             capability_summary="repo-local engineering worker with guarded shell and patch tools",
+            capabilities_advertised=("read-only repo inspection",),
+            capabilities_allowed=("read-only report evidence review",),
+            capabilities_blocked=("mutation worker execution",),
+            project_scope=("project-hermes-mission-control",),
+            lane_scope=("read_only_status",),
+            max_concurrent_read_only_lanes=1,
+            max_concurrent_mutation_lanes=0,
+            safety_notes=("dispatch stays disabled",),
         )
     )
 
@@ -1259,21 +1271,59 @@ def test_record_sourced_workspace_status_projects_worker_node_presence(tmp_path)
     assert presence["stored"] is False
     assert presence["dry_run_only"] is True
     assert presence["presence_state"] == "online"
+    assert presence["registered"] is True
     assert presence["online"] is True
     assert presence["blocked"] is False
     assert presence["blocked_reasons"] == []
+    assert presence["worker_id"] == "codex-worker-laptop"
     assert presence["worker_run_id"] == "worker-run-online"
+    assert presence["worker_type"] == "codex"
+    assert presence["display_name"] == "Laptop Codex worker-node"
     assert presence["worker_host_label"] == "laptop-codex"
+    assert presence["last_heartbeat_at"] == "2026-06-19T12:00:00Z"
+    assert presence["heartbeat_status"] == "fresh"
+    assert presence["heartbeat_age_seconds"] == 300
     assert presence["last_seen_age_seconds"] == 300
     assert presence["stale_after_seconds"] == 900
     assert presence["worker_version"] == "codex-desktop-1.2.3"
     assert presence["capability_summary"] == "repo-local engineering worker with guarded shell and patch tools"
+    assert presence["capabilities_advertised"] == ["read-only repo inspection"]
+    assert presence["capabilities_allowed"] == ["read-only report evidence review"]
+    assert presence["capabilities_blocked"] == ["mutation worker execution"]
+    assert presence["project_scope"] == ["project-hermes-mission-control"]
+    assert presence["lane_scope"] == ["read_only_status"]
+    assert presence["advertised_max_concurrent_read_only_lanes"] == 1
+    assert presence["advertised_max_concurrent_mutation_lanes"] == 0
 
     readiness = status["orchestration_readiness"]["laptop_codex_worker_node"]
     assert readiness["state"] == "preview_ready"
+    assert readiness["registered"] is True
+    assert readiness["readiness_state"] == "REGISTERED_ONLINE_READ_ONLY_CAPABLE"
     assert readiness["online"] is True
     assert readiness["presence_state"] == "online"
     assert readiness["execution_ready"] is False
+
+    codex_worker_status = status["codex_worker_node_status"]
+    assert codex_worker_status["state"] == "registered_online_read_only_capable"
+    assert codex_worker_status["readiness_state"] == "REGISTERED_ONLINE_READ_ONLY_CAPABLE"
+    assert codex_worker_status["dispatch_state"] == "DISPATCH_DISABLED"
+    assert codex_worker_status["registered"] is True
+    assert codex_worker_status["online"] is True
+    assert codex_worker_status["heartbeat_status"] == "fresh"
+    assert codex_worker_status["heartbeat_age_seconds"] == 300
+    assert codex_worker_status["capabilities_advertised"] == ["read-only repo inspection"]
+    assert "read-only report evidence review" in codex_worker_status["capabilities_allowed"]
+    assert "mutation worker execution" in codex_worker_status["capabilities_blocked"]
+    assert codex_worker_status["max_concurrent_read_only_lanes"] == 0
+    assert codex_worker_status["max_concurrent_mutation_lanes"] == 0
+    assert codex_worker_status["advertised_max_concurrent_read_only_lanes"] == 1
+    assert codex_worker_status["advertised_max_concurrent_mutation_lanes"] == 0
+    assert codex_worker_status["read_only_worker_execution_allowed"] is False
+    assert codex_worker_status["mutation_worker_execution_allowed"] is False
+    assert codex_worker_status["dispatch_allowed"] is False
+    assert codex_worker_status["worker_node_dispatch"] is False
+    assert "Codex worker-node dispatch is disabled" in codex_worker_status["dispatch_blockers"]
+    assert "read-only capability does not allow worker execution while dispatch is disabled" in codex_worker_status["safety_notes"]
 
     instruction = status["worker_node_instruction_preview"]
     assert instruction["available"] is True
@@ -1303,21 +1353,145 @@ def test_record_sourced_workspace_status_blocks_worker_node_when_presence_unknow
     )
 
     presence = status["worker_node_presence"]
+    assert presence["registered"] is True
     assert presence["presence_state"] == "unknown"
     assert presence["online"] is False
+    assert presence["heartbeat_status"] == "missing"
     assert presence["blocked"] is True
     assert "worker-node presence_status is not recorded" in presence["blocked_reasons"]
 
     readiness = status["orchestration_readiness"]["laptop_codex_worker_node"]
     assert readiness["state"] == "blocked"
+    assert readiness["registered"] is True
+    assert readiness["readiness_state"] == "REGISTERED_OFFLINE"
     assert readiness["online"] is False
     assert readiness["presence_state"] == "unknown"
     assert "worker-node presence_status is not recorded" in readiness["blocked_reasons"]
     assert "worker-node presence is not confirmed online" in readiness["blocked_reasons"]
 
+    codex_worker_status = status["codex_worker_node_status"]
+    assert codex_worker_status["registered"] is True
+    assert codex_worker_status["online"] is False
+    assert codex_worker_status["readiness_state"] == "REGISTERED_OFFLINE"
+    assert codex_worker_status["heartbeat_status"] == "missing"
+    assert codex_worker_status["dispatch_allowed"] is False
+    assert codex_worker_status["read_only_worker_execution_allowed"] is False
+    assert "Codex worker-node heartbeat is not fresh" in codex_worker_status["dispatch_blockers"]
+
     next_safe_actions = status["next_safe_actions"]
     action_ids = {action["action_id"] for action in next_safe_actions["actions"]}
     assert "review_worker_node_presence" in action_ids
+
+
+def test_record_sourced_workspace_status_surfaces_missing_codex_worker_node_contract(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    status = build_workspace_status_from_records(
+        {"now": "2026-06-19T12:05:00Z"},
+        records_path=records_path,
+    )
+
+    presence = status["worker_node_presence"]
+    assert presence["registered"] is False
+    assert presence["online"] is False
+    assert presence["presence_state"] == "missing"
+    assert presence["heartbeat_status"] == "missing"
+    assert presence["last_heartbeat_at"] == ""
+    assert presence["capabilities_advertised"] == []
+    assert "no laptop Codex worker-node run is recorded" in presence["blocked_reasons"]
+
+    codex_worker_status = status["codex_worker_node_status"]
+    assert codex_worker_status["state"] == "missing"
+    assert codex_worker_status["readiness_state"] == "MISSING"
+    assert codex_worker_status["dispatch_state"] == "DISPATCH_DISABLED"
+    assert codex_worker_status["registered"] is False
+    assert codex_worker_status["online"] is False
+    assert codex_worker_status["heartbeat_status"] == "missing"
+    assert codex_worker_status["capabilities_advertised"] == []
+    assert codex_worker_status["capabilities_allowed"] == ["status display", "manual handoff preview"]
+    assert "read-only worker execution until a fresh heartbeat is recorded" in codex_worker_status["capabilities_blocked"]
+    assert codex_worker_status["dispatch_allowed"] is False
+    assert codex_worker_status["worker_node_dispatch"] is False
+    assert codex_worker_status["read_only_worker_execution_allowed"] is False
+    assert codex_worker_status["mutation_worker_execution_allowed"] is False
+    assert "Codex worker-node is not registered" in codex_worker_status["dispatch_blockers"]
+    assert "Register a real Codex worker-node out of band" in codex_worker_status["next_safe_action"]
+
+
+def test_record_sourced_workspace_status_blocks_mutation_advertised_worker_capability(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        WorkerNodeRunRecord(
+            worker_run_id="worker-run-mutation",
+            parent_run_id="run-parent",
+            project_id="project-hermes-mission-control",
+            worker_type="codex",
+            worker_identity="codex",
+            worker_host_label="laptop-codex",
+            status="running",
+            objective="Advertise mutation capability without enabling dispatch.",
+            presence_status="online",
+            last_heartbeat_at="2026-06-19T12:00:00Z",
+            capabilities_advertised=("read-only repo inspection", "mutation lane patching"),
+            max_concurrent_read_only_lanes=1,
+            max_concurrent_mutation_lanes=1,
+        )
+    )
+
+    status = build_workspace_status_from_records(
+        {"now": "2026-06-19T12:01:00Z"},
+        records_path=records_path,
+    )
+
+    codex_worker_status = status["codex_worker_node_status"]
+    assert codex_worker_status["registered"] is True
+    assert codex_worker_status["online"] is True
+    assert codex_worker_status["readiness_state"] == "REGISTERED_ONLINE_MUTATION_BLOCKED"
+    assert codex_worker_status["dispatch_state"] == "DISPATCH_DISABLED"
+    assert codex_worker_status["advertised_max_concurrent_mutation_lanes"] == 1
+    assert codex_worker_status["max_concurrent_mutation_lanes"] == 0
+    assert codex_worker_status["mutation_worker_execution_allowed"] is False
+    assert codex_worker_status["dispatch_allowed"] is False
+    assert "mutation worker execution" in codex_worker_status["capabilities_blocked"]
+
+
+def test_record_sourced_workspace_status_does_not_register_legacy_hermes_worker_node(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        WorkerNodeRunRecord(
+            worker_run_id="worker-run-legacy-hermes",
+            parent_run_id="run-parent",
+            worker_type="hermes",
+            worker_identity="hermes",
+            worker_host_label="laptop-hermes",
+            worker_kind="laptop_hermes",
+            status="running",
+            objective="Legacy Hermes worker-node record.",
+            presence_status="online",
+            last_heartbeat_at="2026-06-19T12:00:00Z",
+        )
+    )
+
+    status = build_workspace_status_from_records(
+        {"now": "2026-06-19T12:01:00Z"},
+        records_path=records_path,
+    )
+
+    presence = status["worker_node_presence"]
+    assert presence["registered"] is False
+    assert presence["online"] is False
+    assert presence["presence_state"] == "legacy_hermes_record"
+    assert presence["legacy_hermes_worker_node_record"] is True
+    assert "latest worker-node record is not a Codex worker-node registration" in presence["blocked_reasons"]
+
+    codex_worker_status = status["codex_worker_node_status"]
+    assert codex_worker_status["registered"] is False
+    assert codex_worker_status["readiness_state"] == "MISSING"
+    assert codex_worker_status["old_hermes_worker_node_deprecated"] is True
+    assert "legacy Hermes worker-node record is deprecated and not a Codex registration" in codex_worker_status["blocked_reasons"]
+    assert codex_worker_status["dispatch_allowed"] is False
+    assert codex_worker_status["worker_node_dispatch"] is False
 
 
 def test_orchestration_readiness_and_instruction_previews_block_would_execute_flags():

@@ -184,12 +184,39 @@ interface MobileReportLifecycle extends MobileExecutionLockSource {
 
 interface MobileWorkerNodePresence extends MobileExecutionLockSource {
   blocked_reasons?: string[];
+  capabilities_advertised?: string[];
+  capabilities_allowed?: string[];
+  capabilities_blocked?: string[];
   capability_summary?: string;
+  heartbeat_age_seconds?: number | null;
+  heartbeat_status?: string;
+  last_heartbeat_at?: string;
   last_seen_at?: string;
   online?: boolean;
   presence_state?: string;
+  registered?: boolean;
   worker_host_label?: string;
   worker_run_id?: string;
+}
+
+interface MobileCodexWorkerNodeStatus extends MobileExecutionLockSource {
+  blocked_reasons?: string[];
+  capabilities_advertised?: string[];
+  capabilities_allowed?: string[];
+  capabilities_blocked?: string[];
+  dispatch_allowed?: boolean;
+  dispatch_blockers?: string[];
+  dispatch_state?: string;
+  heartbeat_age_seconds?: number | null;
+  heartbeat_status?: string;
+  mutation_worker_execution_allowed?: boolean;
+  next_safe_action?: string;
+  online?: boolean;
+  read_only_worker_execution_allowed?: boolean;
+  readiness_state?: string;
+  registered?: boolean;
+  state?: string;
+  worker_node_dispatch?: boolean;
 }
 
 interface MobileWorkerNodeInstructionPreview extends MobileExecutionLockSource {
@@ -261,6 +288,7 @@ interface MobileWorkspaceStatus {
     would_create_pr?: unknown;
   };
   tool_permission_classification?: MobileToolPermissionClassification;
+  codex_worker_node_status?: MobileCodexWorkerNodeStatus;
   worker_node_instruction_preview?: MobileWorkerNodeInstructionPreview;
   worker_node_orchestration?: MobileWorkerNodeOrchestration;
   worker_node_presence?: MobileWorkerNodePresence;
@@ -662,6 +690,7 @@ function mobileWorkspaceSafety(status: MobileWorkspaceStatus | null): MobileBrid
   reasons.push(...mobileExecutionLockReasons("orchestration_readiness", status?.orchestration_readiness));
   reasons.push(...mobileExecutionLockReasons("workspace safety", status?.safety));
   reasons.push(...mobileExecutionLockReasons("report_lifecycle", status?.report_lifecycle));
+  reasons.push(...mobileExecutionLockReasons("codex_worker_node_status", status?.codex_worker_node_status));
   reasons.push(...mobileExecutionLockReasons("worker_node_presence", status?.worker_node_presence));
   reasons.push(...mobileExecutionLockReasons("worker_node_orchestration", status?.worker_node_orchestration));
   reasons.push(...mobileExecutionLockReasons("worker_node_instruction_preview", status?.worker_node_instruction_preview));
@@ -981,6 +1010,7 @@ export default function JennyMobilePage() {
     + (reportLifecycle?.runs_missing_report?.length ?? 0)
     + reportMissingLinkedCount;
   const readinessStates = workspaceStatus?.orchestration_readiness?.states;
+  const codexWorkerNodeStatus = workspaceStatus?.codex_worker_node_status;
   const workerPresence = workspaceStatus?.worker_node_presence;
   const workerInstruction = workspaceStatus?.worker_node_instruction_preview;
   const workerProjection = workspaceStatus?.worker_node_orchestration;
@@ -988,6 +1018,8 @@ export default function JennyMobilePage() {
   const workerLatestStatus = mobileRecordText(workerRecord, "status") || "none";
   const workerLatestObjective = mobileRecordText(workerRecord, "objective") || "no assigned objective";
   const workerBlockedReasons = [
+    ...(codexWorkerNodeStatus?.blocked_reasons ?? []),
+    ...(codexWorkerNodeStatus?.dispatch_blockers ?? []),
     ...(workerPresence?.blocked_reasons ?? []),
     ...(workerProjection?.blocked_reasons ?? []),
     ...(workerInstruction?.blocked_reasons ?? []),
@@ -1462,10 +1494,26 @@ export default function JennyMobilePage() {
                   </dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-zinc-400">Laptop Codex</dt>
-                  <dd className={cn("min-w-0 truncate text-right", workerPresence?.online ? "text-emerald-300" : "text-amber-300")}>
-                    {workerPresence?.worker_host_label ?? "laptop Codex"} / {workerPresence?.presence_state?.replaceAll("_", " ") ?? "unknown"} / online{" "}
-                    {workerPresence?.online ? "yes" : "no"}
+                  <dt className="text-zinc-400">Codex worker-node</dt>
+                  <dd className={cn("min-w-0 truncate text-right", codexWorkerNodeStatus?.online ? "text-emerald-300" : "text-amber-300")}>
+                    {mobileStateLabel(codexWorkerNodeStatus?.readiness_state ?? workerPresence?.presence_state)} / registered{" "}
+                    {codexWorkerNodeStatus?.registered ? "yes" : "no"} / online {codexWorkerNodeStatus?.online ? "yes" : "no"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-zinc-400">Codex dispatch</dt>
+                  <dd className={cn("min-w-0 truncate text-right", codexWorkerNodeStatus?.dispatch_allowed ? "text-red-300" : "text-emerald-300")}>
+                    {mobileStateLabel(codexWorkerNodeStatus?.dispatch_state ?? "DISPATCH_DISABLED")} / heartbeat{" "}
+                    {mobileStateLabel(codexWorkerNodeStatus?.heartbeat_status ?? "missing")} / allowed{" "}
+                    {codexWorkerNodeStatus?.dispatch_allowed ? "yes" : "no"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-zinc-400">Codex capabilities</dt>
+                  <dd className="min-w-0 truncate text-right">
+                    advertised {codexWorkerNodeStatus?.capabilities_advertised?.length ?? 0} / blocked{" "}
+                    {codexWorkerNodeStatus?.capabilities_blocked?.length ?? 0} / read-only execution{" "}
+                    {codexWorkerNodeStatus?.read_only_worker_execution_allowed ? "yes" : "no"}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-3">
