@@ -194,6 +194,21 @@ def test_record_sourced_workspace_status_projects_reconciled_runtime_facts(tmp_p
         _assert_execution_disabled(projection)
 
 
+def test_record_sourced_workspace_status_uses_baseline_head_when_source_runtime_missing(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(_reconciled_baseline_record(source_runtime={}))
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    assert status["runtime_provenance"]["source_head"] == HEAD
+    assert status["runtime_provenance"]["primary_status"] == "CLEAN_AND_ALIGNED"
+    assert status["runtime_provenance"]["autonomy_blocked"] is False
+    assert "source HEAD is missing" not in status["runtime_provenance"]["autonomy_blocked_reasons"]
+    assert status["source_runtime"]["head"] == HEAD
+    assert status["source_runtime"]["state"] == "recorded"
+
+
 def test_record_sourced_workspace_status_treats_previous_rollback_as_available(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"
     store = JsonlRecordStore(records_path)
