@@ -198,6 +198,64 @@ async function resolveInstallScript({ installStamp, sourceRepoRoot, hermesHome, 
 // powershell wrapper
 // ---------------------------------------------------------------------------
 
+function envValue(env, name) {
+  if (Object.prototype.hasOwnProperty.call(env || {}, name)) return env[name]
+  const key = Object.keys(env || {}).find(candidate => candidate.toLowerCase() === name.toLowerCase())
+  return key ? env[key] : ''
+}
+
+function addUniquePathEntry(entries, seen, entry) {
+  const normalized = String(entry || '').trim()
+  if (!normalized) return
+  const key = normalized.toLowerCase()
+  if (seen.has(key)) return
+  seen.add(key)
+  entries.push(normalized)
+}
+
+function normalizeWindowsPowerShellModulePath(baseEnv = process.env) {
+  const entries = []
+  const seen = new Set()
+  const userProfile = envValue(baseEnv, 'USERPROFILE')
+  const programFiles = envValue(baseEnv, 'ProgramFiles') || 'C:\\Program Files'
+  const systemRoot = envValue(baseEnv, 'SystemRoot') || 'C:\\Windows'
+
+  addUniquePathEntry(entries, seen, userProfile && path.win32.join(userProfile, 'Documents', 'WindowsPowerShell', 'Modules'))
+  addUniquePathEntry(entries, seen, path.win32.join(programFiles, 'WindowsPowerShell', 'Modules'))
+  addUniquePathEntry(entries, seen, path.win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'Modules'))
+
+  const existing = envValue(baseEnv, 'PSModulePath')
+  for (const entry of existing.split(';')) {
+    if (/(^|[\\/])WindowsPowerShell([\\/]|$)/i.test(entry)) {
+      addUniquePathEntry(entries, seen, entry)
+    }
+  }
+
+  return entries.join(';')
+}
+
+function buildPowerShellEnv({ baseEnv = process.env, hermesHome, platform = process.platform } = {}) {
+  const env = {
+    ...baseEnv,
+    // Pass HERMES_HOME through so install.ps1 respects the caller's
+    // choice rather than re-computing the default.
+    HERMES_HOME: hermesHome || envValue(baseEnv, 'HERMES_HOME') || ''
+  }
+
+  if (platform === 'win32') {
+    // Electron/Node can inherit PowerShell 7 module paths. Windows PowerShell
+    // 5.1 may then load incompatible modules in nested installer commands.
+    for (const key of Object.keys(env)) {
+      if (key.toLowerCase() === 'psmodulepath' && key !== 'PSModulePath') {
+        delete env[key]
+      }
+    }
+    env.PSModulePath = normalizeWindowsPowerShellModulePath(baseEnv)
+  }
+
+  return env
+}
+
 function spawnPowerShell(scriptPath, args, { emit, stageName, abortSignal, hermesHome } = {}) {
   return new Promise((resolve, reject) => {
     const ps = process.platform === 'win32' ? 'powershell.exe' : 'pwsh'
@@ -205,12 +263,7 @@ function spawnPowerShell(scriptPath, args, { emit, stageName, abortSignal, herme
 
     const child = spawn(ps, fullArgs, {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        // Pass HERMES_HOME through so install.ps1 respects the caller's
-        // choice rather than re-computing the default.
-        HERMES_HOME: hermesHome || process.env.HERMES_HOME || ''
-      }
+      env: buildPowerShellEnv({ hermesHome })
     })
 
     let stdout = ''
@@ -631,7 +684,9 @@ async function runBootstrap(opts) {
 module.exports = {
   runBootstrap,
   // Exposed for testability
+  buildPowerShellEnv,
   parseStageResult,
+  normalizeWindowsPowerShellModulePath,
   resolveLocalInstallScript,
   cachedScriptPath
 }
