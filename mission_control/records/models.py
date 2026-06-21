@@ -2424,6 +2424,8 @@ class AcceptedBaselineRecord:
     dispatch_in_gateway: bool = False
     active_kanban: int = 0
     max_active_lane: int = 1
+    max_read_only_lanes: int = 2
+    max_mutation_lanes: int = 1
     issue: str = ""
     source_runtime: dict[str, Any] = field(default_factory=dict)
     dashboard_runtime: dict[str, Any] = field(default_factory=dict)
@@ -2447,6 +2449,8 @@ class AcceptedBaselineRecord:
         object.__setattr__(self, "dispatch_in_gateway", self.dispatch_in_gateway is True)
         object.__setattr__(self, "active_kanban", _bounded_handoff_int(self.active_kanban, default=0))
         object.__setattr__(self, "max_active_lane", _bounded_handoff_int(self.max_active_lane, default=1) or 1)
+        object.__setattr__(self, "max_read_only_lanes", _bounded_handoff_int(self.max_read_only_lanes, default=2) or 2)
+        object.__setattr__(self, "max_mutation_lanes", _bounded_handoff_int(self.max_mutation_lanes, default=1) or 1)
         object.__setattr__(self, "issue", _bounded_handoff_text(self.issue))
         object.__setattr__(self, "source_runtime", _bounded_runtime_section(self.source_runtime))
         object.__setattr__(self, "dashboard_runtime", _bounded_runtime_section(self.dashboard_runtime))
@@ -2469,6 +2473,8 @@ class AcceptedBaselineRecord:
             "dispatch_in_gateway": self.dispatch_in_gateway,
             "active_kanban": self.active_kanban,
             "max_active_lane": self.max_active_lane,
+            "max_read_only_lanes": self.max_read_only_lanes,
+            "max_mutation_lanes": self.max_mutation_lanes,
             "issue": self.issue,
             "display_only": True,
             "would_execute": False,
@@ -2498,6 +2504,8 @@ class AcceptedBaselineRecord:
             dispatch_in_gateway=data.get("dispatch_in_gateway") is True,
             active_kanban=data.get("active_kanban", 0),
             max_active_lane=data.get("max_active_lane", 1),
+            max_read_only_lanes=data.get("max_read_only_lanes", 2),
+            max_mutation_lanes=data.get("max_mutation_lanes", 1),
             issue=data.get("issue", ""),
             source_runtime=data.get("source_runtime") or {},
             dashboard_runtime=data.get("dashboard_runtime") or {},

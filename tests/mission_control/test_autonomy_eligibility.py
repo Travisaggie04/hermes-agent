@@ -483,6 +483,91 @@ def test_approved_read_only_lane_preview_is_inert_and_eligible():
     assert result["session_send_enabled"] is False
 
 
+def test_split_policy_allows_two_read_only_lanes_without_global_lane_block():
+    provenance = evaluate_runtime_provenance(
+        _clean_runtime_state(
+            active_lane_count=2,
+            max_active_lane=1,
+            split_lane_policy_present=True,
+            active_read_only_lane_count=2,
+            max_read_only_lanes=2,
+            active_mutation_lane_count=0,
+            max_mutation_lanes=1,
+            active_unknown_lane_count=0,
+        )
+    )
+    result = evaluate_read_only_autonomy_eligibility(
+        _eligible_preview_payload(
+            runtime_provenance=provenance,
+            active_read_only_lane_count=2,
+            max_read_only_lanes=2,
+            active_mutation_lane_count=0,
+        )
+    )
+
+    assert provenance["primary_status"] == "CLEAN_AND_ALIGNED"
+    assert provenance["autonomy_blocked"] is False
+    assert provenance["active_read_only_lane_count"] == 2
+    assert provenance["max_read_only_lanes"] == 2
+    assert result["eligible"] is True
+    assert result["read_only_concurrency_supported"] is True
+    assert result["execution_enabled"] is False
+    assert result["dispatch_enabled"] is False
+    assert result["session_send_enabled"] is False
+    assert result["worker_dispatch_enabled"] is False
+
+
+def test_split_policy_blocks_third_read_only_lane():
+    provenance = evaluate_runtime_provenance(
+        _clean_runtime_state(
+            active_lane_count=3,
+            max_active_lane=1,
+            split_lane_policy_present=True,
+            active_read_only_lane_count=3,
+            max_read_only_lanes=2,
+            active_mutation_lane_count=0,
+            max_mutation_lanes=1,
+            active_unknown_lane_count=0,
+        )
+    )
+    result = evaluate_read_only_autonomy_eligibility(
+        _eligible_preview_payload(
+            runtime_provenance=provenance,
+            active_read_only_lane_count=3,
+            max_read_only_lanes=2,
+        )
+    )
+
+    assert provenance["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
+    assert "active read-only lane count exceeds configured maximum" in provenance["autonomy_blocked_reasons"]
+    assert result["eligible"] is False
+    assert "active read-only lane count exceeds configured maximum" in result["blocked_reasons"]
+
+
+def test_split_policy_blocks_unknown_lane_classification():
+    provenance = evaluate_runtime_provenance(
+        _clean_runtime_state(
+            active_lane_count=1,
+            max_active_lane=1,
+            split_lane_policy_present=True,
+            active_read_only_lane_count=0,
+            active_mutation_lane_count=0,
+            active_unknown_lane_count=1,
+        )
+    )
+    result = evaluate_read_only_autonomy_eligibility(
+        _eligible_preview_payload(
+            runtime_provenance=provenance,
+            active_unknown_lane_count=1,
+        )
+    )
+
+    assert provenance["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
+    assert "active lane classification is unknown" in provenance["autonomy_blocked_reasons"]
+    assert result["eligible"] is False
+    assert "active lane classification is unknown" in result["blocked_reasons"]
+
+
 def test_approval_expiry_consumption_and_broad_scope_block_eligibility():
     result = evaluate_read_only_autonomy_eligibility(
         _eligible_preview_payload(

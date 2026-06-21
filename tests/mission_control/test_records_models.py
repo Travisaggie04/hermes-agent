@@ -968,6 +968,8 @@ def test_accepted_baseline_record_round_trips_and_forces_inert_flags():
         "dispatch_in_gateway": False,
         "active_kanban": 0,
         "max_active_lane": 1,
+        "max_read_only_lanes": 2,
+        "max_mutation_lanes": 1,
         "issue": "none",
         "display_only": True,
         "would_execute": False,

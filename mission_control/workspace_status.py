@@ -106,6 +106,14 @@ _DEFAULT_STATUS: dict[str, Any] = {
         "declared_baseline_head": "775f49352189fdec3169f59e3378b6744da2bdda",
         "max_active_lane": 1,
         "active_lane_count": 0,
+        "max_read_only_lanes": 2,
+        "active_read_only_lane_count": 0,
+        "max_mutation_lanes": 1,
+        "active_mutation_lane_count": 0,
+        "active_unknown_lane_count": 0,
+        "read_only_concurrency_supported": True,
+        "read_only_concurrency_policy": "max_2_supervised_read_only_lanes",
+        "mutation_lane_policy": "max_1_active_mutation_lane",
     },
     "safety": {
         "dispatch_in_gateway": False,
@@ -207,6 +215,14 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
             "declared_baseline_head": accepted_record.get("head", ""),
             "max_active_lane": accepted_record.get("max_active_lane", 1),
             "active_lane_count": 0,
+            "max_read_only_lanes": accepted_record.get("max_read_only_lanes", 2),
+            "active_read_only_lane_count": 0,
+            "max_mutation_lanes": accepted_record.get("max_mutation_lanes", 1),
+            "active_mutation_lane_count": 0,
+            "active_unknown_lane_count": 0,
+            "read_only_concurrency_supported": True,
+            "read_only_concurrency_policy": "max_2_supervised_read_only_lanes",
+            "mutation_lane_policy": "max_1_active_mutation_lane",
         }
         lane_input = _record_authoritative_lane_input(lane_input)
     lane = _lane_section(lane_input, defaults=lane_defaults)
@@ -221,7 +237,12 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
             else accepted_record.get("active_kanban", 0)
         )
         activity = {**activity, "active_workers": 0, "active_tasks": 0, "active_runs": active_runs}
-        lane = {**lane, "max_active_lane": accepted_record.get("max_active_lane", lane.get("max_active_lane", 1))}
+        lane = {
+            **lane,
+            "max_active_lane": accepted_record.get("max_active_lane", lane.get("max_active_lane", 1)),
+            "max_read_only_lanes": accepted_record.get("max_read_only_lanes", lane.get("max_read_only_lanes", 2)),
+            "max_mutation_lanes": accepted_record.get("max_mutation_lanes", lane.get("max_mutation_lanes", 1)),
+        }
     pr_gate = _pr_gate_section(_section(source, "pr_gate"), defaults=_DEFAULT_STATUS["pr_gate"])
     deployment = _deployment_section(_section(source, "deployment"), defaults=_DEFAULT_STATUS["deployment"])
     source_control = _source_control_section(_section(source, "source_control"), defaults=_DEFAULT_STATUS["source_control"])
@@ -243,9 +264,19 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
             _section(source, "autonomy_eligibility"),
             {
                 "runtime_provenance": runtime_provenance,
+                "active_read_only_lane_count": _safe_int(
+                    lane.get("active_read_only_lane_count"),
+                    default=_safe_int(_section(source, "control_plane_lifecycle").get("active_read_only_lane_count"), default=0),
+                ),
+                "max_read_only_lanes": _safe_int(lane.get("max_read_only_lanes"), default=2) or 2,
                 "active_mutation_lane_count": _safe_int(
                     _section(source, "control_plane_lifecycle").get("active_mutation_lane_count"),
                     default=0,
+                ),
+                "max_mutation_lanes": _safe_int(lane.get("max_mutation_lanes"), default=1) or 1,
+                "active_unknown_lane_count": _safe_int(
+                    lane.get("active_unknown_lane_count"),
+                    default=_safe_int(_section(source, "control_plane_lifecycle").get("active_unknown_lane_count"), default=0),
                 ),
                 "now": _safe_text(source.get("now")),
             },
@@ -300,7 +331,14 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
     ):
         if safety.get(flag) is not False:
             warnings.append(f"{flag}_not_false")
-    if lane["active_lane_count"] > lane["max_active_lane"]:
+    if lane.get("split_lane_policy_present"):
+        if lane["active_read_only_lane_count"] > lane["max_read_only_lanes"]:
+            warnings.append("active_read_only_lane_count_exceeds_max")
+        if lane["active_mutation_lane_count"] > lane["max_mutation_lanes"]:
+            warnings.append("active_mutation_lane_count_exceeds_max")
+        if lane["active_unknown_lane_count"] > 0:
+            warnings.append("active_lane_classification_unknown")
+    elif lane["active_lane_count"] > lane["max_active_lane"]:
         warnings.append("active_lane_count_exceeds_max")
     if activity["active_workers"] > 0 or activity["active_tasks"] > 0 or activity["active_runs"] > 0:
         warnings.append("active_workers_tasks_or_runs_present")
@@ -446,6 +484,15 @@ def _runtime_provenance_input(
         "dispatch_in_gateway": safety.get("dispatch_in_gateway"),
         "active_lane_count": lane.get("active_lane_count"),
         "max_active_lane": lane.get("max_active_lane"),
+        "split_lane_policy_present": lane.get("split_lane_policy_present"),
+        "active_read_only_lane_count": lane.get("active_read_only_lane_count"),
+        "max_read_only_lanes": lane.get("max_read_only_lanes"),
+        "active_mutation_lane_count": lane.get("active_mutation_lane_count"),
+        "max_mutation_lanes": lane.get("max_mutation_lanes"),
+        "active_unknown_lane_count": lane.get("active_unknown_lane_count"),
+        "read_only_concurrency_supported": lane.get("read_only_concurrency_supported"),
+        "read_only_concurrency_policy": lane.get("read_only_concurrency_policy"),
+        "mutation_lane_policy": lane.get("mutation_lane_policy"),
     }
 
 
@@ -504,6 +551,9 @@ def _execution_packet_preview_input(
                 "read_only_inspection",
                 "read_only_status_report",
                 "supervised_read_only_status_report",
+                "read_only_execution",
+                "supervised_read_only",
+                "supervised_read_only_execution",
             }
             or lane_type.startswith("read_only")
         ):
@@ -516,9 +566,19 @@ def _execution_packet_preview_input(
         "runtime_provenance": runtime_provenance,
         "tool_permissions": packet_tool_permissions,
         "now": _safe_text(source.get("now") or autonomy.get("now")),
+        "active_read_only_lane_count": _safe_int(
+            lane.get("active_read_only_lane_count"),
+            default=_safe_int(autonomy.get("active_read_only_lane_count"), default=0),
+        ),
+        "max_read_only_lanes": _safe_int(lane.get("max_read_only_lanes"), default=2) or 2,
         "active_mutation_lane_count": _safe_int(
             _section(source, "control_plane_lifecycle").get("active_mutation_lane_count"),
             default=_safe_int(autonomy.get("active_mutation_lane_count"), default=0),
+        ),
+        "max_mutation_lanes": _safe_int(lane.get("max_mutation_lanes"), default=1) or 1,
+        "active_unknown_lane_count": _safe_int(
+            lane.get("active_unknown_lane_count"),
+            default=_safe_int(autonomy.get("active_unknown_lane_count"), default=0),
         ),
     }
     if mode == "read_only":
@@ -562,6 +622,8 @@ def _accepted_baseline_record_section(section: dict[str, Any]) -> dict[str, Any]
         "dispatch_in_gateway": _safe_bool(section.get("dispatch_in_gateway"), default=False),
         "active_kanban": _safe_int(section.get("active_kanban"), default=0),
         "max_active_lane": _safe_int(section.get("max_active_lane"), default=1) or 1,
+        "max_read_only_lanes": _safe_int(section.get("max_read_only_lanes"), default=2) or 2,
+        "max_mutation_lanes": _safe_int(section.get("max_mutation_lanes"), default=1) or 1,
         "issue": _safe_text(section.get("issue")),
         "source_runtime": _runtime_fact_section(section.get("source_runtime")),
         "dashboard_runtime": _runtime_fact_section(section.get("dashboard_runtime")),
@@ -751,13 +813,47 @@ def _lane_section(section: dict[str, Any], *, defaults: dict[str, Any]) -> dict[
     merged = _merge_dicts(defaults, section)
     max_lane = _safe_int(merged.get("max_active_lane"), default=1) or 1
     active_count = _safe_int(merged.get("active_lane_count"), default=0)
+    max_read_only_lanes = _safe_int(merged.get("max_read_only_lanes"), default=2) or 2
+    active_read_only_count = _safe_int(merged.get("active_read_only_lane_count"), default=0)
+    max_mutation_lanes = _safe_int(merged.get("max_mutation_lanes"), default=1) or 1
+    active_mutation_count = _safe_int(merged.get("active_mutation_lane_count"), default=0)
+    active_unknown_count = _safe_int(merged.get("active_unknown_lane_count"), default=0)
+    split_policy_present = any(
+        key in section
+        for key in (
+            "active_read_only_lane_count",
+            "active_mutation_lane_count",
+            "active_unknown_lane_count",
+            "max_read_only_lanes",
+            "max_mutation_lanes",
+        )
+    )
+    if split_policy_present:
+        lane_status = "within_limit"
+        if active_read_only_count > max_read_only_lanes:
+            lane_status = "read_only_exceeds_limit"
+        if active_mutation_count > max_mutation_lanes:
+            lane_status = "mutation_exceeds_limit"
+        if active_unknown_count > 0:
+            lane_status = "unknown_blocked"
+    else:
+        lane_status = "within_limit" if active_count <= max_lane else "exceeds_limit"
     return {
         "active_lane": _safe_text(merged.get("active_lane")),
         "mode": _safe_text(merged.get("mode")),
         "declared_baseline_head": _safe_sha(merged.get("declared_baseline_head")),
         "max_active_lane": max_lane,
         "active_lane_count": active_count,
-        "lane_status": "within_limit" if active_count <= max_lane else "exceeds_limit",
+        "max_read_only_lanes": max_read_only_lanes,
+        "active_read_only_lane_count": active_read_only_count,
+        "max_mutation_lanes": max_mutation_lanes,
+        "active_mutation_lane_count": active_mutation_count,
+        "active_unknown_lane_count": active_unknown_count,
+        "read_only_concurrency_supported": _safe_bool(merged.get("read_only_concurrency_supported"), default=True),
+        "read_only_concurrency_policy": _safe_text(merged.get("read_only_concurrency_policy") or "max_2_supervised_read_only_lanes"),
+        "mutation_lane_policy": _safe_text(merged.get("mutation_lane_policy") or "max_1_active_mutation_lane"),
+        "split_lane_policy_present": split_policy_present,
+        "lane_status": lane_status,
     }
 
 
