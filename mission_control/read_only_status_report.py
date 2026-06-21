@@ -18,6 +18,10 @@ from mission_control.records import (
     SessionProjectLinkRecord,
 )
 from mission_control.records.models import RECORD_TYPES
+from mission_control.pm_decision_packet import (
+    build_read_only_result_pm_decision_packet,
+    render_pm_decision_packet,
+)
 from mission_control.workspace_status_records import build_workspace_status_from_records, default_record_store_path
 
 
@@ -251,6 +255,19 @@ def run_once_if_trusted(
 
     result_report_id = f"report-pr402-supervised-read-only-status-result-{uuid.uuid4().hex[:12]}"
     store = JsonlRecordStore(path)
+    record_counts = _record_counts(store)
+    status_report = _status_report_text(
+        status,
+        record_counts=record_counts,
+        current_run_id=run_id,
+        project_context=_project_context_summary(store, project_id),
+    )
+    pm_decision_packet = build_read_only_result_pm_decision_packet(
+        status=status,
+        run_id=run_id,
+        report_id=result_report_id,
+        record_counts=record_counts,
+    )
     report = ReportRecord(
         report_id=result_report_id,
         run_id=run_id,
@@ -259,12 +276,8 @@ def run_once_if_trusted(
         status="accepted",
         report_kind=REPORT_RESULT_KIND,
         summary="Jenny supervised read-only status report completed without external side effects.",
-        result=_status_report_text(
-            status,
-            record_counts=_record_counts(store),
-            current_run_id=run_id,
-            project_context=_project_context_summary(store, project_id),
-        ),
+        result=status_report + "\n\n" + render_pm_decision_packet(pm_decision_packet),
+        risks=("Low risk: guarded read-only status report only; no file, git, runtime, or external action changed.",),
         blockers=tuple(status.get("operator_decision_packet", {}).get("blocked_reasons", ())[:8])
         if isinstance(status.get("operator_decision_packet"), dict)
         else (),
@@ -290,6 +303,7 @@ def run_once_if_trusted(
             "no_worker_dispatch": True,
             "no_external_side_effects": True,
             "no_secrets_printed": True,
+            "pm_decision_packet": pm_decision_packet,
             "safety_confirmation": (
                 "The guarded backend appended only this status report result and terminal "
                 "RunRecord update; no source/runtime edit, dispatch, session-send, worker dispatch, "
@@ -342,6 +356,7 @@ def run_once_if_trusted(
         "run_record_index": run_index,
         "status_report_summary": report.summary,
         "status_report": report.result,
+        "pm_decision_packet": pm_decision_packet,
         "timeout_seconds": timeout_seconds,
     }
 
