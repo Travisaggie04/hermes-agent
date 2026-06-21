@@ -818,11 +818,18 @@ export interface MissionControlOperatorDecisionPacket {
   top_report_review_reason?: string
   trusted_for_execution?: boolean
   worker_dispatch_enabled?: boolean
+  worker_heartbeat_loop_command?: string
   worker_instruction_available?: boolean
   worker_instruction_ready_for_handoff?: boolean
   worker_last_seen_at?: string
+  worker_next_action_command?: string
   worker_online?: boolean
+  worker_option_recommendation?: string
+  worker_decision_options?: Array<Record<string, unknown>>
   worker_presence_state?: string
+  worker_availability_label?: string
+  worker_status_command?: string
+  worker_stop_command?: string
   would_dispatch?: boolean
   would_execute?: boolean
   would_session_send?: boolean
@@ -1083,6 +1090,7 @@ export interface MissionControlWorkerNodePresence {
   parent_run_id?: string
   presence_state?: string
   presence_status?: string
+  smoke_status?: string
   project_scope?: string[]
   recorded_worker_node_run_count?: number
   registered?: boolean
@@ -1109,6 +1117,7 @@ export interface MissionControlCodexWorkerNodeStatus extends MissionControlExecu
   active_worker_node_run_count?: number
   advertised_max_concurrent_mutation_lanes?: number
   advertised_max_concurrent_read_only_lanes?: number
+  availability_label?: string
   blocked?: boolean
   blocked_reasons?: string[]
   capabilities_advertised?: string[]
@@ -1119,6 +1128,7 @@ export interface MissionControlCodexWorkerNodeStatus extends MissionControlExecu
   dispatch_blockers?: string[]
   dispatch_blocked_until?: string
   dispatch_state?: string
+  copyable_manual_handoff_available?: boolean
   display_name?: string
   external_update_triggered?: boolean
   heartbeat_age_seconds?: number | null
@@ -1130,11 +1140,18 @@ export interface MissionControlCodexWorkerNodeStatus extends MissionControlExecu
   max_concurrent_read_only_lanes?: number
   mutation_worker_execution_allowed?: boolean
   next_safe_action?: string
+  operator_decision_options?: Array<Record<string, unknown>>
+  operator_next_action_command?: string
+  operator_status_command?: string
+  operator_stop_command?: string
+  heartbeat_loop_command?: string
+  manual_handoff_packet_available?: boolean
   old_hermes_worker_node_deprecated?: boolean
   old_hermes_worker_node_status?: string
   online?: boolean
   presence_state?: string
   presence_status?: string
+  smoke_status?: string
   project_scope?: string[]
   read_only_capable?: boolean
   read_only_worker_execution_allowed?: boolean

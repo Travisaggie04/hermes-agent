@@ -61,6 +61,27 @@ def _inert_execution_metadata(value: Any) -> dict[str, Any]:
     return metadata
 
 
+_WORKER_NODE_PRESENCE_STATUSES = {"online", "offline"}
+
+
+def _normalize_worker_node_presence_status(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    return text if text in _WORKER_NODE_PRESENCE_STATUSES else "offline"
+
+
+def _normalize_worker_node_smoke_status(*, smoke_status: Any, presence_status: Any, metadata: dict[str, Any]) -> str:
+    explicit = str(smoke_status or "").strip()
+    if explicit:
+        return explicit
+    metadata_smoke_status = str(metadata.get("smoke_status") or "").strip()
+    if metadata_smoke_status:
+        return metadata_smoke_status
+    presence_text = str(presence_status or "").strip().lower()
+    if presence_text and presence_text not in _WORKER_NODE_PRESENCE_STATUSES:
+        return presence_text
+    return ""
+
+
 def _required(data: dict[str, Any], field_name: str) -> Any:
     try:
         return data[field_name]
@@ -1395,7 +1416,8 @@ class WorkerNodeRunRecord:
     updated_at: str = ""
     stopped_at: str = ""
     stop_reason: str = ""
-    presence_status: str = ""
+    presence_status: str = "offline"
+    smoke_status: str = ""
     last_heartbeat_at: str = ""
     last_seen_at: str = ""
     worker_version: str = ""
@@ -1425,6 +1447,14 @@ class WorkerNodeRunRecord:
         object.__setattr__(self, "allowed_actions", tuple(str(item) for item in _tuple(self.allowed_actions)))
         object.__setattr__(self, "forbidden_actions", tuple(str(item) for item in _tuple(self.forbidden_actions)))
         object.__setattr__(self, "blocked_reasons", tuple(str(item) for item in _tuple(self.blocked_reasons)))
+        metadata = _inert_execution_metadata(self.metadata)
+        smoke_status = _normalize_worker_node_smoke_status(
+            smoke_status=self.smoke_status,
+            presence_status=self.presence_status,
+            metadata=metadata,
+        )
+        object.__setattr__(self, "presence_status", _normalize_worker_node_presence_status(self.presence_status))
+        object.__setattr__(self, "smoke_status", smoke_status)
         object.__setattr__(self, "last_heartbeat_at", str(self.last_heartbeat_at or self.last_seen_at))
         object.__setattr__(
             self,
@@ -1456,7 +1486,8 @@ class WorkerNodeRunRecord:
         object.__setattr__(self, "source_of_truth", str(self.source_of_truth or "WorkerNodeRunRecord"))
         object.__setattr__(self, "safety_notes", tuple(str(item) for item in _tuple(self.safety_notes)))
         object.__setattr__(self, "worker_dispatch_enabled", False)
-        metadata = _inert_execution_metadata(self.metadata)
+        if smoke_status:
+            metadata["smoke_status"] = smoke_status
         metadata.update(
             {
                 "display_only": True,
@@ -1491,6 +1522,7 @@ class WorkerNodeRunRecord:
             "stopped_at": self.stopped_at,
             "stop_reason": self.stop_reason,
             "presence_status": self.presence_status,
+            "smoke_status": self.smoke_status,
             "last_heartbeat_at": self.last_heartbeat_at,
             "last_seen_at": self.last_seen_at,
             "worker_version": self.worker_version,
@@ -1535,7 +1567,8 @@ class WorkerNodeRunRecord:
             updated_at=data.get("updated_at", ""),
             stopped_at=data.get("stopped_at", ""),
             stop_reason=data.get("stop_reason", ""),
-            presence_status=data.get("presence_status", ""),
+            presence_status=data.get("presence_status", "offline"),
+            smoke_status=data.get("smoke_status", "") or _dict(data.get("metadata")).get("smoke_status", ""),
             last_heartbeat_at=data.get("last_heartbeat_at", ""),
             last_seen_at=data.get("last_seen_at", ""),
             worker_version=data.get("worker_version", ""),
