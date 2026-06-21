@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createMissionControlSessionProjectLink } from '@/hermes'
 import { type ChatMessage, chatMessageText } from '@/lib/chat-messages'
+import { addComposerAttachment, clearComposerAttachments } from '@/store/composer'
 import { $notifications, clearNotifications } from '@/store/notifications'
 import {
   $messages,
@@ -213,6 +214,8 @@ describe('usePromptActions project harness', () => {
   afterEach(() => {
     cleanup()
     $messages.set([])
+    clearComposerAttachments()
+    Reflect.deleteProperty(window, 'hermesDesktop')
     setBusy(false)
     setAwaitingResponse(false)
     vi.restoreAllMocks()
@@ -269,7 +272,7 @@ describe('usePromptActions project harness', () => {
     expect(hiddenContext).toContain('Do not turn simple tests, greetings, or casual questions into formal spec reviews')
     expect(hiddenContext).toContain('give short Codex-style status updates')
     expect(hiddenContext).toContain('Action policy: jenny_os_action_policy_v1.')
-    expect(hiddenContext).toContain('ASK before:')
+    expect(hiddenContext).toContain('APPROVAL_GATED_LANE (ASK before):')
     expect(hiddenContext).toContain('gateway restart or gateway runtime switch')
     expect(hiddenContext).toContain('Goal loop: jenny_os_goal_loop_v1.')
     expect(hiddenContext).toContain('resume from the latest checkpoint after compaction, restart, or tool-call limits')
@@ -321,6 +324,60 @@ describe('usePromptActions project harness', () => {
     expect(latestState.messages.map(chatMessageText)).toEqual(['test'])
     expect(latestState.messages.find(message => message.role === 'user')?.nativeJennyReplyAttempt).toMatchObject({
       status: 'queued'
+    })
+  })
+
+  it('uploads desktop image bytes when the gateway cannot read the local Windows path', async () => {
+    const imagePath = 'C:\\Users\\Travis\\AppData\\Roaming\\Hermes\\composer-images\\clip.png'
+    const dataUrl = 'data:image/png;base64,aGVsbG8='
+    const readFileDataUrl = vi.fn(async () => dataUrl)
+    Object.defineProperty(window, 'hermesDesktop', {
+      configurable: true,
+      value: { readFileDataUrl }
+    })
+    addComposerAttachment({
+      id: 'img-1',
+      kind: 'image',
+      label: 'clip.png',
+      path: imagePath
+    })
+
+    const refreshSessions = vi.fn(async () => undefined)
+
+    const requestGateway = vi.fn(async (method: string, params?: Record<string, unknown>) => {
+      if (method === 'image.attach' && !params?.data_url) {
+        throw new Error(`Error invoking remote method 'hermes:api': Error: image not found: ${imagePath}`)
+      }
+
+      if (method === 'image.attach') {
+        return {
+          attached: true,
+          path: '/home/jenny/.hermes/tmp/gateway-image-uploads/rt-abc123/uploaded.png'
+        } as never
+      }
+
+      return {} as never
+    })
+
+    let handle: HarnessHandle | null = null
+    render(<Harness onReady={h => (handle = h)} refreshSessions={refreshSessions} requestGateway={requestGateway} />)
+
+    await handle!.submitText('please inspect this')
+
+    expect(readFileDataUrl).toHaveBeenCalledWith(imagePath)
+    expect(requestGateway).toHaveBeenCalledWith('image.attach', {
+      session_id: RUNTIME_SESSION_ID,
+      path: imagePath
+    })
+    expect(requestGateway).toHaveBeenCalledWith('image.attach', {
+      data_url: dataUrl,
+      filename: 'clip.png',
+      session_id: RUNTIME_SESSION_ID,
+      path: imagePath
+    })
+    expect(requestGateway).toHaveBeenCalledWith('prompt.submit', {
+      session_id: RUNTIME_SESSION_ID,
+      text: 'please inspect this'
     })
   })
 
