@@ -264,7 +264,7 @@ def _append_docs_note(path: Path, *, run_id: str, approval_id: str, edit_instruc
         f"- Scope: {edit_instruction}\n"
         "- Result target: one docs-only draft PR for human review; no merge, deploy, restart, or runtime switch.\n"
     )
-    path.write_text(original.rstrip() + note + "\n", encoding="utf-8")
+    path.write_text(original.rstrip() + note, encoding="utf-8")
 
 
 def _changed_files(worktree: Path, runner: CommandRunner) -> tuple[str, ...]:
