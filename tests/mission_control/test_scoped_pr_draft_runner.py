@@ -8,6 +8,7 @@ import pytest
 from mission_control.scoped_pr_draft_runner import (
     CommandResult,
     ScopedPrDraftRunnerError,
+    _append_docs_note,
     run_scoped_pr_draft,
 )
 
@@ -142,3 +143,21 @@ def test_scoped_pr_draft_runner_refuses_unsafe_packet_scope(tmp_path):
             worktree_root=tmp_path,
             command_runner=FakeCommands(),
         )
+
+
+def test_append_docs_note_leaves_exactly_one_trailing_newline(tmp_path):
+    target = tmp_path / DOC_PATH
+    target.parent.mkdir(parents=True)
+    target.write_text("# Runbook\n\n", encoding="utf-8")
+
+    _append_docs_note(
+        target,
+        run_id="run-scoped-pr-exec-1",
+        approval_id="approval-scoped-pr-exec-1",
+        edit_instruction="Append a bounded note.",
+    )
+
+    content = target.read_text(encoding="utf-8")
+    assert content.endswith("\n")
+    assert not content.endswith("\n\n")
+    assert "<!-- scoped-pr-draft-runner:run-scoped-pr-exec-1 -->" in content
