@@ -166,6 +166,17 @@ function recentProjectSessions(group?: MissionControlProjectSessionGroup): Nativ
     .filter(session => Boolean(session.id))
 }
 
+function linkedSessionFallbacks(group?: MissionControlProjectSessionGroup): NativeProjectChatSession[] {
+  return (group?.linked_session_ids ?? [])
+    .map(id => id.trim())
+    .filter(Boolean)
+    .slice(0, RECENT_PROJECT_SESSIONS)
+    .map((id, index) => ({
+      id,
+      title: `Saved chat ${index + 1}`
+    }))
+}
+
 export function nativeProjectChatModel(
   projects: MissionControlProjectRecord[] = [],
   groups: MissionControlProjectSessionGroup[] = []
@@ -180,13 +191,16 @@ export function nativeProjectChatModel(
       const sessionGroup = sessionGroupsByProject.get(project.project_id)
       const sessionCount = sessionGroup?.linked_session_count ?? sessionGroup?.sessions.length ?? 0
       const latestSession = latestProjectSession(sessionGroup)
+      const linkedFallbacks = linkedSessionFallbacks(sessionGroup)
+      const latestLinkedSession = linkedFallbacks[0] ?? null
+      const recentSessions = recentProjectSessions(sessionGroup)
 
       return {
         id: project.project_id,
-        lastSessionId: latestSession ? projectSessionStableId(latestSession) : '',
-        lastSessionTitle: latestProjectSessionTitle(sessionGroup),
+        lastSessionId: latestSession ? projectSessionStableId(latestSession) : (latestLinkedSession?.id ?? ''),
+        lastSessionTitle: latestProjectSessionTitle(sessionGroup) || (latestLinkedSession ? 'Saved chat' : ''),
         name: project.name,
-        recentSessions: recentProjectSessions(sessionGroup),
+        recentSessions: recentSessions.length ? recentSessions : linkedFallbacks,
         sessionCount
       }
     })

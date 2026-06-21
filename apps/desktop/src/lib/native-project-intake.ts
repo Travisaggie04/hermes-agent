@@ -1,9 +1,9 @@
 import type { MissionControlProjectBriefCreatePayload, MissionControlProjectCreatePayload } from '@/hermes'
 import {
   jennyActionPolicyBriefRule,
+  type JennyActionPolicyDecision,
   jennyActionPolicyForText,
-  jennyActionPolicyReviewConstraint,
-  type JennyActionPolicyDecision
+  jennyActionPolicyReviewConstraint
 } from '@/lib/jenny-action-policy'
 
 export interface NativeProjectIntakeValue {

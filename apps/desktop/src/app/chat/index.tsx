@@ -352,10 +352,26 @@ function ChatHeader({
                 <span className="hidden min-[52rem]:inline">Model {modelStatusLabel}</span>
               </span>
             </Button>
+            <Button
+              aria-label="Draft a steer note for the current Jenny run"
+              className="h-6 shrink-0 gap-1 px-2 text-[0.6875rem]"
+              disabled={!activeTurnRunning}
+              onClick={() => requestComposerInsert('/steer', { mode: 'block', target: 'main' })}
+              title={
+                activeTurnRunning
+                  ? 'Draft a /steer note for the current Jenny run'
+                  : 'Steering is available while Jenny is running'
+              }
+              type="button"
+              variant="outline"
+            >
+              <Codicon name="debug-step-over" size="0.8125rem" />
+              <span className="hidden min-[48rem]:inline">Steer</span>
+            </Button>
           </>
         )}
         <HeaderPill
-          className="hidden min-[46rem]:inline-flex"
+          className="hidden min-[1500px]:inline-flex"
           label={jennyStatus.label}
           title={jennyStatusDetail}
           tone={jennyStatus.tone}
@@ -390,6 +406,7 @@ function ChatHeader({
         onCreated={(projectId, projectName) => {
           onStartProjectChat(projectId, projectName)
           void projectsQuery.refetch()
+          void projectSessionsQuery.refetch()
         }}
         onOpenChange={setProjectIntakeOpen}
         open={projectIntakeOpen}
@@ -459,9 +476,11 @@ function NativeJennyActivityDialog({
               <div className="rounded border border-(--ui-stroke-tertiary) bg-(--ui-control-active-background)/35 p-2" key={rule.decision}>
                 <div className="flex min-w-0 items-center gap-2">
                   <span className="shrink-0 rounded-full border border-(--ui-stroke-tertiary) px-2 py-0.5 text-[0.6875rem] font-semibold">
-                    {rule.decision}
+                    {rule.laneState}
                   </span>
-                  <span className="min-w-0 text-xs font-medium text-foreground">{rule.summary}</span>
+                  <span className="min-w-0 text-xs font-medium text-foreground">
+                    {rule.decision}: {rule.summary}
+                  </span>
                 </div>
                 <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-(--ui-text-tertiary)">
                   {rule.examples.slice(0, 3).join('; ')}

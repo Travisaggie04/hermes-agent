@@ -276,23 +276,39 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
     [currentCwd]
   )
 
-  const attachImagePath = useCallback(async (filePath: string) => {
+  const attachImagePath = useCallback(async (filePath: string, options: { alreadyStored?: boolean } = {}) => {
     if (!filePath) {
       return false
     }
 
+    let durablePath = filePath
+
+    if (!options.alreadyStored) {
+      try {
+        const copiedPath = await window.hermesDesktop?.copyImageToComposerStore?.(filePath)
+
+        if (copiedPath) {
+          durablePath = copiedPath
+        }
+      } catch (err) {
+        notifyError(err, 'Image attach failed')
+
+        return false
+      }
+    }
+
     const baseAttachment: ComposerAttachment = {
-      id: attachmentId('image', filePath),
+      id: attachmentId('image', durablePath),
       kind: 'image',
-      label: pathLabel(filePath),
-      detail: filePath,
-      path: filePath
+      label: pathLabel(durablePath),
+      detail: durablePath,
+      path: durablePath
     }
 
     attachToMain(baseAttachment)
 
     try {
-      const previewUrl = await window.hermesDesktop?.readFileDataUrl(filePath)
+      const previewUrl = await window.hermesDesktop?.readFileDataUrl(durablePath)
 
       if (previewUrl) {
         addComposerAttachment({ ...baseAttachment, previewUrl })
@@ -327,7 +343,7 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
           return false
         }
 
-        return attachImagePath(savedPath)
+        return attachImagePath(savedPath, { alreadyStored: true })
       } catch (err) {
         notifyError(err, 'Image attach failed')
 
@@ -372,7 +388,7 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
         return
       }
 
-      await attachImagePath(path)
+      await attachImagePath(path, { alreadyStored: true })
     } catch (err) {
       notifyError(err, 'Clipboard paste failed')
     }

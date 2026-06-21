@@ -702,6 +702,7 @@ export const en: Translations = {
     editQueued: 'Edit queued turn',
     sendQueuedNow: 'Send queued turn now',
     deleteQueued: 'Delete queued turn',
+    queuedSendFailed: 'Jenny could not send this queued turn.',
     previewUnavailable: 'Preview unavailable',
     previewLabel: label => `Preview ${label}`,
     couldNotPreview: label => `Could not preview ${label}`,

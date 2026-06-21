@@ -7,6 +7,9 @@ export interface QueuedPromptEntry {
   text: string
   attachments: ComposerAttachment[]
   queuedAt: number
+  status?: 'failed' | 'queued'
+  failureReason?: string
+  failedAt?: number
 }
 
 type QueueState = Record<string, QueuedPromptEntry[]>
@@ -164,7 +167,14 @@ export const updateQueuedPrompt = (
 
     changed = true
 
-    return { ...entry, text: update.text, attachments }
+    return {
+      ...entry,
+      text: update.text,
+      attachments,
+      status: 'queued' as const,
+      failureReason: undefined,
+      failedAt: undefined
+    }
   })
 
   if (!changed) {
@@ -178,6 +188,120 @@ export const updateQueuedPrompt = (
 
 export const updateQueuedPromptText = (key: string | null | undefined, id: string, text: string): boolean =>
   updateQueuedPrompt(key, id, { text })
+
+export const markQueuedPromptFailed = (
+  key: string | null | undefined,
+  id: string,
+  reason: string
+): boolean => {
+  const sid = sidOf(key)
+
+  if (!sid) {
+    return false
+  }
+
+  const queue = queueFor(sid)
+  let changed = false
+  const next = queue.map(entry => {
+    if (entry.id !== id) {
+      return entry
+    }
+
+    changed = true
+
+    return {
+      ...entry,
+      status: 'failed' as const,
+      failureReason: reason.trim() || 'Jenny could not send this queued turn.',
+      failedAt: Date.now()
+    }
+  })
+
+  if (!changed) {
+    return false
+  }
+
+  writeSession(sid, next)
+
+  return true
+}
+
+export const clearQueuedPromptFailure = (key: string | null | undefined, id: string): boolean => {
+  const sid = sidOf(key)
+
+  if (!sid) {
+    return false
+  }
+
+  const queue = queueFor(sid)
+  let changed = false
+  const next = queue.map(entry => {
+    if (entry.id !== id || entry.status !== 'failed') {
+      return entry
+    }
+
+    changed = true
+
+    return {
+      ...entry,
+      status: 'queued' as const,
+      failureReason: undefined,
+      failedAt: undefined
+    }
+  })
+
+  if (!changed) {
+    return false
+  }
+
+  writeSession(sid, next)
+
+  return true
+}
+
+export const removeQueuedPromptAttachment = (
+  key: string | null | undefined,
+  id: string,
+  attachmentId: string
+): boolean => {
+  const sid = sidOf(key)
+
+  if (!sid) {
+    return false
+  }
+
+  const queue = queueFor(sid)
+  let changed = false
+  const next = queue.map(entry => {
+    if (entry.id !== id) {
+      return entry
+    }
+
+    const attachments = entry.attachments.filter(attachment => attachment.id !== attachmentId)
+
+    if (attachments.length === entry.attachments.length) {
+      return entry
+    }
+
+    changed = true
+
+    return {
+      ...entry,
+      attachments,
+      status: 'queued' as const,
+      failureReason: undefined,
+      failedAt: undefined
+    }
+  })
+
+  if (!changed) {
+    return false
+  }
+
+  writeSession(sid, next)
+
+  return true
+}
 
 export const clearQueuedPrompts = (key: string | null | undefined) => {
   const sid = sidOf(key)

@@ -43,10 +43,10 @@ describe('native project intake helpers', () => {
     expect(parsed.policyDecision).toBe('ASK')
     expect(parsed.policyMatches).toEqual(['payment, checkout, or refund action', 'customer outreach or delivery'])
     expect(parsed.policyReview).toBe(
-      'Action policy review: ASK payment, checkout, or refund action; customer outreach or delivery.'
+      'Action policy review: APPROVAL_GATED_LANE (ASK) payment, checkout, or refund action; customer outreach or delivery.'
     )
     expect(parsed.constraints).toEqual([
-      'Action policy review: ASK payment, checkout, or refund action; customer outreach or delivery.',
+      'Action policy review: APPROVAL_GATED_LANE (ASK) payment, checkout, or refund action; customer outreach or delivery.',
       'Evidence required: passing tests',
       'Evidence required: manual smoke',
       'Approval/stop rule: Ask before payment changes'

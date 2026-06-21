@@ -26,9 +26,12 @@ import { cn } from '@/lib/utils'
 import { $composerAttachments, clearComposerAttachments, type ComposerAttachment } from '@/store/composer'
 import {
   $queuedPromptsBySession,
+  clearQueuedPromptFailure,
   enqueueQueuedPrompt,
+  markQueuedPromptFailed,
   type QueuedPromptEntry,
   removeQueuedPrompt,
+  removeQueuedPromptAttachment,
   shouldAutoDrainOnSettle,
   updateQueuedPrompt
 } from '@/store/composer-queue'
@@ -130,6 +133,10 @@ export function ChatBar({
   const queuedPrompts = useMemo(
     () => (activeQueueSessionKey ? (queuedPromptsBySession[activeQueueSessionKey] ?? []) : []),
     [activeQueueSessionKey, queuedPromptsBySession]
+  )
+  const sendableQueuedPrompts = useMemo(
+    () => queuedPrompts.filter(entry => entry.status !== 'failed'),
+    [queuedPrompts]
   )
 
   const composerRef = useRef<HTMLFormElement | null>(null)
@@ -952,11 +959,25 @@ export function ChatBar({
       drainingQueueRef.current = true
 
       try {
+        let failureMessage: string | null = null
+        clearQueuedPromptFailure(activeQueueSessionKey, entry.id)
         const accepted = await Promise.resolve(
-          onSubmit(entry.text, { attachments: entry.attachments, fromQueue: true })
+          onSubmit(entry.text, {
+            attachments: entry.attachments,
+            fromQueue: true,
+            onFailure: message => {
+              failureMessage = message
+            }
+          })
         )
 
         if (accepted === false) {
+          markQueuedPromptFailed(
+            activeQueueSessionKey,
+            entry.id,
+            failureMessage || 'Jenny could not send this queued turn. Edit, remove the stale attachment, or retry.'
+          )
+
           return false
         }
 
@@ -975,7 +996,7 @@ export function ChatBar({
       runDrain(entries => {
         const skip = queueEdit?.entryId
 
-        return skip ? entries.find(e => e.id !== skip) : entries[0]
+        return entries.find(e => e.status !== 'failed' && e.id !== skip)
       }),
     [queueEdit, runDrain]
   )
@@ -1014,14 +1035,14 @@ export function ChatBar({
     if (
       shouldAutoDrainOnSettle({
         isBusy: busy,
-        queueLength: queuedPrompts.length,
+        queueLength: sendableQueuedPrompts.length,
         userInterrupted: interrupted,
         wasBusy
       })
     ) {
       void drainNextQueued()
     }
-  }, [busy, drainNextQueued, queuedPrompts.length])
+  }, [busy, drainNextQueued, sendableQueuedPrompts.length])
 
   // Clean up queue edit when its target disappears (session swap or external delete).
   useEffect(() => {
@@ -1298,6 +1319,9 @@ export function ChatBar({
                   }
                 }}
                 onEdit={beginQueuedEdit}
+                onRemoveAttachment={(entryId, attachmentId) =>
+                  removeQueuedPromptAttachment(activeQueueSessionKey, entryId, attachmentId)
+                }
                 onSendNow={id => void sendQueuedNow(id)}
               />
             </div>

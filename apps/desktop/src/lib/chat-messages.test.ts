@@ -253,6 +253,21 @@ describe('toChatMessages', () => {
     expect(chatMessageHiddenContext(message)).toContain('ASK before: gateway restart or runtime switch.')
   })
 
+  it('hides operator-facing lane labels from saved user message display', () => {
+    const [message] = toChatMessages([
+      {
+        role: 'user',
+        content:
+          'Spec-first request for Jenny: Project: Hermes / Mission Control Request Travis is considering: summarize state Action policy: jenny_os_action_policy_v1. APPROVAL_GATED_LANE (ASK before): gateway restart or runtime switch. Goal loop: jenny_os_goal_loop_v1.',
+        timestamp: 1
+      }
+    ])
+
+    expect(chatMessageText(message)).toBe('summarize state')
+    expect(chatMessageRuntimeText(message)).toBe('summarize state')
+    expect(chatMessageHiddenContext(message)).toContain('APPROVAL_GATED_LANE (ASK before): gateway restart or runtime switch.')
+  })
+
   it('hides legacy project-room packet wrappers from saved user message display', () => {
     const [message] = toChatMessages([
       {

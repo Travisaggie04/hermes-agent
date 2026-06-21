@@ -3,11 +3,14 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { ComposerAttachment } from './composer'
 import {
   $queuedPromptsBySession,
+  clearQueuedPromptFailure,
   clearQueuedPrompts,
   dequeueQueuedPrompt,
   enqueueQueuedPrompt,
   getQueuedPrompts,
+  markQueuedPromptFailed,
   removeQueuedPrompt,
+  removeQueuedPromptAttachment,
   shouldAutoDrainOnSettle,
   updateQueuedPrompt,
   updateQueuedPromptText
@@ -79,6 +82,45 @@ describe('composer queue store', () => {
     expect(queue[0]?.text).toBe('edited text')
     expect(queue[0]?.attachments).toEqual(editedAttachments)
     expect(queue[0]?.attachments[0]).not.toBe(editedAttachments[0])
+  })
+
+  it('marks failed queued sends and clears failure state on retry or edit', () => {
+    const entry = enqueueQueuedPrompt(SESSION_KEY, { attachments: [attachment('img-1', 'image')], text: 'look' })
+
+    expect(entry).not.toBeNull()
+    expect(markQueuedPromptFailed(SESSION_KEY, entry!.id, 'Image attach failed: file does not exist.')).toBe(true)
+    expect(getQueuedPrompts(SESSION_KEY)[0]).toMatchObject({
+      failureReason: 'Image attach failed: file does not exist.',
+      status: 'failed'
+    })
+    expect(getQueuedPrompts(SESSION_KEY)[0]?.failedAt).toEqual(expect.any(Number))
+
+    expect(clearQueuedPromptFailure(SESSION_KEY, entry!.id)).toBe(true)
+    expect(getQueuedPrompts(SESSION_KEY)[0]).toMatchObject({ status: 'queued' })
+    expect(getQueuedPrompts(SESSION_KEY)[0]?.failureReason).toBeUndefined()
+    expect(getQueuedPrompts(SESSION_KEY)[0]?.failedAt).toBeUndefined()
+
+    expect(markQueuedPromptFailed(SESSION_KEY, entry!.id, 'failed again')).toBe(true)
+    expect(updateQueuedPromptText(SESSION_KEY, entry!.id, 'look again')).toBe(true)
+    expect(getQueuedPrompts(SESSION_KEY)[0]).toMatchObject({ status: 'queued', text: 'look again' })
+    expect(getQueuedPrompts(SESSION_KEY)[0]?.failureReason).toBeUndefined()
+  })
+
+  it('removes a stale attachment from a failed queued prompt', () => {
+    const entry = enqueueQueuedPrompt(SESSION_KEY, {
+      attachments: [attachment('img-1', 'image'), attachment('f-1')],
+      text: 'use the remaining context'
+    })
+
+    expect(entry).not.toBeNull()
+    expect(markQueuedPromptFailed(SESSION_KEY, entry!.id, 'missing image')).toBe(true)
+    expect(removeQueuedPromptAttachment(SESSION_KEY, entry!.id, 'img-1')).toBe(true)
+
+    const queue = getQueuedPrompts(SESSION_KEY)
+    expect(queue[0]?.text).toBe('use the remaining context')
+    expect(queue[0]?.attachments.map(item => item.id)).toEqual(['f-1'])
+    expect(queue[0]?.status).toBe('queued')
+    expect(queue[0]?.failureReason).toBeUndefined()
   })
 
   it('clears queue state for a session', () => {

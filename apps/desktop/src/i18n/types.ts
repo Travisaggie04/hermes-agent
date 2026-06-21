@@ -582,6 +582,7 @@ export interface Translations {
     editQueued: string
     sendQueuedNow: string
     deleteQueued: string
+    queuedSendFailed: string
     previewUnavailable: string
     previewLabel: (label: string) => string
     couldNotPreview: (label: string) => string

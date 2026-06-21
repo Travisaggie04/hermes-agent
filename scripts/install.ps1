@@ -1187,6 +1187,7 @@ function Install-Repository {
 
     if (-not $didUpdate) {
         $cloneSuccess = $false
+        $zipFallbackUsed = $false
 
         # Fix Windows git "copy-fd: write returned: Invalid argument" error.
         # Git for Windows can fail on atomic file operations (hook templates,
@@ -1250,12 +1251,33 @@ function Install-Repository {
 
                     # Initialize git repo so updates work later
                     Push-Location $InstallDir
-                    git -c windows.appendAtomically=false init 2>$null
-                    git -c windows.appendAtomically=false config windows.appendAtomically false 2>$null
-                    git remote add origin $RepoUrlHttps 2>$null
-                    Pop-Location
+                    $prevEAP = $ErrorActionPreference
+                    $ErrorActionPreference = "Continue"
+                    try {
+                        git -c windows.appendAtomically=false init 2>$null
+                        git -c windows.appendAtomically=false config windows.appendAtomically false 2>$null
+                        git -c windows.appendAtomically=false config core.autocrlf false 2>$null
+                        git -c windows.appendAtomically=false config core.longpaths true 2>$null
+                        git -c windows.appendAtomically=false config user.name "Hermes Installer" 2>$null
+                        git -c windows.appendAtomically=false config user.email "hermes-installer@localhost" 2>$null
+                        git -c windows.appendAtomically=false add -A
+                        if ($LASTEXITCODE -eq 0) {
+                            git -c windows.appendAtomically=false commit -m "Initialize ZIP fallback snapshot $zipLabel" 2>$null | Out-Null
+                            if ($LASTEXITCODE -ne 0) {
+                                Write-Warn "Could not create local ZIP fallback snapshot commit; future updates may need a clean reinstall."
+                            }
+                        } else {
+                            Write-Warn "Could not stage ZIP fallback snapshot; future updates may need a clean reinstall."
+                        }
+                        git remote remove origin 2>$null | Out-Null
+                        git remote add origin $RepoUrlHttps 2>$null | Out-Null
+                    } finally {
+                        $ErrorActionPreference = $prevEAP
+                        Pop-Location
+                    }
                     Write-Success "Git repo initialized for future updates"
 
+                    $zipFallbackUsed = $true
                     $cloneSuccess = $true
                 }
 
@@ -1285,7 +1307,7 @@ function Install-Repository {
     # $Branch's tip, honour the higher-precedence $Commit / $Tag by checking
     # the exact ref out as a detached HEAD.  Skipped for the in-place update
     # path (above) since that already routed via the same precedence.
-    if (-not $didUpdate) {
+    if ((-not $didUpdate) -and (-not $zipFallbackUsed)) {
         # Same EAP=Continue wrap as the update path -- git fetch's 'From <url>'
         # info line goes to stderr and would terminate the script under the
         # global EAP=Stop otherwise.  We check $LASTEXITCODE for real errors.

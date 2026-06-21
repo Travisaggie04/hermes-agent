@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { DisclosureCaret } from '@/components/ui/disclosure-caret'
 import { Tip } from '@/components/ui/tooltip'
 import { type Translations, useI18n } from '@/i18n'
-import { ArrowUp, Pencil, Trash2 } from '@/lib/icons'
+import { AlertTriangle, ArrowUp, Pencil, Trash2, X } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import type { QueuedPromptEntry } from '@/store/composer-queue'
 
@@ -14,13 +14,22 @@ interface QueuePanelProps {
   entries: QueuedPromptEntry[]
   onDelete: (id: string) => void
   onEdit: (entry: QueuedPromptEntry) => void
+  onRemoveAttachment: (entryId: string, attachmentId: string) => void
   onSendNow: (id: string) => void
 }
 
 const entryPreview = (entry: QueuedPromptEntry, c: Translations['composer']) =>
   entry.text.trim() || (entry.attachments.length > 0 ? c.attachmentOnly : c.emptyTurn)
 
-export function QueuePanel({ busy, editingId, entries, onDelete, onEdit, onSendNow }: QueuePanelProps) {
+export function QueuePanel({
+  busy,
+  editingId,
+  entries,
+  onDelete,
+  onEdit,
+  onRemoveAttachment,
+  onSendNow
+}: QueuePanelProps) {
   const { t } = useI18n()
   const c = t.composer
   const [collapsed, setCollapsed] = useState(false)
@@ -44,24 +53,30 @@ export function QueuePanel({ busy, editingId, entries, onDelete, onEdit, onSendN
         <div className="space-y-0.5 px-1.5 pb-0.5">
           {entries.map(entry => {
             const isEditing = editingId === entry.id
+            const isFailed = entry.status === 'failed'
             const attachmentsCount = entry.attachments.length
 
             return (
               <div
                 className={cn(
-                  'group/queue-row flex items-center gap-1.5 rounded-lg border border-transparent px-1.5 py-1',
+                  'group/queue-row flex items-start gap-1.5 rounded-lg border border-transparent px-1.5 py-1',
                   'transition-colors duration-300 ease-out hover:bg-(--chrome-action-hover) hover:transition-none',
-                  isEditing && 'border-[color-mix(in_srgb,var(--dt-composer-ring)_40%,transparent)] bg-accent/25'
+                  isEditing && 'border-[color-mix(in_srgb,var(--dt-composer-ring)_40%,transparent)] bg-accent/25',
+                  isFailed && 'border-destructive/35 bg-destructive/10'
                 )}
                 key={entry.id}
               >
-                <span
-                  aria-hidden
-                  className="h-3.5 w-3.5 shrink-0 rounded-full border border-foreground/35 bg-transparent"
-                />
+                {isFailed ? (
+                  <AlertTriangle aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive/80" />
+                ) : (
+                  <span
+                    aria-hidden
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border border-foreground/35 bg-transparent"
+                  />
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[0.73rem] leading-4 text-foreground/92">{entryPreview(entry, c)}</p>
-                  {(attachmentsCount > 0 || isEditing) && (
+                  {(attachmentsCount > 0 || isEditing || isFailed) && (
                     <div className="mt-0.5 flex items-center gap-1.5 text-[0.64rem] text-muted-foreground/75">
                       {attachmentsCount > 0 && (
                         <span>
@@ -73,6 +88,26 @@ export function QueuePanel({ busy, editingId, entries, onDelete, onEdit, onSendN
                           {c.editingInComposer}
                         </span>
                       )}
+                    </div>
+                  )}
+                  {isFailed && (
+                    <p className="mt-0.5 line-clamp-2 text-[0.64rem] leading-3 text-destructive/85">
+                      {entry.failureReason || c.queuedSendFailed}
+                    </p>
+                  )}
+                  {isFailed && entry.attachments.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {entry.attachments.map(attachment => (
+                        <button
+                          className="inline-flex max-w-40 items-center gap-1 rounded-md border border-border/55 bg-background/50 px-1.5 py-0.5 text-[0.62rem] text-muted-foreground transition hover:border-destructive/45 hover:text-foreground"
+                          key={attachment.id}
+                          onClick={() => onRemoveAttachment(entry.id, attachment.id)}
+                          type="button"
+                        >
+                          <span className="truncate">{attachment.label}</span>
+                          <X aria-hidden className="h-2.5 w-2.5 shrink-0" />
+                        </button>
+                      ))}
                     </div>
                   )}
                 </div>

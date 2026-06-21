@@ -9,6 +9,7 @@ import {
   jennyActionPolicyBriefRule,
   jennyActionPolicyDecisionSummary,
   jennyActionPolicyForText,
+  jennyActionPolicyLaneState,
   jennyActionPolicyReviewConstraint,
   jennyHiddenActionPolicyContext
 } from './jenny-action-policy'
@@ -17,6 +18,14 @@ describe('Jenny desktop action policy context', () => {
   it('centralizes native chat policy as ALLOW / ASK / DENY rules', () => {
     expect(JENNY_ACTION_POLICY_ID).toBe('jenny_os_action_policy_v1')
     expect(JENNY_ACTION_POLICY_RULES.map(rule => rule.decision)).toEqual(['ALLOW', 'ASK', 'DENY'])
+    expect(JENNY_ACTION_POLICY_RULES.map(rule => rule.laneState)).toEqual([
+      'APPROVED_SAFE_LANE',
+      'APPROVAL_GATED_LANE',
+      'BLOCKED_DANGEROUS_LANE'
+    ])
+    expect(jennyActionPolicyLaneState('ALLOW')).toBe('APPROVED_SAFE_LANE')
+    expect(jennyActionPolicyLaneState('ASK')).toBe('APPROVAL_GATED_LANE')
+    expect(jennyActionPolicyLaneState('DENY')).toBe('BLOCKED_DANGEROUS_LANE')
 
     expect(JENNY_ACTION_POLICY_RULES.find(rule => rule.decision === 'ALLOW')?.examples).toEqual(
       JENNY_ALLOWED_ACTION_EXAMPLES
@@ -40,18 +49,20 @@ describe('Jenny desktop action policy context', () => {
   it('summarizes the shared policy decisions for hidden Jenny context', () => {
     const summary = jennyActionPolicyDecisionSummary()
 
-    expect(summary).toContain('ALLOW: Safe engineering assistance inside the active project chat')
-    expect(summary).toContain('ASK: Protected operational or customer-impacting actions require separate explicit approval')
-    expect(summary).toContain('DENY: Shortcut requests that weaken Jenny OS reliability are not allowed')
+    expect(summary).toContain('APPROVED_SAFE_LANE (ALLOW): Safe engineering assistance inside the active project chat')
+    expect(summary).toContain('APPROVAL_GATED_LANE (ASK): Protected operational or customer-impacting actions require separate explicit approval')
+    expect(summary).toContain('BLOCKED_DANGEROUS_LANE (DENY): Shortcut requests that weaken Jenny OS reliability are not allowed')
   })
 
   it('classifies action text with DENY over ASK over ALLOW precedence', () => {
     expect(jennyActionPolicyForText('read approved context and run targeted tests')).toMatchObject({
       decision: 'ALLOW',
+      laneState: 'APPROVED_SAFE_LANE',
       matches: ['read approved context', 'run targeted tests']
     })
     expect(jennyActionPolicyForText('restart the gateway, then deploy the service')).toMatchObject({
       decision: 'ASK',
+      laneState: 'APPROVAL_GATED_LANE',
       matches: ['gateway restart or gateway runtime switch', 'deploy or service restart']
     })
     expect(jennyActionPolicyForText('inspect secrets, then start a background worker')).toMatchObject({
@@ -87,20 +98,22 @@ describe('Jenny desktop action policy context', () => {
     const deny = jennyActionPolicyForText('disable guardrails')
 
     expect(jennyActionPolicyBriefRule()).toContain('jenny_os_action_policy_v1')
-    expect(jennyActionPolicyBriefRule()).toContain('ALLOW: Safe engineering assistance')
+    expect(jennyActionPolicyBriefRule()).toContain('APPROVED_SAFE_LANE (ALLOW): Safe engineering assistance')
     expect(jennyActionPolicyReviewConstraint(ask)).toBe(
-      'Action policy review: ASK payment, checkout, or refund action; customer outreach or delivery.'
+      'Action policy review: APPROVAL_GATED_LANE (ASK) payment, checkout, or refund action; customer outreach or delivery.'
     )
-    expect(jennyActionPolicyReviewConstraint(deny)).toBe('Action policy review: DENY disable or bypass guardrails.')
+    expect(jennyActionPolicyReviewConstraint(deny)).toBe(
+      'Action policy review: BLOCKED_DANGEROUS_LANE (DENY) disable or bypass guardrails.'
+    )
   })
 
   it('builds hidden context without visible user-message wording', () => {
     const context = jennyHiddenActionPolicyContext()
 
     expect(context).toContain('Action policy: jenny_os_action_policy_v1.')
-    expect(context).toContain('ALLOW:')
-    expect(context).toContain('DENY:')
-    expect(context).toContain('ASK before:')
+    expect(context).toContain('APPROVED_SAFE_LANE (ALLOW):')
+    expect(context).toContain('BLOCKED_DANGEROUS_LANE (DENY):')
+    expect(context).toContain('APPROVAL_GATED_LANE (ASK before):')
     expect(context).toContain('gateway restart or gateway runtime switch')
     expect(context).toContain('broad or unlimited approval')
     expect(context).not.toContain('Spec-first request for Jenny')

@@ -272,13 +272,43 @@ function projectSessionToSessionInfo(session: MissionControlProjectSession): Ses
   }
 }
 
+function linkedSessionToFallbackSessionInfo(id: string, index: number): SessionInfo {
+  const ts = Date.now() / 1000 - index
+
+  return {
+    archived: false,
+    cwd: null,
+    ended_at: null,
+    id,
+    _lineage_root_id: id,
+    input_tokens: 0,
+    is_active: false,
+    is_default_profile: true,
+    last_active: ts,
+    message_count: 0,
+    model: null,
+    output_tokens: 0,
+    preview: null,
+    profile: 'default',
+    source: 'mission-control-link',
+    started_at: ts,
+    title: `Saved chat ${index + 1}`,
+    tool_call_count: 0
+  }
+}
+
 function projectGroupsFor(groups: MissionControlProjectSessionGroup[]): SidebarSessionGroup[] {
   return groups.filter(group => group.project_id !== UNASSIGNED_PROJECT_GROUP_ID).map(group => ({
     id: group.project_id,
     label: group.name,
     mode: 'project' as const,
     path: null,
-    sessions: group.sessions.map(projectSessionToSessionInfo),
+    sessions: group.sessions.length
+      ? group.sessions.map(projectSessionToSessionInfo)
+      : (group.linked_session_ids ?? [])
+          .map(id => id.trim())
+          .filter(Boolean)
+          .map(linkedSessionToFallbackSessionInfo),
     linkedSessionIds: group.linked_session_ids ?? [],
     totalCount: group.linked_session_count ?? group.sessions.length
   }))
