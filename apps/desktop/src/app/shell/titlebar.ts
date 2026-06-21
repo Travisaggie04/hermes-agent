@@ -19,7 +19,7 @@ export const titlebarButtonClass =
   'text-muted-foreground/85 hover:bg-(--ui-control-hover-background) hover:text-foreground'
 
 export const titlebarHeaderBaseClass =
-  'pointer-events-none relative z-3 flex h-(--titlebar-height) shrink-0 items-center justify-start gap-3 border-b border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background) px-[max(0.75rem,var(--titlebar-content-inset,0rem))]'
+  'pointer-events-none relative z-3 flex h-(--titlebar-height) shrink-0 items-center justify-start gap-3 border-b border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background) pl-[max(0.75rem,var(--titlebar-content-inset,0rem),calc(var(--titlebar-left-safe-inset,0rem)-var(--titlebar-left-pane-width,0px)))] pr-[max(0.75rem,var(--titlebar-tools-right,0.75rem))]'
 
 export const titlebarHeaderShadowClass =
   "after:pointer-events-none after:absolute after:left-0 after:right-0 after:top-full after:h-4 after:bg-linear-to-b after:from-(--ui-chat-surface-background) after:to-transparent after:content-['']"

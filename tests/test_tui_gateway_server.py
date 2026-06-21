@@ -2630,6 +2630,38 @@ def test_image_attach_accepts_unquoted_screenshot_path_with_spaces(monkeypatch):
     assert len(server._sessions["sid"]["attached_images"]) == 1
 
 
+def test_image_attach_accepts_uploaded_desktop_image_when_path_not_visible(monkeypatch, tmp_path):
+    fake_cli = types.ModuleType("cli")
+    fake_cli._IMAGE_EXTENSIONS = {".png"}
+    fake_cli._detect_file_drop = lambda raw: None
+    fake_cli._split_path_input = lambda raw: (raw, "")
+    fake_cli._resolve_attachment_path = lambda raw: None
+
+    server._sessions["sid"] = _session()
+    monkeypatch.setitem(sys.modules, "cli", fake_cli)
+    monkeypatch.setattr(server, "_hermes_home", str(tmp_path))
+
+    resp = server.handle_request(
+        {
+            "id": "1",
+            "method": "image.attach",
+            "params": {
+                "session_id": "sid",
+                "path": "C:\\Users\\Travis\\AppData\\Roaming\\Hermes\\composer-images\\clip.png",
+                "filename": "clip.png",
+                "data_url": "data:image/png;base64,aGVsbG8=",
+            },
+        }
+    )
+
+    uploaded_path = Path(resp["result"]["path"])
+    assert resp["result"]["attached"] is True
+    assert resp["result"]["name"].endswith(".png")
+    assert uploaded_path.read_bytes() == b"hello"
+    assert uploaded_path.is_relative_to(tmp_path / "tmp" / "gateway-image-uploads" / "sid")
+    assert server._sessions["sid"]["attached_images"] == [str(uploaded_path)]
+
+
 def test_commands_catalog_surfaces_quick_commands(monkeypatch):
     monkeypatch.setattr(
         server,

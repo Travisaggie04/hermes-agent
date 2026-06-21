@@ -123,6 +123,12 @@ export function AppShell({
           '--titlebar-height': `${TITLEBAR_HEIGHT}px`,
           '--titlebar-content-inset': `${titlebarContentInset}px`,
           '--titlebar-controls-left': `${titlebarControls.left}px`,
+          '--titlebar-left-pane-width': panesFlipped
+            ? 'var(--pane-file-browser-width, 0px)'
+            : 'var(--pane-chat-sidebar-width, 0px)',
+          '--titlebar-left-safe-inset': `${
+            titlebarControls.left + TITLEBAR_HEIGHT + Math.round(TITLEBAR_HEIGHT / 2)
+          }px`,
           '--titlebar-controls-top': `${titlebarControls.top}px`,
           '--titlebar-tools-right': titlebarToolsRight,
           '--titlebar-tools-width': titlebarToolsWidth,

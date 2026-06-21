@@ -1,4 +1,6 @@
 import atexit
+import base64
+import binascii
 import concurrent.futures
 import contextvars
 import copy
@@ -33,6 +35,17 @@ from tui_gateway.transport import (
 )
 
 logger = logging.getLogger(__name__)
+_IMAGE_ATTACH_UPLOAD_MAX_BYTES = 20 * 1024 * 1024
+_IMAGE_UPLOAD_MIME_EXTENSIONS = {
+    "image/bmp": ".bmp",
+    "image/gif": ".gif",
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/svg+xml": ".svg",
+    "image/tiff": ".tiff",
+    "image/webp": ".webp",
+    "image/x-icon": ".ico",
+}
 
 _hermes_home = get_hermes_home()
 load_hermes_dotenv(
@@ -551,6 +564,67 @@ def _image_meta(path: Path) -> dict:
     except Exception:
         pass
     return meta
+
+
+def _safe_uploaded_image_suffix(
+    filename_hint: str, mime_type: str, allowed_exts: set[str]
+) -> str:
+    suffix = Path(str(filename_hint or "").strip()).suffix.lower()
+    if suffix in allowed_exts:
+        return suffix
+
+    mime_suffix = _IMAGE_UPLOAD_MIME_EXTENSIONS.get(mime_type.lower())
+    if mime_suffix in allowed_exts:
+        return mime_suffix
+
+    return ".png"
+
+
+def _write_uploaded_image_for_session(
+    session_id: str,
+    data_url: str,
+    filename_hint: str,
+    allowed_exts: set[str],
+) -> Path:
+    raw = str(data_url or "").strip()
+    if not raw:
+        raise ValueError("image data required")
+
+    encoded = raw
+    mime_type = ""
+    if raw.startswith("data:"):
+        try:
+            header, encoded = raw.split(",", 1)
+        except ValueError as exc:
+            raise ValueError("invalid image data URL") from exc
+
+        header_lower = header.lower()
+        if ";base64" not in header_lower:
+            raise ValueError("image data URL must be base64 encoded")
+
+        mime_type = header[5:].split(";", 1)[0].strip().lower()
+        if mime_type and not mime_type.startswith("image/"):
+            raise ValueError("uploaded data is not an image")
+
+    try:
+        payload = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("invalid image data") from exc
+
+    if not payload:
+        raise ValueError("image data is empty")
+    if len(payload) > _IMAGE_ATTACH_UPLOAD_MAX_BYTES:
+        raise ValueError("image upload is too large")
+
+    safe_session = "".join(
+        ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in str(session_id or "session")
+    )[:64] or "session"
+    suffix = _safe_uploaded_image_suffix(filename_hint, mime_type, allowed_exts)
+    upload_dir = Path(_hermes_home) / "tmp" / "gateway-image-uploads" / safe_session
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    image_path = upload_dir / f"uploaded_{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}{suffix}"
+    image_path.write_bytes(payload)
+    return image_path
 
 
 def _ok(rid, result: dict) -> dict:
@@ -4995,6 +5069,7 @@ def _(rid, params: dict) -> dict:
     session, err = _sess(params, rid)
     if err:
         return err
+    session_id = str(params.get("session_id", "") or "").strip()
     raw = str(params.get("path", "") or "").strip()
     if not raw:
         return _err(rid, 4015, "path required")
@@ -5014,7 +5089,22 @@ def _(rid, params: dict) -> dict:
             path_token, remainder = _split_path_input(raw)
             image_path = _resolve_attachment_path(path_token)
             if image_path is None:
-                return _err(rid, 4016, f"image not found: {path_token}")
+                data_url = str(
+                    params.get("data_url")
+                    or params.get("dataUrl")
+                    or params.get("data")
+                    or ""
+                )
+                if not data_url:
+                    return _err(rid, 4016, f"image not found: {path_token}")
+
+                image_path = _write_uploaded_image_for_session(
+                    session_id,
+                    data_url,
+                    str(params.get("filename") or params.get("name") or path_token),
+                    _IMAGE_EXTENSIONS,
+                )
+                remainder = ""
         if image_path.suffix.lower() not in _IMAGE_EXTENSIONS:
             return _err(rid, 4016, f"unsupported image: {image_path.name}")
         session.setdefault("attached_images", []).append(str(image_path))

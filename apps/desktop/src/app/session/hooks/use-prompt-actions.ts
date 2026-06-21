@@ -120,6 +120,33 @@ function friendlyPromptFailureMessage(error: unknown): string {
   return raw || 'Jenny could not finish that message. Retry once from this chat.'
 }
 
+function isUnreadableImagePathMessage(message: string): boolean {
+  const lower = message.toLowerCase()
+
+  return (
+    lower.includes('image not found') ||
+    lower.includes('file does not exist') ||
+    lower.includes('no such file') ||
+    lower.includes('enoent')
+  )
+}
+
+function imageAttachFilename(attachment: ComposerAttachment): string {
+  return attachment.label || (attachment.path ? pathLabel(attachment.path) : 'image.png')
+}
+
+async function readImageDataUrl(attachment: ComposerAttachment): Promise<null | string> {
+  if (!attachment.path) {
+    return null
+  }
+
+  try {
+    return (await window.hermesDesktop?.readFileDataUrl?.(attachment.path)) || null
+  } catch {
+    return null
+  }
+}
+
 function nativeProjectHarnessContext(): string {
   const projectId = $selectedMissionControlProjectId.get().trim()
 
@@ -366,14 +393,47 @@ export function usePromptActions({
           continue
         }
 
-        const result = await requestGateway<ImageAttachResponse>('image.attach', {
-          session_id: sessionId,
-          path: attachment.path
-        })
+        const attachUploadedImage = async () => {
+          const dataUrl = await readImageDataUrl(attachment)
 
-        if (!result.attached) {
+          if (!dataUrl) {
+            return null
+          }
+
+          return requestGateway<ImageAttachResponse>('image.attach', {
+            data_url: dataUrl,
+            filename: imageAttachFilename(attachment),
+            session_id: sessionId,
+            path: attachment.path
+          })
+        }
+
+        let result: ImageAttachResponse | null
+
+        try {
+          result = await requestGateway<ImageAttachResponse>('image.attach', {
+            session_id: sessionId,
+            path: attachment.path
+          })
+        } catch (err) {
+          if (!isUnreadableImagePathMessage(inlineErrorMessage(err, 'Image attach failed'))) {
+            throw err
+          }
+
+          result = await attachUploadedImage()
+
+          if (!result) {
+            throw err
+          }
+        }
+
+        if (!result.attached && result.message && isUnreadableImagePathMessage(result.message)) {
+          result = await attachUploadedImage()
+        }
+
+        if (!result?.attached) {
           const label = attachment.label || (attachment.path ? pathLabel(attachment.path) : 'image')
-          throw new Error(result.message || `Could not attach ${label}`)
+          throw new Error(result?.message || `Could not attach ${label}`)
         }
 
         const attachedPath = result.path || attachment.path
