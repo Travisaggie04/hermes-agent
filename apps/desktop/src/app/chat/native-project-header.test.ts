@@ -62,6 +62,14 @@ describe('native project chat header', () => {
     expect(source).not.toContain('className="hidden h-6 max-w-44 shrink-0 px-2 text-[0.6875rem] min-[52rem]:inline-flex"')
   })
 
+  it('offers a visible gated steer affordance for active Jenny project runs', () => {
+    expect(source).toContain('aria-label="Draft a steer note for the current Jenny run"')
+    expect(source).toContain('disabled={!activeTurnRunning}')
+    expect(source).toContain("requestComposerInsert('/steer', { mode: 'block', target: 'main' })")
+    expect(source).toContain('Steering is available while Jenny is running')
+    expect(source).toContain('debug-step-over')
+  })
+
   it('lets the native chat header switch Jenny projects without opening Mission Control', () => {
     expect(source).toContain('getMissionControlProjects')
     expect(source).toContain('getMissionControlProjectSessions')
@@ -98,7 +106,7 @@ describe('native project chat header', () => {
     expect(source).not.toContain('ml-auto hidden min-w-0 max-w-[44vw]')
     expect(source).toContain('max-w-[38vw]')
     expect(source).toContain('min-[46rem]:max-w-56')
-    expect(source).toContain('className="hidden min-[46rem]:inline-flex"')
+    expect(source).toContain('className="hidden min-[1500px]:inline-flex"')
     expect(source).toContain('className="h-6 shrink-0 px-2 text-[0.6875rem]"')
     expect(source).toContain('className="min-[46rem]:hidden"')
     expect(source).not.toContain("className=\"hidden h-6 shrink-0 px-2 text-[0.6875rem] min-[46rem]:inline-flex\"")
@@ -174,6 +182,7 @@ describe('native project chat header', () => {
     expect(source).toContain('Approval or stop rules, one per line')
     expect(source).toContain('notifyMissionControlProjectCreated({ projectId, projectName })')
     expect(source).toContain('onStartProjectChat(projectId, projectName)')
+    expect(source).toContain('void projectSessionsQuery.refetch()')
   })
 
   it('refreshes native project pickers when any surface creates a project', () => {
@@ -318,7 +327,8 @@ describe('native project chat header', () => {
     expect(source).toContain("import { JENNY_ACTION_POLICY_RULES } from '@/lib/jenny-action-policy'")
     expect(source).toContain('Policy guardrails')
     expect(source).toContain('JENNY_ACTION_POLICY_RULES.map(rule => (')
-    expect(source).toContain('{rule.decision}')
+    expect(source).toContain('{rule.laneState}')
+    expect(source).toContain('{rule.decision}: {rule.summary}')
     expect(source).toContain('{rule.summary}')
     expect(source).toContain('rule.examples.slice(0, 3).join')
     expect(source).not.toContain('setPolicy')

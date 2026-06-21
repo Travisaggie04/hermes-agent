@@ -51,7 +51,7 @@ export interface ChatBarProps {
   onRemoveAttachment?: (id: string) => void
   onSubmit: (
     value: string,
-    options?: { attachments?: ComposerAttachment[]; fromQueue?: boolean }
+    options?: { attachments?: ComposerAttachment[]; fromQueue?: boolean; onFailure?: (message: string) => void }
   ) => Promise<boolean> | boolean
   onTranscribeAudio?: (audio: Blob) => Promise<string>
 }

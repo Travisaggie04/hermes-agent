@@ -11,6 +11,7 @@ def test_action_policy_allows_bounded_work_without_runtime_enforcement():
     assert report.denied_actions == ()
     assert report.approval_actions == ()
     assert [decision.decision for decision in report.decisions] == ["allow", "allow"]
+    assert [decision.lane_state for decision in report.decisions] == ["APPROVED_SAFE_LANE", "APPROVED_SAFE_LANE"]
 
 
 def test_action_policy_denies_unbounded_context_and_parent_directory_access():
@@ -26,6 +27,7 @@ def test_action_policy_denies_unbounded_context_and_parent_directory_access():
         "scan parent directory /home/jenny",
     )
     assert [decision.decision for decision in report.decisions] == ["deny", "deny"]
+    assert {decision.lane_state for decision in report.decisions} == {"BLOCKED_DANGEROUS_LANE"}
 
 
 def test_action_policy_asks_for_protected_actions():
@@ -58,6 +60,7 @@ def test_action_policy_asks_for_protected_actions():
         "push branch",
     )
     assert {decision.decision for decision in report.decisions} == {"ask"}
+    assert {decision.lane_state for decision in report.decisions} == {"APPROVAL_GATED_LANE"}
     assert report.required_approvals == ()
     assert report.approval_satisfied is False
 

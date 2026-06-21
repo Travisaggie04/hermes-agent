@@ -14,17 +14,25 @@ from typing import Literal
 
 
 PolicyDecisionState = Literal["allow", "ask", "deny"]
+PolicyLaneState = Literal["APPROVED_SAFE_LANE", "APPROVAL_GATED_LANE", "BLOCKED_DANGEROUS_LANE"]
 
 POLICY_ID = "mission_control.action_policy.allow_ask_deny.v1"
 DEFAULT_OFF = True
 WOULD_EXECUTE = False
 ENFORCES_RUNTIME = False
 
+LANE_STATE_BY_DECISION: dict[PolicyDecisionState, PolicyLaneState] = {
+    "allow": "APPROVED_SAFE_LANE",
+    "ask": "APPROVAL_GATED_LANE",
+    "deny": "BLOCKED_DANGEROUS_LANE",
+}
+
 
 @dataclass(frozen=True)
 class ActionPolicyDecision:
     action: str
     decision: PolicyDecisionState
+    lane_state: PolicyLaneState
     category: str
     reason: str
 
@@ -132,6 +140,7 @@ def _decision_for(action: str) -> ActionPolicyDecision:
             action=normalized,
             category=deny_category,
             decision="deny",
+            lane_state=LANE_STATE_BY_DECISION["deny"],
             reason=f"{deny_category} is outside bounded Mission Control context",
         )
 
@@ -141,6 +150,7 @@ def _decision_for(action: str) -> ActionPolicyDecision:
             action=normalized,
             category=ask_category,
             decision="ask",
+            lane_state=LANE_STATE_BY_DECISION["ask"],
             reason=f"{ask_category} requires explicit approval",
         )
 
@@ -148,6 +158,7 @@ def _decision_for(action: str) -> ActionPolicyDecision:
         action=normalized,
         category="bounded",
         decision="allow",
+        lane_state=LANE_STATE_BY_DECISION["allow"],
         reason="bounded action",
     )
 

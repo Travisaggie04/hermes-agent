@@ -1,22 +1,32 @@
 export const JENNY_ACTION_POLICY_ID = 'jenny_os_action_policy_v1'
 
 export type JennyActionPolicyDecision = 'ALLOW' | 'ASK' | 'DENY'
+export type JennyActionPolicyLaneState = 'APPROVAL_GATED_LANE' | 'APPROVED_SAFE_LANE' | 'BLOCKED_DANGEROUS_LANE'
 
 export interface JennyActionPolicyRule {
   readonly decision: JennyActionPolicyDecision
+  readonly laneState: JennyActionPolicyLaneState
   readonly summary: string
   readonly examples: readonly string[]
 }
 
 export interface JennyActionPolicyEvaluation {
   readonly decision: JennyActionPolicyDecision
+  readonly laneState: JennyActionPolicyLaneState
   readonly matches: readonly string[]
   readonly rule: JennyActionPolicyRule
+}
+
+const JENNY_ACTION_POLICY_LANE_STATE_BY_DECISION: Record<JennyActionPolicyDecision, JennyActionPolicyLaneState> = {
+  ALLOW: 'APPROVED_SAFE_LANE',
+  ASK: 'APPROVAL_GATED_LANE',
+  DENY: 'BLOCKED_DANGEROUS_LANE'
 }
 
 export const JENNY_ACTION_POLICY_RULES = [
   {
     decision: 'ALLOW',
+    laneState: 'APPROVED_SAFE_LANE',
     summary: 'Safe engineering assistance inside the active project chat',
     examples: [
       'read approved context',
@@ -29,6 +39,7 @@ export const JENNY_ACTION_POLICY_RULES = [
   },
   {
     decision: 'ASK',
+    laneState: 'APPROVAL_GATED_LANE',
     summary: 'Protected operational or customer-impacting actions require separate explicit approval',
     examples: [
       'gateway restart or gateway runtime switch',
@@ -45,6 +56,7 @@ export const JENNY_ACTION_POLICY_RULES = [
   },
   {
     decision: 'DENY',
+    laneState: 'BLOCKED_DANGEROUS_LANE',
     summary: 'Shortcut requests that weaken Jenny OS reliability are not allowed',
     examples: ['broad or unlimited approval', 'disable or bypass guardrails', 'skip review, tests, or evidence']
   }
@@ -175,8 +187,14 @@ export const JENNY_PROTECTED_ACTION_SUMMARIES = examplesForDecision('ASK')
 
 export const JENNY_DENIED_SHORTCUT_SUMMARIES = examplesForDecision('DENY')
 
+export function jennyActionPolicyLaneState(decision: JennyActionPolicyDecision): JennyActionPolicyLaneState {
+  return JENNY_ACTION_POLICY_LANE_STATE_BY_DECISION[decision]
+}
+
 export function jennyActionPolicyDecisionSummary(): string {
-  return JENNY_ACTION_POLICY_RULES.map(rule => `${rule.decision}: ${rule.summary} (${rule.examples.join('; ')})`).join('\n')
+  return JENNY_ACTION_POLICY_RULES.map(
+    rule => `${rule.laneState} (${rule.decision}): ${rule.summary} (${rule.examples.join('; ')})`
+  ).join('\n')
 }
 
 export function jennyActionPolicyBriefRule(): string {
@@ -208,6 +226,7 @@ export function jennyActionPolicyForText(value: string): JennyActionPolicyEvalua
 
   return {
     decision,
+    laneState: jennyActionPolicyLaneState(decision),
     matches: matchesByDecision.get(decision) ?? [],
     rule
   }
@@ -215,19 +234,19 @@ export function jennyActionPolicyForText(value: string): JennyActionPolicyEvalua
 
 export function jennyActionPolicyReviewConstraint(evaluation: JennyActionPolicyEvaluation): string {
   if (evaluation.decision === 'ALLOW') {
-    return `Action policy review: ALLOW ${evaluation.rule.summary}.`
+    return `Action policy review: ${evaluation.laneState} (ALLOW) ${evaluation.rule.summary}.`
   }
 
   const target = evaluation.matches.length ? evaluation.matches.join('; ') : evaluation.rule.examples.join('; ')
 
-  return `Action policy review: ${evaluation.decision} ${target}.`
+  return `Action policy review: ${evaluation.laneState} (${evaluation.decision}) ${target}.`
 }
 
 export function jennyHiddenActionPolicyContext(): string {
   return [
     `Action policy: ${JENNY_ACTION_POLICY_ID}.`,
-    `ALLOW: ${JENNY_ALLOWED_ACTION_EXAMPLES.join(', ')}.`,
-    `ASK before: ${JENNY_PROTECTED_ACTION_SUMMARIES.join('; ')}.`,
-    `DENY: ${JENNY_DENIED_SHORTCUT_SUMMARIES.join('; ')}.`
+    `APPROVED_SAFE_LANE (ALLOW): ${JENNY_ALLOWED_ACTION_EXAMPLES.join(', ')}.`,
+    `APPROVAL_GATED_LANE (ASK before): ${JENNY_PROTECTED_ACTION_SUMMARIES.join('; ')}.`,
+    `BLOCKED_DANGEROUS_LANE (DENY): ${JENNY_DENIED_SHORTCUT_SUMMARIES.join('; ')}.`
   ].join('\n')
 }

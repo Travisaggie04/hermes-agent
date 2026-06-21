@@ -103,6 +103,16 @@ function friendlyPromptFailureMessage(error: unknown): string {
     return 'Jenny could not process that message because it was too large. Send one smaller task and try again.'
   }
 
+  if (
+    lower.includes('image attach failed') ||
+    lower.includes('could not attach') ||
+    lower.includes('file does not exist') ||
+    lower.includes('no such file') ||
+    lower.includes('enoent')
+  ) {
+    return `${raw || 'The image attachment is no longer readable.'} Remove the stale image from the queued turn or reattach it.`
+  }
+
   if (lower.includes('app-server startup failed') || lower.includes('timed out')) {
     return 'Jenny failed before finishing. Retry once; if it fails again, open details.'
   }
@@ -227,6 +237,7 @@ interface PromptActionsOptions {
 interface SubmitTextOptions {
   attachments?: ComposerAttachment[]
   omitUserMessage?: boolean
+  onFailure?: (message: string) => void
   titlePreview?: string
   visibleText?: string
   fromQueue?: boolean
@@ -481,6 +492,7 @@ export function usePromptActions({
         } catch (err) {
           dropOptimistic(null)
           releaseBusy()
+          options?.onFailure?.(friendlyPromptFailureMessage(err))
           notifyError(err, 'Session unavailable')
 
           return false
@@ -489,6 +501,7 @@ export function usePromptActions({
         if (!sessionId) {
           dropOptimistic(null)
           releaseBusy()
+          options?.onFailure?.('Could not create a new session.')
           notify({ kind: 'error', title: 'Session unavailable', message: 'Could not create a new session' })
 
           return false
@@ -511,7 +524,8 @@ export function usePromptActions({
         return true
       } catch (err) {
         releaseBusy()
-        appendAssistantErrorMessage(sessionId, err)
+        const message = appendAssistantErrorMessage(sessionId, err)
+        options?.onFailure?.(message)
 
         if (isProviderSetupError(err)) {
           requestDesktopOnboarding('Add a provider credential before sending your first message.')

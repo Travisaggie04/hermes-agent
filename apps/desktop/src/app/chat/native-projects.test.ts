@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 
 import {
   fallbackProjectGroups,
+  NATIVE_PROJECT_SESSION_LIMIT,
   nativeChatProjects,
   nativeProjectChatModel,
-  NATIVE_PROJECT_SESSION_LIMIT,
   projectSessionStableId,
   UNASSIGNED_PROJECT_GROUP_ID
 } from './native-projects'
@@ -91,5 +91,30 @@ describe('native chat projects', () => {
     expect(model.projects[0].lastSessionId).toBe('session-root')
     expect(model.projects[0].recentSessions[0]).toEqual({ id: 'session-root', title: 'Durable chat' })
     expect(model.otherChats[0]).toEqual({ id: 'legacy-root', title: 'Legacy chat' })
+  })
+
+  it('uses linked session ids when detailed project session rows are unavailable', () => {
+    const model = nativeProjectChatModel(
+      [{ name: 'Hermes / Mission Control', project_id: 'project-hermes-mission-control' }],
+      [
+        {
+          linked_session_count: 2,
+          linked_session_ids: ['root-recent', 'root-older'],
+          name: 'Hermes / Mission Control',
+          project_id: 'project-hermes-mission-control',
+          sessions: []
+        }
+      ]
+    )
+
+    expect(model.projects[0]).toMatchObject({
+      lastSessionId: 'root-recent',
+      lastSessionTitle: 'Saved chat',
+      sessionCount: 2
+    })
+    expect(model.projects[0].recentSessions).toEqual([
+      { id: 'root-recent', title: 'Saved chat 1' },
+      { id: 'root-older', title: 'Saved chat 2' }
+    ])
   })
 })

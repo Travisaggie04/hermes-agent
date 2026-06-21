@@ -2690,6 +2690,17 @@ async function writeComposerImage(buffer, ext = '.png') {
   return filePath
 }
 
+async function copyImageToComposerStore(filePath) {
+  const { resolvedPath } = await resolveReadableFileForIpc(filePath, { purpose: 'Image attach' })
+  const mimeType = mimeTypeForPath(resolvedPath)
+
+  if (!mimeType.startsWith('image/')) {
+    throw new Error('Image attach failed: selected file is not an image.')
+  }
+
+  return writeComposerImage(await fs.promises.readFile(resolvedPath), path.extname(resolvedPath) || '.png')
+}
+
 function previewLabelForUrl(url) {
   return `${url.host}${url.pathname === '/' ? '' : url.pathname}`
 }
@@ -5014,6 +5025,10 @@ ipcMain.handle('hermes:saveImageBuffer', async (_event, payload) => {
   const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data)
   return writeComposerImage(buffer, payload?.ext || '.png')
 })
+
+ipcMain.handle('hermes:copyImageToComposerStore', async (_event, filePath) =>
+  copyImageToComposerStore(String(filePath || ''))
+)
 
 ipcMain.handle('hermes:saveClipboardImage', async () => {
   const image = clipboard.readImage()

@@ -13,6 +13,13 @@ from typing import Any, Literal
 from mission_control.inert_contract import inert_live_operation_flags
 
 Decision = Literal["ALLOW", "ASK", "DENY"]
+CapabilityState = Literal["APPROVED_SAFE_LANE", "APPROVAL_GATED_LANE", "BLOCKED_DANGEROUS_LANE"]
+
+CAPABILITY_STATE_BY_DECISION: dict[Decision, CapabilityState] = {
+    "ALLOW": "APPROVED_SAFE_LANE",
+    "ASK": "APPROVAL_GATED_LANE",
+    "DENY": "BLOCKED_DANGEROUS_LANE",
+}
 
 INERT_POLICY_FLAGS: dict[str, Any] = inert_live_operation_flags(
     enforcement_enabled=False,
@@ -24,6 +31,12 @@ ACTION_POLICY_GUARDRAILS: dict[str, Any] = {
     "policy_id": "jenny_os_action_policy_v1",
     **INERT_POLICY_FLAGS,
     "decisions": ("ALLOW", "ASK", "DENY"),
+    "capability_states": (
+        "APPROVED_SAFE_LANE",
+        "APPROVAL_GATED_LANE",
+        "BLOCKED_DANGEROUS_LANE",
+    ),
+    "decision_to_capability_state": CAPABILITY_STATE_BY_DECISION,
     "default_decision": "ASK",
     "protected_action_categories": (
         "gateway_restart",
@@ -223,6 +236,10 @@ def _evaluation_flags() -> dict[str, Any]:
     return {**INERT_POLICY_FLAGS, "enforces_runtime": False}
 
 
+def _capability_state(decision: Decision) -> CapabilityState:
+    return CAPABILITY_STATE_BY_DECISION[decision]
+
+
 def _matches_rule(text: str, rule: dict[str, Any]) -> bool:
     lowered = text.lower()
     return any(pattern in lowered for pattern in rule["patterns"])
@@ -247,6 +264,7 @@ def evaluate_action_policy(payload: dict[str, Any] | None) -> dict[str, Any]:
         return {
             **_evaluation_flags(),
             "decision": "ASK",
+            "capability_state": _capability_state("ASK"),
             "decision_state": "needs_request",
             "matched_categories": [],
             "reasons": ["request text or requested_actions are required"],
@@ -265,6 +283,7 @@ def evaluate_action_policy(payload: dict[str, Any] | None) -> dict[str, Any]:
         return {
             **_evaluation_flags(),
             "decision": "DENY",
+            "capability_state": _capability_state("DENY"),
             "decision_state": "denied",
             "matched_categories": matched_categories,
             "reasons": reasons,
@@ -284,6 +303,7 @@ def evaluate_action_policy(payload: dict[str, Any] | None) -> dict[str, Any]:
         return {
             **_evaluation_flags(),
             "decision": "ASK",
+            "capability_state": _capability_state("ASK"),
             "decision_state": "requires_explicit_approval",
             "matched_categories": matched_categories,
             "reasons": reasons,
@@ -294,6 +314,7 @@ def evaluate_action_policy(payload: dict[str, Any] | None) -> dict[str, Any]:
     return {
         **_evaluation_flags(),
         "decision": "ALLOW",
+        "capability_state": _capability_state("ALLOW"),
         "decision_state": "allowed_in_current_guardrails",
         "matched_categories": [],
         "reasons": ["request has no protected action matches"],

@@ -3854,6 +3854,12 @@ def test_action_policy_endpoint_exposes_inert_allow_ask_deny_policy(client):
     assert payload["source"] == "mission_control.action_policy_guardrails"
     assert payload["policy"]["policy_id"] == "jenny_os_action_policy_v1"
     assert payload["policy"]["decisions"] == ["ALLOW", "ASK", "DENY"]
+    assert payload["policy"]["capability_states"] == [
+        "APPROVED_SAFE_LANE",
+        "APPROVAL_GATED_LANE",
+        "BLOCKED_DANGEROUS_LANE",
+    ]
+    assert payload["policy"]["decision_to_capability_state"]["ASK"] == "APPROVAL_GATED_LANE"
     assert "gateway_restart" in payload["policy"]["protected_action_categories"]
     assert "payment" in payload["policy"]["protected_action_categories"]
     assert "hidden_workers_timers_daemons_cron" in payload["policy"]["protected_action_categories"]
@@ -3877,6 +3883,7 @@ def test_action_policy_evaluate_endpoint_classifies_without_storing_or_echoing_r
     assert payload["stored"] is False
     assert payload["source"] == "caller_supplied_action_request"
     assert payload["decision"] == "ASK"
+    assert payload["capability_state"] == "APPROVAL_GATED_LANE"
     assert payload["decision_state"] == "requires_explicit_approval"
     assert "deploy" in payload["matched_categories"]
     assert "gateway_restart" in payload["matched_categories"]
@@ -3897,6 +3904,7 @@ def test_action_policy_evaluate_endpoint_denies_broad_approval_shortcuts(client)
     assert response.status_code == 200
     payload = response.json()
     assert payload["decision"] == "DENY"
+    assert payload["capability_state"] == "BLOCKED_DANGEROUS_LANE"
     assert payload["decision_state"] == "denied"
     assert "broad_or_unlimited_approval" in payload["matched_categories"]
     assert "bypass_review_or_evidence" in payload["matched_categories"]

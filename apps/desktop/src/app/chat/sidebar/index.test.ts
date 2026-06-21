@@ -162,6 +162,15 @@ describe('chat sidebar project workspace affordances', () => {
     expect(source).toContain('totalCount: group.linked_session_count ?? group.sessions.length')
   })
 
+  it('shows linked project sessions even when detailed session rows are unavailable', () => {
+    expect(source).toContain('function linkedSessionToFallbackSessionInfo')
+    expect(source).toContain("source: 'mission-control-link'")
+    expect(source).toContain('title: `Saved chat ${index + 1}`')
+    expect(source).toContain('group.sessions.length')
+    expect(source).toContain('(group.linked_session_ids ?? [])')
+    expect(source).toContain('.map(linkedSessionToFallbackSessionInfo)')
+  })
+
   it('surfaces backend project suggestions for unfiled Other chats', () => {
     expect(source).toContain('const [suggestedProjectMoveTargets, setSuggestedProjectMoveTargets]')
     expect(source).toContain('const projectTargets = new Map(projectRecords.map(project => [project.project_id')

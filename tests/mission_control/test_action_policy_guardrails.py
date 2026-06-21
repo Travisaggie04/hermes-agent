@@ -19,6 +19,14 @@ def test_action_policy_guardrails_are_inert_and_display_only():
     assert policy["enforcement_enabled"] is False
     assert policy["dry_run_only"] is True
     assert policy["display_only"] is True
+    assert policy["capability_states"] == (
+        "APPROVED_SAFE_LANE",
+        "APPROVAL_GATED_LANE",
+        "BLOCKED_DANGEROUS_LANE",
+    )
+    assert policy["decision_to_capability_state"]["ALLOW"] == "APPROVED_SAFE_LANE"
+    assert policy["decision_to_capability_state"]["ASK"] == "APPROVAL_GATED_LANE"
+    assert policy["decision_to_capability_state"]["DENY"] == "BLOCKED_DANGEROUS_LANE"
     assert "gateway_restart" in policy["protected_action_categories"]
     assert "payment" in policy["protected_action_categories"]
     assert "waha_social_posting" in policy["protected_action_categories"]
@@ -45,6 +53,7 @@ def test_action_policy_allows_bounded_read_plan_test_request():
     )
 
     assert result["decision"] == "ALLOW"
+    assert result["capability_state"] == "APPROVED_SAFE_LANE"
     assert result["decision_state"] == "allowed_in_current_guardrails"
     assert result["blocked_actions"] == []
     assert result["required_approvals"] == []
@@ -64,6 +73,7 @@ def test_action_policy_asks_for_protected_deploy_payment_and_waha_actions():
     )
 
     assert result["decision"] == "ASK"
+    assert result["capability_state"] == "APPROVAL_GATED_LANE"
     assert result["decision_state"] == "requires_explicit_approval"
     assert "deploy" in result["matched_categories"]
     assert "gateway_restart" in result["matched_categories"]
@@ -88,6 +98,7 @@ def test_action_policy_asks_for_hidden_workers_state_and_local_model_routing():
     )
 
     assert result["decision"] == "ASK"
+    assert result["capability_state"] == "APPROVAL_GATED_LANE"
     assert "hidden_workers_timers_daemons_cron" in result["matched_categories"]
     assert "secrets_or_state_mutation" in result["matched_categories"]
     assert "local_llm_routing" in result["matched_categories"]
@@ -107,6 +118,7 @@ def test_action_policy_denies_broad_approval_and_guardrail_bypass():
     )
 
     assert result["decision"] == "DENY"
+    assert result["capability_state"] == "BLOCKED_DANGEROUS_LANE"
     assert result["decision_state"] == "denied"
     assert "broad_or_unlimited_approval" in result["matched_categories"]
     assert "disable_guardrails" in result["matched_categories"]
@@ -121,6 +133,7 @@ def test_action_policy_asks_for_missing_request_text():
     result = evaluate_action_policy({})
 
     assert result["decision"] == "ASK"
+    assert result["capability_state"] == "APPROVAL_GATED_LANE"
     assert result["decision_state"] == "needs_request"
     assert result["reasons"] == ["request text or requested_actions are required"]
     assert result["blocked_actions"] == []
@@ -136,6 +149,7 @@ def test_action_policy_does_not_echo_raw_request_text():
 
     flattened = str(result)
     assert result["decision"] == "ASK"
+    assert result["capability_state"] == "APPROVAL_GATED_LANE"
     assert "SECRET_TOKEN" not in flattened
     assert "sk-test-not-real" not in flattened
     assert "Deploy with" not in flattened
