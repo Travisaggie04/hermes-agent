@@ -29,4 +29,11 @@ describe('titlebarControlsPosition', () => {
     expect(titlebarHeaderBaseClass).toContain('var(--titlebar-left-safe-inset')
     expect(titlebarHeaderBaseClass).toContain('var(--titlebar-left-pane-width')
   })
+
+  it('reserves the fixed right titlebar controls and clips crowded header content', () => {
+    expect(titlebarHeaderBaseClass).toContain('overflow-hidden')
+    expect(titlebarHeaderBaseClass).toContain('pr-[calc(var(--titlebar-tools-right')
+    expect(titlebarHeaderBaseClass).toContain('var(--titlebar-tools-width')
+    expect(titlebarHeaderBaseClass).not.toContain('pr-[max(0.75rem,var(--titlebar-tools-right')
+  })
 })

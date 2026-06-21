@@ -93,7 +93,7 @@ describe('native chat projects', () => {
     expect(model.otherChats[0]).toEqual({ id: 'legacy-root', title: 'Legacy chat' })
   })
 
-  it('uses linked session ids when detailed project session rows are unavailable', () => {
+  it('keeps linked counts without fabricating placeholder chat rows', () => {
     const model = nativeProjectChatModel(
       [{ name: 'Hermes / Mission Control', project_id: 'project-hermes-mission-control' }],
       [
@@ -108,13 +108,10 @@ describe('native chat projects', () => {
     )
 
     expect(model.projects[0]).toMatchObject({
-      lastSessionId: 'root-recent',
-      lastSessionTitle: 'Saved chat',
+      lastSessionId: '',
+      lastSessionTitle: '',
       sessionCount: 2
     })
-    expect(model.projects[0].recentSessions).toEqual([
-      { id: 'root-recent', title: 'Saved chat 1' },
-      { id: 'root-older', title: 'Saved chat 2' }
-    ])
+    expect(model.projects[0].recentSessions).toEqual([])
   })
 })

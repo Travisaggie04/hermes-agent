@@ -328,6 +328,217 @@ def _normalize_role(r: Optional[str]) -> str:
     return "leaf"
 
 
+_REASONING_EFFORT_ALIASES = {
+    "": "",
+    "default": "",
+    "inherit": "",
+    "parent": "",
+    "off": "none",
+    "disabled": "none",
+    "disable": "none",
+    "extra-high": "xhigh",
+    "extra_high": "xhigh",
+    "extra high": "xhigh",
+    "x-high": "xhigh",
+    "x_high": "xhigh",
+    "very high": "xhigh",
+    "max": "xhigh",
+    "maximum": "xhigh",
+}
+
+_VALID_REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh"}
+_REQUESTABLE_REASONING_EFFORTS = _VALID_REASONING_EFFORTS | {"auto"}
+_REASONING_EFFORT_CHOICES = "auto, none, minimal, low, medium, high, xhigh"
+
+
+def _normalize_reasoning_effort_value(value: Optional[str]) -> str:
+    """Normalise user/model supplied reasoning-effort text.
+
+    ``parse_reasoning_effort`` intentionally accepts only canonical config
+    tokens. ``delegate_task`` is user-facing and model-facing, so be a little
+    more forgiving with common human phrases like "extra high".
+    """
+    if value is None:
+        return ""
+    raw = str(value).strip().lower()
+    return _REASONING_EFFORT_ALIASES.get(raw, raw)
+
+
+def _reasoning_effort_validation_error(
+    value: Optional[str],
+    *,
+    field_name: str,
+) -> Optional[str]:
+    """Return a user-facing validation error for an effort value, if invalid."""
+    effort = _normalize_reasoning_effort_value(value)
+    if not effort:
+        return None
+    if effort in _REQUESTABLE_REASONING_EFFORTS:
+        return None
+    return (
+        f"{field_name} must be one of {_REASONING_EFFORT_CHOICES}; "
+        f"received {value!r}."
+    )
+
+
+def _reasoning_effort_label(reasoning_config) -> Optional[str]:
+    """Return a compact effort label for diagnostics/introspection."""
+    if not isinstance(reasoning_config, dict):
+        return None
+    if reasoning_config.get("enabled") is False:
+        return "none"
+    effort = str(reasoning_config.get("effort") or "").strip().lower()
+    return effort or None
+
+
+def _infer_auto_reasoning_effort(
+    *,
+    goal: Optional[str],
+    context: Optional[str],
+    toolsets: Optional[List[str]],
+) -> str:
+    """Classify a delegated task into a conservative effort tier.
+
+    Cheap read-only/status work stays low, ordinary coding defaults to medium,
+    ambiguous review/debugging gets high, and live/security/destructive/deploy
+    decisions get xhigh.
+    """
+    text = " ".join(
+        part
+        for part in [goal or "", context or "", " ".join(toolsets or [])]
+        if part
+    ).lower()
+
+    xhigh_markers = (
+        "gateway",
+        "restart",
+        "deploy",
+        "deployment",
+        "production",
+        "live service",
+        "live gateway",
+        "rollback",
+        "security",
+        "credential",
+        "credentials",
+        "secret",
+        "token",
+        "auth",
+        "oauth",
+        "payment",
+        "billing",
+        "destructive",
+        "delete",
+        "remove files",
+        "merge readiness",
+        "final review",
+        "release",
+    )
+    if any(marker in text for marker in xhigh_markers):
+        return "xhigh"
+
+    high_markers = (
+        "pr review",
+        "code review",
+        "review pr",
+        "multi-file",
+        "multifile",
+        "bug hunt",
+        "ambiguous",
+        "root cause",
+        "race condition",
+        "intermittent",
+        "failing tests",
+        "investigate failure",
+        "architecture",
+    )
+    if any(marker in text for marker in high_markers):
+        return "high"
+
+    low_markers = (
+        "summarize",
+        "summary",
+        "status",
+        "lookup",
+        "look up",
+        "read-only",
+        "read only",
+        "format",
+        "formatting",
+        "rewrite",
+        "list",
+        "find file",
+        "search",
+    )
+    if any(marker in text for marker in low_markers):
+        return "low"
+
+    coding_markers = (
+        "implement",
+        "coding",
+        "code",
+        "fix",
+        "debug",
+        "test",
+        "refactor",
+        "repo",
+    )
+    if any(marker in text for marker in coding_markers):
+        return "medium"
+
+    return "medium"
+
+
+def _resolve_child_reasoning_config(
+    *,
+    parent_reasoning,
+    delegation_cfg: Dict[str, Any],
+    requested_effort: Optional[str],
+    goal: Optional[str],
+    context: Optional[str],
+    toolsets: Optional[List[str]],
+):
+    """Resolve reasoning for one delegated child.
+
+    Precedence:
+      1. per-call / per-task ``reasoning_effort``
+      2. ``delegation.reasoning_effort`` in config
+      3. parent agent's current reasoning config
+
+    Either configured value may be ``auto`` to classify the child from its
+    goal/context/toolsets using ``_infer_auto_reasoning_effort``.
+    """
+    effort = _normalize_reasoning_effort_value(requested_effort)
+    if not effort:
+        effort = _normalize_reasoning_effort_value(
+            delegation_cfg.get("reasoning_effort")
+        )
+
+    if not effort:
+        return parent_reasoning
+
+    if effort == "auto":
+        effort = _infer_auto_reasoning_effort(
+            goal=goal,
+            context=context,
+            toolsets=toolsets,
+        )
+
+    if effort not in _VALID_REASONING_EFFORTS:
+        logger.warning(
+            "Unknown delegate_task reasoning_effort '%s', inheriting parent level",
+            requested_effort or delegation_cfg.get("reasoning_effort"),
+        )
+        return parent_reasoning
+
+    from hermes_constants import parse_reasoning_effort
+
+    parsed = parse_reasoning_effort(effort)
+    if parsed is None:
+        return parent_reasoning
+    return parsed
+
+
 def _get_max_concurrent_children() -> int:
     """Read delegation.max_concurrent_children from config, falling back to
     DELEGATION_MAX_CONCURRENT_CHILDREN env var, then the default (3).
@@ -672,6 +883,20 @@ def _build_child_system_prompt(
             "Coordinate your workers' results and synthesize them before "
             "reporting back to your parent. You are responsible for the "
             "final summary, not your workers.\n\n"
+            "EFFORT POLICY for your own delegate_task calls:\n"
+            "- Set reasoning_effort='auto' when you want Hermes to classify "
+            "each child task.\n"
+            "- Use reasoning_effort='low' for simple summaries/status "
+            "checks, file lookup, and formatting.\n"
+            "- Use reasoning_effort='medium' for normal coding/debugging "
+            "and small straightforward fixes.\n"
+            "- Use reasoning_effort='high' for PR review or ambiguous "
+            "multi-file bug hunts.\n"
+            "- Use reasoning_effort='xhigh' for gateway/runtime/deploy/security/payment/destructive "
+            "operations or final merge-readiness decisions.\n"
+            "- In batch mode, put reasoning_effort on each task when the "
+            "subtasks need different levels; per-task values beat the "
+            "top-level value.\n\n"
             f"NOTE: You are at depth {child_depth}. The delegation tree "
             f"is capped at max_spawn_depth={max_spawn_depth}. {child_note}"
         )
@@ -920,6 +1145,7 @@ def _build_child_agent(
     # ACP transport overrides — lets a non-ACP parent spawn ACP child agents
     override_acp_command: Optional[str] = None,
     override_acp_args: Optional[List[str]] = None,
+    reasoning_effort: Optional[str] = None,
     # Per-call role controlling whether the child can further delegate.
     # 'leaf' (default) cannot; 'orchestrator' retains the delegation
     # toolset subject to depth/kill-switch bounds applied below.
@@ -1093,24 +1319,22 @@ def _build_child_agent(
         effective_provider = "copilot-acp"
         effective_api_mode = "chat_completions"
 
-    # Resolve reasoning config: delegation override > parent inherit
+    # Resolve reasoning config: explicit per-call/per-task effort >
+    # delegation.reasoning_effort config > parent inherit. Either explicit or
+    # configured effort may be "auto" to classify from the child task text.
     parent_reasoning = getattr(parent_agent, "reasoning_config", None)
-    child_reasoning = parent_reasoning
     try:
-        delegation_effort = str(delegation_cfg.get("reasoning_effort") or "").strip()
-        if delegation_effort:
-            from hermes_constants import parse_reasoning_effort
-
-            parsed = parse_reasoning_effort(delegation_effort)
-            if parsed is not None:
-                child_reasoning = parsed
-            else:
-                logger.warning(
-                    "Unknown delegation.reasoning_effort '%s', inheriting parent level",
-                    delegation_effort,
-                )
+        child_reasoning = _resolve_child_reasoning_config(
+            parent_reasoning=parent_reasoning,
+            delegation_cfg=delegation_cfg,
+            requested_effort=reasoning_effort,
+            goal=goal,
+            context=context,
+            toolsets=child_toolsets,
+        )
     except Exception as exc:
-        logger.debug("Could not load delegation reasoning_effort: %s", exc)
+        logger.debug("Could not resolve delegate_task reasoning_effort: %s", exc)
+        child_reasoning = parent_reasoning
 
     # Inherit the parent's fallback provider chain so subagents can recover
     # from rate-limits and credential exhaustion exactly like the top-level
@@ -1177,6 +1401,10 @@ def _build_child_agent(
     # Stash the post-degrade role for introspection (leaf if the
     # kill switch or depth bounded the caller's requested role).
     child._delegate_role = effective_role
+    # Stash resolved reasoning so nested orchestrators and UI/diagnostics can
+    # prove what effort this child actually received.
+    setattr(child, "_delegate_reasoning_config", child_reasoning)
+    setattr(child, "_delegate_reasoning_effort", _reasoning_effort_label(child_reasoning))
     # Stash subagent identity for nested-delegation event propagation and
     # for _run_single_child / interrupt_subagent to look up by id.
     child._subagent_id = subagent_id
@@ -1975,6 +2203,7 @@ def delegate_task(
     max_iterations: Optional[int] = None,
     acp_command: Optional[str] = None,
     acp_args: Optional[List[str]] = None,
+    reasoning_effort: Optional[str] = None,
     role: Optional[str] = None,
     background: Optional[bool] = None,
     parent_agent=None,
@@ -2046,6 +2275,23 @@ def delegate_task(
 
     # Load config
     cfg = _load_config()
+
+    # Fail fast on bad effort knobs before spawning a child. Silently falling
+    # back to the parent's level can burn the wrong model budget, especially
+    # when the parent is running at xhigh.
+    config_effort_error = _reasoning_effort_validation_error(
+        cfg.get("reasoning_effort"),
+        field_name="delegation.reasoning_effort",
+    )
+    if config_effort_error:
+        return tool_error(config_effort_error)
+    top_effort_error = _reasoning_effort_validation_error(
+        reasoning_effort,
+        field_name="reasoning_effort",
+    )
+    if top_effort_error:
+        return tool_error(top_effort_error)
+
     default_max_iter = cfg.get("max_iterations", DEFAULT_MAX_ITERATIONS)
     # Model-supplied max_iterations is ignored — the config value is authoritative
     # so users get predictable budgets. The kwarg is retained for internal callers
@@ -2090,7 +2336,13 @@ def delegate_task(
         task_list = tasks
     elif goal and isinstance(goal, str) and goal.strip():
         task_list = [
-            {"goal": goal, "context": context, "toolsets": toolsets, "role": top_role}
+            {
+                "goal": goal,
+                "context": context,
+                "toolsets": toolsets,
+                "role": top_role,
+                "reasoning_effort": reasoning_effort,
+            }
         ]
     else:
         return tool_error("Provide either 'goal' (single task) or 'tasks' (batch).")
@@ -2098,7 +2350,7 @@ def delegate_task(
     if not task_list:
         return tool_error("No tasks provided.")
 
-    # Validate each task has a goal
+    # Validate each task has a goal and a valid optional per-task effort.
     for i, task in enumerate(task_list):
         if not isinstance(task, dict):
             return tool_error(
@@ -2106,6 +2358,13 @@ def delegate_task(
             )
         if not task.get("goal", "").strip():
             return tool_error(f"Task {i} is missing a 'goal'.")
+        if "reasoning_effort" in task:
+            task_effort_error = _reasoning_effort_validation_error(
+                task.get("reasoning_effort"),
+                field_name=f"Task {i} reasoning_effort",
+            )
+            if task_effort_error:
+                return tool_error(task_effort_error)
 
     overall_start = time.monotonic()
     results = []
@@ -2128,6 +2387,11 @@ def delegate_task(
     try:
         for i, t in enumerate(task_list):
             task_acp_args = t.get("acp_args") if "acp_args" in t else None
+            task_reasoning_effort = (
+                t.get("reasoning_effort")
+                if "reasoning_effort" in t
+                else reasoning_effort
+            )
             # Per-task role beats top-level; normalise again so unknown
             # per-task values warn and degrade to leaf uniformly.
             effective_role = _normalize_role(t.get("role") or top_role)
@@ -2152,6 +2416,7 @@ def delegate_task(
                     if task_acp_args is not None
                     else (acp_args if acp_args is not None else creds.get("args"))
                 ),
+                reasoning_effort=task_reasoning_effort,
                 role=effective_role,
             )
             # Override with correct parent tool names (before child construction mutated global)
@@ -2721,6 +2986,10 @@ def _build_top_level_description() -> str:
         "new message, /stop, /new) the child is cancelled with status="
         "'interrupted' and its work is discarded. Children cannot continue "
         "in the background.\n\n"
+        "REASONING EFFORT:\n"
+        "- Optional reasoning_effort values: auto, none, minimal, low, medium, high, xhigh.\n"
+        "- Use reasoning_effort='auto' for the built-in policy: simple summaries/status/file lookup/formatting -> low; normal coding/small fixes/debugging -> medium; PR review/ambiguous multi-file failures -> high; gateway/runtime/deploy/security/payment/destructive/final merge-readiness -> xhigh.\n"
+        "- In batch mode, put reasoning_effort on each task when subtasks need different levels; per-task values beat the top-level value.\n\n"
         "IMPORTANT:\n"
         "- Subagents have NO memory of your conversation. Pass all relevant "
         "info (file paths, error messages, constraints) via the 'context' field.\n"
@@ -2868,6 +3137,19 @@ DELEGATE_TASK_SCHEMA = {
                     "['terminal', 'file', 'web'] for full-stack tasks."
                 ),
             },
+            "reasoning_effort": {
+                "type": "string",
+                "enum": ["auto", "none", "minimal", "low", "medium", "high", "xhigh"],
+                "description": (
+                    "Optional reasoning effort override for the child. Use "
+                    "'auto' to classify by task type: simple summaries/status "
+                    "checks -> low; normal coding/debugging -> medium; PR "
+                    "review or ambiguous multi-file bug hunts -> high; "
+                    "gateway/runtime/deploy/security/payment/destructive or "
+                    "final merge-readiness work -> xhigh. Omit to use "
+                    "delegation.reasoning_effort from config, then parent inherit."
+                ),
+            },
             "tasks": {
                 "type": "array",
                 "items": {
@@ -2882,6 +3164,15 @@ DELEGATE_TASK_SCHEMA = {
                             "type": "array",
                             "items": {"type": "string"},
                             "description": f"Toolsets for this specific task. Available: {_TOOLSET_LIST_STR}. Use 'web' for network access, 'terminal' for shell, 'browser' for web interaction.",
+                        },
+                        "reasoning_effort": {
+                            "type": "string",
+                            "enum": ["auto", "none", "minimal", "low", "medium", "high", "xhigh"],
+                            "description": (
+                                "Per-task reasoning effort override. Beats the "
+                                "top-level reasoning_effort. Use 'auto' for the "
+                                "built-in task-type policy."
+                            ),
                         },
                         "acp_command": {
                             "type": "string",
@@ -2975,6 +3266,7 @@ registry.register(
         max_iterations=args.get("max_iterations"),
         acp_command=args.get("acp_command"),
         acp_args=args.get("acp_args"),
+        reasoning_effort=args.get("reasoning_effort"),
         role=args.get("role"),
         background=args.get("background"),
         parent_agent=kw.get("parent_agent"),

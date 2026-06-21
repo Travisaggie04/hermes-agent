@@ -665,7 +665,7 @@ function mobilePermissionClassification(permission: MobileBridgePermission | und
   return permission?.permission_classification || permission?.legacy_permission_classification || "unknown_blocked";
 }
 
-function mobileWorkspaceSafety(status: MobileWorkspaceStatus | null): MobileBridgeSafety {
+function mobileWorkspaceExecutionLockSafety(status: MobileWorkspaceStatus | null): MobileBridgeSafety {
   const reasons: string[] = [];
   if (!status) {
     reasons.push("workspace status not loaded");
@@ -694,6 +694,13 @@ function mobileWorkspaceSafety(status: MobileWorkspaceStatus | null): MobileBrid
   reasons.push(...mobileExecutionLockReasons("worker_node_presence", status?.worker_node_presence));
   reasons.push(...mobileExecutionLockReasons("worker_node_orchestration", status?.worker_node_orchestration));
   reasons.push(...mobileExecutionLockReasons("worker_node_instruction_preview", status?.worker_node_instruction_preview));
+
+  const uniqueReasons = [...new Set(reasons)];
+  return { reasons: uniqueReasons, safe: uniqueReasons.length === 0 };
+}
+
+function mobileWorkspaceSafety(status: MobileWorkspaceStatus | null): MobileBridgeSafety {
+  const reasons: string[] = [...mobileWorkspaceExecutionLockSafety(status).reasons];
 
   const readinessStates = status?.orchestration_readiness?.states;
   if (readinessStates?.supervised_read_only_autonomy !== "preview_ready") {
@@ -985,11 +992,21 @@ export default function JennyMobilePage() {
   const runState = runByProject[selectedProject.project_id] ?? statusFromBridge(bridgeStatus);
   const bridgeSafety = useMemo(() => mobileBridgeSafety(bridgeStatus), [bridgeStatus]);
   const workspaceSafety = useMemo(() => mobileWorkspaceSafety(workspaceStatus), [workspaceStatus]);
+  const workspaceExecutionLockSafety = useMemo(
+    () => mobileWorkspaceExecutionLockSafety(workspaceStatus),
+    [workspaceStatus],
+  );
   const mobileSafety = useMemo(() => combineMobileSafety(bridgeSafety, workspaceSafety), [bridgeSafety, workspaceSafety]);
-  const visibleRunState: RunState = mobileSafety.safe
+  const manualChatSafety = useMemo(
+    () => combineMobileSafety(bridgeSafety, workspaceExecutionLockSafety),
+    [bridgeSafety, workspaceExecutionLockSafety],
+  );
+  const automationLocked = !mobileSafety.safe;
+  const manualChatLocked = !manualChatSafety.safe;
+  const visibleRunState: RunState = manualChatSafety.safe
     ? runState
     : {
-        detail: `Manual chat blocked: ${mobileSafety.reasons[0] ?? "backend safety is not confirmed"}`,
+        detail: `Manual chat blocked: ${manualChatSafety.reasons[0] ?? "backend safety is not confirmed"}`,
         status: "failed",
       };
   const modelChoices = useMemo(() => buildModelChoices(modelInfo, modelOptions), [modelInfo, modelOptions]);
@@ -997,7 +1014,7 @@ export default function JennyMobilePage() {
   const selectedModel = modelChoiceFromKey(currentModelChoice);
   const statusRecords = unwrapRecords(bridgeStatus?.status_records).slice(-5).reverse();
   const latestPendingId = latestPendingRequestId(messages);
-  const sendDisabled = sending || loading || !composer.trim() || !mobileSafety.safe;
+  const sendDisabled = sending || loading || !composer.trim() || manualChatLocked;
   const reportLifecycle = workspaceStatus?.report_lifecycle;
   const reportMissingLinkedCount = Object.values(reportLifecycle?.runs_with_missing_linked_report_ids ?? {}).reduce(
     (count, reportIds) => count + reportIds.length,
@@ -1082,11 +1099,11 @@ export default function JennyMobilePage() {
 
   const runJennyOnce = useCallback(async (projectId: string, requestId: string) => {
     if (!requestId || replyingRequestIdRef.current) return;
-    if (!mobileSafety.safe) {
+    if (!manualChatSafety.safe) {
       setRunByProject((prev) => ({
         ...prev,
         [projectId]: {
-          detail: `Manual chat blocked: ${mobileSafety.reasons[0] ?? "backend safety is not confirmed"}`,
+          detail: `Manual chat blocked: ${manualChatSafety.reasons[0] ?? "backend safety is not confirmed"}`,
           requestId,
           status: "failed",
         },
@@ -1149,7 +1166,7 @@ export default function JennyMobilePage() {
       replyingRequestIdRef.current = "";
       setReplyingRequestId("");
     }
-  }, [appendMessage, mobileSafety.reasons, mobileSafety.safe, refreshMessages, updateMessageStatus]);
+  }, [appendMessage, manualChatSafety.reasons, manualChatSafety.safe, refreshMessages, updateMessageStatus]);
 
   async function sendMessage() {
     const text = composer.trim();
@@ -1257,7 +1274,7 @@ export default function JennyMobilePage() {
         </div>
       </div>
 
-      <section className="mx-auto flex min-h-[calc(100dvh-9rem)] max-w-2xl flex-col gap-4 px-3 pb-[calc(9.75rem+env(safe-area-inset-bottom,0px))] pt-[calc(4.75rem+env(safe-area-inset-top,0px))]">
+      <section className="mx-auto flex min-h-[calc(100dvh-9rem)] max-w-2xl flex-col gap-4 px-3 pb-[calc(12.5rem+env(safe-area-inset-bottom,0px))] pt-[calc(4.75rem+env(safe-area-inset-top,0px))]">
         <div className="flex items-center justify-between gap-3 px-1 text-xs text-zinc-400">
           <span className={cn(
             "inline-flex items-center gap-1 font-medium",
@@ -1305,12 +1322,12 @@ export default function JennyMobilePage() {
                       <button
                         className="rounded-full bg-black/15 px-2 py-0.5 text-[0.7rem] font-semibold text-zinc-950 disabled:opacity-50"
                         type="button"
-                        disabled={replyingRequestId !== "" || sending || !mobileSafety.safe}
-                        aria-label={mobileSafety.safe ? "Get reply" : "Get reply blocked - backend execution disabled"}
+                        disabled={replyingRequestId !== "" || sending || manualChatLocked}
+                        aria-label={manualChatSafety.safe ? "Get reply" : "Get reply blocked - backend execution disabled"}
                         onClick={() => void runJennyOnce(selectedProject.project_id, message.requestId ?? "")}
-                        title={mobileSafety.safe ? "Manual foreground reply only" : `Backend execution disabled: ${mobileSafety.reasons[0] ?? "autonomy preview is not approved"}`}
+                        title={manualChatSafety.safe ? "Manual foreground reply only" : `Manual chat disabled: ${manualChatSafety.reasons[0] ?? "backend safety is not confirmed"}`}
                       >
-                        {mobileSafety.safe ? (message.status === "failed" ? "Retry" : "Get reply") : "Reply locked"}
+                        {manualChatSafety.safe ? (message.status === "failed" ? "Retry" : "Get reply") : "Reply locked"}
                       </button>
                     ) : null}
                   </div>
@@ -1377,24 +1394,23 @@ export default function JennyMobilePage() {
             </label>
           </div>
 
-          {!mobileSafety.safe ? (
+          {(automationLocked || manualChatLocked) ? (
             <section
-              aria-label="Jenny mobile controls blocked"
-              className="mb-2 rounded-2xl border border-amber-400/30 bg-amber-950/35 px-3 py-2 text-xs text-amber-100"
+              aria-label={manualChatLocked ? "Jenny mobile controls blocked" : "Jenny mobile automation locked"}
+              className="mb-2 flex min-w-0 items-start gap-2 rounded-2xl border border-amber-400/30 bg-amber-950/35 px-3 py-2 text-xs text-amber-100"
               role="status"
             >
-              <p className="font-semibold">Backend execution disabled - Jenny controls locked</p>
-              <p className="mt-1 leading-snug">
-                Runtime can be clean while supervised read-only autonomy, scoped PR creation, dispatch, session-send, and worker dispatch remain blocked.
-              </p>
-              <p className="mt-1 font-semibold leading-snug">
-                execution_enabled=false / dispatch_enabled=false / session_send_enabled=false / worker_dispatch_enabled=false
-              </p>
-              <ul className="mt-1 list-disc space-y-1 pl-4">
-                {mobileSafety.reasons.slice(0, 4).map((reason) => (
-                  <li key={reason}>{reason}</li>
-                ))}
-              </ul>
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-200" />
+              <div className="min-w-0">
+                <p className="font-semibold leading-tight">
+                  {manualChatLocked ? "Manual chat locked - draft only" : "Automation locked - manual chat allowed"}
+                </p>
+                <p className="mt-0.5 truncate text-[0.68rem] leading-tight text-amber-100/80">
+                  {manualChatLocked
+                    ? "Backend safety is not ready. Open Activity for details."
+                    : "No dispatch, session-send, or worker dispatch. Open Activity for details."}
+                </p>
+              </div>
             </section>
           ) : null}
 
@@ -1418,7 +1434,7 @@ export default function JennyMobilePage() {
                   void sendMessage();
                 }
               }}
-              placeholder={mobileSafety.safe ? "Ask Jenny" : "Draft only - backend execution disabled"}
+              placeholder={manualChatSafety.safe ? "Ask Jenny" : "Draft only - backend execution disabled"}
               rows={1}
               value={composer}
             />
@@ -1427,17 +1443,19 @@ export default function JennyMobilePage() {
               type="submit"
               className="mb-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-full bg-emerald-400 text-zinc-950 disabled:bg-zinc-800 disabled:text-zinc-500"
               disabled={sendDisabled}
-              aria-label={mobileSafety.safe ? "Send Jenny message" : "Send Jenny message blocked - backend execution disabled"}
-              title={mobileSafety.safe ? "Manual foreground only - no dispatch/session-send" : `Backend execution disabled: ${mobileSafety.reasons[0] ?? "autonomy preview is not approved"}`}
+              aria-label={manualChatSafety.safe ? "Send Jenny message" : "Send Jenny message blocked - backend execution disabled"}
+              title={manualChatSafety.safe ? "Manual foreground only - no dispatch/session-send" : `Manual chat disabled: ${manualChatSafety.reasons[0] ?? "backend safety is not confirmed"}`}
             >
               {sending || replyingRequestId ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
             </button>
           </div>
           <p className={cn(
             "mt-1 text-[0.68rem]",
-            mobileSafety.safe ? "text-emerald-300" : "text-amber-200",
+            manualChatSafety.safe ? "text-emerald-300" : "text-amber-200",
           )}>
-            {mobileSafety.safe ? "Manual only - no dispatch/session-send/worker dispatch." : "Send locked - backend execution disabled; draft text only."}
+            {manualChatSafety.safe
+              ? "Manual chat ready - no dispatch/session-send/worker dispatch."
+              : "Send locked - backend execution disabled; draft text only."}
           </p>
         </div>
       </form>
@@ -1481,9 +1499,15 @@ export default function JennyMobilePage() {
                   <dd className="min-w-0 truncate text-right">{latestPendingId || "none"}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-zinc-400">Safety</dt>
-                  <dd className={cn("text-right", mobileSafety.safe ? "text-emerald-300" : "text-red-300")}>
-                    {mobileSafety.safe ? "manual foreground only" : "blocked"}
+                  <dt className="text-zinc-400">Manual chat</dt>
+                  <dd className={cn("text-right", manualChatSafety.safe ? "text-emerald-300" : "text-red-300")}>
+                    {manualChatSafety.safe ? "ready" : "blocked"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-zinc-400">Automation</dt>
+                  <dd className={cn("text-right", automationLocked ? "text-amber-300" : "text-emerald-300")}>
+                    {automationLocked ? "locked" : "clear"}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-3">
@@ -1544,9 +1568,19 @@ export default function JennyMobilePage() {
                 </div>
               </dl>
 
-              {!mobileSafety.safe ? (
+              {manualChatLocked ? (
                 <div className="mt-3 rounded-lg border border-red-400/30 bg-red-950/40 px-3 py-2 text-sm text-red-100">
                   <p className="font-medium">Manual chat blocked</p>
+                  <ul className="mt-1 list-disc space-y-1 pl-4">
+                    {manualChatSafety.reasons.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {automationLocked ? (
+                <div className="mt-3 rounded-lg border border-amber-400/30 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
+                  <p className="font-medium">Automation remains locked</p>
                   <ul className="mt-1 list-disc space-y-1 pl-4">
                     {mobileSafety.reasons.map((reason) => (
                       <li key={reason}>{reason}</li>
