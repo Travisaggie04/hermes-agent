@@ -38,6 +38,9 @@ _READ_ONLY_LANE_TYPES = {
     "read_only_lane",
     "read_only_design",
     "read_only_inspection",
+    "read_only_execution",
+    "supervised_read_only",
+    "supervised_read_only_execution",
     *_READ_ONLY_ONE_RUN_LANE_TYPES,
 }
 _APPROVED_ACTION_CLASSES = _READ_ONLY_LANE_TYPES
@@ -548,7 +551,20 @@ def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) ->
 
     if _flag_enabled(state.get("dispatch_state")) or _flag_enabled(state.get("dispatch_in_gateway")):
         _add(blocked_reasons, "dispatch is enabled")
-    if _safe_int(state.get("active_lane_count")) > _safe_int(state.get("max_active_lane"), default=1):
+    split_lane_policy_present = _safe_bool(state.get("split_lane_policy_present"))
+    active_read_only_lane_count = _safe_int(state.get("active_read_only_lane_count"))
+    max_read_only_lanes = _safe_int(state.get("max_read_only_lanes"), default=2) or 2
+    active_mutation_lane_count = _safe_int(state.get("active_mutation_lane_count"))
+    max_mutation_lanes = _safe_int(state.get("max_mutation_lanes"), default=1) or 1
+    active_unknown_lane_count = _safe_int(state.get("active_unknown_lane_count"))
+    if split_lane_policy_present:
+        if active_read_only_lane_count > max_read_only_lanes:
+            _add(blocked_reasons, "active read-only lane count exceeds configured maximum")
+        if active_mutation_lane_count > max_mutation_lanes:
+            _add(blocked_reasons, "active mutation lane count exceeds configured maximum")
+        if active_unknown_lane_count > 0:
+            _add(blocked_reasons, "active lane classification is unknown")
+    elif _safe_int(state.get("active_lane_count")) > _safe_int(state.get("max_active_lane"), default=1):
         _add(blocked_reasons, "active lane count exceeds configured maximum")
 
     if not statuses and not blocked_reasons:
@@ -572,6 +588,17 @@ def evaluate_runtime_provenance(observed_state: dict[str, Any] | None = None) ->
         "default_branch_head": default_branch_head,
         "latest_merged_pr": latest_merged_pr,
         "merged_prs_after_accepted_baseline": merged_prs_after_baseline,
+        "active_lane_count": _safe_int(state.get("active_lane_count")),
+        "max_active_lane": _safe_int(state.get("max_active_lane"), default=1) or 1,
+        "split_lane_policy_present": split_lane_policy_present,
+        "active_read_only_lane_count": active_read_only_lane_count,
+        "max_read_only_lanes": max_read_only_lanes,
+        "active_mutation_lane_count": active_mutation_lane_count,
+        "max_mutation_lanes": max_mutation_lanes,
+        "active_unknown_lane_count": active_unknown_lane_count,
+        "read_only_concurrency_supported": _safe_bool(state.get("read_only_concurrency_supported")) or split_lane_policy_present,
+        "read_only_concurrency_policy": _safe_text(state.get("read_only_concurrency_policy") or "max_2_supervised_read_only_lanes"),
+        "mutation_lane_policy": _safe_text(state.get("mutation_lane_policy") or "max_1_active_mutation_lane"),
         "runtimes": runtimes,
         "dry_run_only": True,
         "enforces_runtime": False,
@@ -832,7 +859,16 @@ def evaluate_read_only_autonomy_eligibility(observed_state: dict[str, Any] | Non
     _check_capabilities(capabilities, blocked)
     _check_preview_disabled_flags(blocked, state, run, lane)
 
-    if _safe_int(state.get("active_mutation_lane_count")) > 0:
+    active_read_only_lane_count = _safe_int(state.get("active_read_only_lane_count"))
+    max_read_only_lanes = _safe_int(state.get("max_read_only_lanes"), default=2) or 2
+    active_mutation_lane_count = _safe_int(state.get("active_mutation_lane_count"))
+    max_mutation_lanes = _safe_int(state.get("max_mutation_lanes"), default=1) or 1
+    active_unknown_lane_count = _safe_int(state.get("active_unknown_lane_count"))
+    if active_read_only_lane_count > max_read_only_lanes:
+        _add(blocked, "active read-only lane count exceeds configured maximum")
+    if active_unknown_lane_count > 0:
+        _add(blocked, "active lane classification is unknown")
+    if active_mutation_lane_count > 0:
         _add(blocked, "active mutation lane count must be 0")
     if bridge["permission_classification"] in {"write_capable", "unsafe_for_autonomy", "write_capable_not_safe_for_autonomy", "unknown_blocked"}:
         _add(blocked, "bridge path is not read-only safe")
@@ -849,6 +885,14 @@ def evaluate_read_only_autonomy_eligibility(observed_state: dict[str, Any] | Non
         "blocked_reasons": blocked,
         "warnings": warnings,
         "runtime_provenance": provenance,
+        "active_read_only_lane_count": active_read_only_lane_count,
+        "max_read_only_lanes": max_read_only_lanes,
+        "active_mutation_lane_count": active_mutation_lane_count,
+        "max_mutation_lanes": max_mutation_lanes,
+        "active_unknown_lane_count": active_unknown_lane_count,
+        "read_only_concurrency_supported": True,
+        "read_only_concurrency_policy": "max_2_supervised_read_only_lanes",
+        "mutation_lane_policy": "active_mutation_blocks_read_only_execution",
         "bridge_permissions": bridge,
         "tool_permissions": tool_permissions or {},
         "would_execute": False,
@@ -1013,6 +1057,12 @@ def build_execution_packet_preview(observed_state: dict[str, Any] | None = None)
         "blocked_reasons": blocked_reasons,
         "warnings": list(eligibility.get("warnings") or ()),
         "packet": packet,
+        "active_read_only_lane_count": _safe_int(state.get("active_read_only_lane_count")),
+        "max_read_only_lanes": _safe_int(state.get("max_read_only_lanes"), default=2) or 2,
+        "active_mutation_lane_count": _safe_int(state.get("active_mutation_lane_count")),
+        "max_mutation_lanes": _safe_int(state.get("max_mutation_lanes"), default=1) or 1,
+        "active_unknown_lane_count": _safe_int(state.get("active_unknown_lane_count")),
+        "read_only_concurrency_supported": True,
         "display_only": True,
         "trusted_for_execution": one_run_authorized,
         "one_run_authorized": one_run_authorized,

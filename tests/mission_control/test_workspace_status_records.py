@@ -113,6 +113,31 @@ def _forbidden_actions() -> tuple[str, ...]:
     )
 
 
+def _append_active_run(
+    store: JsonlRecordStore,
+    run_id: str,
+    *,
+    lane_type: str,
+    execution_mode: str = "manual_copy",
+    dispatch_state: bool = False,
+) -> None:
+    store.append(
+        RunRecord(
+            run_id=run_id,
+            project_id="project-hermes-mission-control",
+            lane_type=lane_type,
+            title=run_id,
+            objective="status projection test",
+            status="requested",
+            execution_mode=execution_mode,
+            dispatch_state=dispatch_state,
+            forbidden_actions=_forbidden_actions(),
+            baseline_runtime_path="/runtime/accepted",
+            baseline_head=HEAD,
+        )
+    )
+
+
 def test_record_sourced_workspace_status_uses_latest_baseline_and_idle_when_no_runs(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"
     store = JsonlRecordStore(records_path)
@@ -145,8 +170,15 @@ def test_record_sourced_workspace_status_uses_latest_baseline_and_idle_when_no_r
     assert status["rollback_baseline"]["head"] == "d7d1e0d758a64783f4de435f06450be218e8a2bf"
     assert status["lane"]["active_lane"] == ""
     assert status["lane"]["active_lane_count"] == 0
+    assert status["lane"]["active_read_only_lane_count"] == 0
+    assert status["lane"]["active_mutation_lane_count"] == 0
+    assert status["lane"]["max_read_only_lanes"] == 2
+    assert status["lane"]["max_mutation_lanes"] == 1
+    assert status["lane"]["read_only_concurrency_supported"] is True
     assert status["activity"]["active_runs"] == 0
     assert status["control_plane_records"]["active_run_count"] == 0
+    assert status["control_plane_records"]["active_read_only_lane_count"] == 0
+    assert status["control_plane_records"]["active_mutation_lane_count"] == 0
     assert status["record_store"]["status"] == "ok"
     assert status["tool_permission_classification"]["permission_classification"] == "write_capable_not_safe_for_autonomy"
     assert "accepted_baseline_source_missing" not in status["stale_context"]["warnings"]
@@ -163,6 +195,101 @@ def test_record_sourced_workspace_status_uses_latest_baseline_and_idle_when_no_r
     assert "live deploy" in hard_boundary["forbidden_actions"]
     assert "9121 /api/status gate" in hard_boundary["forbidden_actions"]
     assert "PR merge" in hard_boundary["separate_approval_actions"]
+
+
+def test_record_sourced_workspace_status_allows_two_active_read_only_lanes(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(_reconciled_baseline_record())
+    _append_active_run(
+        store,
+        "run-read-only-a",
+        lane_type="supervised_read_only_status_report",
+        execution_mode="one_run_read_only",
+    )
+    _append_active_run(
+        store,
+        "run-read-only-b",
+        lane_type="read_only_execution",
+        execution_mode="one_run_read_only",
+    )
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    assert status["runtime_provenance"]["primary_status"] == "CLEAN_AND_ALIGNED"
+    assert status["runtime_provenance"]["autonomy_blocked"] is False
+    assert status["lane"]["active_lane_count"] == 2
+    assert status["lane"]["active_read_only_lane_count"] == 2
+    assert status["lane"]["active_mutation_lane_count"] == 0
+    assert status["lane"]["active_unknown_lane_count"] == 0
+    assert status["lane"]["max_read_only_lanes"] == 2
+    assert status["lane"]["lane_status"] == "within_limit"
+    assert status["control_plane_records"]["active_read_only_lane_count"] == 2
+    assert status["control_plane_records"]["active_mutation_lane_count"] == 0
+    assert status["run_lifecycle"]["active_read_only_lane_count"] == 2
+    assert status["run_lifecycle"]["active_read_only_run_ids"] == ["run-read-only-a", "run-read-only-b"]
+    assert status["execution_packet_preview"]["active_read_only_lane_count"] == 2
+    assert "active lane count exceeds configured maximum" not in status["runtime_provenance"]["autonomy_blocked_reasons"]
+
+
+def test_record_sourced_workspace_status_blocks_third_active_read_only_lane(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(_reconciled_baseline_record())
+    for suffix in ("a", "b", "c"):
+        _append_active_run(
+            store,
+            f"run-read-only-{suffix}",
+            lane_type="supervised_read_only_status_report",
+            execution_mode="one_run_read_only",
+        )
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    assert status["lane"]["active_read_only_lane_count"] == 3
+    assert status["lane"]["lane_status"] == "read_only_exceeds_limit"
+    assert status["runtime_provenance"]["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
+    assert "active read-only lane count exceeds configured maximum" in status["runtime_provenance"]["autonomy_blocked_reasons"]
+    assert "active_read_only_lane_count_exceeds_max" in status["stale_context"]["warnings"]
+    assert "active read-only lane count exceeds configured maximum" in status["run_lifecycle"]["blocked_reasons"]
+
+
+def test_record_sourced_workspace_status_classifies_write_capable_lanes_as_mutation_not_read_only(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(_reconciled_baseline_record())
+    _append_active_run(store, "run-impl", lane_type="implementation")
+    _append_active_run(store, "run-pr", lane_type="pr_creation")
+    _append_active_run(store, "run-deploy", lane_type="deploy")
+    _append_active_run(store, "run-dispatch", lane_type="read_only_inspection", dispatch_state=True)
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    assert status["lane"]["active_read_only_lane_count"] == 0
+    assert status["lane"]["active_mutation_lane_count"] == 4
+    assert status["lane"]["lane_status"] == "mutation_exceeds_limit"
+    assert status["control_plane_lifecycle"]["active_lane_classes"]["run-pr"] == "scoped_pr_creation"
+    assert status["control_plane_lifecycle"]["active_lane_classes"]["run-deploy"] == "deploy"
+    assert status["control_plane_lifecycle"]["active_lane_classes"]["run-dispatch"] == "mutation"
+    assert status["runtime_provenance"]["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
+    assert "active mutation lane count exceeds configured maximum" in status["runtime_provenance"]["autonomy_blocked_reasons"]
+    assert "active mutation lane count exceeds one" in status["run_lifecycle"]["blocked_reasons"]
+
+
+def test_record_sourced_workspace_status_blocks_unknown_active_lane(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(_reconciled_baseline_record())
+    _append_active_run(store, "run-unknown", lane_type="mystery_lane")
+
+    status = build_workspace_status_from_records(records_path=records_path)
+
+    assert status["lane"]["active_unknown_lane_count"] == 1
+    assert status["lane"]["lane_status"] == "unknown_blocked"
+    assert status["control_plane_lifecycle"]["active_lane_classes"]["run-unknown"] == "unknown_blocked"
+    assert status["runtime_provenance"]["status"] == "BLOCKED_UNSAFE_FOR_AUTONOMY"
+    assert "active lane classification is unknown" in status["runtime_provenance"]["autonomy_blocked_reasons"]
+    assert "active lane classification is unknown" in status["run_lifecycle"]["blocked_reasons"]
 
 
 def test_record_sourced_workspace_status_projects_reconciled_runtime_facts(tmp_path):

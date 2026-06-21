@@ -108,6 +108,7 @@ MUTATION_LANE_TYPES = {
     "implementation",
     "pr_creation",
     "deploy",
+    "restart",
     "runtime_switch",
     "payment",
     "waha",
@@ -123,6 +124,37 @@ READ_ONLY_PREVIEW_LANE_TYPES = {
     "read_only_status_report",
     "supervised_read_only_status_report",
 }
+READ_ONLY_EXECUTION_LANE_TYPES = {
+    "read_only_execution",
+    "supervised_read_only",
+    "supervised_read_only_execution",
+}
+SCOPED_PR_LANE_TYPES = {"pr_creation", "scoped_pr", "scoped_pr_creation"}
+DEPLOYMENT_LANE_TYPES = {"deploy", "restart", "runtime_switch"}
+EXTERNAL_SIDE_EFFECT_LANE_TYPES = {
+    "payment",
+    "waha",
+    "social_post",
+    "model_routing",
+    "queue_mutation",
+    "worker_timer_enablement",
+}
+READ_ONLY_LANE_CLASSIFICATIONS = {
+    "supervised_read_only",
+    "read_only_preview",
+    "read_only_execution",
+}
+MUTATION_LANE_CLASSIFICATIONS = {
+    "implementation",
+    "scoped_pr_creation",
+    "mutation",
+    "deploy",
+    "restart",
+    "runtime_switch",
+    "external_side_effect",
+}
+DEFAULT_MAX_READ_ONLY_LANES = 2
+DEFAULT_MAX_MUTATION_LANES = 1
 READ_ONLY_PREVIEW_REPORT_KINDS = {
     "preview_readiness",
     "read_only_preview_contract",
@@ -212,6 +244,37 @@ def default_record_store_path() -> Path:
     return get_hermes_home() / "mission-control" / "records.jsonl"
 
 
+def classify_run_lane(record: RunRecord) -> str:
+    """Classify an active lane for concurrency policy without trusting labels broadly."""
+
+    metadata = record.metadata if isinstance(record.metadata, dict) else {}
+    lane_type = _safe_text(record.lane_type).lower()
+    execution_mode = _safe_text(record.execution_mode).lower()
+    action_class = _safe_text(metadata.get("action_class")).lower()
+    lane_class = _safe_text(metadata.get("lane_class") or metadata.get("lane_policy_class")).lower()
+    terms = {term for term in (lane_type, execution_mode, action_class, lane_class) if term}
+
+    if record.dispatch_state is True:
+        return "mutation"
+    if terms & DEPLOYMENT_LANE_TYPES:
+        if "restart" in terms:
+            return "restart"
+        if "runtime_switch" in terms:
+            return "runtime_switch"
+        return "deploy"
+    if terms & EXTERNAL_SIDE_EFFECT_LANE_TYPES:
+        return "external_side_effect"
+    if terms & SCOPED_PR_LANE_TYPES:
+        return "scoped_pr_creation"
+    if terms & MUTATION_LANE_TYPES or "implementation" in terms:
+        return "implementation" if "implementation" in terms else "mutation"
+    if terms & READ_ONLY_EXECUTION_LANE_TYPES:
+        return "read_only_execution" if "read_only_execution" in terms else "supervised_read_only"
+    if terms & READ_ONLY_PREVIEW_LANE_TYPES or any(term.startswith("read_only") for term in terms):
+        return "read_only_preview"
+    return "unknown_blocked"
+
+
 def build_workspace_status_from_records(
     payload: dict[str, Any] | None = None,
     *,
@@ -289,10 +352,17 @@ def build_workspace_status_from_records(
 
     reports_by_id, reports_by_run_id = _report_lookup_maps(recent_reports)
     active_runs = tuple(record for record in recent_runs if record.status in ACTIVE_RUN_STATUSES)
+    active_lane_classes = {record.run_id: classify_run_lane(record) for record in active_runs}
+    active_read_only_runs = tuple(
+        record for record in active_runs if active_lane_classes.get(record.run_id) in READ_ONLY_LANE_CLASSIFICATIONS
+    )
+    active_unknown_runs = tuple(
+        record for record in active_runs if active_lane_classes.get(record.run_id) == "unknown_blocked"
+    )
     active_mutation_runs = tuple(
         record
         for record in active_runs
-        if record.lane_type in MUTATION_LANE_TYPES or record.dispatch_state is True
+        if active_lane_classes.get(record.run_id) in MUTATION_LANE_CLASSIFICATIONS or record.dispatch_state is True
     )
     latest_active_run = active_runs[-1] if active_runs else None
     duplicate_approval_ids = _duplicate_record_ids(recent_approvals_raw, "approval_id")
@@ -349,7 +419,11 @@ def build_workspace_status_from_records(
             ),
             "report_record_ready": read_only_preview_report_ready,
             "report": report_for_eligibility,
+            "active_read_only_lane_count": len(active_read_only_runs),
             "active_mutation_lane_count": len(active_mutation_runs),
+            "active_unknown_lane_count": len(active_unknown_runs),
+            "max_read_only_lanes": DEFAULT_MAX_READ_ONLY_LANES,
+            "max_mutation_lanes": DEFAULT_MAX_MUTATION_LANES,
         }
         if latest_read_only_preview_run is not None:
             if not isinstance(base_autonomy_input.get("bridge"), dict):
@@ -367,12 +441,35 @@ def build_workspace_status_from_records(
                 "mode": latest_active_run.execution_mode,
                 "declared_baseline_head": latest_active_run.baseline_head or latest_baseline.get("head", ""),
                 "active_lane_count": len(active_runs),
+                "active_read_only_lane_count": len(active_read_only_runs),
+                "active_mutation_lane_count": len(active_mutation_runs),
+                "active_unknown_lane_count": len(active_unknown_runs),
+                "max_read_only_lanes": DEFAULT_MAX_READ_ONLY_LANES,
+                "max_mutation_lanes": DEFAULT_MAX_MUTATION_LANES,
+                "read_only_concurrency_supported": True,
+                "read_only_concurrency_policy": "max_2_supervised_read_only_lanes",
+                "mutation_lane_policy": "max_1_active_mutation_lane",
             },
         )
         status_input["autonomy_eligibility"] = _merge_status_input(
             base_autonomy_input,
             autonomy_eligibility_input,
         )
+    status_input["lane"] = _merge_status_input(
+        status_input.get("lane") if isinstance(status_input.get("lane"), dict) else {},
+        {
+            "active_lane_count": len(active_runs),
+            "active_read_only_lane_count": len(active_read_only_runs),
+            "active_mutation_lane_count": len(active_mutation_runs),
+            "active_unknown_lane_count": len(active_unknown_runs),
+            "max_read_only_lanes": DEFAULT_MAX_READ_ONLY_LANES,
+            "max_mutation_lanes": DEFAULT_MAX_MUTATION_LANES,
+            "read_only_concurrency_supported": True,
+            "read_only_concurrency_policy": "max_2_supervised_read_only_lanes",
+            "mutation_lane_policy": "max_1_active_mutation_lane",
+            "split_lane_policy_present": True,
+        },
+    )
     status_input["activity"] = _merge_status_input(
         status_input.get("activity") if isinstance(status_input.get("activity"), dict) else {},
         {"active_runs": len(active_runs)},
@@ -381,7 +478,10 @@ def build_workspace_status_from_records(
         approvals=recent_approvals,
         runs=recent_runs,
         reports=recent_reports,
+        active_lane_classes=active_lane_classes,
+        active_read_only_lane_count=len(active_read_only_runs),
         active_mutation_lane_count=len(active_mutation_runs),
+        active_unknown_lane_count=len(active_unknown_runs),
     )
 
     active_child_runs = tuple(record for record in recent_child_runs if record.status in ACTIVE_ORCHESTRATION_STATUSES)
@@ -397,7 +497,9 @@ def build_workspace_status_from_records(
         approval_record_count_for_id=latest_approval_record_count,
         run_record_count_for_id=latest_run_record_count,
         duplicate_approval_ids=duplicate_approval_ids,
+        active_read_only_lane_count=len(active_read_only_runs),
         active_mutation_lane_count=len(active_mutation_runs),
+        active_unknown_lane_count=len(active_unknown_runs),
         active_worker_runs=active_worker_runs,
     )
 
@@ -438,7 +540,10 @@ def build_workspace_status_from_records(
         runs=recent_runs,
         raw_runs=recent_runs_raw,
         reports=recent_reports,
+        active_lane_classes=active_lane_classes,
+        active_read_only_lane_count=len(active_read_only_runs),
         active_mutation_lane_count=len(active_mutation_runs),
+        active_unknown_lane_count=len(active_unknown_runs),
     )
     status["report_lifecycle"] = _report_lifecycle_payload(
         reports=recent_reports,
@@ -461,6 +566,11 @@ def build_workspace_status_from_records(
             1 for record in recent_approvals if record.status in AVAILABLE_APPROVAL_STATUSES
         ),
         "active_mutation_lane_count": len(active_mutation_runs),
+        "active_read_only_lane_count": len(active_read_only_runs),
+        "active_unknown_lane_count": len(active_unknown_runs),
+        "max_read_only_lanes": DEFAULT_MAX_READ_ONLY_LANES,
+        "max_mutation_lanes": DEFAULT_MAX_MUTATION_LANES,
+        "read_only_concurrency_supported": True,
         "active_child_run_count": len(active_child_runs),
         "active_worker_node_run_count": len(active_worker_runs),
     }
@@ -687,7 +797,7 @@ def _record_execution_mode_classification_input(
         mode = "worker_node"
     elif lane_type in {"pr_creation", "scoped_pr"}:
         mode = "scoped_pr"
-    elif lane_type in READ_ONLY_PREVIEW_LANE_TYPES or lane_type.startswith("read_only"):
+    elif lane_type in READ_ONLY_PREVIEW_LANE_TYPES or lane_type in READ_ONLY_EXECUTION_LANE_TYPES or lane_type.startswith("read_only"):
         mode = "read_only"
     else:
         mode = _safe_text(run_payload.get("execution_mode"))
@@ -715,7 +825,9 @@ def _record_execution_packet_preview_input(
     approval_record_count_for_id: int,
     run_record_count_for_id: int,
     duplicate_approval_ids: list[str],
+    active_read_only_lane_count: int,
     active_mutation_lane_count: int,
+    active_unknown_lane_count: int,
     active_worker_runs: tuple[WorkerNodeRunRecord, ...],
 ) -> dict[str, Any]:
     worker = active_worker_runs[-1] if active_worker_runs else None
@@ -731,7 +843,7 @@ def _record_execution_packet_preview_input(
         mode = "worker_node"
     elif lane_type in {"pr_creation", "scoped_pr"}:
         mode = "scoped_pr"
-    elif lane_type in READ_ONLY_PREVIEW_LANE_TYPES or lane_type.startswith("read_only"):
+    elif lane_type in READ_ONLY_PREVIEW_LANE_TYPES or lane_type in READ_ONLY_EXECUTION_LANE_TYPES or lane_type.startswith("read_only"):
         mode = "read_only"
     else:
         mode = "blocked"
@@ -766,7 +878,11 @@ def _record_execution_packet_preview_input(
             "review_required": contract_required,
             "result_summary_required": contract_required,
         },
+        "active_read_only_lane_count": active_read_only_lane_count,
         "active_mutation_lane_count": active_mutation_lane_count,
+        "active_unknown_lane_count": active_unknown_lane_count,
+        "max_read_only_lanes": DEFAULT_MAX_READ_ONLY_LANES,
+        "max_mutation_lanes": DEFAULT_MAX_MUTATION_LANES,
     }
 
 
@@ -808,15 +924,29 @@ def _control_plane_lifecycle_payload(
     approvals: tuple[ApprovalRecord, ...],
     runs: tuple[RunRecord, ...],
     reports: tuple[ReportRecord, ...],
+    active_lane_classes: dict[str, str],
+    active_read_only_lane_count: int,
     active_mutation_lane_count: int,
+    active_unknown_lane_count: int,
 ) -> dict[str, Any]:
+    class_counts: dict[str, int] = {}
+    for lane_class in active_lane_classes.values():
+        class_counts[lane_class] = class_counts.get(lane_class, 0) + 1
     return {
         **INERT_PROJECTION_FLAGS,
         "source": "mission_control_records_jsonl",
         "latest_approvals_by_id": _latest_by_id(approvals, "approval_id"),
         "latest_runs_by_id": _latest_by_id(runs, "run_id"),
         "latest_reports_by_id": _latest_by_id(reports, "report_id"),
+        "active_lane_classes": dict(active_lane_classes),
+        "active_lane_classification_counts": class_counts,
+        "active_read_only_lane_count": active_read_only_lane_count,
         "active_mutation_lane_count": active_mutation_lane_count,
+        "active_unknown_lane_count": active_unknown_lane_count,
+        "max_read_only_lanes": DEFAULT_MAX_READ_ONLY_LANES,
+        "max_mutation_lanes": DEFAULT_MAX_MUTATION_LANES,
+        "read_only_concurrency_policy": "max_2_supervised_read_only_lanes",
+        "mutation_lane_policy": "max_1_active_mutation_lane",
         "append_only_projection": True,
     }
 
@@ -932,11 +1062,16 @@ def _run_lifecycle_payload(
     runs: tuple[RunRecord, ...],
     raw_runs: tuple[RunRecord, ...],
     reports: tuple[ReportRecord, ...],
+    active_lane_classes: dict[str, str],
+    active_read_only_lane_count: int,
     active_mutation_lane_count: int,
+    active_unknown_lane_count: int,
 ) -> dict[str, Any]:
     status_counts: dict[str, int] = {}
     active_run_ids: list[str] = []
+    active_read_only_run_ids: list[str] = []
     active_mutation_run_ids: list[str] = []
+    active_unknown_run_ids: list[str] = []
     terminal_run_ids: list[str] = []
     stop_cancel_run_ids: list[str] = []
     runs_by_status: dict[str, list[str]] = {}
@@ -950,7 +1085,15 @@ def _run_lifecycle_payload(
         runs_by_status.setdefault(status, []).append(run.run_id)
         if status in ACTIVE_RUN_STATUSES:
             active_run_ids.append(run.run_id)
-        if status in ACTIVE_RUN_STATUSES and (run.lane_type in MUTATION_LANE_TYPES or run.dispatch_state is True):
+            lane_class = active_lane_classes.get(run.run_id, classify_run_lane(run))
+            if lane_class in READ_ONLY_LANE_CLASSIFICATIONS:
+                active_read_only_run_ids.append(run.run_id)
+            elif lane_class == "unknown_blocked":
+                active_unknown_run_ids.append(run.run_id)
+        if status in ACTIVE_RUN_STATUSES and (
+            active_lane_classes.get(run.run_id, classify_run_lane(run)) in MUTATION_LANE_CLASSIFICATIONS
+            or run.dispatch_state is True
+        ):
             active_mutation_run_ids.append(run.run_id)
         if status in RUN_TERMINAL_STATUSES:
             terminal_run_ids.append(run.run_id)
@@ -967,8 +1110,12 @@ def _run_lifecycle_payload(
     blocked_reasons: list[str] = []
     for run_id in run_update_conflicts:
         blocked_reasons.append(f"run_id {run_id} has multiple append-only records")
-    if active_mutation_lane_count > 1:
+    if active_read_only_lane_count > DEFAULT_MAX_READ_ONLY_LANES:
+        blocked_reasons.append("active read-only lane count exceeds configured maximum")
+    if active_mutation_lane_count > DEFAULT_MAX_MUTATION_LANES:
         blocked_reasons.append("active mutation lane count exceeds one")
+    if active_unknown_lane_count > 0:
+        blocked_reasons.append("active lane classification is unknown")
     for run_id in terminal_runs_missing_report:
         blocked_reasons.append(f"terminal run_id {run_id} has no linked report")
     for run_id, missing_report_ids in terminal_runs_with_missing_linked_report_ids.items():
@@ -983,9 +1130,20 @@ def _run_lifecycle_payload(
         "status_counts": status_counts,
         "runs_by_status": runs_by_status,
         "active_run_ids": active_run_ids,
+        "active_read_only_run_ids": active_read_only_run_ids,
         "active_mutation_run_ids": active_mutation_run_ids,
+        "active_unknown_run_ids": active_unknown_run_ids,
+        "active_lane_classes": dict(active_lane_classes),
+        "active_read_only_lane_count": active_read_only_lane_count,
         "active_mutation_lane_count": active_mutation_lane_count,
-        "one_active_mutation_lane_rule_passed": active_mutation_lane_count <= 1,
+        "active_unknown_lane_count": active_unknown_lane_count,
+        "max_read_only_lanes": DEFAULT_MAX_READ_ONLY_LANES,
+        "max_mutation_lanes": DEFAULT_MAX_MUTATION_LANES,
+        "read_only_concurrency_supported": True,
+        "read_only_concurrency_policy": "max_2_supervised_read_only_lanes",
+        "mutation_lane_policy": "max_1_active_mutation_lane",
+        "read_only_lane_limit_passed": active_read_only_lane_count <= DEFAULT_MAX_READ_ONLY_LANES,
+        "one_active_mutation_lane_rule_passed": active_mutation_lane_count <= DEFAULT_MAX_MUTATION_LANES,
         "terminal_run_ids": terminal_run_ids,
         "stop_cancel_run_ids": stop_cancel_run_ids,
         "duplicate_run_ids": duplicate_run_ids,
