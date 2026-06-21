@@ -12,8 +12,10 @@ from typing import Any
 from mission_control.records import (
     ApprovalRecord,
     JsonlRecordStore,
+    ProjectRecord,
     ReportRecord,
     RunRecord,
+    SessionProjectLinkRecord,
 )
 from mission_control.records.models import RECORD_TYPES
 from mission_control.workspace_status_records import build_workspace_status_from_records, default_record_store_path
@@ -257,7 +259,12 @@ def run_once_if_trusted(
         status="accepted",
         report_kind=REPORT_RESULT_KIND,
         summary="Jenny supervised read-only status report completed without external side effects.",
-        result=_status_report_text(status, record_counts=_record_counts(store), current_run_id=run_id),
+        result=_status_report_text(
+            status,
+            record_counts=_record_counts(store),
+            current_run_id=run_id,
+            project_context=_project_context_summary(store, project_id),
+        ),
         blockers=tuple(status.get("operator_decision_packet", {}).get("blocked_reasons", ())[:8])
         if isinstance(status.get("operator_decision_packet"), dict)
         else (),
@@ -344,6 +351,7 @@ def _status_report_text(
     *,
     record_counts: dict[str, int],
     current_run_id: str,
+    project_context: dict[str, Any] | None = None,
 ) -> str:
     baseline = _mapping(status.get("accepted_baseline_record"))
     dashboard = _mapping(status.get("dashboard_runtime"))
@@ -355,11 +363,14 @@ def _status_report_text(
     states = _mapping(readiness.get("states"))
     packet = _mapping(status.get("execution_packet_preview"))
     packet_body = _mapping(packet.get("packet"))
+    project_context = _mapping(project_context)
     project_id = str(packet_body.get("project_id") or "")
-    project_name = str(packet_body.get("project_name") or "")
+    project_name = str(project_context.get("project_name") or packet_body.get("project_name") or "")
     project_label = project_id
     if project_name:
         project_label = f"{project_id} ({project_name})" if project_id else project_name
+    linked_session_count = _safe_int(project_context.get("linked_session_count"))
+    latest_project_reports = tuple(str(item) for item in project_context.get("latest_report_ids", ()) if item)
     active_runs = _safe_int(records.get("active_run_count"))
     active_run_ids = tuple(str(run_id) for run_id in run_lifecycle.get("active_run_ids", ()) if run_id)
     current_run_is_active = current_run_id in active_run_ids or (
@@ -378,6 +389,9 @@ def _status_report_text(
         [
             f"Operator summary: {summary}",
             f"Project context: {project_label or 'unavailable in execution packet'}",
+            f"Project linked sessions: {linked_session_count}",
+            "Project latest reports before run: "
+            + (", ".join(latest_project_reports) if latest_project_reports else "none"),
             f"Accepted runtime/head: {baseline.get('runtime_path', '')} {baseline.get('head', '')}",
             f"Dashboard runtime/head: {dashboard.get('path', '')} {dashboard.get('head', '')}",
             f"Gateway runtime/head: {gateway.get('path', '')} {gateway.get('head', '')}",
@@ -419,6 +433,28 @@ def _record_counts(store: JsonlRecordStore) -> dict[str, int]:
     counts = {"total": len(records)}
     counts.update({record_type: by_type.get(record_type, 0) for record_type in RECORD_TYPES})
     return counts
+
+
+def _project_context_summary(store: JsonlRecordStore, project_id: str) -> dict[str, Any]:
+    if not project_id:
+        return {}
+    records = store.read_all()
+    project_name = ""
+    linked_session_count = 0
+    latest_report_ids: list[str] = []
+    for record in records:
+        if isinstance(record, ProjectRecord) and record.project_id == project_id:
+            project_name = record.name
+        elif isinstance(record, SessionProjectLinkRecord) and record.project_id == project_id and record.status != "inactive":
+            linked_session_count += 1
+        elif isinstance(record, ReportRecord) and record.project_id == project_id:
+            latest_report_ids.append(record.report_id)
+    return {
+        "project_id": project_id,
+        "project_name": project_name,
+        "linked_session_count": linked_session_count,
+        "latest_report_ids": tuple(latest_report_ids[-3:]),
+    }
 
 
 def _blocked(reason: str, status: dict[str, Any]) -> dict[str, Any]:

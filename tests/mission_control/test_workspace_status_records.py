@@ -7,8 +7,10 @@ from mission_control.records import (
     ApprovalRecord,
     ChildRunRecord,
     JsonlRecordStore,
+    ProjectRecord,
     ReportRecord,
     RunRecord,
+    SessionProjectLinkRecord,
     WorkerNodeRunRecord,
 )
 from mission_control.read_only_status_report import build_record_set, run_once_if_trusted
@@ -600,6 +602,21 @@ def test_record_sourced_one_run_status_report_blocks_active_duplicate_approval(t
 def test_guarded_read_only_status_report_runs_once_and_closes_run(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"
     store = JsonlRecordStore(records_path)
+    store.append(
+        ProjectRecord(
+            project_id="project-hermes-mission-control",
+            name="Hermes / Mission Control",
+            status="active",
+        )
+    )
+    store.append(
+        SessionProjectLinkRecord(
+            link_id="link-hermes-session",
+            project_id="project-hermes-mission-control",
+            session_id="session-hermes",
+            status="active",
+        )
+    )
     store.append(_reconciled_baseline_record())
     record_set = build_record_set(
         head=HEAD,
@@ -630,12 +647,16 @@ def test_guarded_read_only_status_report_runs_once_and_closes_run(tmp_path):
     report = result["status_report"]
     assert "Operator summary: SAFE for this one supervised read-only status report" in report
     assert "Project context: project-hermes-mission-control (Hermes / Mission Control)" in report
+    assert "Project linked sessions: 1" in report
+    assert "Project latest reports before run: report-pr402-supervised-read-only-status-contract-runonce" in report
     assert "Accepted runtime/head: /runtime/accepted" in report
-    assert "Record counts: total=4" in report
+    assert "Record counts: total=6" in report
     assert "AcceptedBaselineRecord=1" in report
     assert "ApprovalRecord=1" in report
+    assert "ProjectRecord=1" in report
     assert "RunRecord=1" in report
     assert "ReportRecord=1" in report
+    assert "SessionProjectLinkRecord=1" in report
     assert "ApprovalSlice=0" in report
     assert "JennyReportRecord=0" in report
     assert "WorkerNodeRunRecord=0" in report
