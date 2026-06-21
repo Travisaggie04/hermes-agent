@@ -219,6 +219,98 @@ def _append_scoped_pr_preview_records(
     return approval_id, run_id, report_id
 
 
+def _append_scoped_pr_execution_records(store: JsonlRecordStore) -> tuple[str, str, str]:
+    approval_id = "approval-scoped-pr-execution"
+    run_id = "run-scoped-pr-execution"
+    report_id = "report-scoped-pr-execution-contract"
+    file_path = "docs/mission-control/jenny-engineering-orchestrator-runbook-2026-06-19.md"
+    actions = _forbidden_actions() + (
+        "secrets access",
+        "files outside exact scope",
+    )
+    store.append(
+        ApprovalRecord(
+            approval_id=approval_id,
+            project_id="project-hermes-mission-control",
+            run_id=run_id,
+            action_class="pr_creation",
+            approval_scope="project-hermes-mission-control:scoped-pr-draft:exact-docs-file",
+            approved_actions=("create exactly one docs-only draft PR",),
+            status="approved",
+            expires_at="2099-01-01T00:00:00Z",
+            forbidden_actions=actions,
+            metadata={
+                "files": [file_path],
+                "approved_files": [file_path],
+                "max_files": 1,
+                "max_commits": 1,
+                "max_prs": 1,
+            },
+        )
+    )
+    store.append(
+        RunRecord(
+            run_id=run_id,
+            project_id="project-hermes-mission-control",
+            approval_id=approval_id,
+            lane_type="pr_creation",
+            title="Scoped PR execution",
+            objective="Create exactly one docs-only draft PR and stop before merge.",
+            status="requested",
+            execution_mode="scoped_pr_draft",
+            allowed_actions=("create exactly one docs-only draft PR",),
+            forbidden_actions=actions,
+            baseline_runtime_path="/runtime/accepted",
+            baseline_head=HEAD,
+            report_ids=(report_id,),
+            metadata={
+                "scoped_pr_execution": True,
+                "draft_pr": True,
+                "runner_id": "mission_control_scoped_pr_draft_runner",
+                "branch_name": "codex/scoped-pr-docs-smoke-test",
+                "base_branch": "accepted-live/approval-safety-5ad8906",
+                "draft_pr_title": "docs: record scoped PR creation smoke test",
+                "edit_instruction": "Append a bounded scoped PR smoke-test note.",
+                "files": [file_path],
+                "allowed_files": [file_path],
+                "max_files": 1,
+                "max_commits": 1,
+                "max_prs": 1,
+            },
+        )
+    )
+    store.append(
+        ReportRecord(
+            report_id=report_id,
+            run_id=run_id,
+            approval_id=approval_id,
+            project_id="project-hermes-mission-control",
+            status="reviewed",
+            report_kind="scoped_pr_draft_execution_contract",
+            summary="Scoped PR execution report contract.",
+            result="Contract only: result must list branch, commit, draft PR URL, changed file, tests, and safety checks.",
+            risks=("Draft PR must remain unmerged until human review.",),
+            changed_files=(file_path,),
+            tests=("git diff --check",),
+            next_recommended_lane="Run the gated scoped PR draft runner once.",
+            evidence_refs=("exact docs file contract",),
+            reviewed_at="2026-06-21T00:00:00Z",
+            reviewed_by="operator",
+            metadata={
+                "tests_required": True,
+                "review_required": True,
+                "human_review_required": True,
+                "result_summary_required": True,
+                "safety_confirmation": (
+                    "Draft PR only; one docs file; no merge, deploy, restart, runtime switch, "
+                    "dispatch, session-send, worker dispatch, or secrets."
+                ),
+            },
+        )
+    )
+    return approval_id, run_id, report_id
+
+
 def _append_active_run(
     store: JsonlRecordStore,
     run_id: str,
@@ -2017,6 +2109,42 @@ def test_record_sourced_scoped_pr_preview_feeds_formal_readiness_projection(tmp_
     assert packet["trusted_for_execution"] is False
     assert packet["packet"].get("would_create_pr") is not True
     assert packet["packet"].get("would_write_files") is not True
+
+
+def test_record_sourced_scoped_pr_execution_records_authorize_draft_runner(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(_reconciled_baseline_record())
+    _append_scoped_pr_execution_records(store)
+
+    status = build_workspace_status_from_records(
+        {
+            "now": "2026-06-21T00:00:00Z",
+            "source_control": {"accepted_live_head": HEAD},
+        },
+        records_path=records_path,
+    )
+
+    preview = status["scoped_pr_lane_eligibility"]
+    execution = status["scoped_pr_execution_eligibility"]
+    assert preview["would_execute"] is False
+    assert preview["would_create_pr"] is False
+    assert execution["eligible"] is True
+    assert execution["trusted_for_execution"] is True
+    assert execution["one_run_authorized"] is True
+    assert execution["would_execute"] is True
+    assert execution["would_create_pr"] is True
+    assert execution["would_write_files"] is True
+    assert execution["dispatch_enabled"] is False
+    assert execution["session_send_enabled"] is False
+    assert execution["worker_dispatch_enabled"] is False
+    assert execution["merge_enabled"] is False
+    packet = execution["packet"]
+    assert packet["runner_id"] == "mission_control_scoped_pr_draft_runner"
+    assert packet["allowed_file"] == "docs/mission-control/jenny-engineering-orchestrator-runbook-2026-06-19.md"
+    assert packet["draft_pr_required"] is True
+    assert status["run_lifecycle"]["active_mutation_lane_count"] == 1
+    assert status["run_lifecycle"]["active_read_only_lane_count"] == 0
 
 
 def test_record_sourced_scoped_pr_preview_requires_report_contract(tmp_path):

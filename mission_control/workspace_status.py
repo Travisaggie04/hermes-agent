@@ -17,6 +17,7 @@ from mission_control.autonomy_eligibility import (
     classify_control_path_permissions,
     evaluate_read_only_autonomy_eligibility,
     evaluate_runtime_provenance,
+    evaluate_scoped_pr_execution_eligibility,
     evaluate_scoped_pr_lane_eligibility,
 )
 from mission_control.runtime_worktree_guard import evaluate_runtime_worktree_guard
@@ -295,6 +296,28 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
             },
         )
     )
+    scoped_pr_execution_eligibility = evaluate_scoped_pr_execution_eligibility(
+        _merge_dicts(
+            _section(source, "scoped_pr_execution_eligibility"),
+            {
+                "runtime_provenance": runtime_provenance,
+                "active_read_only_lane_count": _safe_int(
+                    lane.get("active_read_only_lane_count"),
+                    default=_safe_int(_section(source, "control_plane_lifecycle").get("active_read_only_lane_count"), default=0),
+                ),
+                "active_mutation_lane_count": _safe_int(
+                    _section(source, "control_plane_lifecycle").get("active_mutation_lane_count"),
+                    default=0,
+                ),
+                "active_unknown_lane_count": _safe_int(
+                    lane.get("active_unknown_lane_count"),
+                    default=_safe_int(_section(source, "control_plane_lifecycle").get("active_unknown_lane_count"), default=0),
+                ),
+                "max_mutation_lanes": _safe_int(lane.get("max_mutation_lanes"), default=1) or 1,
+                "now": _safe_text(source.get("now")),
+            },
+        )
+    )
     tool_permission_classification = classify_control_path_permissions(_section(source, "tool_permissions"))
     execution_mode_classification = classify_execution_mode(
         _execution_mode_classification_input(source=source)
@@ -401,6 +424,7 @@ def build_workspace_status(payload: dict[str, Any] | None = None) -> dict[str, A
         "runtime_provenance": runtime_provenance,
         "read_only_autonomy_eligibility": read_only_autonomy_eligibility,
         "scoped_pr_lane_eligibility": scoped_pr_lane_eligibility,
+        "scoped_pr_execution_eligibility": scoped_pr_execution_eligibility,
         "tool_permission_classification": tool_permission_classification,
         "execution_mode_classification": execution_mode_classification,
         "execution_packet_preview": execution_packet_preview,
