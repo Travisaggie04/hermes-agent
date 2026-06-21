@@ -1659,6 +1659,7 @@ def test_project_session_projection_counts_links_outside_recent_session_window(p
             session_id="session-older",
             lineage_root_id="root-older",
             status="active",
+            title_snapshot="Older linked Hermes chat",
             linked_at="2026-06-12T00:02:00Z",
         )
     )
@@ -1686,13 +1687,17 @@ def test_project_session_projection_counts_links_outside_recent_session_window(p
     assert grouped_payload["active_link_count"] == 2
     assert groups["project-hermes"]["linked_session_count"] == 2
     assert set(groups["project-hermes"]["linked_session_ids"]) == {"root-recent", "root-older"}
-    assert [session["session_id"] for session in groups["project-hermes"]["sessions"]] == ["session-recent"]
+    assert [session["session_id"] for session in groups["project-hermes"]["sessions"]] == ["session-recent", "session-older"]
+    fallback = groups["project-hermes"]["sessions"][1]
+    assert fallback["title"] == "Older linked Hermes chat"
+    assert fallback["source"] == "mission-control-link"
+    assert fallback["link_record"]["link_id"] == "older-link"
 
     state = client.get("/api/plugins/mission-control-governance/workspace/project-state")
     assert state.status_code == 200
     states = {item["project_id"]: item for item in state.json()["project_states"]}
     assert states["project-hermes"]["linked_session_count"] == 2
-    assert [session["session_id"] for session in states["project-hermes"]["recent_sessions"]] == ["session-recent"]
+    assert [session["session_id"] for session in states["project-hermes"]["recent_sessions"]] == ["session-recent", "session-older"]
 
 
 def test_project_session_projection_limit_controls_visible_rows(plugin_api, client, monkeypatch):

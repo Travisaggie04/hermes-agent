@@ -220,6 +220,8 @@ function ensureNativeProjectSessionLink(storedSessionId: string | null, preview?
     return
   }
 
+  nativeProjectSessionLinkCache.add(cacheKey)
+
   const projectName = $selectedMissionControlProjectName.get().trim() || projectId
 
   createMissionControlSessionProjectLink({
@@ -234,10 +236,10 @@ function ensureNativeProjectSessionLink(storedSessionId: string | null, preview?
     title_snapshot: preview?.trim() || undefined
   })
     .then(() => {
-      nativeProjectSessionLinkCache.add(cacheKey)
       notifyMissionControlProjectLinkCreated({ projectId, sessionId })
     })
     .catch(() => {
+      nativeProjectSessionLinkCache.delete(cacheKey)
       notifyNativeProjectFilingSkipped(projectName)
     })
 }

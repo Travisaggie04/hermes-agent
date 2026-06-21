@@ -1341,6 +1341,43 @@ def _session_projection_payload(session: dict[str, Any], *, link: dict[str, Any]
     }
 
 
+def _link_timestamp(link: dict[str, Any]) -> float:
+    linked_at = str(link.get("linked_at") or "").strip()
+    if linked_at:
+        try:
+            return datetime.fromisoformat(linked_at.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            pass
+    return time.time()
+
+
+def _session_link_projection_payload(link: dict[str, Any]) -> dict[str, Any]:
+    durable_id = str(link.get("durable_session_id") or link.get("lineage_root_id") or link.get("session_id") or "")
+    session_id = str(link.get("session_id") or durable_id or "")
+    title = str(link.get("title_snapshot") or "").strip() or "Linked chat"
+    profile = str(link.get("profile") or "default").strip() or "default"
+    linked_at = _link_timestamp(link)
+
+    return {
+        "session_id": session_id,
+        "durable_session_id": durable_id,
+        "lineage_root_id": str(link.get("lineage_root_id") or durable_id or ""),
+        "profile": profile,
+        "is_default_profile": profile == "default",
+        "source": link.get("source") or "mission-control-link",
+        "title": title,
+        "preview": "",
+        "cwd": link.get("cwd_snapshot") or "",
+        "started_at": linked_at,
+        "last_active": linked_at,
+        "message_count": 0,
+        "tool_call_count": 0,
+        "linked_project_id": link.get("project_id", ""),
+        "link_record": link,
+        "suggested_project_id": "",
+    }
+
+
 def _suggest_project_id_for_session(session: dict[str, Any]) -> str:
     profile = str(session.get("profile") or "").lower()
     cwd = str(session.get("cwd") or "").lower()
@@ -1458,6 +1495,19 @@ def _project_sessions_projection(limit: int) -> dict[str, Any]:
         unassigned["sessions"].append(payload)
         if payload["suggested_project_id"]:
             unassigned["unassigned_suggestion_count"] += 1
+    loaded_project_session_ids = {
+        session["durable_session_id"]
+        for group in groups
+        for session in group["sessions"]
+        if session.get("durable_session_id")
+    }
+    for durable, link_item in active_links.items():
+        if durable in loaded_project_session_ids:
+            continue
+        link = link_item.get("record", {})
+        project_id = link.get("project_id", "")
+        if project_id in by_project:
+            by_project[project_id]["sessions"].append(_session_link_projection_payload(link))
     for group in groups:
         group["linked_session_ids"] = linked_session_ids_by_project.get(group["project_id"], [])
         group["linked_session_count"] = linked_counts_by_project.get(group["project_id"], len(group["sessions"]))

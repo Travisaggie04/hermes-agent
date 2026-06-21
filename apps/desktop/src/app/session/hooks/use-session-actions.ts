@@ -2,11 +2,10 @@ import type { MutableRefObject } from 'react'
 import { useCallback, useRef } from 'react'
 import type { NavigateFunction } from 'react-router-dom'
 
-import { createMissionControlSessionProjectLink, deleteSession, getSessionMessages, setSessionArchived } from '@/hermes'
+import { deleteSession, getSessionMessages, setSessionArchived } from '@/hermes'
 import { type ChatMessage, chatMessageText, preserveLocalAssistantErrors, toChatMessages } from '@/lib/chat-messages'
 import { normalizePersonalityValue } from '@/lib/chat-runtime'
 import { embeddedImageUrls, textWithoutEmbeddedImages } from '@/lib/embedded-images'
-import { notifyMissionControlProjectLinkCreated } from '@/lib/mission-control-events'
 import { setSessionYolo } from '@/lib/yolo-session'
 import { clearComposerAttachments, clearComposerDraft } from '@/store/composer'
 import { clearQueuedPrompts } from '@/store/composer-queue'
@@ -18,7 +17,6 @@ import {
   $currentCwd,
   $messages,
   $selectedMissionControlProjectId,
-  $selectedMissionControlProjectName,
   $sessions,
   $yoloActive,
   getRememberedWorkspaceCwd,
@@ -370,28 +368,9 @@ export function useSessionActions({
           upsertOptimisticSession(created, stored, null, preview?.trim() || null)
           navigate(sessionRoute(stored), { replace: true })
 
-          const projectId = $selectedMissionControlProjectId.get().trim()
-
-          if (projectId) {
-            const projectName = $selectedMissionControlProjectName.get().trim() || projectId
-            void createMissionControlSessionProjectLink({
-              cwd_snapshot: cwd || undefined,
-              link_method: 'manual',
-              linked_by: 'desktop',
-              profile: newChatProfile || undefined,
-              project_id: projectId,
-              session_id: stored,
-              source: 'desktop-native-chat',
-              status: 'active',
-              title_snapshot: preview?.trim() || undefined
-            })
-              .then(() => {
-                notifyMissionControlProjectLinkCreated({ projectId, sessionId: stored })
-              })
-              .catch(err => {
-                notifyError(err, `Project chat was created, but Mission Control could not link it to ${projectName}`)
-              })
-          }
+          // Project filing happens in submitPromptText immediately before the
+          // first prompt submit. Keeping it in one path avoids writing duplicate
+          // SessionProjectLinkRecord rows for the same new Desktop chat.
         }
 
         setFreshDraftReady(false)
