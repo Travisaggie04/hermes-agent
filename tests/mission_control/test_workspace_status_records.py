@@ -115,6 +115,110 @@ def _forbidden_actions() -> tuple[str, ...]:
     )
 
 
+def _append_scoped_pr_preview_records(
+    store: JsonlRecordStore,
+    *,
+    files: tuple[str, ...] = ("docs/mission-control/jenny-engineering-orchestrator-runbook-2026-06-19.md",),
+    forbidden_actions: tuple[str, ...] | None = None,
+    include_report: bool = True,
+) -> tuple[str, str, str]:
+    approval_id = "approval-scoped-pr-preview"
+    run_id = "run-scoped-pr-preview"
+    report_id = "report-scoped-pr-preview-contract"
+    actions = forbidden_actions if forbidden_actions is not None else _forbidden_actions()
+    store.append(
+        ApprovalRecord(
+            approval_id=approval_id,
+            project_id="project-hermes-mission-control",
+            run_id=run_id,
+            action_class="pr_creation",
+            approval_scope="project-hermes-mission-control:pr_creation:exact-docs-scope",
+            status="approved",
+            expires_at="2099-01-01T00:00:00Z",
+            forbidden_actions=actions,
+            metadata={
+                "files": list(files),
+                "approved_files": list(files),
+                "preview_only": True,
+                "would_create_pr": False,
+                "would_write_files": False,
+                "would_execute": False,
+                "execution_enabled": False,
+                "dispatch_enabled": False,
+                "session_send_enabled": False,
+                "worker_dispatch_enabled": False,
+            },
+        )
+    )
+    store.append(
+        RunRecord(
+            run_id=run_id,
+            project_id="project-hermes-mission-control",
+            approval_id=approval_id,
+            lane_type="pr_creation",
+            title="Scoped PR preview",
+            objective="Preview a bounded scoped PR lane without writing files or creating a PR.",
+            status="requested",
+            execution_mode="scoped_pr",
+            forbidden_actions=actions,
+            baseline_runtime_path="/runtime/accepted",
+            baseline_head=HEAD,
+            report_ids=(report_id,) if include_report else (),
+            metadata={
+                "files": list(files),
+                "allowed_files": list(files),
+                "preview_only": True,
+                "tests_required": True,
+                "review_required": True,
+                "would_create_pr": False,
+                "would_write_files": False,
+                "would_execute": False,
+                "execution_enabled": False,
+                "dispatch_enabled": False,
+                "session_send_enabled": False,
+                "worker_dispatch_enabled": False,
+            },
+        )
+    )
+    if include_report:
+        store.append(
+            ReportRecord(
+                report_id=report_id,
+                run_id=run_id,
+                approval_id=approval_id,
+                project_id="project-hermes-mission-control",
+                status="reviewed",
+                report_kind="scoped_pr_preview_contract",
+                summary="Scoped PR preview report contract.",
+                result="Contract only: no files changed, no branch, commit, PR, execution, merge, deploy, or runtime switch.",
+                risks=("Scoped PR creation remains preview-only and requires human review before merge.",),
+                tests=("Future scoped PR result must list tests run.",),
+                next_recommended_lane="Human review required before any scoped PR execution or merge.",
+                evidence_refs=("exact scoped file contract",),
+                reviewed_at="2026-06-21T00:00:00Z",
+                reviewed_by="operator",
+                metadata={
+                    "tests_required": True,
+                    "review_required": True,
+                    "human_review_required": True,
+                    "result_summary_required": True,
+                    "safety_confirmation": (
+                        "No files changed, no commits, no PR created, no deploy/restart/runtime switch, "
+                        "no dispatch/session-send/worker activation, no secrets printed."
+                    ),
+                    "would_create_pr": False,
+                    "would_write_files": False,
+                    "would_execute": False,
+                    "execution_enabled": False,
+                    "dispatch_enabled": False,
+                    "session_send_enabled": False,
+                    "worker_dispatch_enabled": False,
+                },
+            )
+        )
+    return approval_id, run_id, report_id
+
+
 def _append_active_run(
     store: JsonlRecordStore,
     run_id: str,
@@ -1873,6 +1977,98 @@ def test_record_sourced_workspace_status_projects_execution_packet_preview(tmp_p
     assert "Execution mode: worker_node_preview; execution disabled." in operator_packet["plain_language_summary"]
     assert "Execution packet preview: worker_node, eligible true; execution disabled." in operator_packet["plain_language_summary"]
     assert operator_packet["execution_lock_blocked_reasons"] == []
+
+
+def test_record_sourced_scoped_pr_preview_feeds_formal_readiness_projection(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(_reconciled_baseline_record())
+    _append_scoped_pr_preview_records(store)
+
+    status = build_workspace_status_from_records(
+        {
+            "now": "2026-06-21T00:00:00Z",
+            "source_control": {"accepted_live_head": HEAD},
+        },
+        records_path=records_path,
+    )
+
+    scoped_pr = status["scoped_pr_lane_eligibility"]
+    packet = status["execution_packet_preview"]
+    readiness = status["orchestration_readiness"]["scoped_pr_creation"]
+    assert scoped_pr["eligible"] is True
+    assert scoped_pr["blocked_reasons"] == []
+    assert scoped_pr["scope"]["files"] == [
+        "docs/mission-control/jenny-engineering-orchestrator-runbook-2026-06-19.md"
+    ]
+    assert packet["eligible"] is True
+    assert packet["blocked_reasons"] == []
+    assert packet["packet"]["mode"] == "scoped_pr"
+    assert packet["packet"]["scope"] == scoped_pr["scope"]
+    assert readiness["state"] == "preview_ready"
+    assert readiness["execution_ready"] is False
+    assert status["run_lifecycle"]["active_mutation_lane_count"] == 1
+    assert status["run_lifecycle"]["active_read_only_lane_count"] == 0
+    assert status["run_lifecycle"]["active_unknown_lane_count"] == 0
+    for projection in (scoped_pr, packet, readiness):
+        _assert_execution_disabled(projection)
+    assert scoped_pr["would_create_pr"] is False
+    assert scoped_pr["would_commit"] is False
+    assert packet["trusted_for_execution"] is False
+    assert packet["packet"].get("would_create_pr") is not True
+    assert packet["packet"].get("would_write_files") is not True
+
+
+def test_record_sourced_scoped_pr_preview_requires_report_contract(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(_reconciled_baseline_record())
+    _append_scoped_pr_preview_records(store, include_report=False)
+
+    status = build_workspace_status_from_records(
+        {"now": "2026-06-21T00:00:00Z", "source_control": {"accepted_live_head": HEAD}},
+        records_path=records_path,
+    )
+
+    assert status["scoped_pr_lane_eligibility"]["eligible"] is False
+    assert "report/result contract is required" in status["scoped_pr_lane_eligibility"]["blocked_reasons"]
+    assert status["execution_packet_preview"]["eligible"] is False
+    assert "report/result contract is required" in status["execution_packet_preview"]["blocked_reasons"]
+
+
+def test_record_sourced_scoped_pr_preview_blocks_wildcard_scope(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(_reconciled_baseline_record())
+    _append_scoped_pr_preview_records(store, files=("*",))
+
+    status = build_workspace_status_from_records(
+        {"now": "2026-06-21T00:00:00Z", "source_control": {"accepted_live_head": HEAD}},
+        records_path=records_path,
+    )
+
+    assert status["scoped_pr_lane_eligibility"]["eligible"] is False
+    assert "scoped PR lane cannot use wildcard paths" in status["scoped_pr_lane_eligibility"]["blocked_reasons"]
+    assert status["execution_packet_preview"]["eligible"] is False
+    assert "scoped PR lane cannot use wildcard paths" in status["execution_packet_preview"]["blocked_reasons"]
+
+
+def test_record_sourced_scoped_pr_preview_requires_all_protected_forbidden_classes(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(_reconciled_baseline_record())
+    incomplete_forbidden_actions = tuple(item for item in _forbidden_actions() if item != "daemon")
+    _append_scoped_pr_preview_records(store, forbidden_actions=incomplete_forbidden_actions)
+
+    status = build_workspace_status_from_records(
+        {"now": "2026-06-21T00:00:00Z", "source_control": {"accepted_live_head": HEAD}},
+        records_path=records_path,
+    )
+
+    assert status["scoped_pr_lane_eligibility"]["eligible"] is False
+    assert "forbidden actions missing protected classes: daemon" in status["scoped_pr_lane_eligibility"]["blocked_reasons"]
+    assert status["execution_packet_preview"]["eligible"] is False
+    assert "forbidden actions missing protected classes: daemon" in status["execution_packet_preview"]["blocked_reasons"]
 
 
 def test_operator_decision_packet_rolls_up_nested_execution_locks():

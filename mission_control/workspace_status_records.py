@@ -491,6 +491,22 @@ def build_workspace_status_from_records(
         latest_approval=latest_approval,
         active_worker_runs=active_worker_runs,
     )
+    scoped_pr_eligibility_input = _record_scoped_pr_eligibility_input(
+        latest_active_run=latest_active_run,
+        latest_approval=latest_approval,
+        reports_by_id=reports_by_id,
+        reports_by_run_id=reports_by_run_id,
+        active_mutation_lane_count=len(active_mutation_runs),
+        active_read_only_lane_count=len(active_read_only_runs),
+        active_unknown_lane_count=len(active_unknown_runs),
+    )
+    if scoped_pr_eligibility_input:
+        status_input["scoped_pr_eligibility"] = _merge_status_input(
+            status_input.get("scoped_pr_eligibility")
+            if isinstance(status_input.get("scoped_pr_eligibility"), dict)
+            else {},
+            scoped_pr_eligibility_input,
+        )
     status_input["execution_packet_preview"] = _record_execution_packet_preview_input(
         latest_active_run=latest_active_run,
         latest_approval=latest_approval,
@@ -501,6 +517,11 @@ def build_workspace_status_from_records(
         active_mutation_lane_count=len(active_mutation_runs),
         active_unknown_lane_count=len(active_unknown_runs),
         active_worker_runs=active_worker_runs,
+        scoped_pr_report_contract=(
+            scoped_pr_eligibility_input.get("report_contract")
+            if scoped_pr_eligibility_input
+            else None
+        ),
     )
 
     status = build_workspace_status(status_input)
@@ -829,6 +850,7 @@ def _record_execution_packet_preview_input(
     active_mutation_lane_count: int,
     active_unknown_lane_count: int,
     active_worker_runs: tuple[WorkerNodeRunRecord, ...],
+    scoped_pr_report_contract: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     worker = active_worker_runs[-1] if active_worker_runs else None
     run_payload = latest_active_run.to_dict() if latest_active_run is not None else {}
@@ -862,6 +884,16 @@ def _record_execution_packet_preview_input(
         "directories": _metadata_list(latest_active_run, "directories", "allowed_directories", "approved_directories"),
     }
     contract_required = latest_active_run is not None or worker is not None
+    report_contract = (
+        scoped_pr_report_contract
+        if mode == "scoped_pr" and isinstance(scoped_pr_report_contract, dict)
+        else {
+            "required": contract_required,
+            "tests_required": mode in {"scoped_pr", "worker_node"},
+            "review_required": contract_required,
+            "result_summary_required": contract_required,
+        }
+    )
     return {
         "mode": mode,
         "run": run_payload,
@@ -872,18 +904,112 @@ def _record_execution_packet_preview_input(
         "run_record_count_for_id": run_record_count_for_id,
         "approval_id_duplicated": _safe_text(approval_payload.get("approval_id")) in duplicate_approval_ids,
         "duplicate_approval_ids": duplicate_approval_ids,
-        "report_contract": {
-            "required": contract_required,
-            "tests_required": mode in {"scoped_pr", "worker_node"},
-            "review_required": contract_required,
-            "result_summary_required": contract_required,
-        },
+        "report_contract": report_contract,
         "active_read_only_lane_count": active_read_only_lane_count,
         "active_mutation_lane_count": active_mutation_lane_count,
         "active_unknown_lane_count": active_unknown_lane_count,
         "max_read_only_lanes": DEFAULT_MAX_READ_ONLY_LANES,
         "max_mutation_lanes": DEFAULT_MAX_MUTATION_LANES,
     }
+
+
+def _record_scoped_pr_eligibility_input(
+    *,
+    latest_active_run: RunRecord | None,
+    latest_approval: ApprovalRecord | None,
+    reports_by_id: dict[str, ReportRecord],
+    reports_by_run_id: dict[str, ReportRecord],
+    active_mutation_lane_count: int,
+    active_read_only_lane_count: int,
+    active_unknown_lane_count: int,
+) -> dict[str, Any]:
+    if latest_active_run is None:
+        return {}
+    run_payload = latest_active_run.to_dict()
+    lane_type = _safe_text(run_payload.get("lane_type") or run_payload.get("execution_mode"))
+    if lane_type not in {"pr_creation", "scoped_pr"}:
+        return {}
+
+    lane_payload = {
+        "lane_type": lane_type,
+        "objective": _safe_text(run_payload.get("objective") or run_payload.get("title"), max_chars=800),
+        "allowed_actions": _metadata_list(latest_active_run, "allowed_actions", "allowed_actions"),
+        "forbidden_actions": _metadata_list(latest_active_run, "forbidden_actions", "forbidden_actions"),
+        "files": _metadata_list(latest_active_run, "files", "allowed_files", "approved_files"),
+        "directories": _metadata_list(latest_active_run, "directories", "allowed_directories", "approved_directories"),
+    }
+    return {
+        "approval": _approval_packet_payload(latest_approval),
+        "run": run_payload,
+        "lane": lane_payload,
+        "report_contract": _record_scoped_pr_report_contract_payload(
+            latest_active_run,
+            reports_by_id=reports_by_id,
+            reports_by_run_id=reports_by_run_id,
+        ),
+        "active_read_only_lane_count": active_read_only_lane_count,
+        "active_mutation_lane_count": active_mutation_lane_count,
+        "active_unknown_lane_count": active_unknown_lane_count,
+        "max_read_only_lanes": DEFAULT_MAX_READ_ONLY_LANES,
+        "max_mutation_lanes": DEFAULT_MAX_MUTATION_LANES,
+    }
+
+
+def _record_scoped_pr_report_contract_payload(
+    run: RunRecord,
+    *,
+    reports_by_id: dict[str, ReportRecord],
+    reports_by_run_id: dict[str, ReportRecord],
+) -> dict[str, Any]:
+    report = _record_stop_report(
+        record_id=run.run_id,
+        report_ids=run.report_ids,
+        reports_by_id=reports_by_id,
+        reports_by_run_id=reports_by_run_id,
+    )
+    if report is None:
+        return {
+            "required": False,
+            "tests_required": False,
+            "review_required": False,
+            "result_summary_required": False,
+            "present": False,
+            "missing_fields": ["report"],
+        }
+
+    metadata = report.metadata if isinstance(report.metadata, dict) else {}
+    missing_fields = _report_contract_missing_fields(report)
+    tests_required = (
+        _metadata_truthy(metadata.get("tests_required"))
+        or _metadata_truthy(metadata.get("tests_run_required"))
+        or bool(report.tests)
+    )
+    review_required = (
+        _metadata_truthy(metadata.get("review_required"))
+        or _metadata_truthy(metadata.get("human_review_required"))
+        or "human review" in _safe_text(report.next_recommended_lane).lower()
+    )
+    result_summary_required = (
+        _metadata_truthy(metadata.get("result_summary_required"))
+        or bool(_safe_text(report.result))
+    )
+    return {
+        "required": not missing_fields,
+        "tests_required": tests_required,
+        "review_required": review_required,
+        "result_summary_required": result_summary_required,
+        "present": True,
+        "report_id": report.report_id,
+        "missing_fields": missing_fields,
+    }
+
+
+def _metadata_truthy(value: Any) -> bool:
+    if value is True:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "required", "present"}
+    return False
 
 
 def _approval_packet_payload(approval: ApprovalRecord | None) -> dict[str, Any]:
