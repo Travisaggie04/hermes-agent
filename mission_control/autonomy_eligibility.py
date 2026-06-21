@@ -1025,6 +1025,11 @@ def build_execution_packet_preview(observed_state: dict[str, Any] | None = None)
         "run_id": _safe_text(_section(state, "run").get("run_id")),
         "approval_id": _safe_text(_section(state, "approval").get("approval_id")),
         "project_id": _safe_text(_section(state, "run").get("project_id") or _section(state, "approval").get("project_id")),
+        "project_name": _safe_text(
+            _section(_section(state, "run"), "metadata").get("project_context_name")
+            or _section(_section(state, "approval"), "metadata").get("project_context_name"),
+            max_chars=160,
+        ),
         "objective": _safe_text(_section(state, "run").get("objective") or _section(state, "lane").get("objective"), max_chars=800),
         "allowed_actions": _bounded_texts(_as_list(_section(state, "run").get("allowed_actions")) + _as_list(_section(state, "lane").get("allowed_actions"))),
         "forbidden_actions": _bounded_texts(_as_list(_section(state, "run").get("forbidden_actions")) + _as_list(_section(state, "lane").get("forbidden_actions"))),
