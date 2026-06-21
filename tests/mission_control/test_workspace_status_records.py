@@ -867,6 +867,12 @@ def test_guarded_read_only_status_report_runs_once_and_closes_run(tmp_path):
     assert "git commits/PRs=no" in report
     assert "secrets printed=no" in report
     assert "Next recommended action:" in report
+    assert "PM decision packet" in report
+    assert "Plain-English summary: Jenny completed a read-only operator handoff report." in report
+    assert "Recommended decision: APPROVE_NEXT_STEP" in report
+    assert "Risk level: low" in report
+    assert "Rollback / undo:" in report
+    assert "deploy/restart/runtime switch=no" in report
     assert "token" not in report.lower()
     assert ".env" not in report
     after = build_workspace_status_from_records(
@@ -882,6 +888,14 @@ def test_guarded_read_only_status_report_runs_once_and_closes_run(tmp_path):
     assert generated_report.tests == (
         "guarded read-only status-report backend trusted one-run packet and appended only approved records",
     )
+    assert generated_report.risks == (
+        "Low risk: guarded read-only status report only; no file, git, runtime, or external action changed.",
+    )
+    pm_packet = generated_report.metadata["pm_decision_packet"]
+    assert pm_packet["recommended_decision"] == "APPROVE_NEXT_STEP"
+    assert pm_packet["risk_level"] == "low"
+    assert pm_packet["safety_checklist"]["files_changed"] is False
+    assert pm_packet["safety_checklist"]["prs_created"] is False
     assert after["report_completion_path"]["blocked_completion_count"] == 0
     assert after["report_completion_path"]["completion_ready_count"] == 1
     assert after["run_lifecycle"]["append_only_run_update_ids"] == [record_set.run.run_id]
