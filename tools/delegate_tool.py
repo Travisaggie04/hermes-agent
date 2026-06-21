@@ -342,9 +342,13 @@ _REASONING_EFFORT_ALIASES = {
     "x-high": "xhigh",
     "x_high": "xhigh",
     "very high": "xhigh",
+    "max": "xhigh",
+    "maximum": "xhigh",
 }
 
 _VALID_REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh"}
+_REQUESTABLE_REASONING_EFFORTS = _VALID_REASONING_EFFORTS | {"auto"}
+_REASONING_EFFORT_CHOICES = "auto, none, minimal, low, medium, high, xhigh"
 
 
 def _normalize_reasoning_effort_value(value: Optional[str]) -> str:
@@ -358,6 +362,33 @@ def _normalize_reasoning_effort_value(value: Optional[str]) -> str:
         return ""
     raw = str(value).strip().lower()
     return _REASONING_EFFORT_ALIASES.get(raw, raw)
+
+
+def _reasoning_effort_validation_error(
+    value: Optional[str],
+    *,
+    field_name: str,
+) -> Optional[str]:
+    """Return a user-facing validation error for an effort value, if invalid."""
+    effort = _normalize_reasoning_effort_value(value)
+    if not effort:
+        return None
+    if effort in _REQUESTABLE_REASONING_EFFORTS:
+        return None
+    return (
+        f"{field_name} must be one of {_REASONING_EFFORT_CHOICES}; "
+        f"received {value!r}."
+    )
+
+
+def _reasoning_effort_label(reasoning_config) -> Optional[str]:
+    """Return a compact effort label for diagnostics/introspection."""
+    if not isinstance(reasoning_config, dict):
+        return None
+    if reasoning_config.get("enabled") is False:
+        return "none"
+    effort = str(reasoning_config.get("effort") or "").strip().lower()
+    return effort or None
 
 
 def _infer_auto_reasoning_effort(
@@ -852,6 +883,20 @@ def _build_child_system_prompt(
             "Coordinate your workers' results and synthesize them before "
             "reporting back to your parent. You are responsible for the "
             "final summary, not your workers.\n\n"
+            "EFFORT POLICY for your own delegate_task calls:\n"
+            "- Set reasoning_effort='auto' when you want Hermes to classify "
+            "each child task.\n"
+            "- Use reasoning_effort='low' for simple summaries/status "
+            "checks, file lookup, and formatting.\n"
+            "- Use reasoning_effort='medium' for normal coding/debugging "
+            "and small straightforward fixes.\n"
+            "- Use reasoning_effort='high' for PR review or ambiguous "
+            "multi-file bug hunts.\n"
+            "- Use reasoning_effort='xhigh' for gateway/runtime/deploy/security/payment/destructive "
+            "operations or final merge-readiness decisions.\n"
+            "- In batch mode, put reasoning_effort on each task when the "
+            "subtasks need different levels; per-task values beat the "
+            "top-level value.\n\n"
             f"NOTE: You are at depth {child_depth}. The delegation tree "
             f"is capped at max_spawn_depth={max_spawn_depth}. {child_note}"
         )
@@ -1356,6 +1401,10 @@ def _build_child_agent(
     # Stash the post-degrade role for introspection (leaf if the
     # kill switch or depth bounded the caller's requested role).
     child._delegate_role = effective_role
+    # Stash resolved reasoning so nested orchestrators and UI/diagnostics can
+    # prove what effort this child actually received.
+    setattr(child, "_delegate_reasoning_config", child_reasoning)
+    setattr(child, "_delegate_reasoning_effort", _reasoning_effort_label(child_reasoning))
     # Stash subagent identity for nested-delegation event propagation and
     # for _run_single_child / interrupt_subagent to look up by id.
     child._subagent_id = subagent_id
@@ -2226,6 +2275,23 @@ def delegate_task(
 
     # Load config
     cfg = _load_config()
+
+    # Fail fast on bad effort knobs before spawning a child. Silently falling
+    # back to the parent's level can burn the wrong model budget, especially
+    # when the parent is running at xhigh.
+    config_effort_error = _reasoning_effort_validation_error(
+        cfg.get("reasoning_effort"),
+        field_name="delegation.reasoning_effort",
+    )
+    if config_effort_error:
+        return tool_error(config_effort_error)
+    top_effort_error = _reasoning_effort_validation_error(
+        reasoning_effort,
+        field_name="reasoning_effort",
+    )
+    if top_effort_error:
+        return tool_error(top_effort_error)
+
     default_max_iter = cfg.get("max_iterations", DEFAULT_MAX_ITERATIONS)
     # Model-supplied max_iterations is ignored — the config value is authoritative
     # so users get predictable budgets. The kwarg is retained for internal callers
@@ -2284,7 +2350,7 @@ def delegate_task(
     if not task_list:
         return tool_error("No tasks provided.")
 
-    # Validate each task has a goal
+    # Validate each task has a goal and a valid optional per-task effort.
     for i, task in enumerate(task_list):
         if not isinstance(task, dict):
             return tool_error(
@@ -2292,6 +2358,13 @@ def delegate_task(
             )
         if not task.get("goal", "").strip():
             return tool_error(f"Task {i} is missing a 'goal'.")
+        if "reasoning_effort" in task:
+            task_effort_error = _reasoning_effort_validation_error(
+                task.get("reasoning_effort"),
+                field_name=f"Task {i} reasoning_effort",
+            )
+            if task_effort_error:
+                return tool_error(task_effort_error)
 
     overall_start = time.monotonic()
     results = []
@@ -2913,6 +2986,10 @@ def _build_top_level_description() -> str:
         "new message, /stop, /new) the child is cancelled with status="
         "'interrupted' and its work is discarded. Children cannot continue "
         "in the background.\n\n"
+        "REASONING EFFORT:\n"
+        "- Optional reasoning_effort values: auto, none, minimal, low, medium, high, xhigh.\n"
+        "- Use reasoning_effort='auto' for the built-in policy: simple summaries/status/file lookup/formatting -> low; normal coding/small fixes/debugging -> medium; PR review/ambiguous multi-file failures -> high; gateway/runtime/deploy/security/payment/destructive/final merge-readiness -> xhigh.\n"
+        "- In batch mode, put reasoning_effort on each task when subtasks need different levels; per-task values beat the top-level value.\n\n"
         "IMPORTANT:\n"
         "- Subagents have NO memory of your conversation. Pass all relevant "
         "info (file paths, error messages, constraints) via the 'context' field.\n"
