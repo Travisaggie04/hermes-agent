@@ -2243,6 +2243,7 @@ def _build_worker_node_run_record(payload: dict[str, Any]) -> WorkerNodeRunRecor
         stopped_at=_workspace_text(payload.get("stopped_at"), max_chars=80),
         stop_reason=_workspace_text(payload.get("stop_reason"), max_chars=MAX_WORKSPACE_TEXT_CHARS),
         presence_status=_workspace_text(payload.get("presence_status"), max_chars=80),
+        smoke_status=_workspace_text(payload.get("smoke_status"), max_chars=120),
         last_heartbeat_at=_workspace_text(payload.get("last_heartbeat_at"), max_chars=80),
         last_seen_at=_workspace_text(payload.get("last_seen_at"), max_chars=80),
         worker_version=_workspace_text(payload.get("worker_version"), max_chars=160),

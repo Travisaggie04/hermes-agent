@@ -1600,6 +1600,7 @@ def test_record_sourced_workspace_status_projects_worker_node_presence(tmp_path)
             status="running",
             objective="Prepare scoped engineering evidence.",
             presence_status="online",
+            smoke_status="reachable_manual_smoke_ok",
             last_heartbeat_at="2026-06-19T12:00:00Z",
             last_seen_at="2026-06-19T12:00:00Z",
             worker_version="codex-desktop-1.2.3",
@@ -1642,6 +1643,7 @@ def test_record_sourced_workspace_status_projects_worker_node_presence(tmp_path)
     assert presence["display_name"] == "Laptop Codex worker-node"
     assert presence["worker_host_label"] == "laptop-codex"
     assert presence["last_heartbeat_at"] == "2026-06-19T12:00:00Z"
+    assert presence["smoke_status"] == "reachable_manual_smoke_ok"
     assert presence["heartbeat_status"] == "fresh"
     assert presence["heartbeat_age_seconds"] == 300
     assert presence["last_seen_age_seconds"] == 300
@@ -1666,6 +1668,8 @@ def test_record_sourced_workspace_status_projects_worker_node_presence(tmp_path)
 
     codex_worker_status = status["codex_worker_node_status"]
     assert codex_worker_status["state"] == "registered_online_read_only_capable"
+    assert codex_worker_status["availability_label"] == "online_manual_ready"
+    assert codex_worker_status["manual_handoff_packet_available"] is True
     assert codex_worker_status["readiness_state"] == "REGISTERED_ONLINE_READ_ONLY_CAPABLE"
     assert codex_worker_status["dispatch_state"] == "DISPATCH_DISABLED"
     assert codex_worker_status["registered"] is True
@@ -1693,7 +1697,7 @@ def test_record_sourced_workspace_status_projects_worker_node_presence(tmp_path)
     assert "Handoff readiness: ready for manual review copy." in instruction["manual_handoff_prompt"]
 
 
-def test_record_sourced_workspace_status_blocks_worker_node_when_presence_unknown(tmp_path):
+def test_record_sourced_workspace_status_defaults_worker_node_missing_presence_to_offline(tmp_path):
     records_path = tmp_path / "mission-control" / "records.jsonl"
     store = JsonlRecordStore(records_path)
     store.append(
@@ -1715,26 +1719,29 @@ def test_record_sourced_workspace_status_blocks_worker_node_when_presence_unknow
 
     presence = status["worker_node_presence"]
     assert presence["registered"] is True
-    assert presence["presence_state"] == "unknown"
+    assert presence["presence_state"] == "offline"
+    assert presence["presence_status"] == "offline"
     assert presence["online"] is False
-    assert presence["heartbeat_status"] == "missing"
+    assert presence["heartbeat_status"] == "offline"
     assert presence["blocked"] is True
-    assert "worker-node presence_status is not recorded" in presence["blocked_reasons"]
+    assert "worker-node presence_status is offline" in presence["blocked_reasons"]
 
     readiness = status["orchestration_readiness"]["laptop_codex_worker_node"]
     assert readiness["state"] == "blocked"
     assert readiness["registered"] is True
     assert readiness["readiness_state"] == "REGISTERED_OFFLINE"
     assert readiness["online"] is False
-    assert readiness["presence_state"] == "unknown"
-    assert "worker-node presence_status is not recorded" in readiness["blocked_reasons"]
+    assert readiness["presence_state"] == "offline"
+    assert "worker-node presence_status is offline" in readiness["blocked_reasons"]
     assert "worker-node presence is not confirmed online" in readiness["blocked_reasons"]
 
     codex_worker_status = status["codex_worker_node_status"]
     assert codex_worker_status["registered"] is True
     assert codex_worker_status["online"] is False
+    assert codex_worker_status["state"] == "offline"
+    assert codex_worker_status["availability_label"] == "offline"
     assert codex_worker_status["readiness_state"] == "REGISTERED_OFFLINE"
-    assert codex_worker_status["heartbeat_status"] == "missing"
+    assert codex_worker_status["heartbeat_status"] == "offline"
     assert codex_worker_status["dispatch_allowed"] is False
     assert codex_worker_status["read_only_worker_execution_allowed"] is False
     assert "Codex worker-node heartbeat is not fresh" in codex_worker_status["dispatch_blockers"]
@@ -1742,6 +1749,82 @@ def test_record_sourced_workspace_status_blocks_worker_node_when_presence_unknow
     next_safe_actions = status["next_safe_actions"]
     action_ids = {action["action_id"] for action in next_safe_actions["actions"]}
     assert "review_worker_node_presence" in action_ids
+
+
+def test_record_sourced_workspace_status_marks_online_worker_node_stale_after_freshness_window(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        WorkerNodeRunRecord(
+            worker_run_id="worker-run-stale",
+            parent_run_id="run-parent",
+            project_id="project-hermes-mission-control",
+            worker_identity="codex",
+            worker_host_label="laptop-codex",
+            status="running",
+            objective="Prepare scoped engineering evidence.",
+            presence_status="online",
+            last_heartbeat_at="2026-06-19T12:00:00Z",
+            capabilities_advertised=("read-only repo inspection",),
+            max_concurrent_read_only_lanes=1,
+        )
+    )
+
+    status = build_workspace_status_from_records(
+        {"now": "2026-06-19T12:16:00Z"},
+        records_path=records_path,
+    )
+
+    presence = status["worker_node_presence"]
+    assert presence["presence_status"] == "online"
+    assert presence["presence_state"] == "stale"
+    assert presence["online"] is False
+    assert presence["heartbeat_status"] == "stale"
+    assert presence["heartbeat_age_seconds"] == 960
+    assert "worker-node last_heartbeat_at is stale" in presence["blocked_reasons"]
+
+    codex_worker_status = status["codex_worker_node_status"]
+    assert codex_worker_status["state"] == "stale"
+    assert codex_worker_status["availability_label"] == "stale"
+    assert codex_worker_status["readiness_state"] == "STALE_HEARTBEAT"
+    assert codex_worker_status["manual_handoff_packet_available"] is False
+    assert codex_worker_status["operator_next_action_command"] == "jenny-worker-awake on"
+
+
+def test_record_sourced_workspace_status_moves_legacy_smoke_presence_status_out_of_presence(tmp_path):
+    records_path = tmp_path / "mission-control" / "records.jsonl"
+    store = JsonlRecordStore(records_path)
+    store.append(
+        WorkerNodeRunRecord(
+            worker_run_id="worker-run-smoke",
+            parent_run_id="run-parent",
+            project_id="project-hermes-mission-control",
+            worker_identity="codex",
+            worker_host_label="laptop-codex",
+            status="running",
+            objective="Smoke-tested but not online.",
+            presence_status="reachable_manual_smoke_ok",
+            last_heartbeat_at="2026-06-19T12:00:00Z",
+        )
+    )
+
+    status = build_workspace_status_from_records(
+        {"now": "2026-06-19T12:05:00Z"},
+        records_path=records_path,
+    )
+
+    presence = status["worker_node_presence"]
+    assert presence["presence_status"] == "offline"
+    assert presence["smoke_status"] == "reachable_manual_smoke_ok"
+    assert presence["presence_state"] == "offline"
+    assert presence["online"] is False
+    assert "worker-node presence_status is offline" in presence["blocked_reasons"]
+
+    codex_worker_status = status["codex_worker_node_status"]
+    assert codex_worker_status["state"] == "offline"
+    assert codex_worker_status["smoke_status"] == "reachable_manual_smoke_ok"
+    assert codex_worker_status["availability_label"] == "offline"
+    assert codex_worker_status["dispatch_allowed"] is False
 
 
 def test_record_sourced_workspace_status_surfaces_missing_codex_worker_node_contract(tmp_path):
@@ -1775,7 +1858,7 @@ def test_record_sourced_workspace_status_surfaces_missing_codex_worker_node_cont
     assert codex_worker_status["read_only_worker_execution_allowed"] is False
     assert codex_worker_status["mutation_worker_execution_allowed"] is False
     assert "Codex worker-node is not registered" in codex_worker_status["dispatch_blockers"]
-    assert "Register a real Codex worker-node out of band" in codex_worker_status["next_safe_action"]
+    assert "jenny-worker-awake on" in codex_worker_status["next_safe_action"]
 
 
 def test_record_sourced_workspace_status_blocks_mutation_advertised_worker_capability(tmp_path):

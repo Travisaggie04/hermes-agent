@@ -1138,6 +1138,7 @@ def test_worker_node_run_record_round_trips_laptop_codex_state_and_forces_disabl
         report_review_status="needs_review",
         report_contract_status="incomplete",
         presence_status="online",
+        smoke_status="reachable_manual_smoke_ok",
         last_heartbeat_at="2026-06-19T12:00:00Z",
         last_seen_at="2026-06-19T12:00:00Z",
         worker_version="codex-desktop-1.2.3",
@@ -1176,6 +1177,7 @@ def test_worker_node_run_record_round_trips_laptop_codex_state_and_forces_disabl
     assert data["worker_host_label"] == "laptop-codex"
     assert data["blocked_reasons"] == ["worker node offline"]
     assert data["presence_status"] == "online"
+    assert data["smoke_status"] == "reachable_manual_smoke_ok"
     assert data["last_heartbeat_at"] == "2026-06-19T12:00:00Z"
     assert data["last_seen_at"] == "2026-06-19T12:00:00Z"
     assert data["worker_version"] == "codex-desktop-1.2.3"
@@ -1213,7 +1215,29 @@ def test_worker_node_run_record_defaults_codex_registration_fields_for_legacy_di
     assert data["worker_type"] == "codex"
     assert data["display_name"] == "codex on laptop-codex"
     assert data["last_heartbeat_at"] == "2026-06-19T12:00:00Z"
+    assert data["presence_status"] == "offline"
     assert data["capabilities_advertised"] == []
     assert data["max_concurrent_read_only_lanes"] == 0
+    assert data["worker_dispatch_enabled"] is False
+    _assert_inert_execution_metadata(data["metadata"])
+
+
+def test_worker_node_run_record_moves_legacy_smoke_presence_state_to_smoke_status():
+    record = WorkerNodeRunRecord.from_dict(
+        {
+            "worker_run_id": "worker-run-smoke-legacy",
+            "parent_run_id": "run-parent-1",
+            "worker_identity": "codex",
+            "worker_kind": "laptop_codex",
+            "presence_status": "reachable_manual_smoke_ok",
+            "last_heartbeat_at": "2026-06-19T12:00:00Z",
+        }
+    )
+
+    data = record.to_dict()
+
+    assert data["presence_status"] == "offline"
+    assert data["smoke_status"] == "reachable_manual_smoke_ok"
+    assert data["metadata"]["smoke_status"] == "reachable_manual_smoke_ok"
     assert data["worker_dispatch_enabled"] is False
     _assert_inert_execution_metadata(data["metadata"])

@@ -5706,6 +5706,7 @@ def test_child_and_worker_node_run_records_stay_inert(plugin_api, client):
             "blocked_reasons": ["worker node offline"],
             "status": "blocked",
             "presence_status": "offline",
+            "smoke_status": "reachable_manual_smoke_ok",
             "last_heartbeat_at": "2026-06-19T12:00:00Z",
             "worker_version": "codex-desktop-1.2.3",
             "capabilities_advertised": ["read-only repo inspection"],
@@ -5753,6 +5754,8 @@ def test_child_and_worker_node_run_records_stay_inert(plugin_api, client):
     assert worker_payload["worker_node_run"]["display_name"] == "Laptop Codex worker-node"
     assert worker_payload["worker_node_run"]["worker_host_label"] == "laptop-codex"
     assert worker_payload["worker_node_run"]["presence_status"] == "offline"
+    assert worker_payload["worker_node_run"]["smoke_status"] == "reachable_manual_smoke_ok"
+    assert worker_payload["worker_node_run"]["metadata"]["smoke_status"] == "reachable_manual_smoke_ok"
     assert worker_payload["worker_node_run"]["last_heartbeat_at"] == "2026-06-19T12:00:00Z"
     assert worker_payload["worker_node_run"]["capabilities_advertised"] == ["read-only repo inspection"]
     assert worker_payload["worker_node_run"]["capabilities_allowed"] == ["manual handoff preview"]

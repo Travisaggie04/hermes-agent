@@ -238,6 +238,35 @@ WORKER_NODE_MANUAL_ALLOWED_CAPABILITIES = (
     "status display",
     "manual handoff preview",
 )
+WORKER_NODE_OPERATOR_START_COMMAND = "jenny-worker-awake on"
+WORKER_NODE_OPERATOR_STOP_COMMAND = "jenny-worker-awake off"
+WORKER_NODE_OPERATOR_STATUS_COMMAND = "jenny-worker-awake status"
+WORKER_NODE_HEARTBEAT_LOOP_COMMAND = (
+    "python scripts/codex_worker_heartbeat_loop.py --mission-control-url <dashboard-api-url>"
+)
+WORKER_NODE_DECISION_OPTIONS = (
+    {
+        "option_id": "A",
+        "label": "manual keep-awake only",
+        "summary": "Operator runs jenny-worker-awake on/off; Jenny prepares manual handoff packets only.",
+        "dispatch_enabled": False,
+        "recommended": False,
+    },
+    {
+        "option_id": "B",
+        "label": "WSL background job with heartbeat",
+        "summary": "Operator starts a bounded WSL/tmux heartbeat loop for dinner or overnight work; dispatch stays disabled.",
+        "dispatch_enabled": False,
+        "recommended": True,
+    },
+    {
+        "option_id": "C",
+        "label": "fully automatic Jenny-to-Codex dispatch",
+        "summary": "Future lane only; would require separate approval, hard dispatch guards, and CI-reviewed implementation.",
+        "dispatch_enabled": False,
+        "recommended": False,
+    },
+)
 
 
 def default_record_store_path() -> Path:
@@ -3168,17 +3197,17 @@ def _worker_node_mentions_any(values: list[str], markers: tuple[str, ...]) -> bo
 def _worker_node_next_safe_action(*, registered: bool, online: bool) -> str:
     if not registered:
         return (
-            "Register a real Codex worker-node out of band and record a fresh heartbeat; "
-            "do not enable worker dispatch."
+            f"On main-laptop, run `{WORKER_NODE_OPERATOR_START_COMMAND}` to start keep-awake worker mode "
+            "and record a fresh Codex heartbeat; worker dispatch remains disabled."
         )
     if not online:
         return (
-            "Bring the registered Codex worker-node online out of band and record a fresh heartbeat; "
-            "dispatch remains disabled."
+            f"On main-laptop, run `{WORKER_NODE_OPERATOR_START_COMMAND}` or the WSL heartbeat loop to "
+            "record a fresh online heartbeat; worker dispatch remains disabled."
         )
     return (
-        "Review the online worker-node readiness record manually; a separate explicit lane is required "
-        "before any worker dispatch or execution."
+        "Generate/copy the manual Codex handoff packet for operator review; worker dispatch and "
+        "session-send remain disabled until a separate explicit approval."
     )
 
 
@@ -3270,6 +3299,7 @@ def _worker_node_presence_payload(
         "worker_host_label": _safe_text(worker_payload.get("worker_host_label")) or "laptop-codex",
         "worker_kind": _safe_text(worker_payload.get("worker_kind")) or "laptop_codex",
         "presence_status": _safe_text(worker_payload.get("presence_status")),
+        "smoke_status": _safe_text(worker_payload.get("smoke_status") or _mapping(worker_payload.get("metadata")).get("smoke_status")),
         "last_heartbeat_at": last_heartbeat_at,
         "heartbeat_status": heartbeat_status,
         "heartbeat_age_seconds": heartbeat_age_seconds,
@@ -3312,6 +3342,7 @@ def _codex_worker_node_status_payload(status: dict[str, Any]) -> dict[str, Any]:
     worker_run_id = _safe_text(presence.get("worker_run_id"))
     registered = presence.get("registered") is True
     online = registered and presence.get("online") is True
+    presence_state = _safe_text(presence.get("presence_state")) or "missing"
     capabilities_advertised = _text_list(presence.get("capabilities_advertised"))
     capabilities_allowed_record = _text_list(presence.get("capabilities_allowed"))
     capabilities_blocked_record = _text_list(presence.get("capabilities_blocked"))
@@ -3337,6 +3368,9 @@ def _codex_worker_node_status_payload(status: dict[str, Any]) -> dict[str, Any]:
     if not registered:
         state = "missing"
         readiness_state = "MISSING"
+    elif presence_state == "stale":
+        state = "stale"
+        readiness_state = "STALE_HEARTBEAT"
     elif not online:
         state = "offline"
         readiness_state = "REGISTERED_OFFLINE"
@@ -3383,6 +3417,19 @@ def _codex_worker_node_status_payload(status: dict[str, Any]) -> dict[str, Any]:
             "mutation worker execution remains blocked",
         ]
     )
+    if not registered:
+        availability_label = "offline"
+    elif presence_state == "stale":
+        availability_label = "stale"
+    elif not online:
+        availability_label = "offline"
+    elif mutation_advertised or blockers:
+        availability_label = "blocked"
+    elif read_only_capable:
+        availability_label = "online_manual_ready"
+    else:
+        availability_label = "blocked"
+    manual_handoff_packet_available = availability_label == "online_manual_ready"
 
     return {
         **INERT_PROJECTION_FLAGS,
@@ -3402,6 +3449,7 @@ def _codex_worker_node_status_payload(status: dict[str, Any]) -> dict[str, Any]:
         "dry_run_only": True,
         "manual_handoff_only": True,
         "state": state,
+        "availability_label": availability_label,
         "readiness_state": readiness_state,
         "dispatch_state": "DISPATCH_DISABLED",
         "registered": registered,
@@ -3415,8 +3463,9 @@ def _codex_worker_node_status_payload(status: dict[str, Any]) -> dict[str, Any]:
         "worker_identity": _safe_text(presence.get("worker_identity")) or "codex",
         "worker_host_label": _safe_text(presence.get("worker_host_label")) or "laptop-codex",
         "worker_kind": _safe_text(presence.get("worker_kind")) or "laptop_codex",
-        "presence_state": _safe_text(presence.get("presence_state")) or "unknown",
+        "presence_state": presence_state,
         "presence_status": _safe_text(presence.get("presence_status")),
+        "smoke_status": _safe_text(presence.get("smoke_status")),
         "last_heartbeat_at": _safe_text(presence.get("last_heartbeat_at")),
         "heartbeat_age_seconds": presence.get("heartbeat_age_seconds"),
         "last_seen_at": _safe_text(presence.get("last_seen_at")),
@@ -3435,6 +3484,14 @@ def _codex_worker_node_status_payload(status: dict[str, Any]) -> dict[str, Any]:
         "updated_at": _safe_text(presence.get("updated_at")),
         "safety_notes": safety_notes,
         "read_only_capable": read_only_capable,
+        "manual_handoff_packet_available": manual_handoff_packet_available,
+        "copyable_manual_handoff_available": manual_handoff_packet_available,
+        "operator_next_action_command": WORKER_NODE_OPERATOR_START_COMMAND if not online else "copy manual Codex handoff packet",
+        "operator_status_command": WORKER_NODE_OPERATOR_STATUS_COMMAND,
+        "operator_stop_command": WORKER_NODE_OPERATOR_STOP_COMMAND,
+        "heartbeat_loop_command": WORKER_NODE_HEARTBEAT_LOOP_COMMAND,
+        "operator_decision_options": [dict(option) for option in WORKER_NODE_DECISION_OPTIONS],
+        "recommended_operator_option": "B",
         "read_only_worker_execution_allowed": False,
         "mutation_worker_execution_allowed": False,
         "dispatch_allowed": False,
@@ -4060,6 +4117,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     stop_control = _mapping(status.get("orchestration_stop_control"))
     hard_boundary = _mapping(status.get("hard_boundary_contract"))
     worker_presence = _mapping(status.get("worker_node_presence"))
+    codex_worker_node = _mapping(status.get("codex_worker_node_status"))
     worker_instruction = _mapping(status.get("worker_node_instruction_preview"))
     child_instruction = _mapping(status.get("child_agent_instruction_preview"))
     execution_mode = _mapping(status.get("execution_mode_classification"))
@@ -4098,6 +4156,8 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
     report_label = _safe_text(report_queue.get("primary_review_label"), max_chars=800)
     report_reason = _safe_text(report_queue.get("primary_review_reason"), max_chars=800)
     worker_presence_state = _safe_text(worker_presence.get("presence_state")) or "unknown"
+    worker_availability = _safe_text(codex_worker_node.get("availability_label")) or worker_presence_state
+    worker_next_command = _safe_text(codex_worker_node.get("operator_next_action_command")) or WORKER_NODE_OPERATOR_START_COMMAND
     worker_last_seen_at = _safe_text(worker_presence.get("last_seen_at"))
     worker_seen_suffix = f" at {worker_last_seen_at}" if worker_last_seen_at else ""
     execution_packet_mode = _safe_text(_mapping(execution_packet.get("packet")).get("mode")) or "unknown"
@@ -4154,7 +4214,7 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         (
             "Worker presence: "
             f"{worker_presence_state}"
-            f"{worker_seen_suffix}."
+            f"{worker_seen_suffix}; availability {worker_availability}."
         ),
         (
             "Execution mode: "
@@ -4225,6 +4285,11 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
             f"{'ready for manual handoff' if worker_instruction_ready else 'preview available but blocked'}; "
             "laptop Codex dispatch remains disabled."
         )
+    summary_lines.append(
+        "Worker wake options: A manual keep-awake only, B WSL background heartbeat job (recommended next), "
+        "C fully automatic Jenny-to-Codex dispatch later only; automatic dispatch remains disabled."
+    )
+    summary_lines.append(f"Worker next command: {worker_next_command}.")
     child_instruction_ready = child_instruction.get("ready_for_handoff") is True
     if child_instruction.get("available") is True:
         summary_lines.append(
@@ -4305,8 +4370,15 @@ def _operator_decision_packet_payload(status: dict[str, Any]) -> dict[str, Any]:
         "execution_packet_blocked_reasons": _text_list(execution_packet.get("blocked_reasons")),
         "execution_lock_blocked_reasons": execution_lock_reasons,
         "worker_presence_state": worker_presence_state,
+        "worker_availability_label": worker_availability,
         "worker_online": worker_presence.get("online") is True,
         "worker_last_seen_at": worker_last_seen_at,
+        "worker_next_action_command": worker_next_command,
+        "worker_status_command": _safe_text(codex_worker_node.get("operator_status_command")) or WORKER_NODE_OPERATOR_STATUS_COMMAND,
+        "worker_stop_command": _safe_text(codex_worker_node.get("operator_stop_command")) or WORKER_NODE_OPERATOR_STOP_COMMAND,
+        "worker_heartbeat_loop_command": _safe_text(codex_worker_node.get("heartbeat_loop_command")) or WORKER_NODE_HEARTBEAT_LOOP_COMMAND,
+        "worker_option_recommendation": "B",
+        "worker_decision_options": [dict(option) for option in WORKER_NODE_DECISION_OPTIONS],
         "top_report_review_item_id": _safe_text(report_queue.get("primary_review_item_id")),
         "top_report_review_label": report_label,
         "top_report_review_reason": report_reason,

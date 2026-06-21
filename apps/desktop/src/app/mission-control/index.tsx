@@ -1663,6 +1663,9 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     operatorPacketWorkerDispatchEnabled: operatorDecisionPacket?.worker_dispatch_enabled,
     operatorPacketWorkerOnline: operatorDecisionPacket?.worker_online,
     operatorPacketWorkerPresenceState: operatorDecisionPacket?.worker_presence_state ?? 'unknown',
+    operatorPacketWorkerAvailability: operatorDecisionPacket?.worker_availability_label ?? 'unknown',
+    operatorPacketWorkerNextCommand: operatorDecisionPacket?.worker_next_action_command ?? 'jenny-worker-awake on',
+    operatorPacketWorkerOptionRecommendation: operatorDecisionPacket?.worker_option_recommendation ?? 'B',
     projectionExecutionLockReasons,
     orchestrationReadinessBlockedReasons: orchestrationReadiness?.blocked_reasons ?? [],
     orchestrationReadinessDispatchEnabled: orchestrationReadiness?.dispatch_enabled,
@@ -1826,6 +1829,8 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     toolPermissionWritePaths: toolPermissions?.write_capable_path_ids ?? [],
     workerActiveCount: status.worker_node_orchestration?.active_count ?? 0,
     workerBlockedReasons,
+    codexWorkerNodeAvailability: codexWorkerNodeStatus?.availability_label ?? 'unknown',
+    codexWorkerNodeCopyableManualHandoffAvailable: codexWorkerNodeStatus?.copyable_manual_handoff_available,
     codexWorkerNodeDispatchAllowed: codexWorkerNodeStatus?.dispatch_allowed,
     codexWorkerNodeDispatchBlockers: codexWorkerNodeStatus?.dispatch_blockers ?? [],
     codexWorkerNodeDispatchState: codexWorkerNodeStatus?.dispatch_state ?? `DIS${'P'}ATCH_DISABLED`,
@@ -1833,6 +1838,8 @@ export function summarizeWorkspaceStatus(status: MissionControlWorkspaceStatus) 
     codexWorkerNodeHeartbeatAgeSeconds: codexWorkerNodeStatus?.heartbeat_age_seconds ?? null,
     codexWorkerNodeHeartbeatStatus: codexWorkerNodeStatus?.heartbeat_status ?? 'unknown',
     codexWorkerNodeMutationExecutionAllowed: codexWorkerNodeStatus?.mutation_worker_execution_allowed,
+    codexWorkerNodeNextActionCommand: codexWorkerNodeStatus?.operator_next_action_command ?? 'jenny-worker-awake on',
+    codexWorkerNodeHeartbeatLoopCommand: codexWorkerNodeStatus?.heartbeat_loop_command ?? 'python scripts/codex_worker_heartbeat_loop.py --mission-control-url <dashboard-api-url>',
     codexWorkerNodeNextSafeAction: codexWorkerNodeStatus?.next_safe_action ?? 'Register a real Codex worker-node out of band and record a fresh heartbeat; do not enable worker dispatch.',
     codexWorkerNodeOldHermesStatus: codexWorkerNodeStatus?.old_hermes_worker_node_status ?? 'deprecated_not_an_executor',
     codexWorkerNodeOnline: codexWorkerNodeStatus?.online,
@@ -4927,11 +4934,14 @@ function WorkspaceStatusPanel({ status }: { status: ReturnType<typeof summarizeW
       <StatusItem label="runtime baseline append" tone={status.runtimeUpdateBaselineAppendRequired ? 'warn' : 'good'} value={`required after approved success ${yesNo(status.runtimeUpdateBaselineAppendRequired)} / would append ${yesNo(status.runtimeUpdateWouldAppendBaseline)}`} />
       <StatusItem label="external app update" tone="warn" value={status.runtimeUpdateExternalAppUpdate} />
       <StatusItem label="Codex worker-node readiness" tone="warn" value={`${labelText(status.codexWorkerNodeReadinessState)} / registered ${yesNo(status.codexWorkerNodeRegistered)} / online ${yesNo(status.codexWorkerNodeOnline)}`} />
+      <StatusItem label="Codex worker availability" tone={status.codexWorkerNodeAvailability === 'online_manual_ready' ? 'good' : 'warn'} value={`${labelText(status.codexWorkerNodeAvailability)} / handoff packet ${yesNo(status.codexWorkerNodeCopyableManualHandoffAvailable)}`} />
       <StatusItem label="Codex worker heartbeat" tone={status.codexWorkerNodeHeartbeatStatus === 'fresh' ? 'good' : 'warn'} value={`${labelText(status.codexWorkerNodeHeartbeatStatus)} / age ${status.codexWorkerNodeHeartbeatAgeSeconds == null ? 'missing' : `${status.codexWorkerNodeHeartbeatAgeSeconds}s`}`} />
       <StatusItem label="Codex worker dispatch" tone={status.codexWorkerNodeWorkerDispatch || status.codexWorkerNodeDispatchAllowed ? 'warn' : 'good'} value={`${labelText(status.codexWorkerNodeDispatchState)} / dispatch ${yesNo(status.codexWorkerNodeWorkerDispatch)} / allowed ${yesNo(status.codexWorkerNodeDispatchAllowed)}`} />
       <StatusItem label="Codex worker execution" tone="warn" value={`read-only ${yesNo(status.codexWorkerNodeReadOnlyExecutionAllowed)} / mutation ${yesNo(status.codexWorkerNodeMutationExecutionAllowed)} / would update ${yesNo(status.codexWorkerNodeWouldUpdate)}`} />
       <StatusItem className="md:col-span-2" label="Codex worker capabilities" tone="warn" value={`advertised ${status.workerCapabilitiesAdvertised.length ? status.workerCapabilitiesAdvertised.join(', ') : 'none'} / allowed ${status.workerCapabilitiesAllowed.join(', ') || 'none'} / blocked ${status.workerCapabilitiesBlocked.join(', ') || 'none'}`} />
       <StatusItem className="md:col-span-2" label="Codex worker next action" tone="warn" value={status.codexWorkerNodeNextSafeAction} />
+      <StatusItem className="md:col-span-2" label="Codex worker wake command" tone="warn" value={status.codexWorkerNodeNextActionCommand} />
+      <StatusItem className="md:col-span-2" label="Codex heartbeat loop" tone="warn" value={status.codexWorkerNodeHeartbeatLoopCommand} />
       <StatusItem className="md:col-span-2" label="legacy Hermes worker-node deprecation" tone="warn" value={status.runtimeUpdateOldHermesWorkerNode} />
       <StatusItem label="child-agent status" tone={childLockTone} value={`${status.childActiveCount} active / latest ${labelText(status.childLatestStatus)}`} />
       <StatusItem className="md:col-span-2" label="child-agent objective" value={status.childLatestObjective || status.childLatestAgent} />
