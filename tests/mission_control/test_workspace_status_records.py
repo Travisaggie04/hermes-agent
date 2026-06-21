@@ -614,6 +614,8 @@ def test_guarded_read_only_status_report_runs_once_and_closes_run(tmp_path):
         records_path=records_path,
     )
     assert before["execution_packet_preview"]["trusted_for_execution"] is True
+    assert before["execution_packet_preview"]["packet"]["project_id"] == "project-hermes-mission-control"
+    assert before["execution_packet_preview"]["packet"]["project_name"] == "Hermes / Mission Control"
 
     result = run_once_if_trusted(
         records_path=records_path,
@@ -627,6 +629,7 @@ def test_guarded_read_only_status_report_runs_once_and_closes_run(tmp_path):
     assert result["report_id"].startswith("report-pr402-supervised-read-only-status-result-")
     report = result["status_report"]
     assert "Operator summary: SAFE for this one supervised read-only status report" in report
+    assert "Project context: project-hermes-mission-control (Hermes / Mission Control)" in report
     assert "Accepted runtime/head: /runtime/accepted" in report
     assert "Record counts: total=4" in report
     assert "AcceptedBaselineRecord=1" in report

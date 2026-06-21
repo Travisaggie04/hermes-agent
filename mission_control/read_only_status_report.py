@@ -100,6 +100,7 @@ def build_record_set(
         "secrets_access_allowed": False,
         "would_execute": False,
         "execution_enabled": False,
+        "project_context_name": "Hermes / Mission Control",
     }
     approval = ApprovalRecord(
         approval_id=approval_id,
@@ -353,6 +354,12 @@ def _status_report_text(
     run_lifecycle = _mapping(status.get("run_lifecycle"))
     states = _mapping(readiness.get("states"))
     packet = _mapping(status.get("execution_packet_preview"))
+    packet_body = _mapping(packet.get("packet"))
+    project_id = str(packet_body.get("project_id") or "")
+    project_name = str(packet_body.get("project_name") or "")
+    project_label = project_id
+    if project_name:
+        project_label = f"{project_id} ({project_name})" if project_id else project_name
     active_runs = _safe_int(records.get("active_run_count"))
     active_run_ids = tuple(str(run_id) for run_id in run_lifecycle.get("active_run_ids", ()) if run_id)
     current_run_is_active = current_run_id in active_run_ids or (
@@ -370,6 +377,7 @@ def _status_report_text(
     return "\n".join(
         [
             f"Operator summary: {summary}",
+            f"Project context: {project_label or 'unavailable in execution packet'}",
             f"Accepted runtime/head: {baseline.get('runtime_path', '')} {baseline.get('head', '')}",
             f"Dashboard runtime/head: {dashboard.get('path', '')} {dashboard.get('head', '')}",
             f"Gateway runtime/head: {gateway.get('path', '')} {gateway.get('head', '')}",
