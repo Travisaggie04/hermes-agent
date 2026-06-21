@@ -147,6 +147,24 @@ _PR_BLOCKED_CAPABILITY_KEYS = (
 )
 
 _ACTIVE_PR_STATUSES = {"requested", "preflight_passed", "running", "stopping"}
+_SCOPED_PR_EXECUTION_MODES = {
+    "scoped_pr_draft",
+    "scoped_pr_draft_execution",
+}
+_SCOPED_PR_EXECUTION_REPORT_KINDS = {
+    "scoped_pr_execution_contract",
+    "scoped_pr_draft_execution_contract",
+}
+_SCOPED_PR_DRAFT_RUNNER_ID = "mission_control_scoped_pr_draft_runner"
+_SCOPED_PR_EXECUTION_REQUIRED_LIMITS = {
+    "max_files": 1,
+    "max_commits": 1,
+    "max_prs": 1,
+}
+_SCOPED_PR_EXECUTION_EXTRA_FORBIDDEN_CLASSES = (
+    ("secret", "secrets", "secret access", "secrets access"),
+    ("files outside exact scope", "outside exact scope", "unscoped file write"),
+)
 
 _PROTECTED_EXECUTION_MARKERS = {
     "deploy": "deploy",
@@ -987,6 +1005,155 @@ def evaluate_scoped_pr_lane_eligibility(observed_state: dict[str, Any] | None = 
     }
 
 
+def evaluate_scoped_pr_execution_eligibility(observed_state: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Authorize one tightly scoped docs-only draft PR lane without enabling broad dispatch.
+
+    This is intentionally separate from ``evaluate_scoped_pr_lane_eligibility``:
+    the preview gate remains inert forever, while this gate returns an executable
+    packet only for a one-run docs-only draft PR runner with exact file scope.
+    """
+
+    state = dict(observed_state or {})
+    provenance = state.get("runtime_provenance")
+    if not isinstance(provenance, dict):
+        provenance = evaluate_runtime_provenance(_section(state, "runtime"))
+
+    approval = _section(state, "approval")
+    run = _section(state, "run")
+    lane = _section(state, "lane")
+    capabilities = _section(state, "capabilities")
+    report_contract = _section(state, "report_contract")
+
+    blocked: list[str] = []
+    warnings: list[str] = []
+
+    if provenance.get("autonomy_blocked") is not False or provenance.get("primary_status") != PROVENANCE_CLEAN:
+        _add(blocked, "runtime provenance is not clean")
+        for reason in provenance.get("autonomy_blocked_reasons", ()):
+            _add(blocked, str(reason))
+
+    _check_pr_approval(approval, blocked, now=_safe_text(state.get("now")))
+    _check_pr_run(run, approval, blocked)
+    _check_pr_scope(approval, lane, blocked)
+    _check_pr_forbidden_actions(run, lane, blocked)
+    _check_pr_execution_forbidden_actions(run, lane, blocked)
+    _check_pr_capabilities(capabilities, blocked)
+    _check_scoped_pr_execution_live_flags(state, run, lane, capabilities, blocked)
+
+    active_read_only_lane_count = _safe_int(state.get("active_read_only_lane_count"))
+    active_mutation_lane_count = _safe_int(state.get("active_mutation_lane_count"))
+    max_mutation_lanes = _safe_int(state.get("max_mutation_lanes"), default=1) or 1
+    active_unknown_lane_count = _safe_int(state.get("active_unknown_lane_count"))
+    if active_read_only_lane_count > 0:
+        _add(blocked, "scoped PR execution requires active read-only lane count to be 0")
+    if active_mutation_lane_count != 1:
+        _add(blocked, "scoped PR execution requires exactly one active mutation lane: this RunRecord")
+    if active_mutation_lane_count > max_mutation_lanes:
+        _add(blocked, "active mutation lane count exceeds one")
+    if active_unknown_lane_count > 0:
+        _add(blocked, "active lane classification is unknown")
+
+    scope = _explicit_scope(approval, lane)
+    scoped_file = scope["files"][0] if len(scope["files"]) == 1 else ""
+    if len(scope["files"]) != 1 or scope["directories"]:
+        _add(blocked, "scoped PR execution requires exactly one approved file and no directories")
+    if scoped_file and not _docs_file_path_is_safe(scoped_file):
+        _add(blocked, "scoped PR execution is limited to safe docs file paths")
+
+    branch_name = _scoped_pr_execution_text(state, run, lane, "branch_name", "head_branch")
+    base_branch = _scoped_pr_execution_text(state, run, lane, "base_branch") or "accepted-live/approval-safety-5ad8906"
+    draft_title = _scoped_pr_execution_text(state, run, lane, "draft_pr_title", "pr_title", max_chars=160)
+    edit_instruction = _scoped_pr_execution_text(state, run, lane, "edit_instruction", "change_summary", max_chars=800)
+    runner_id = _scoped_pr_execution_text(state, run, lane, "runner_id")
+    execution_mode = _safe_text(run.get("execution_mode") or lane.get("execution_mode") or state.get("execution_mode"))
+    run_metadata = _section(run, "metadata")
+
+    if runner_id != _SCOPED_PR_DRAFT_RUNNER_ID:
+        _add(blocked, "scoped PR execution requires the approved draft PR runner")
+    if execution_mode not in _SCOPED_PR_EXECUTION_MODES:
+        _add(blocked, "scoped PR execution requires scoped_pr_draft execution_mode")
+    if _safe_bool(run_metadata.get("scoped_pr_execution")) is not True:
+        _add(blocked, "RunRecord metadata must set scoped_pr_execution=true")
+    if _safe_bool(run_metadata.get("draft_pr")) is not True:
+        _add(blocked, "RunRecord metadata must require draft_pr=true")
+    if not _branch_name_is_safe(branch_name):
+        _add(blocked, "scoped PR execution requires a safe codex/* branch name")
+    if not draft_title:
+        _add(blocked, "draft PR title is required")
+    if not edit_instruction:
+        _add(blocked, "edit instruction is required")
+    _check_scoped_pr_execution_limits(state, run, lane, blocked)
+    _check_scoped_pr_execution_approved_actions(approval, run, lane, blocked)
+    _check_scoped_pr_execution_report_contract(report_contract, blocked)
+
+    eligible = not blocked
+    packet = {
+        "packet_version": "mission_control_scoped_pr_execution_packet_v1",
+        "mode": "scoped_pr_draft",
+        "runner_id": runner_id,
+        "run_id": _safe_text(run.get("run_id")),
+        "approval_id": _safe_text(approval.get("approval_id")),
+        "project_id": _safe_text(run.get("project_id") or approval.get("project_id")),
+        "branch_name": branch_name,
+        "base_branch": base_branch,
+        "draft_pr_title": draft_title,
+        "edit_instruction": edit_instruction,
+        "scope": scope,
+        "allowed_file": scoped_file,
+        "draft_pr_required": True,
+        "max_files": 1,
+        "max_commits": 1,
+        "max_prs": 1,
+        "merge_enabled": False,
+        "deploy_enabled": False,
+        "restart_enabled": False,
+        "runtime_switch_enabled": False,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "waha_enabled": False,
+        "social_enabled": False,
+        "payment_enabled": False,
+        "queue_mutation_enabled": False,
+        "model_routing_enabled": False,
+        "secrets_access_allowed": False,
+    }
+    return {
+        "source": "mission_control_scoped_pr_execution_eligibility_v1",
+        "eligible": eligible,
+        "trusted_for_execution": eligible,
+        "one_run_authorized": eligible,
+        "would_execute": eligible,
+        "would_create_pr": eligible,
+        "would_write_files": eligible,
+        "would_commit": eligible,
+        "would_dispatch": False,
+        "would_session_send": False,
+        "execution_enabled": eligible,
+        "dispatch_enabled": False,
+        "session_send_enabled": False,
+        "worker_dispatch_enabled": False,
+        "merge_enabled": False,
+        "deploy_enabled": False,
+        "restart_enabled": False,
+        "runtime_switch_enabled": False,
+        "draft_pr_required": True,
+        "display_only": True,
+        "stored": False,
+        "dry_run_only": not eligible,
+        "blocked": bool(blocked),
+        "blocked_reasons": blocked,
+        "warnings": warnings,
+        "runtime_provenance": provenance,
+        "active_read_only_lane_count": active_read_only_lane_count,
+        "active_mutation_lane_count": active_mutation_lane_count,
+        "active_unknown_lane_count": active_unknown_lane_count,
+        "max_mutation_lanes": max_mutation_lanes,
+        "scope": scope,
+        "packet": packet,
+    }
+
+
 def build_execution_packet_preview(observed_state: dict[str, Any] | None = None) -> dict[str, Any]:
     """Build a future work-packet preview while keeping execution disabled."""
 
@@ -1628,6 +1795,166 @@ def _check_pr_scope(approval: dict[str, Any], lane: dict[str, Any], blocked: lis
         _add(blocked, "explicit files or directories are required")
     if scope["has_wildcard"]:
         _add(blocked, "scoped PR lane cannot use wildcard paths")
+
+
+def _check_pr_execution_forbidden_actions(run: dict[str, Any], lane: dict[str, Any], blocked: list[str]) -> None:
+    forbidden = tuple(
+        _safe_text(item).lower()
+        for item in _as_list(run.get("forbidden_actions")) + _as_list(lane.get("forbidden_actions"))
+    )
+    missing = [
+        aliases[0]
+        for aliases in _SCOPED_PR_EXECUTION_EXTRA_FORBIDDEN_CLASSES
+        if not any(alias in item for item in forbidden for alias in aliases)
+    ]
+    if missing:
+        _add(blocked, f"forbidden actions missing scoped PR execution classes: {', '.join(missing[:8])}")
+
+
+def _check_scoped_pr_execution_live_flags(
+    state: dict[str, Any],
+    run: dict[str, Any],
+    lane: dict[str, Any],
+    capabilities: dict[str, Any],
+    blocked: list[str],
+) -> None:
+    blocked_flags = (
+        "dispatch_enabled",
+        "dispatch_in_gateway",
+        "dispatch_state",
+        "would_dispatch",
+        "would_session_send",
+        "session_send_enabled",
+        "send_to_jenny_enabled",
+        "worker_enabled",
+        "workers_enabled",
+        "worker_dispatch_enabled",
+        "timer_enabled",
+        "daemon_enabled",
+        "waha_enabled",
+        "social_enabled",
+        "payment_enabled",
+        "queue_mutation_enabled",
+        "model_routing_enabled",
+        "merge_enabled",
+        "merge_allowed",
+        "deploy_enabled",
+        "deploy_allowed",
+        "restart_enabled",
+        "restart_allowed",
+        "runtime_switch_enabled",
+        "runtime_switch_allowed",
+        "secrets_access_allowed",
+    )
+    for key in blocked_flags:
+        if any(
+            _flag_enabled(section.get(key))
+            for section in (state, run, lane, capabilities)
+            if isinstance(section, dict)
+        ):
+            _add(blocked, f"{key} must remain false for scoped PR execution")
+
+
+def _check_scoped_pr_execution_limits(
+    state: dict[str, Any],
+    run: dict[str, Any],
+    lane: dict[str, Any],
+    blocked: list[str],
+) -> None:
+    for key, expected in _SCOPED_PR_EXECUTION_REQUIRED_LIMITS.items():
+        value = _scoped_pr_execution_int(state, run, lane, key)
+        if value != expected:
+            _add(blocked, f"{key} must be exactly {expected}")
+
+
+def _check_scoped_pr_execution_approved_actions(
+    approval: dict[str, Any],
+    run: dict[str, Any],
+    lane: dict[str, Any],
+    blocked: list[str],
+) -> None:
+    approved_text = " ".join(
+        _safe_text(item).lower()
+        for item in (
+            _as_list(approval.get("approved_actions"))
+            + _as_list(run.get("allowed_actions"))
+            + _as_list(lane.get("allowed_actions"))
+        )
+    )
+    if "draft" not in approved_text or ("pr" not in approved_text and "pull request" not in approved_text):
+        _add(blocked, "approved actions must authorize exactly one draft PR")
+    if "one" not in approved_text and "1" not in approved_text and "single" not in approved_text:
+        _add(blocked, "approved actions must limit execution to one PR")
+
+
+def _check_scoped_pr_execution_report_contract(report_contract: dict[str, Any], blocked: list[str]) -> None:
+    if _safe_bool(report_contract.get("required")) is not True:
+        _add(blocked, "scoped PR execution report contract is required")
+    if _safe_bool(report_contract.get("tests_required")) is not True:
+        _add(blocked, "scoped PR execution tests are required")
+    if _safe_bool(report_contract.get("review_required")) is not True:
+        _add(blocked, "human review is required before merge")
+    if _safe_bool(report_contract.get("result_summary_required")) is not True:
+        _add(blocked, "scoped PR execution result summary is required")
+    report_kind = _safe_text(report_contract.get("report_kind"))
+    if report_kind and report_kind not in _SCOPED_PR_EXECUTION_REPORT_KINDS:
+        _add(blocked, "scoped PR execution contract kind is required")
+
+
+def _scoped_pr_execution_text(
+    state: dict[str, Any],
+    run: dict[str, Any],
+    lane: dict[str, Any],
+    *keys: str,
+    max_chars: int = 240,
+) -> str:
+    run_metadata = _section(run, "metadata")
+    approval = _section(state, "approval")
+    approval_metadata = _section(approval, "metadata")
+    for key in keys:
+        for section in (state, lane, run, run_metadata, approval, approval_metadata):
+            value = section.get(key) if isinstance(section, dict) else None
+            text = _safe_text(value, max_chars=max_chars)
+            if text:
+                return text
+    return ""
+
+
+def _scoped_pr_execution_int(
+    state: dict[str, Any],
+    run: dict[str, Any],
+    lane: dict[str, Any],
+    key: str,
+) -> int:
+    run_metadata = _section(run, "metadata")
+    approval = _section(state, "approval")
+    approval_metadata = _section(approval, "metadata")
+    for section in (state, lane, run, run_metadata, approval, approval_metadata):
+        if isinstance(section, dict) and key in section:
+            return _safe_int(section.get(key), default=-1)
+    return -1
+
+
+def _docs_file_path_is_safe(path: str) -> bool:
+    normalized = path.replace("\\", "/").strip()
+    if not normalized or normalized.startswith("/") or normalized.startswith("~"):
+        return False
+    if normalized.startswith("../") or "/../" in normalized or normalized == "..":
+        return False
+    if normalized.endswith("/") or normalized.startswith("."):
+        return False
+    return normalized.startswith("docs/") and normalized.lower().endswith(".md")
+
+
+def _branch_name_is_safe(branch_name: str) -> bool:
+    if not branch_name.startswith("codex/") or len(branch_name) > 120:
+        return False
+    if branch_name.endswith("/") or branch_name.endswith(".") or branch_name.endswith(".lock"):
+        return False
+    if ".." in branch_name or "//" in branch_name or "\\" in branch_name:
+        return False
+    disallowed = set(" ~^:?*[")
+    return all(char not in disallowed and ord(char) >= 32 for char in branch_name)
 
 
 def _runtime_summary(name: str, runtime: dict[str, Any]) -> dict[str, Any]:

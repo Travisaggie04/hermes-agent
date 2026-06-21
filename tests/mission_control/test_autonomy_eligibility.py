@@ -7,6 +7,7 @@ from mission_control.autonomy_eligibility import (
     classify_execution_mode,
     evaluate_read_only_autonomy_eligibility,
     evaluate_runtime_provenance,
+    evaluate_scoped_pr_execution_eligibility,
     evaluate_scoped_pr_lane_eligibility,
 )
 from mission_control.workspace_status import build_workspace_status
@@ -245,6 +246,86 @@ def _eligible_pr_preview_payload(**overrides):
         "capabilities": {},
         "now": "2026-06-19T00:00:00Z",
     }
+    payload.update(overrides)
+    return payload
+
+
+def _eligible_scoped_pr_execution_payload(**overrides):
+    forbidden = _forbidden_actions() + ["secrets access", "files outside exact scope"]
+    file_path = "docs/mission-control/jenny-engineering-orchestrator-runbook-2026-06-19.md"
+    payload = _eligible_pr_preview_payload(
+        mode="scoped_pr",
+        approval={
+            "approval_id": "approval-scoped-pr-exec-1",
+            "run_id": "run-scoped-pr-exec-1",
+            "status": "approved",
+            "approval_mode": "one_time",
+            "approval_scope": "project-hermes-mission-control:scoped-pr-draft:exact-docs-file",
+            "action_class": "pr_creation",
+            "approved_actions": ("create exactly one docs-only draft PR",),
+            "forbidden_actions": forbidden,
+            "expires_at": "2099-01-01T00:00:00Z",
+            "consumed_at": "",
+            "approved_files": [file_path],
+            "metadata": {
+                "approved_files": [file_path],
+                "max_files": 1,
+                "max_commits": 1,
+                "max_prs": 1,
+            },
+        },
+        run={
+            "run_id": "run-scoped-pr-exec-1",
+            "project_id": "project-hermes-mission-control",
+            "approval_id": "approval-scoped-pr-exec-1",
+            "lane_type": "pr_creation",
+            "status": "requested",
+            "execution_mode": "scoped_pr_draft",
+            "dispatch_state": False,
+            "allowed_actions": ("create exactly one docs-only draft PR",),
+            "forbidden_actions": forbidden,
+            "metadata": {
+                "scoped_pr_execution": True,
+                "draft_pr": True,
+                "runner_id": "mission_control_scoped_pr_draft_runner",
+                "branch_name": "codex/scoped-pr-docs-smoke-test",
+                "base_branch": "accepted-live/approval-safety-5ad8906",
+                "draft_pr_title": "docs: record scoped PR creation smoke test",
+                "edit_instruction": "Append a bounded scoped PR smoke-test note.",
+                "allowed_files": [file_path],
+                "max_files": 1,
+                "max_commits": 1,
+                "max_prs": 1,
+            },
+        },
+        lane={
+            "lane_type": "pr_creation",
+            "execution_mode": "scoped_pr_draft",
+            "allowed_actions": ("create exactly one docs-only draft PR",),
+            "allowed_files": [file_path],
+            "forbidden_actions": forbidden,
+            "runner_id": "mission_control_scoped_pr_draft_runner",
+            "branch_name": "codex/scoped-pr-docs-smoke-test",
+            "base_branch": "accepted-live/approval-safety-5ad8906",
+            "draft_pr_title": "docs: record scoped PR creation smoke test",
+            "edit_instruction": "Append a bounded scoped PR smoke-test note.",
+            "max_files": 1,
+            "max_commits": 1,
+            "max_prs": 1,
+            "tests_required": True,
+            "review_required": True,
+        },
+        report_contract={
+            "required": True,
+            "tests_required": True,
+            "review_required": True,
+            "result_summary_required": True,
+            "report_kind": "scoped_pr_draft_execution_contract",
+        },
+        active_read_only_lane_count=0,
+        active_mutation_lane_count=1,
+        active_unknown_lane_count=0,
+    )
     payload.update(overrides)
     return payload
 
@@ -949,6 +1030,92 @@ def test_scoped_pr_lane_blocks_merge_deploy_and_runtime_switch():
     assert "capability merge must be disabled" in result["blocked_reasons"]
     assert "capability deploy must be disabled" in result["blocked_reasons"]
     assert "capability runtime_switch must be disabled" in result["blocked_reasons"]
+
+
+def test_scoped_pr_execution_gate_authorizes_exact_docs_draft_pr_lane():
+    result = evaluate_scoped_pr_execution_eligibility(_eligible_scoped_pr_execution_payload())
+
+    assert result["source"] == "mission_control_scoped_pr_execution_eligibility_v1"
+    assert result["eligible"] is True
+    assert result["trusted_for_execution"] is True
+    assert result["one_run_authorized"] is True
+    assert result["would_execute"] is True
+    assert result["would_create_pr"] is True
+    assert result["would_write_files"] is True
+    assert result["would_commit"] is True
+    assert result["dispatch_enabled"] is False
+    assert result["session_send_enabled"] is False
+    assert result["worker_dispatch_enabled"] is False
+    assert result["merge_enabled"] is False
+    assert result["deploy_enabled"] is False
+    assert result["runtime_switch_enabled"] is False
+    packet = result["packet"]
+    assert packet["runner_id"] == "mission_control_scoped_pr_draft_runner"
+    assert packet["mode"] == "scoped_pr_draft"
+    assert packet["draft_pr_required"] is True
+    assert packet["max_files"] == 1
+    assert packet["max_commits"] == 1
+    assert packet["max_prs"] == 1
+    assert packet["allowed_file"] == "docs/mission-control/jenny-engineering-orchestrator-runbook-2026-06-19.md"
+
+
+def test_scoped_pr_execution_gate_blocks_code_paths_and_non_draft_metadata():
+    payload = _eligible_scoped_pr_execution_payload()
+    payload["approval"] = {
+        **payload["approval"],
+        "approved_files": ["mission_control/autonomy_eligibility.py"],
+    }
+    payload["lane"] = {
+        **payload["lane"],
+        "allowed_files": ["mission_control/autonomy_eligibility.py"],
+    }
+    payload["run"] = {
+        **payload["run"],
+        "metadata": {
+            **payload["run"]["metadata"],
+            "allowed_files": ["mission_control/autonomy_eligibility.py"],
+            "draft_pr": False,
+        },
+    }
+
+    result = evaluate_scoped_pr_execution_eligibility(payload)
+
+    assert result["eligible"] is False
+    assert result["trusted_for_execution"] is False
+    assert result["would_execute"] is False
+    assert result["execution_enabled"] is False
+    assert "RunRecord metadata must require draft_pr=true" in result["blocked_reasons"]
+    assert "scoped PR execution is limited to safe docs file paths" in result["blocked_reasons"]
+
+
+def test_scoped_pr_execution_gate_blocks_missing_runner_limits_and_live_flags():
+    payload = _eligible_scoped_pr_execution_payload(
+        lane={
+            "lane_type": "pr_creation",
+            "execution_mode": "scoped_pr_draft",
+            "allowed_actions": ("create exactly one docs-only draft PR",),
+            "allowed_files": ["docs/mission-control/jenny-engineering-orchestrator-runbook-2026-06-19.md"],
+            "forbidden_actions": _forbidden_actions() + ["secrets access", "files outside exact scope"],
+            "runner_id": "other_runner",
+            "branch_name": "main",
+            "draft_pr_title": "docs: unsafe",
+            "edit_instruction": "Append note.",
+            "max_files": 2,
+            "max_commits": 1,
+            "max_prs": 1,
+            "dispatch_enabled": True,
+            "tests_required": True,
+            "review_required": True,
+        }
+    )
+
+    result = evaluate_scoped_pr_execution_eligibility(payload)
+
+    assert result["eligible"] is False
+    assert "dispatch_enabled must remain false for scoped PR execution" in result["blocked_reasons"]
+    assert "scoped PR execution requires the approved draft PR runner" in result["blocked_reasons"]
+    assert "scoped PR execution requires a safe codex/* branch name" in result["blocked_reasons"]
+    assert "max_files must be exactly 1" in result["blocked_reasons"]
 
 
 def test_execution_mode_classification_allows_preview_families_without_execution():

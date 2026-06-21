@@ -507,6 +507,22 @@ def build_workspace_status_from_records(
             else {},
             scoped_pr_eligibility_input,
         )
+    scoped_pr_execution_input = _record_scoped_pr_execution_eligibility_input(
+        latest_active_run=latest_active_run,
+        latest_approval=latest_approval,
+        reports_by_id=reports_by_id,
+        reports_by_run_id=reports_by_run_id,
+        active_mutation_lane_count=len(active_mutation_runs),
+        active_read_only_lane_count=len(active_read_only_runs),
+        active_unknown_lane_count=len(active_unknown_runs),
+    )
+    if scoped_pr_execution_input:
+        status_input["scoped_pr_execution_eligibility"] = _merge_status_input(
+            status_input.get("scoped_pr_execution_eligibility")
+            if isinstance(status_input.get("scoped_pr_execution_eligibility"), dict)
+            else {},
+            scoped_pr_execution_input,
+        )
     status_input["execution_packet_preview"] = _record_execution_packet_preview_input(
         latest_active_run=latest_active_run,
         latest_approval=latest_approval,
@@ -955,6 +971,61 @@ def _record_scoped_pr_eligibility_input(
     }
 
 
+def _record_scoped_pr_execution_eligibility_input(
+    *,
+    latest_active_run: RunRecord | None,
+    latest_approval: ApprovalRecord | None,
+    reports_by_id: dict[str, ReportRecord],
+    reports_by_run_id: dict[str, ReportRecord],
+    active_mutation_lane_count: int,
+    active_read_only_lane_count: int,
+    active_unknown_lane_count: int,
+) -> dict[str, Any]:
+    if latest_active_run is None:
+        return {}
+    run_payload = latest_active_run.to_dict()
+    run_metadata = latest_active_run.metadata if isinstance(latest_active_run.metadata, dict) else {}
+    execution_mode = _safe_text(run_payload.get("execution_mode"))
+    if execution_mode not in {"scoped_pr_draft", "scoped_pr_draft_execution"} and run_metadata.get("scoped_pr_execution") is not True:
+        return {}
+    lane_type = _safe_text(run_payload.get("lane_type") or execution_mode)
+    if lane_type not in {"pr_creation", "scoped_pr"}:
+        return {}
+
+    lane_payload = {
+        "lane_type": lane_type,
+        "execution_mode": execution_mode,
+        "objective": _safe_text(run_payload.get("objective") or run_payload.get("title"), max_chars=800),
+        "allowed_actions": _metadata_list(latest_active_run, "allowed_actions", "allowed_actions"),
+        "forbidden_actions": _metadata_list(latest_active_run, "forbidden_actions", "forbidden_actions"),
+        "files": _metadata_list(latest_active_run, "files", "allowed_files", "approved_files"),
+        "directories": _metadata_list(latest_active_run, "directories", "allowed_directories", "approved_directories"),
+        "runner_id": _safe_text(run_metadata.get("runner_id")),
+        "branch_name": _safe_text(run_metadata.get("branch_name") or run_metadata.get("head_branch")),
+        "base_branch": _safe_text(run_metadata.get("base_branch")),
+        "draft_pr_title": _safe_text(run_metadata.get("draft_pr_title") or run_metadata.get("pr_title"), max_chars=160),
+        "edit_instruction": _safe_text(run_metadata.get("edit_instruction") or run_metadata.get("change_summary"), max_chars=800),
+        "max_files": run_metadata.get("max_files"),
+        "max_commits": run_metadata.get("max_commits"),
+        "max_prs": run_metadata.get("max_prs"),
+    }
+    return {
+        "approval": _approval_packet_payload(latest_approval),
+        "run": run_payload,
+        "lane": lane_payload,
+        "report_contract": _record_scoped_pr_report_contract_payload(
+            latest_active_run,
+            reports_by_id=reports_by_id,
+            reports_by_run_id=reports_by_run_id,
+        ),
+        "active_read_only_lane_count": active_read_only_lane_count,
+        "active_mutation_lane_count": active_mutation_lane_count,
+        "active_unknown_lane_count": active_unknown_lane_count,
+        "max_read_only_lanes": DEFAULT_MAX_READ_ONLY_LANES,
+        "max_mutation_lanes": DEFAULT_MAX_MUTATION_LANES,
+    }
+
+
 def _record_scoped_pr_report_contract_payload(
     run: RunRecord,
     *,
@@ -1000,6 +1071,7 @@ def _record_scoped_pr_report_contract_payload(
         "result_summary_required": result_summary_required,
         "present": True,
         "report_id": report.report_id,
+        "report_kind": report.report_kind,
         "missing_fields": missing_fields,
     }
 
