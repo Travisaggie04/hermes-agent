@@ -356,6 +356,7 @@ export interface UsageStats {
   model?: string
   output: number
   prompt?: number
+  provider?: string
   reasoning?: number
   total: number
 }

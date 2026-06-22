@@ -136,8 +136,25 @@ function formatCost(value: number): string {
   return `$${value.toFixed(6).replace(/0+$/, '').replace(/\.$/, '')}`
 }
 
+function normalizedProvider(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase().replaceAll('_', '-') : ''
+}
+
+function isCodexProvider(value: unknown): boolean {
+  const provider = normalizedProvider(value)
+
+  return provider === 'openai-codex' || provider === 'codex'
+}
+
 export function formatUsageNote(usage?: Partial<UsageStats> | null): string | null {
   if (!usage) {
+    return null
+  }
+
+  const provider = normalizedProvider(usage.provider)
+  const codexProvider = isCodexProvider(provider)
+
+  if (provider && !codexProvider) {
     return null
   }
 
@@ -147,11 +164,14 @@ export function formatUsageNote(usage?: Partial<UsageStats> | null): string | nu
   const total = measuredTotal ?? (input > 0 || output > 0 ? input + output : 0)
 
   if (total <= 0 && input <= 0 && output <= 0) {
-    return 'Usage: not measured'
+    return codexProvider ? 'Codex tokens: not measured' : 'Usage: not measured'
   }
 
   const tokenLabel = Math.round(total) === 1 ? 'token' : 'tokens'
-  const parts = [`Usage: ${formatInteger(total)} ${tokenLabel}`]
+
+  const parts = codexProvider
+    ? [`Codex tokens: ${formatInteger(total)}`]
+    : [`Usage: ${formatInteger(total)} ${tokenLabel}`]
 
   if (input > 0) {
     parts.push(`fresh ${formatInteger(input)} in`)

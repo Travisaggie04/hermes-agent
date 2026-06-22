@@ -4385,6 +4385,7 @@ def test_usage_delta_reports_per_turn_counts():
         "completion": 45,
         "total": 205,
         "model": "test-model",
+        "provider": "openai-codex",
     }
 
     assert server._usage_delta(after, before) == {
@@ -4395,6 +4396,7 @@ def test_usage_delta_reports_per_turn_counts():
         "model": "test-model",
         "output": 20,
         "prompt": 60,
+        "provider": "openai-codex",
         "total": 80,
     }
 
@@ -4407,7 +4409,14 @@ def test_prompt_submit_emits_turn_usage_delta(monkeypatch):
             return {"final_response": "done", "messages": [], "completed": True}
 
     before = {"calls": 1, "input": 100, "output": 20, "total": 120}
-    after = {"calls": 2, "input": 135, "output": 30, "total": 165, "model": "test-model"}
+    after = {
+        "calls": 2,
+        "input": 135,
+        "output": 30,
+        "total": 165,
+        "model": "test-model",
+        "provider": "openai-codex",
+    }
     usage_snapshots = [before, after]
 
     def fake_get_usage(_agent):
@@ -4446,6 +4455,7 @@ def test_prompt_submit_emits_turn_usage_delta(monkeypatch):
         "input": 35,
         "model": "test-model",
         "output": 10,
+        "provider": "openai-codex",
         "total": 45,
     }
 

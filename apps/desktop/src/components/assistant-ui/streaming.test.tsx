@@ -432,6 +432,7 @@ describe('assistant-ui streaming renderer', () => {
           calls: 2,
           input: 10_000,
           output: 2_345,
+          provider: 'openai-codex',
           reasoning: 140,
           total: 12_345
         })}
@@ -440,7 +441,7 @@ describe('assistant-ui streaming renderer', () => {
 
     expect(
       screen.getByText(
-        'Usage: 12,345 tokens · fresh 10,000 in · 2,345 out · cache read 25,000 · reasoning 140 · 2 calls'
+        'Codex tokens: 12,345 · fresh 10,000 in · 2,345 out · cache read 25,000 · reasoning 140 · 2 calls'
       )
     ).toBeTruthy()
   })

@@ -22,12 +22,25 @@ describe('formatUsageNote', () => {
         cost_usd: 0.0012,
         input: 10_000,
         output: 2_345,
+        provider: 'openai-codex',
         reasoning: 140,
         total: 12_345
       })
     ).toBe(
-      'Usage: 12,345 tokens · fresh 10,000 in · 2,345 out · cache read 25,000 · reasoning 140 · 2 calls · $0.0012'
+      'Codex tokens: 12,345 · fresh 10,000 in · 2,345 out · cache read 25,000 · reasoning 140 · 2 calls · $0.0012'
     )
+  })
+
+  it('does not show non-Codex provider token counts as plan usage', () => {
+    expect(
+      formatUsageNote({
+        calls: 1,
+        input: 100,
+        output: 20,
+        provider: 'openrouter',
+        total: 120
+      })
+    ).toBeNull()
   })
 
   it('falls back to prompt and completion fields when providers omit input/output aliases', () => {

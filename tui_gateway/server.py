@@ -1715,6 +1715,7 @@ def _get_usage(agent) -> dict:
     g = lambda k, fb=None: getattr(agent, k, 0) or (getattr(agent, fb, 0) if fb else 0)
     usage = {
         "model": getattr(agent, "model", "") or "",
+        "provider": getattr(agent, "provider", "") or "",
         "input": g("session_input_tokens", "session_prompt_tokens"),
         "output": g("session_output_tokens", "session_completion_tokens"),
         "cache_read": g("session_cache_read_tokens"),
@@ -1794,7 +1795,7 @@ def _usage_delta(after: dict, before: dict) -> dict:
         if input_value or output_value:
             delta["total"] = input_value + output_value
 
-    for key in ("model", "cost_status"):
+    for key in ("model", "provider", "cost_status"):
         value = after.get(key)
         if value:
             delta[key] = value
