@@ -129,6 +129,31 @@ _SUBAGENT_TOOLSETS = sorted(
 )
 _TOOLSET_LIST_STR = ", ".join(f"'{n}'" for n in _SUBAGENT_TOOLSETS)
 
+# Explicit low-overhead presets keep common delegations from inheriting every
+# parent toolset by accident. They are opt-in and never reduce the user's
+# configured max_iterations; they only narrow the child tool surface.
+DELEGATE_TOOLSET_PRESETS = {
+    "code": ["terminal", "file"],
+    "review": ["terminal", "file"],
+    "research": ["web"],
+    "browser_qa": ["browser", "terminal"],
+    "fullstack": ["terminal", "file", "web"],
+}
+_TOOLSET_PRESET_ALIASES = {
+    "browser-qa": "browser_qa",
+    "browserqa": "browser_qa",
+    "browser": "browser_qa",
+    "qa": "browser_qa",
+    "full-stack": "fullstack",
+    "full_stack": "fullstack",
+    "coding": "code",
+    "dev": "code",
+    "pr_review": "review",
+    "pr-review": "review",
+}
+_TOOLSET_PRESET_CHOICES = list(DELEGATE_TOOLSET_PRESETS)
+_TOOLSET_PRESET_LIST_STR = ", ".join(f"'{name}'" for name in _TOOLSET_PRESET_CHOICES)
+
 _DEFAULT_MAX_CONCURRENT_CHILDREN = 3
 MAX_DEPTH = 1  # flat by default: parent (0) -> child (1); grandchild rejected unless max_spawn_depth raised.
 # Configurable depth cap consulted by _get_max_spawn_depth; MAX_DEPTH
@@ -928,6 +953,47 @@ def _resolve_workspace_hint(parent_agent) -> Optional[str]:
         if os.path.isabs(text) and os.path.isdir(text):
             return text
     return None
+
+
+def _resolve_toolset_preset(value: Optional[str]) -> tuple[Optional[List[str]], Optional[str]]:
+    """Return toolsets for a named preset, or a user-facing error."""
+    if value is None:
+        return None, None
+    raw = str(value).strip().lower()
+    if not raw:
+        return None, None
+    key = _TOOLSET_PRESET_ALIASES.get(raw, raw)
+    if key not in DELEGATE_TOOLSET_PRESETS:
+        return None, (
+            f"Unknown toolset_preset {value!r}. Use one of: {_TOOLSET_PRESET_LIST_STR}. "
+            "Pass explicit toolsets instead if this task needs a custom tool mix."
+        )
+    return list(DELEGATE_TOOLSET_PRESETS[key]), None
+
+
+def _resolve_task_toolsets(
+    task: Dict[str, Any],
+    *,
+    fallback_toolsets: Optional[List[str]],
+    fallback_preset: Optional[str],
+) -> tuple[Optional[List[str]], Optional[str]]:
+    """Resolve explicit toolsets or a preset for one delegated task.
+
+    Explicit toolsets win over presets. This keeps the feature additive: callers
+    can use a cheap preset for the common case but still request an exact toolset
+    list when the task genuinely needs it.
+    """
+    task_toolsets = task.get("toolsets")
+    if task_toolsets:
+        return task_toolsets, None
+
+    preset = task.get("toolset_preset") or fallback_preset
+    preset_toolsets, preset_error = _resolve_toolset_preset(preset)
+    if preset_error:
+        return None, preset_error
+    if preset_toolsets is not None:
+        return preset_toolsets, None
+    return fallback_toolsets, None
 
 
 def _strip_blocked_tools(toolsets: List[str]) -> List[str]:
@@ -2199,6 +2265,7 @@ def delegate_task(
     goal: Optional[str] = None,
     context: Optional[str] = None,
     toolsets: Optional[List[str]] = None,
+    toolset_preset: Optional[str] = None,
     tasks: Optional[List[Dict[str, Any]]] = None,
     max_iterations: Optional[int] = None,
     acp_command: Optional[str] = None,
@@ -2340,6 +2407,7 @@ def delegate_task(
                 "goal": goal,
                 "context": context,
                 "toolsets": toolsets,
+                "toolset_preset": toolset_preset,
                 "role": top_role,
                 "reasoning_effort": reasoning_effort,
             }
@@ -2365,6 +2433,13 @@ def delegate_task(
             )
             if task_effort_error:
                 return tool_error(task_effort_error)
+        _, preset_error = _resolve_task_toolsets(
+            task,
+            fallback_toolsets=toolsets,
+            fallback_preset=toolset_preset,
+        )
+        if preset_error:
+            return tool_error(preset_error)
 
     overall_start = time.monotonic()
     results = []
@@ -2395,11 +2470,19 @@ def delegate_task(
             # Per-task role beats top-level; normalise again so unknown
             # per-task values warn and degrade to leaf uniformly.
             effective_role = _normalize_role(t.get("role") or top_role)
+            effective_toolsets, preset_error = _resolve_task_toolsets(
+                t,
+                fallback_toolsets=toolsets,
+                fallback_preset=toolset_preset,
+            )
+            if preset_error:
+                return tool_error(preset_error)
+            t["_resolved_toolsets"] = effective_toolsets
             child = _build_child_agent(
                 task_index=i,
                 goal=t["goal"],
                 context=t.get("context"),
-                toolsets=t.get("toolsets") or toolsets,
+                toolsets=effective_toolsets,
                 model=creds["model"],
                 max_iterations=effective_max_iter,
                 task_count=n_tasks,
@@ -2481,7 +2564,7 @@ def delegate_task(
             dispatch = dispatch_async_delegation(
                 goal=_t["goal"],
                 context=_t.get("context"),
-                toolsets=_t.get("toolsets") or toolsets,
+                toolsets=_t.get("_resolved_toolsets"),
                 role=_normalize_role(_t.get("role") or top_role),
                 model=creds["model"],
                 session_key=_session_key,
@@ -2966,7 +3049,7 @@ def _build_top_level_description() -> str:
         "Only the final summary is returned -- intermediate tool results "
         "never enter your context window.\n\n"
         "TWO MODES (one of 'goal' or 'tasks' is required):\n"
-        "1. Single task: provide 'goal' (+ optional context, toolsets)\n"
+        "1. Single task: provide 'goal' (+ optional context, toolset_preset or toolsets)\n"
         f"2. Batch (parallel): provide 'tasks' array with up to {max_children} "
         f"items concurrently for this user (configured via "
         f"delegation.max_concurrent_children in config.yaml). "
@@ -2990,6 +3073,9 @@ def _build_top_level_description() -> str:
         "- Optional reasoning_effort values: auto, none, minimal, low, medium, high, xhigh.\n"
         "- Use reasoning_effort='auto' for the built-in policy: simple summaries/status/file lookup/formatting -> low; normal coding/small fixes/debugging -> medium; PR review/ambiguous multi-file failures -> high; gateway/runtime/deploy/security/payment/destructive/final merge-readiness -> xhigh.\n"
         "- In batch mode, put reasoning_effort on each task when subtasks need different levels; per-task values beat the top-level value.\n\n"
+        "TOOLSET PRESETS:\n"
+        "- Prefer toolset_preset for common low-overhead tasks: code/review=['terminal','file'], research=['web'], browser_qa=['browser','terminal'], fullstack=['terminal','file','web'].\n"
+        "- Use explicit toolsets only when the preset is wrong for the task; explicit toolsets override toolset_preset.\n\n"
         "IMPORTANT:\n"
         "- Subagents have NO memory of your conversation. Pass all relevant "
         "info (file paths, error messages, constraints) via the 'context' field.\n"
@@ -3129,12 +3215,21 @@ DELEGATE_TASK_SCHEMA = {
                 "type": "array",
                 "items": {"type": "string"},
                 "description": (
-                    "Toolsets to enable for this subagent. "
-                    "Default: inherits your enabled toolsets. "
+                    "Exact toolsets to enable for this subagent. "
+                    "Default: inherits your enabled toolsets unless toolset_preset is set. "
                     f"Available toolsets: {_TOOLSET_LIST_STR}. "
-                    "Common patterns: ['terminal', 'file'] for code work, "
-                    "['web'] for research, ['browser'] for web interaction, "
-                    "['terminal', 'file', 'web'] for full-stack tasks."
+                    "Use exact toolsets when a preset is too broad or too narrow."
+                ),
+            },
+            "toolset_preset": {
+                "type": "string",
+                "enum": _TOOLSET_PRESET_CHOICES,
+                "description": (
+                    "Optional named low-overhead toolset preset. Use this before "
+                    "manual toolsets for common delegation patterns: code/review -> "
+                    "['terminal', 'file']; research -> ['web']; browser_qa -> "
+                    "['browser', 'terminal']; fullstack -> ['terminal', 'file', 'web']. "
+                    "Explicit toolsets override the preset."
                 ),
             },
             "reasoning_effort": {
@@ -3163,7 +3258,16 @@ DELEGATE_TASK_SCHEMA = {
                         "toolsets": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": f"Toolsets for this specific task. Available: {_TOOLSET_LIST_STR}. Use 'web' for network access, 'terminal' for shell, 'browser' for web interaction.",
+                            "description": f"Exact toolsets for this specific task. Available: {_TOOLSET_LIST_STR}. Explicit toolsets override toolset_preset.",
+                        },
+                        "toolset_preset": {
+                            "type": "string",
+                            "enum": _TOOLSET_PRESET_CHOICES,
+                            "description": (
+                                "Per-task low-overhead preset. Choices: "
+                                f"{_TOOLSET_PRESET_LIST_STR}. Explicit task "
+                                "toolsets override this preset."
+                            ),
                         },
                         "reasoning_effort": {
                             "type": "string",
@@ -3262,6 +3366,7 @@ registry.register(
         goal=args.get("goal"),
         context=args.get("context"),
         toolsets=args.get("toolsets"),
+        toolset_preset=args.get("toolset_preset"),
         tasks=args.get("tasks"),
         max_iterations=args.get("max_iterations"),
         acp_command=args.get("acp_command"),

@@ -68,6 +68,11 @@ class TestDelegateRequirements(unittest.TestCase):
         self.assertIn("tasks", props)
         self.assertIn("context", props)
         self.assertIn("toolsets", props)
+        self.assertIn("toolset_preset", props)
+        self.assertEqual(
+            props["toolset_preset"]["enum"],
+            ["code", "review", "research", "browser_qa", "fullstack"],
+        )
         # max_iterations is intentionally NOT exposed to the model — it's
         # config-authoritative via delegation.max_iterations so users get
         # predictable budgets.
@@ -196,6 +201,96 @@ class TestDelegateTask(unittest.TestCase):
         self.assertEqual(result["results"][0]["status"], "completed")
         self.assertEqual(result["results"][0]["summary"], "Done!")
         mock_run.assert_called_once()
+
+    @patch("tools.delegate_tool._run_single_child")
+    @patch("tools.delegate_tool._build_child_agent")
+    def test_toolset_preset_routes_single_child_to_narrow_toolsets(self, mock_build, mock_run):
+        child = MagicMock()
+        mock_build.return_value = child
+        mock_run.return_value = {
+            "task_index": 0,
+            "status": "completed",
+            "summary": "Done!",
+            "api_calls": 1,
+            "duration_seconds": 1.0,
+        }
+        parent = _make_mock_parent()
+
+        result = json.loads(
+            delegate_task(goal="Review this patch", toolset_preset="review", parent_agent=parent)
+        )
+
+        self.assertIn("results", result)
+        self.assertEqual(mock_build.call_args.kwargs["toolsets"], ["terminal", "file"])
+
+    @patch("tools.delegate_tool._run_single_child")
+    @patch("tools.delegate_tool._build_child_agent")
+    def test_explicit_toolsets_override_toolset_preset(self, mock_build, mock_run):
+        child = MagicMock()
+        mock_build.return_value = child
+        mock_run.return_value = {
+            "task_index": 0,
+            "status": "completed",
+            "summary": "Done!",
+            "api_calls": 1,
+            "duration_seconds": 1.0,
+        }
+        parent = _make_mock_parent()
+
+        result = json.loads(
+            delegate_task(
+                goal="Research this topic",
+                toolsets=["web"],
+                toolset_preset="code",
+                parent_agent=parent,
+            )
+        )
+
+        self.assertIn("results", result)
+        self.assertEqual(mock_build.call_args.kwargs["toolsets"], ["web"])
+
+    @patch("tools.delegate_tool._run_single_child")
+    @patch("tools.delegate_tool._build_child_agent")
+    def test_per_task_toolset_preset_routes_batch_children(self, mock_build, mock_run):
+        child_a = MagicMock()
+        child_b = MagicMock()
+        mock_build.side_effect = [child_a, child_b]
+        mock_run.return_value = {
+            "task_index": 0,
+            "status": "completed",
+            "summary": "Done!",
+            "api_calls": 1,
+            "duration_seconds": 1.0,
+        }
+        parent = _make_mock_parent()
+
+        result = json.loads(
+            delegate_task(
+                tasks=[
+                    {"goal": "Scout the source", "toolset_preset": "code"},
+                    {"goal": "Check public docs", "toolset_preset": "research"},
+                ],
+                parent_agent=parent,
+            )
+        )
+
+        self.assertIn("results", result)
+        self.assertEqual(mock_build.call_args_list[0].kwargs["toolsets"], ["terminal", "file"])
+        self.assertEqual(mock_build.call_args_list[1].kwargs["toolsets"], ["web"])
+
+    @patch("tools.delegate_tool._run_single_child")
+    @patch("tools.delegate_tool._build_child_agent")
+    def test_unknown_toolset_preset_fails_before_spawn(self, mock_build, mock_run):
+        parent = _make_mock_parent()
+
+        result = json.loads(
+            delegate_task(goal="Review this", toolset_preset="everything", parent_agent=parent)
+        )
+
+        self.assertIn("error", result)
+        self.assertIn("Unknown toolset_preset", result["error"])
+        mock_build.assert_not_called()
+        mock_run.assert_not_called()
 
     @patch("tools.delegate_tool._run_single_child")
     def test_batch_mode(self, mock_run):
