@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   AlertCircle,
   CheckCircle2,
@@ -12,8 +13,8 @@ import {
   X,
 } from "lucide-react";
 
-import { fetchJSON, type ModelInfoResponse, type ModelOptionsResponse } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { fetchJSON, type ModelInfoResponse, type ModelOptionsResponse, type SessionInfo } from "@/lib/api";
+import { cn, timeAgo } from "@/lib/utils";
 import { usePageHeader } from "@/contexts/usePageHeader";
 
 const WORKSPACE_PROJECTS_URL = "/api/plugins/mission-control-governance/workspace/projects";
@@ -23,6 +24,7 @@ const WORKSPACE_GITHUB_BRIDGE_OUTBOX_CREATE_URL = "/api/plugins/mission-control-
 const WORKSPACE_GITHUB_BRIDGE_ANSWER_ONCE_URL = "/api/plugins/mission-control-governance/workspace/github-bridge/answer-once";
 const MODEL_INFO_URL = "/api/model/info";
 const MODEL_OPTIONS_URL = "/api/model/options";
+const RECENT_SESSIONS_URL = "/api/sessions?limit=8&offset=0";
 
 const SELECTED_PROJECT_STORAGE_KEY = "jenny-mobile-selected-project";
 const SELECTED_MODEL_STORAGE_KEY = "jenny-mobile-selected-model";
@@ -554,10 +556,44 @@ function messagesFromStatus(status: GitHubBridgeStatus): ChatMessage[] {
 }
 
 function latestPendingRequestId(messages: ChatMessage[]): string {
+  const answered = answeredRequestIds(messages);
   const pending = [...messages].reverse().find(
-    (message) => message.role === "user" && ["queued", "working", "failed"].includes(message.status) && message.requestId,
+    (message) =>
+      message.role === "user" &&
+      ["queued", "working", "failed"].includes(message.status) &&
+      message.requestId &&
+      !answered.has(message.requestId),
   );
   return pending?.requestId ?? "";
+}
+
+function answeredRequestIds(messages: ChatMessage[]): Set<string> {
+  return new Set(
+    messages
+      .filter((message) => message.role === "assistant" && message.requestId)
+      .map((message) => message.requestId as string),
+  );
+}
+
+function visibleMessageStatus(message: ChatMessage, answered: Set<string>): MobileMessageStatus {
+  if (message.role === "user" && message.requestId && answered.has(message.requestId)) {
+    return "replied";
+  }
+  return message.status;
+}
+
+function recentSessionTitle(session: SessionInfo): string {
+  return compactText(session.title || session.preview || session.id, 74) || "Untitled session";
+}
+
+function recentSessionMeta(session: SessionInfo): string {
+  return [timeAgo(session.last_active), session.source || "local", `${session.message_count} msgs`]
+    .filter(Boolean)
+    .join(" / ");
+}
+
+function chatResumeRoute(sessionId: string): string {
+  return `/chat?resume=${encodeURIComponent(sessionId)}`;
 }
 
 function statusFromBridge(status: GitHubBridgeStatus | undefined): RunState {
@@ -897,6 +933,7 @@ function statusTone(status: MobileMessageStatus): string {
 
 export default function JennyMobilePage() {
   const { setTitle } = usePageHeader();
+  const navigate = useNavigate();
   const endRef = useRef<HTMLDivElement | null>(null);
   const replyingRequestIdRef = useRef("");
   const [projects, setProjects] = useState<MobileProject[]>(MOBILE_PROJECTS);
@@ -908,6 +945,7 @@ export default function JennyMobilePage() {
     }
   });
   const [messagesByProject, setMessagesByProject] = useState<Record<string, ChatMessage[]>>({});
+  const [recentSessions, setRecentSessions] = useState<SessionInfo[]>([]);
   const [statusByProject, setStatusByProject] = useState<Record<string, GitHubBridgeStatus>>({});
   const [workspaceStatus, setWorkspaceStatus] = useState<MobileWorkspaceStatus | null>(null);
   const [runByProject, setRunByProject] = useState<Record<string, RunState>>({});
@@ -959,17 +997,19 @@ export default function JennyMobilePage() {
     let cancelled = false;
     async function loadChrome() {
       try {
-        const [projectsPayload, info, options, workspace] = await Promise.all([
+        const [projectsPayload, info, options, workspace, sessionsPayload] = await Promise.all([
           fetchJSON<{ projects?: Array<WrappedRecord<MobileProject> | MobileProject> }>(`${WORKSPACE_PROJECTS_URL}?limit=25`),
           fetchJSON<ModelInfoResponse>(MODEL_INFO_URL),
           fetchJSON<ModelOptionsResponse>(MODEL_OPTIONS_URL),
           fetchJSON<MobileWorkspaceStatus>(WORKSPACE_STATUS_URL),
+          fetchJSON<{ sessions?: SessionInfo[] }>(RECENT_SESSIONS_URL).catch(() => ({ sessions: [] })),
         ]);
         if (cancelled) return;
         setProjects(canonicalProjects(unwrapRecords(projectsPayload.projects)));
         setModelInfo(info);
         setModelOptions(options);
         setWorkspaceStatus(workspace);
+        setRecentSessions(sessionsPayload.sessions ?? []);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err));
@@ -987,7 +1027,11 @@ export default function JennyMobilePage() {
     [projects, selectedProjectId],
   );
 
-  const messages = messagesByProject[selectedProject.project_id] ?? [];
+  const messages = useMemo(
+    () => messagesByProject[selectedProject.project_id] ?? [],
+    [messagesByProject, selectedProject.project_id],
+  );
+  const answeredIds = useMemo(() => answeredRequestIds(messages), [messages]);
   const bridgeStatus = statusByProject[selectedProject.project_id];
   const runState = runByProject[selectedProject.project_id] ?? statusFromBridge(bridgeStatus);
   const bridgeSafety = useMemo(() => mobileBridgeSafety(bridgeStatus), [bridgeStatus]);
@@ -1041,6 +1085,16 @@ export default function JennyMobilePage() {
     ...(workerProjection?.blocked_reasons ?? []),
     ...(workerInstruction?.blocked_reasons ?? []),
   ].filter(Boolean);
+
+  const openRecentSession = useCallback((sessionId: string) => {
+    if (!sessionId) return;
+    navigate(chatResumeRoute(sessionId));
+  }, [navigate]);
+
+  const refreshRecentSessions = useCallback(async () => {
+    const sessionsPayload = await fetchJSON<{ sessions?: SessionInfo[] }>(RECENT_SESSIONS_URL);
+    setRecentSessions(sessionsPayload.sessions ?? []);
+  }, []);
 
   const refreshMessages = useCallback(async (projectId: string) => {
     const [status, workspace] = await Promise.all([
@@ -1265,7 +1319,12 @@ export default function JennyMobilePage() {
           <button
             type="button"
             className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[0.06] text-zinc-100 disabled:opacity-50"
-            onClick={() => void refreshMessages(selectedProject.project_id)}
+            onClick={() => {
+              void refreshMessages(selectedProject.project_id);
+              void refreshRecentSessions().catch((err) => {
+                setError(err instanceof Error ? err.message : String(err));
+              });
+            }}
             disabled={loading}
             aria-label="Refresh Jenny mobile chat"
           >
@@ -1292,6 +1351,29 @@ export default function JennyMobilePage() {
           </p>
         ) : null}
 
+        {recentSessions.length ? (
+          <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-3" data-testid="jenny-mobile-recent-sessions">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-zinc-100">Recent sessions</h2>
+              <span className="text-[0.68rem] text-emerald-300">Tap to continue</span>
+            </div>
+            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+              {recentSessions.slice(0, 6).map((session) => (
+                <button
+                  aria-label={`Continue session ${recentSessionTitle(session)}`}
+                  className="min-w-[13.5rem] rounded-xl border border-white/10 bg-zinc-900/80 p-2.5 text-left text-xs text-zinc-100 shadow-sm transition hover:border-emerald-300/60 hover:bg-emerald-500/10"
+                  key={session.id}
+                  onClick={() => openRecentSession(session.id)}
+                  type="button"
+                >
+                  <span className="block font-semibold leading-snug">{recentSessionTitle(session)}</span>
+                  <span className="mt-1 block text-[0.68rem] text-zinc-400">{recentSessionMeta(session)}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         {loading && !messages.length ? (
           <div className="flex flex-1 items-center justify-center py-16 text-sm text-zinc-400">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1299,41 +1381,44 @@ export default function JennyMobilePage() {
           </div>
         ) : messages.length ? (
           <div className="flex flex-col gap-4" data-testid="jenny-mobile-chat-timeline">
-            {messages.map((message) => (
-              <article
-                className={cn(
-                  "flex w-full min-w-0",
-                  message.role === "user" ? "justify-end" : "justify-start",
-                )}
-                key={`${message.id}-${message.role}`}
-              >
-                <div className={cn(
-                  "max-w-[88%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[0.95rem] leading-6 shadow-sm",
-                  message.role === "user"
-                    ? "rounded-br-md bg-emerald-500 text-zinc-950"
-                    : "rounded-bl-md bg-zinc-900 text-zinc-100",
-                )}>
-                  <p>{message.text}</p>
-                  <div className="mt-1.5 flex items-center justify-end gap-2 text-[0.7rem] font-medium">
-                    <span className={message.role === "user" ? "text-zinc-900/70" : statusTone(message.status)}>
-                      {formatStatusLabel(message.status)}
-                    </span>
-                    {message.role === "user" && ["queued", "failed"].includes(message.status) && message.requestId ? (
-                      <button
-                        className="rounded-full bg-black/15 px-2 py-0.5 text-[0.7rem] font-semibold text-zinc-950 disabled:opacity-50"
-                        type="button"
-                        disabled={replyingRequestId !== "" || sending || manualChatLocked}
-                        aria-label={manualChatSafety.safe ? "Get reply" : "Get reply blocked - backend execution disabled"}
-                        onClick={() => void runJennyOnce(selectedProject.project_id, message.requestId ?? "")}
-                        title={manualChatSafety.safe ? "Manual foreground reply only" : `Manual chat disabled: ${manualChatSafety.reasons[0] ?? "backend safety is not confirmed"}`}
-                      >
-                        {manualChatSafety.safe ? (message.status === "failed" ? "Retry" : "Get reply") : "Reply locked"}
-                      </button>
-                    ) : null}
+            {messages.map((message) => {
+              const messageStatus = visibleMessageStatus(message, answeredIds);
+              return (
+                <article
+                  className={cn(
+                    "flex w-full min-w-0",
+                    message.role === "user" ? "justify-end" : "justify-start",
+                  )}
+                  key={`${message.id}-${message.role}`}
+                >
+                  <div className={cn(
+                    "max-w-[88%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[0.95rem] leading-6 shadow-sm",
+                    message.role === "user"
+                      ? "rounded-br-md bg-emerald-500 text-zinc-950"
+                      : "rounded-bl-md bg-zinc-900 text-zinc-100",
+                  )}>
+                    <p>{message.text}</p>
+                    <div className="mt-1.5 flex items-center justify-end gap-2 text-[0.7rem] font-medium">
+                      <span className={message.role === "user" ? "text-zinc-900/70" : statusTone(messageStatus)}>
+                        {formatStatusLabel(messageStatus)}
+                      </span>
+                      {message.role === "user" && ["queued", "failed"].includes(messageStatus) && message.requestId ? (
+                        <button
+                          className="rounded-full bg-black/15 px-2 py-0.5 text-[0.7rem] font-semibold text-zinc-950 disabled:opacity-50"
+                          type="button"
+                          disabled={replyingRequestId !== "" || sending || manualChatLocked}
+                          aria-label={manualChatSafety.safe ? "Get reply" : "Get reply blocked - backend execution disabled"}
+                          onClick={() => void runJennyOnce(selectedProject.project_id, message.requestId ?? "")}
+                          title={manualChatSafety.safe ? "Manual foreground reply only" : `Manual chat disabled: ${manualChatSafety.reasons[0] ?? "backend safety is not confirmed"}`}
+                        >
+                          {manualChatSafety.safe ? (messageStatus === "failed" ? "Retry" : "Get reply") : "Reply locked"}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
             <div ref={endRef} />
           </div>
         ) : (
@@ -1403,12 +1488,12 @@ export default function JennyMobilePage() {
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-200" />
               <div className="min-w-0">
                 <p className="font-semibold leading-tight">
-                  {manualChatLocked ? "Manual chat locked - draft only" : "Automation locked - manual chat allowed"}
+                  {manualChatLocked ? "Manual chat locked - draft only" : "Manual chat only"}
                 </p>
                 <p className="mt-0.5 truncate text-[0.68rem] leading-tight text-amber-100/80">
                   {manualChatLocked
                     ? "Backend safety is not ready. Open Activity for details."
-                    : "No dispatch, session-send, or worker dispatch. Open Activity for details."}
+                    : "This sends one foreground Jenny reply. It does not start background workers."}
                 </p>
               </div>
             </section>
@@ -1454,7 +1539,7 @@ export default function JennyMobilePage() {
             manualChatSafety.safe ? "text-emerald-300" : "text-amber-200",
           )}>
             {manualChatSafety.safe
-              ? "Manual chat ready - no dispatch/session-send/worker dispatch."
+              ? "Manual chat ready — sends one Jenny reply; no background automation starts."
               : "Send locked - backend execution disabled; draft text only."}
           </p>
         </div>
