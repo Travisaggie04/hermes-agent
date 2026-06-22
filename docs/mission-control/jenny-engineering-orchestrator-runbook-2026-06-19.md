@@ -557,3 +557,11 @@ After each code-side change:
    decision packet `execution_lock_blocked_reasons` rollup.
 6. Confirm no secrets or raw private paths were added to docs, tests, or UI.
 7. Commit coherent chunks and keep the PR reviewable.
+
+<!-- scoped-pr-draft-runner:run-pr413-scoped-pr-docs-exec-20260621071102-d0b1034 -->
+### Scoped PR creation smoke test
+
+- RunRecord: `run-pr413-scoped-pr-docs-exec-20260621071102-d0b1034`
+- ApprovalRecord: `approval-pr413-scoped-pr-docs-exec-20260621071102-d0b1034`
+- Scope: Append a bounded scoped PR smoke-test note.
+- Result target: one docs-only draft PR for human review; no merge, deploy, restart, or runtime switch.
