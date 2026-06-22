@@ -6,11 +6,34 @@ import {
   chatMessageHiddenContext,
   chatMessageRuntimeText,
   chatMessageText,
+  formatUsageNote,
   preserveLocalAssistantErrors,
   renderMediaTags,
   toChatMessages,
   upsertToolPart
 } from './chat-messages'
+
+describe('formatUsageNote', () => {
+  it('formats measured token totals compactly for a completed assistant turn', () => {
+    expect(
+      formatUsageNote({
+        calls: 2,
+        cost_usd: 0.0012,
+        input: 10_000,
+        output: 2_345,
+        total: 12_345
+      })
+    ).toBe('Usage: 12,345 tokens · 10,000 in / 2,345 out · 2 calls · $0.0012')
+  })
+
+  it('falls back to prompt and completion fields when providers omit input/output aliases', () => {
+    expect(formatUsageNote({ prompt: 10, completion: 5 } as never)).toBe('Usage: 15 tokens · 10 in / 5 out')
+  })
+
+  it('reports when usage was present but no token counts were measured', () => {
+    expect(formatUsageNote({ calls: 0, input: 0, output: 0, total: 0 })).toBe('Usage: not measured')
+  })
+})
 
 describe('toChatMessages', () => {
   it('keeps a turn with interleaved tool-only rows in a single bubble', () => {

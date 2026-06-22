@@ -75,6 +75,7 @@ import {
 import { Loader } from '@/components/ui/loader'
 import type { HermesGateway } from '@/hermes'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
+import { formatUsageNote } from '@/lib/chat-messages'
 import { DATA_IMAGE_URL_RE } from '@/lib/embedded-images'
 import { triggerHaptic } from '@/lib/haptics'
 import { GitBranchIcon, Loader2Icon, Volume2Icon, VolumeXIcon } from '@/lib/icons'
@@ -84,6 +85,7 @@ import { cn } from '@/lib/utils'
 import { playSpeechText, stopVoicePlayback } from '@/lib/voice-playback'
 import { notifyError } from '@/store/notifications'
 import { $voicePlayback } from '@/store/voice-playback'
+import type { UsageStats } from '@/types/hermes'
 
 type ThreadLoadingState = 'response' | 'session'
 
@@ -91,6 +93,10 @@ interface MessageActionProps {
   messageId: string
   messageText: string
   onBranchInNewChat?: (messageId: string) => void
+}
+
+interface AssistantFooterProps extends MessageActionProps {
+  usage?: Partial<UsageStats>
 }
 
 let readAloudAudio: HTMLAudioElement | null = null
@@ -210,6 +216,7 @@ const AssistantMessage: FC<{ onBranchInNewChat?: (messageId: string) => void }> 
   const messageId = useAuiState(s => s.message.id)
   const content = useAuiState(s => s.message.content)
   const messageText = messageContentText(content)
+  const usage = useAuiState(s => ((s.message.metadata?.custom ?? {}) as { usage?: Partial<UsageStats> }).usage)
   const hoistedTodos = useMemo(() => todosFromMessageContent(content), [content])
 
   const previewTargets = useMemo(() => {
@@ -263,7 +270,7 @@ const AssistantMessage: FC<{ onBranchInNewChat?: (messageId: string) => void }> 
         </MessagePrimitive.Error>
       </div>
       {messageText.trim().length > 0 && !interruptedOnly && (
-        <AssistantFooter messageId={messageId} messageText={messageText} onBranchInNewChat={onBranchInNewChat} />
+        <AssistantFooter messageId={messageId} messageText={messageText} onBranchInNewChat={onBranchInNewChat} usage={usage} />
       )}
     </MessagePrimitive.Root>
   )
@@ -618,7 +625,21 @@ const MessageTimestamp: FC = () => {
   return <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">{label}</DropdownMenuLabel>
 }
 
-const AssistantFooter: FC<MessageActionProps> = props => (
+const AssistantUsageNote: FC<{ usage?: Partial<UsageStats> }> = ({ usage }) => {
+  const note = formatUsageNote(usage)
+
+  if (!note) {
+    return null
+  }
+
+  return (
+    <div className="text-right text-[0.72rem] leading-4 text-muted-foreground/72" data-slot="aui_assistant-usage-note">
+      {note}
+    </div>
+  )
+}
+
+const AssistantFooter: FC<AssistantFooterProps> = ({ usage, ...actionProps }) => (
   <div className="flex min-h-6 flex-col items-end gap-1 pr-(--message-text-indent) pl-(--message-text-indent)">
     <BranchPickerPrimitive.Root
       className="inline-flex h-6 items-center gap-1 text-xs text-muted-foreground"
@@ -634,7 +655,8 @@ const AssistantFooter: FC<MessageActionProps> = props => (
         <Codicon name="chevron-right" size="0.875rem" />
       </BranchPickerPrimitive.Next>
     </BranchPickerPrimitive.Root>
-    <AssistantActionBar {...props} />
+    <AssistantUsageNote usage={usage} />
+    <AssistantActionBar {...actionProps} />
   </div>
 )
 
