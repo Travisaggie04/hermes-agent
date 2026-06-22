@@ -21,6 +21,8 @@ export type ChatMessage = {
   timestamp?: number
   pending?: boolean
   error?: string
+  /** Per-turn token/cost usage for this completed assistant message, when the backend measured it. */
+  usage?: Partial<UsageStats>
   branchGroupId?: string
   hidden?: boolean
   /** Composer attachment ref strings (`@file:...`, `@image:...`) sent with this user message. */
@@ -65,6 +67,7 @@ export type GatewayEventPayload = {
   credential_warning?: string
   personality?: string
   usage?: Partial<UsageStats>
+  turn_usage?: Partial<UsageStats>
   // clarify.request
   request_id?: string
   question?: string
@@ -117,6 +120,100 @@ export function assistantTextPart(text: string): ChatMessagePart {
   return textPart(renderMediaTags(text))
 }
 
+function usageNumber(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null
+  }
+
+  return value
+}
+
+function formatInteger(value: number): string {
+  return Math.max(0, Math.round(value)).toLocaleString('en-US')
+}
+
+function formatCost(value: number): string {
+  return `$${value.toFixed(6).replace(/0+$/, '').replace(/\.$/, '')}`
+}
+
+function normalizedProvider(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase().replaceAll('_', '-') : ''
+}
+
+function isCodexProvider(value: unknown): boolean {
+  const provider = normalizedProvider(value)
+
+  return provider === 'openai-codex' || provider === 'codex'
+}
+
+export function formatUsageNote(usage?: Partial<UsageStats> | null): string | null {
+  if (!usage) {
+    return null
+  }
+
+  const provider = normalizedProvider(usage.provider)
+  const codexProvider = isCodexProvider(provider)
+
+  if (provider && !codexProvider) {
+    return null
+  }
+
+  const input = usageNumber(usage.input) ?? usageNumber(usage.prompt) ?? 0
+  const output = usageNumber(usage.output) ?? usageNumber(usage.completion) ?? 0
+  const measuredTotal = usageNumber(usage.total)
+  const total = measuredTotal ?? (input > 0 || output > 0 ? input + output : 0)
+
+  if (total <= 0 && input <= 0 && output <= 0) {
+    return codexProvider ? 'Codex tokens: not measured' : 'Usage: not measured'
+  }
+
+  const tokenLabel = Math.round(total) === 1 ? 'token' : 'tokens'
+
+  const parts = codexProvider
+    ? [`Codex tokens: ${formatInteger(total)}`]
+    : [`Usage: ${formatInteger(total)} ${tokenLabel}`]
+
+  if (input > 0) {
+    parts.push(`fresh ${formatInteger(input)} in`)
+  }
+
+  if (output > 0) {
+    parts.push(`${formatInteger(output)} out`)
+  }
+
+  const cacheRead = usageNumber(usage.cache_read)
+
+  if (cacheRead !== null && cacheRead > 0) {
+    parts.push(`cache read ${formatInteger(cacheRead)}`)
+  }
+
+  const cacheWrite = usageNumber(usage.cache_write)
+
+  if (cacheWrite !== null && cacheWrite > 0) {
+    parts.push(`cache write ${formatInteger(cacheWrite)}`)
+  }
+
+  const reasoning = usageNumber(usage.reasoning)
+
+  if (reasoning !== null && reasoning > 0) {
+    parts.push(`reasoning ${formatInteger(reasoning)}`)
+  }
+
+  const calls = usageNumber(usage.calls)
+
+  if (calls !== null && calls > 0) {
+    parts.push(`${formatInteger(calls)} ${Math.round(calls) === 1 ? 'call' : 'calls'}`)
+  }
+
+  const cost = usageNumber(usage.cost_usd)
+
+  if (cost !== null && cost > 0) {
+    parts.push(formatCost(cost))
+  }
+
+  return parts.join(' · ')
+}
+
 export function chatMessageText(message: ChatMessage): string {
   return message.parts
     .filter((part): part is Extract<ChatMessagePart, { type: 'text' }> => part.type === 'text')
@@ -137,10 +234,13 @@ const CONTEXT_WARNINGS_MARKER_RE = /(?:^|\n)--- Context Warnings ---[\s\S]*$/
 const CONTEXT_REF_RE = /@(file|folder|url|image|tool|terminal):(?:"[^"\n]+"|'[^'\n]+'|`[^`\n]+`|\S+)/g
 const HIDDEN_JENNY_OS_CONTEXT_RE = /^Hidden Jenny OS project context:[ \t]*\r?\n/
 const HIDDEN_JENNY_OS_VISIBLE_RULE_RE = /^Visible chat rule:/i
+
 const ENGINEERING_GOAL_PROMPT_RE =
   /^\[(Engineering goal kickoff|Continuing engineering goal)\]\s*Objective:\s*([\s\S]*?)(?=\n\n(?:Additional user criteria:|Goal loop state:|Operate as a senior engineering agent\.)|$)/i
+
 const STANDING_GOAL_PROMPT_RE =
   /^\[Continuing toward your standing goal\]\s*Goal:\s*([\s\S]*?)(?=\n\n(?:Additional criteria the user added mid-loop:|Continue working toward)|$)/i
+
 const LEGACY_JENNY_REQUEST_STOP_LABELS = [
   'Project ID:',
   'Jenny role:',
@@ -172,22 +272,27 @@ const LEGACY_JENNY_REQUEST_STOP_LABELS = [
   'Evidence required:',
   'Approval gate:'
 ].join('|')
+
 const LEGACY_SPEC_FIRST_REQUEST_RE = new RegExp(
   `^Spec-first request for Jenny:\\s*Project:\\s*.+?\\s+Request Travis is considering:\\s*([\\s\\S]*?)(?=\\s+(?:${LEGACY_JENNY_REQUEST_STOP_LABELS})|$)`,
   'i'
 )
+
 const LEGACY_PROJECT_ROOM_REQUEST_RE = new RegExp(
   `^Project room request:\\s*(?:.+?\\s+)?Request:\\s*([\\s\\S]*?)(?=\\s+(?:${LEGACY_JENNY_REQUEST_STOP_LABELS})|$)`,
   'i'
 )
+
 const LEGACY_GENERIC_REQUEST_RE = new RegExp(
   `(?:^|[\\s/])Request:\\s*([\\s\\S]*?)(?=\\s+(?:${LEGACY_JENNY_REQUEST_STOP_LABELS})|$)`,
   'i'
 )
+
 const LEGACY_INLINE_PROJECT_REQUEST_RE = new RegExp(
   `^[\\w &/-]+ Request:\\s*([\\s\\S]*?)(?=\\s+(?:${LEGACY_JENNY_REQUEST_STOP_LABELS})|$)`,
   'i'
 )
+
 const LEGACY_FALLBACK_REQUEST_RE = new RegExp(
   `^(.+?)\\s+(?=${LEGACY_JENNY_REQUEST_STOP_LABELS})`,
   'i'

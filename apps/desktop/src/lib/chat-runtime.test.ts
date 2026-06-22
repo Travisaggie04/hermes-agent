@@ -100,4 +100,17 @@ describe('toRuntimeMessage', () => {
 
     expect(runtimeMessage.content).toEqual([{ type: 'text', text: '@file:tsconfig.tsbuildinfo\n\nwhat is this file' }])
   })
+
+  it('carries assistant usage metadata so completed replies can show token totals', () => {
+    const runtimeMessage = toRuntimeMessage({
+      id: 'assistant-usage-1',
+      role: 'assistant',
+      parts: [{ type: 'text', text: 'Done.' }],
+      usage: { input: 10, output: 5, total: 15, calls: 1 }
+    })
+
+    expect(runtimeMessage.metadata?.custom).toMatchObject({
+      usage: { input: 10, output: 5, total: 15, calls: 1 }
+    })
+  })
 })

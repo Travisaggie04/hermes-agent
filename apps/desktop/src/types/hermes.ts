@@ -343,13 +343,21 @@ export interface SessionRuntimeInfo {
 }
 
 export interface UsageStats {
+  cache_read?: number
+  cache_write?: number
   calls: number
+  completion?: number
   context_max?: number
   context_percent?: number
   context_used?: number
+  cost_status?: string
   cost_usd?: number
   input: number
+  model?: string
   output: number
+  prompt?: number
+  provider?: string
+  reasoning?: number
   total: number
 }
 

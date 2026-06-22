@@ -4366,6 +4366,100 @@ def test_prompt_submit_preserves_empty_response_without_error(monkeypatch):
     assert text in {"", None}, f"expected empty text, got {text!r}"
 
 
+def test_usage_delta_reports_per_turn_counts():
+    before = {
+        "calls": 3,
+        "cost_usd": 0.001,
+        "input": 100,
+        "output": 25,
+        "prompt": 100,
+        "completion": 25,
+        "total": 125,
+    }
+    after = {
+        "calls": 5,
+        "cost_usd": 0.0018,
+        "input": 160,
+        "output": 45,
+        "prompt": 160,
+        "completion": 45,
+        "total": 205,
+        "model": "test-model",
+        "provider": "openai-codex",
+    }
+
+    assert server._usage_delta(after, before) == {
+        "calls": 2,
+        "completion": 20,
+        "cost_usd": 0.0008,
+        "input": 60,
+        "model": "test-model",
+        "output": 20,
+        "prompt": 60,
+        "provider": "openai-codex",
+        "total": 80,
+    }
+
+
+def test_prompt_submit_emits_turn_usage_delta(monkeypatch):
+    class _Agent:
+        def run_conversation(
+            self, prompt, conversation_history=None, stream_callback=None
+        ):
+            return {"final_response": "done", "messages": [], "completed": True}
+
+    before = {"calls": 1, "input": 100, "output": 20, "total": 120}
+    after = {
+        "calls": 2,
+        "input": 135,
+        "output": 30,
+        "total": 165,
+        "model": "test-model",
+        "provider": "openai-codex",
+    }
+    usage_snapshots = [before, after]
+
+    def fake_get_usage(_agent):
+        if usage_snapshots:
+            return usage_snapshots.pop(0)
+        return after
+
+    server._sessions["sid"] = _session(agent=_Agent())
+    monkeypatch.setattr(server.threading, "Thread", _ImmediateThread)
+    monkeypatch.setattr(server, "_get_usage", fake_get_usage)
+    monkeypatch.setattr(server, "make_stream_renderer", lambda cols: None)
+    monkeypatch.setattr(server, "render_message", lambda raw, cols: None)
+    monkeypatch.setattr(server, "_get_db", lambda: None)
+
+    emitted: list[tuple[str, str, dict]] = []
+    monkeypatch.setattr(
+        server,
+        "_emit",
+        lambda event, sid, payload=None: emitted.append((event, sid, payload or {})),
+    )
+
+    server.handle_request(
+        {
+            "id": "1",
+            "method": "prompt.submit",
+            "params": {"session_id": "sid", "text": "hello"},
+        }
+    )
+
+    complete_events = [event for event in emitted if event[0] == "message.complete"]
+    assert complete_events, "expected message.complete to be emitted"
+    payload = complete_events[-1][2]
+    assert payload["usage"] == after
+    assert payload["turn_usage"] == {
+        "calls": 1,
+        "input": 35,
+        "model": "test-model",
+        "output": 10,
+        "provider": "openai-codex",
+        "total": 45,
+    }
+
+
 # ── active live TUI sessions ─────────────────────────────────────────
 
 

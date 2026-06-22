@@ -36,7 +36,7 @@ import {
 } from '@/store/session'
 import { clearSessionSubagents, pruneDelegateFallbackSubagents, upsertSubagent } from '@/store/subagents'
 import { recordToolDiff } from '@/store/tool-diffs'
-import type { RpcEvent } from '@/types/hermes'
+import type { RpcEvent, UsageStats } from '@/types/hermes'
 
 import type { ClientSessionState } from '../../types'
 
@@ -433,7 +433,7 @@ export function useMessageStream({
   )
 
   const completeAssistantMessage = useCallback(
-    (sessionId: string, text: string) => {
+    (sessionId: string, text: string, usage?: Partial<UsageStats>) => {
       let shouldHydrate = false
 
       const completedState = updateSessionState(sessionId, state => {
@@ -475,12 +475,14 @@ export function useMessageStream({
                 ...message,
                 error: completionError,
                 parts: message.parts.filter(part => part.type !== 'text'),
-                pending: false
+                pending: false,
+                ...(usage && { usage })
               }
             : {
                 ...message,
                 parts: replaceTextPart(message.parts),
-                pending: false
+                pending: false,
+                ...(usage && { usage })
               }
 
         const newAssistantFromCompletion = (): ChatMessage => ({
@@ -488,6 +490,7 @@ export function useMessageStream({
           role: 'assistant',
           parts: completionError ? [] : [assistantTextPart(finalText)],
           branchGroupId: state.pendingBranchGroup ?? undefined,
+          ...(usage && { usage }),
           ...(completionError && { error: completionError })
         })
 
@@ -523,6 +526,7 @@ export function useMessageStream({
           completionError ? 'failed' : 'replied',
           completionError ?? undefined
         )
+
         const hasInlineError = finalMessages.some(m => m.role === 'assistant' && m.error && !m.hidden)
         const lastVisible = [...finalMessages].reverse().find(m => !m.hidden)
         const unresolvedUserTail = lastVisible?.role === 'user'
@@ -771,7 +775,8 @@ export function useMessageStream({
         }
 
         const finalText = coerceGatewayText(payload?.text) || coerceGatewayText(payload?.rendered)
-        completeAssistantMessage(sessionId, finalText)
+        const messageUsage = payload?.turn_usage ?? payload?.usage
+        completeAssistantMessage(sessionId, finalText, messageUsage)
 
         if (isActiveEvent) {
           setTurnStartedAt(null)

@@ -6,11 +6,51 @@ import {
   chatMessageHiddenContext,
   chatMessageRuntimeText,
   chatMessageText,
+  formatUsageNote,
   preserveLocalAssistantErrors,
   renderMediaTags,
   toChatMessages,
   upsertToolPart
 } from './chat-messages'
+
+describe('formatUsageNote', () => {
+  it('formats completed assistant turn usage with separate fresh/cache/reasoning fields', () => {
+    expect(
+      formatUsageNote({
+        cache_read: 25_000,
+        calls: 2,
+        cost_usd: 0.0012,
+        input: 10_000,
+        output: 2_345,
+        provider: 'openai-codex',
+        reasoning: 140,
+        total: 12_345
+      })
+    ).toBe(
+      'Codex tokens: 12,345 · fresh 10,000 in · 2,345 out · cache read 25,000 · reasoning 140 · 2 calls · $0.0012'
+    )
+  })
+
+  it('does not show non-Codex provider token counts as plan usage', () => {
+    expect(
+      formatUsageNote({
+        calls: 1,
+        input: 100,
+        output: 20,
+        provider: 'openrouter',
+        total: 120
+      })
+    ).toBeNull()
+  })
+
+  it('falls back to prompt and completion fields when providers omit input/output aliases', () => {
+    expect(formatUsageNote({ prompt: 10, completion: 5 } as never)).toBe('Usage: 15 tokens · fresh 10 in · 5 out')
+  })
+
+  it('reports when usage was present but no token counts were measured', () => {
+    expect(formatUsageNote({ calls: 0, input: 0, output: 0, total: 0 })).toBe('Usage: not measured')
+  })
+})
 
 describe('toChatMessages', () => {
   it('keeps a turn with interleaved tool-only rows in a single bubble', () => {

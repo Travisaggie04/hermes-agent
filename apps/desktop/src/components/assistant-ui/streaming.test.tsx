@@ -3,6 +3,8 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { useEffect, useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { UsageStats } from '@/types/hermes'
+
 import { Thread } from './thread'
 
 const createdAt = new Date('2026-05-01T00:00:00.000Z')
@@ -96,7 +98,11 @@ function userMessage(): ThreadMessage {
   } as ThreadMessage
 }
 
-function assistantMessage(text: string, running = true): ThreadMessage {
+function assistantMessage(
+  text: string,
+  running = true,
+  usage?: Partial<UsageStats>
+): ThreadMessage {
   return {
     id: 'assistant-1',
     role: 'assistant',
@@ -108,7 +114,7 @@ function assistantMessage(text: string, running = true): ThreadMessage {
       unstable_annotations: [],
       unstable_data: [],
       steps: [],
-      custom: {}
+      custom: usage ? { usage } : {}
     }
   } as ThreadMessage
 }
@@ -418,6 +424,28 @@ describe('assistant-ui streaming renderer', () => {
     expect(screen.getByRole('alert').textContent).toContain('OpenRouter rejected the request (403).')
   })
 
+  it('renders token usage under completed assistant messages when usage metadata is available', () => {
+    render(
+      <MessageHarness
+        message={assistantMessage('complete response', false, {
+          cache_read: 25_000,
+          calls: 2,
+          input: 10_000,
+          output: 2_345,
+          provider: 'openai-codex',
+          reasoning: 140,
+          total: 12_345
+        })}
+      />
+    )
+
+    expect(
+      screen.getByText(
+        'Codex tokens: 12,345 · fresh 10,000 in · 2,345 out · cache read 25,000 · reasoning 140 · 2 calls'
+      )
+    ).toBeTruthy()
+  })
+
   it('does not pull the viewport back down after the user scrolls up during streaming', async () => {
     const { container } = render(<StreamingHarness />)
 
@@ -641,10 +669,9 @@ describe('assistant-ui streaming renderer', () => {
 
   it('renders an incomplete streaming reasoning fenced code block as a code card', async () => {
     const { container } = render(<RunningReasoningHarness />)
-    const ui = within(container)
 
-    fireEvent.click(ui.getByRole('button', { name: /thinking/i }))
-
+    // Streaming thinking is auto-open as a live preview; clicking the disclosure
+    // here would close it and hide the code card we are trying to verify.
     await waitFor(() => {
       expect(container.querySelector('[data-slot="code-card"]')).toBeTruthy()
     })

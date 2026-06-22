@@ -1715,6 +1715,7 @@ def _get_usage(agent) -> dict:
     g = lambda k, fb=None: getattr(agent, k, 0) or (getattr(agent, fb, 0) if fb else 0)
     usage = {
         "model": getattr(agent, "model", "") or "",
+        "provider": getattr(agent, "provider", "") or "",
         "input": g("session_input_tokens", "session_prompt_tokens"),
         "output": g("session_output_tokens", "session_completion_tokens"),
         "cache_read": g("session_cache_read_tokens"),
@@ -1754,6 +1755,52 @@ def _get_usage(agent) -> dict:
     except Exception:
         pass
     return usage
+
+
+def _usage_delta(after: dict, before: dict) -> dict:
+    """Return per-turn usage from cumulative agent usage counters."""
+    delta: dict = {}
+    numeric_fields = (
+        "input",
+        "output",
+        "cache_read",
+        "cache_write",
+        "reasoning",
+        "prompt",
+        "completion",
+        "total",
+        "calls",
+        "cost_usd",
+    )
+
+    for key in numeric_fields:
+        after_value = after.get(key)
+        if not isinstance(after_value, (int, float)):
+            continue
+
+        before_value = before.get(key, 0)
+        if not isinstance(before_value, (int, float)):
+            before_value = 0
+
+        value = max(0, after_value - before_value)
+        if key == "cost_usd":
+            value = round(float(value), 6)
+        elif isinstance(value, float) and value.is_integer():
+            value = int(value)
+        delta[key] = value
+
+    if not delta.get("total"):
+        input_value = delta.get("input") or delta.get("prompt") or 0
+        output_value = delta.get("output") or delta.get("completion") or 0
+        if input_value or output_value:
+            delta["total"] = input_value + output_value
+
+    for key in ("model", "provider", "cost_status"):
+        value = after.get(key)
+        if value:
+            delta[key] = value
+
+    return delta
 
 
 def _probe_credentials(agent) -> str:
@@ -4744,6 +4791,7 @@ def _run_prompt_submit(
                     run_kwargs["task_id"] = session["session_key"]
             except (TypeError, ValueError):
                 pass
+            usage_before_turn = _get_usage(agent)
             result = agent.run_conversation(run_message, **run_kwargs)
 
             last_reasoning = None
@@ -4813,7 +4861,13 @@ def _run_prompt_submit(
                 raw = str(result)
                 status = "complete"
 
-            payload = {"text": raw, "usage": _get_usage(agent), "status": status}
+            usage_after_turn = _get_usage(agent)
+            payload = {
+                "text": raw,
+                "usage": usage_after_turn,
+                "turn_usage": _usage_delta(usage_after_turn, usage_before_turn),
+                "status": status,
+            }
             if last_reasoning:
                 payload["reasoning"] = last_reasoning
             if status_note:

@@ -332,7 +332,7 @@ export function toRuntimeMessage(message: ChatMessage): ThreadMessage {
       unstable_annotations: [],
       unstable_data: [],
       steps: [],
-      custom: {}
+      custom: message.usage ? { usage: message.usage } : {}
     }
   } as ThreadMessage
 }
