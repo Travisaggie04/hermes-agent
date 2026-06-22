@@ -151,7 +151,34 @@ export function formatUsageNote(usage?: Partial<UsageStats> | null): string | nu
   }
 
   const tokenLabel = Math.round(total) === 1 ? 'token' : 'tokens'
-  const parts = [`Usage: ${formatInteger(total)} ${tokenLabel} · ${formatInteger(input)} in / ${formatInteger(output)} out`]
+  const parts = [`Usage: ${formatInteger(total)} ${tokenLabel}`]
+
+  if (input > 0) {
+    parts.push(`fresh ${formatInteger(input)} in`)
+  }
+
+  if (output > 0) {
+    parts.push(`${formatInteger(output)} out`)
+  }
+
+  const cacheRead = usageNumber(usage.cache_read)
+
+  if (cacheRead !== null && cacheRead > 0) {
+    parts.push(`cache read ${formatInteger(cacheRead)}`)
+  }
+
+  const cacheWrite = usageNumber(usage.cache_write)
+
+  if (cacheWrite !== null && cacheWrite > 0) {
+    parts.push(`cache write ${formatInteger(cacheWrite)}`)
+  }
+
+  const reasoning = usageNumber(usage.reasoning)
+
+  if (reasoning !== null && reasoning > 0) {
+    parts.push(`reasoning ${formatInteger(reasoning)}`)
+  }
+
   const calls = usageNumber(usage.calls)
 
   if (calls !== null && calls > 0) {

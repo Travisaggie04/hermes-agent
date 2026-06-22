@@ -14,20 +14,24 @@ import {
 } from './chat-messages'
 
 describe('formatUsageNote', () => {
-  it('formats measured token totals compactly for a completed assistant turn', () => {
+  it('formats completed assistant turn usage with separate fresh/cache/reasoning fields', () => {
     expect(
       formatUsageNote({
+        cache_read: 25_000,
         calls: 2,
         cost_usd: 0.0012,
         input: 10_000,
         output: 2_345,
+        reasoning: 140,
         total: 12_345
       })
-    ).toBe('Usage: 12,345 tokens · 10,000 in / 2,345 out · 2 calls · $0.0012')
+    ).toBe(
+      'Usage: 12,345 tokens · fresh 10,000 in · 2,345 out · cache read 25,000 · reasoning 140 · 2 calls · $0.0012'
+    )
   })
 
   it('falls back to prompt and completion fields when providers omit input/output aliases', () => {
-    expect(formatUsageNote({ prompt: 10, completion: 5 } as never)).toBe('Usage: 15 tokens · 10 in / 5 out')
+    expect(formatUsageNote({ prompt: 10, completion: 5 } as never)).toBe('Usage: 15 tokens · fresh 10 in · 5 out')
   })
 
   it('reports when usage was present but no token counts were measured', () => {

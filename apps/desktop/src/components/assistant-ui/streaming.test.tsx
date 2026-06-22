@@ -3,6 +3,8 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { useEffect, useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { UsageStats } from '@/types/hermes'
+
 import { Thread } from './thread'
 
 const createdAt = new Date('2026-05-01T00:00:00.000Z')
@@ -99,7 +101,7 @@ function userMessage(): ThreadMessage {
 function assistantMessage(
   text: string,
   running = true,
-  usage?: { calls: number; input: number; output: number; total: number }
+  usage?: Partial<UsageStats>
 ): ThreadMessage {
   return {
     id: 'assistant-1',
@@ -426,15 +428,21 @@ describe('assistant-ui streaming renderer', () => {
     render(
       <MessageHarness
         message={assistantMessage('complete response', false, {
+          cache_read: 25_000,
           calls: 2,
           input: 10_000,
           output: 2_345,
+          reasoning: 140,
           total: 12_345
         })}
       />
     )
 
-    expect(screen.getByText('Usage: 12,345 tokens · 10,000 in / 2,345 out · 2 calls')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'Usage: 12,345 tokens · fresh 10,000 in · 2,345 out · cache read 25,000 · reasoning 140 · 2 calls'
+      )
+    ).toBeTruthy()
   })
 
   it('does not pull the viewport back down after the user scrolls up during streaming', async () => {
